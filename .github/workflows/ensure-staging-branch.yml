@@ -1,0 +1,45 @@
+name: Ensure staging branch
+
+# One-time (and re-runnable) bootstrap for the long-lived `staging` integration
+# branch. Idempotent: if `staging` already exists, only branch protection is
+# re-mirrored from `main`.
+#
+# Triggers:
+#   - workflow_dispatch (manual): run after merging this workflow, or whenever
+#     main's branch-protection rules change and staging should be brought back
+#     in sync.
+#
+# Required permissions: contents:write to create the ref, administration:write
+# to mirror branch protection. The default GITHUB_TOKEN must be allowed to
+# modify branch protection in repo Settings → Actions → General.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mirror_protection_only:
+        description: "Skip branch creation; only re-mirror protection from main"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  administration: write
+
+jobs:
+  ensure-staging:
+    name: Ensure staging branch exists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create staging from main and mirror protection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          args=()
+          if [ "${{ inputs.mirror_protection_only }}" = "true" ]; then
+            args+=(--mirror-protection)
+          fi
+          node scripts/ensure-staging-branch.mjs "${args[@]}"

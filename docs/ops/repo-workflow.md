@@ -6,14 +6,18 @@ epic lifecycle detail stays in [`docs/redesign/README.md`](../redesign/README.md
 This file is the short map of **who writes what, how it merges, and what is
 manual today**.
 
+**Promotion spine (panel):** feature PRs target `staging`; UAT runs on the
+staging deploy; production promotion is a `staging` → `main` PR. Full detail:
+[`staging-promotion.md`](./staging-promotion.md).
+
 ---
 
 ## Two lanes
 
-| Lane              | Who builds                           | Branch pattern                                                            | Merge                                      |
-| ----------------- | ------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------ |
-| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `main`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges — **never self-merge**  |
-| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                  | PM merges draft PRs — **never self-merge** |
+| Lane              | Who builds                           | Branch pattern                                                               | Merge                                                                                        |
+| ----------------- | ------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `staging`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges to `staging` — **never self-merge**; promote `staging` → `main` after UAT |
+| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                     | PM merges draft PRs — **never self-merge**                                                   |
 
 Epic lane owns roadmap features (e.g. E6.9 Form Setup). The 3M lane owns
 reliability, muda deletion, and approved simplification slices — it must not
@@ -66,10 +70,11 @@ Summary:
 
 ### CI surfaces (panel)
 
-| Workflow                                     | What                                                          |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| `.github/workflows/ci.yml`                   | format, typecheck, lint, unit tests, build, migration dry-run |
-| `.github/workflows/verify-org-isolation.yml` | org-isolation gate for `/api`                                 |
+| Workflow                                      | What                                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`                    | format, typecheck, lint, unit tests, build, migration dry-run (PRs + `main`/`staging` push) |
+| `.github/workflows/verify-org-isolation.yml`  | org-isolation gate for `/api`                                                               |
+| `.github/workflows/ensure-staging-branch.yml` | one-time `staging` branch bootstrap + protection mirror                                     |
 
 Extension: `.github/workflows/ci.yml` — typecheck, lint, vitest.
 
@@ -127,13 +132,14 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 
 ## Quick links
 
-| Doc                                                                | Role                                                |
-| ------------------------------------------------------------------ | --------------------------------------------------- |
-| [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents                     |
-| [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                         |
-| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                   |
-| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                               |
-| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)       | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation   |
-| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)               | Slice 5 — closed items + TD-49/TD-50 backlog        |
-| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions) |
-| Extension `CLAUDE.md`                                              | Extension architecture + wire contracts             |
+| Doc                                                                | Role                                                       |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents                            |
+| [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                                |
+| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                          |
+| [`staging-promotion.md`](./staging-promotion.md)                   | `staging` branch bootstrap + feature → staging → main flow |
+| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                                      |
+| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)       | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation          |
+| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)               | Slice 5 — closed items + TD-49/TD-50 backlog               |
+| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions)        |
+| Extension `CLAUDE.md`                                              | Extension architecture + wire contracts                    |
