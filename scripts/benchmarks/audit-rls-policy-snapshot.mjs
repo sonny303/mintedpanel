@@ -68,7 +68,8 @@ const rows = [...policies.values()]
     const membershipDependent =
       usesUserOrgIds || usesUserRole || usesMembershipsDirectly || usesAdminAnywhere;
     const roleAware = usesUserRole || usesAdminAnywhere;
-    const command = /\bFOR\s+(SELECT|INSERT|UPDATE|DELETE|ALL)\b/i.exec(policy.expression)?.[1] ?? "ALL";
+    const command =
+      /\bFOR\s+(SELECT|INSERT|UPDATE|DELETE|ALL)\b/i.exec(policy.expression)?.[1] ?? "ALL";
     return {
       table: policy.table,
       policy: policy.policy,
