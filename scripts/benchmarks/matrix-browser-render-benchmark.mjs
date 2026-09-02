@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import os from "node:os";
+import { existsSync } from "node:fs";
 import { chromium } from "playwright";
 
 const trials = Number.parseInt(process.env.MATRIX_BROWSER_TRIALS ?? "10", 10);
@@ -8,9 +9,15 @@ if (!Number.isFinite(trials) || trials < 5) {
   throw new Error("MATRIX_BROWSER_TRIALS must be at least 5.");
 }
 
+const sandboxChromium = "/opt/pw-browsers/chromium";
+const systemChrome = "/usr/local/bin/google-chrome";
 const executablePath =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ??
-  (process.platform === "linux" ? "/opt/pw-browsers/chromium" : undefined);
+  (existsSync(sandboxChromium)
+    ? sandboxChromium
+    : existsSync(systemChrome)
+      ? systemChrome
+      : undefined);
 const browser = await chromium.launch({
   headless: true,
   ...(executablePath ? { executablePath } : {}),
