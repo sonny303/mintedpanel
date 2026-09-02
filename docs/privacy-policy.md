@@ -1,9 +1,9 @@
 # Privacy Policy
 
-**Effective date:** July 5, 2026
+**Effective date:** September 1, 2026
 **Applies to:** the Minted Panel web application and the Minted Panel Filler browser extension (together, "the Service").
 
-South Park Physician Group ("we," "us") provides Minted Panel, a credentialing and contracting management platform for healthcare practice groups. This policy explains what information the Service handles and how.
+Minted Panel, LLC ("we," "us") provides Minted Panel, a credentialing and contracting management platform for healthcare practice groups. This policy explains what information the Service handles and how.
 
 ## Who our users are
 
@@ -30,7 +30,13 @@ The Minted Panel Filler extension fills insurance payer enrollment forms using y
 
 ## How we use information
 
-We use the information described above only to operate the Service: signing you in, filling forms you request, keeping your organization's records, and maintaining audit trails. We do not use it for advertising. We do not sell it. We do not share it with third parties except the infrastructure providers below.
+We use the information described above only to operate the Service: signing you in, filling forms you request, keeping your organization's records, and maintaining audit trails.
+
+We do not use it for advertising. We do not sell it. We do not use it to determine creditworthiness or for lending purposes. We do not transfer it to third parties except the infrastructure providers below, or as needed to comply with the law.
+
+## Cookies and tracking
+
+The Service uses only the cookies and browser storage necessary to keep you signed in. We do not use advertising cookies, tracking pixels, or third-party analytics that follow you across other websites.
 
 ## Service providers
 
@@ -38,15 +44,27 @@ We run the Service on established infrastructure providers, currently Vercel (ap
 
 ## Data retention and deletion
 
-Provider records and audit trails are retained while your organization uses the Service, because credentialing history has ongoing compliance value to your organization. If your organization ends its use of the Service, it may request deletion of its data by contacting us.
+Provider records and audit trails are retained while your organization uses the Service, because credentialing history has ongoing compliance value to your organization. If your organization ends its use of the Service, we delete its data within 30 days of termination or a written deletion request, unless we're required by law to keep it longer.
 
 ## Your organization's role
 
 Your organization controls the provider data it enters into the Service and decides who at the organization has access. Questions about specific records should go to your organization's administrator first.
 
+## Your privacy rights
+
+Depending on your state, you may have rights to access, correct, or delete your information. To exercise these rights, contact us using the information below.
+
+## Children's privacy
+
+The Service is a business tool for credentialing staff. It is not directed at, and we do not knowingly collect information from, anyone under 18.
+
+## Not a HIPAA business associate
+
+The Service does not create, receive, or transmit patient medical records or other protected health information. We are not a HIPAA covered entity or business associate with respect to the data described in this policy.
+
 ## Security
 
-Access is scoped by organization. Sensitive fields are limited by design (for example, only the last four digits of Social Security numbers are ever stored). Reads of detailed provider records are logged.
+Access is scoped by organization. Sensitive fields are limited by design (for example, only the last four digits of Social Security numbers are ever stored). Reads of detailed provider records are logged. If a security incident affects your organization's data, we will notify your administrator without undue delay.
 
 ## Changes to this policy
 

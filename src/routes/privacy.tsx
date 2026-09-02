@@ -51,16 +51,16 @@ function PrivacyPage() {
         <h1 className="text-3xl font-semibold text-foreground">Privacy Policy</h1>
 
         <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
-          <Lead>Effective date:</Lead> July 5, 2026
+          <Lead>Effective date:</Lead> September 1, 2026
           <br />
           <Lead>Applies to:</Lead> the Minted Panel web application and the Minted Panel Filler
           browser extension (together, "the Service").
         </p>
 
         <Body>
-          South Park Physician Group ("we," "us") provides Minted Panel, a credentialing and
-          contracting management platform for healthcare practice groups. This policy explains what
-          information the Service handles and how.
+          Minted Panel, LLC ("we," "us") provides Minted Panel, a credentialing and contracting
+          management platform for healthcare practice groups. This policy explains what information
+          the Service handles and how.
         </Body>
 
         <SectionTitle>Who our users are</SectionTitle>
@@ -119,8 +119,19 @@ function PrivacyPage() {
         <Body>
           We use the information described above only to operate the Service: signing you in,
           filling forms you request, keeping your organization's records, and maintaining audit
-          trails. We do not use it for advertising. We do not sell it. We do not share it with third
-          parties except the infrastructure providers below.
+          trails.
+        </Body>
+        <Body>
+          We do not use it for advertising. We do not sell it. We do not use it to determine
+          creditworthiness or for lending purposes. We do not transfer it to third parties except
+          the infrastructure providers below, or as needed to comply with the law.
+        </Body>
+
+        <SectionTitle>Cookies and tracking</SectionTitle>
+        <Body>
+          The Service uses only the cookies and browser storage necessary to keep you signed in. We
+          do not use advertising cookies, tracking pixels, or third-party analytics that follow you
+          across other websites.
         </Body>
 
         <SectionTitle>Service providers</SectionTitle>
@@ -134,8 +145,8 @@ function PrivacyPage() {
         <Body>
           Provider records and audit trails are retained while your organization uses the Service,
           because credentialing history has ongoing compliance value to your organization. If your
-          organization ends its use of the Service, it may request deletion of its data by
-          contacting us.
+          organization ends its use of the Service, we delete its data within 30 days of termination
+          or a written deletion request, unless we're required by law to keep it longer.
         </Body>
 
         <SectionTitle>Your organization's role</SectionTitle>
@@ -145,11 +156,31 @@ function PrivacyPage() {
           organization's administrator first.
         </Body>
 
+        <SectionTitle>Your privacy rights</SectionTitle>
+        <Body>
+          Depending on your state, you may have rights to access, correct, or delete your
+          information. To exercise these rights, contact us using the information below.
+        </Body>
+
+        <SectionTitle>Children's privacy</SectionTitle>
+        <Body>
+          The Service is a business tool for credentialing staff. It is not directed at, and we do
+          not knowingly collect information from, anyone under 18.
+        </Body>
+
+        <SectionTitle>Not a HIPAA business associate</SectionTitle>
+        <Body>
+          The Service does not create, receive, or transmit patient medical records or other
+          protected health information. We are not a HIPAA covered entity or business associate with
+          respect to the data described in this policy.
+        </Body>
+
         <SectionTitle>Security</SectionTitle>
         <Body>
           Access is scoped by organization. Sensitive fields are limited by design (for example,
           only the last four digits of Social Security numbers are ever stored). Reads of detailed
-          provider records are logged.
+          provider records are logged. If a security incident affects your organization's data, we
+          will notify your administrator without undue delay.
         </Body>
 
         <SectionTitle>Changes to this policy</SectionTitle>
