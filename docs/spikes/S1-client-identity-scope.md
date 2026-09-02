@@ -151,7 +151,8 @@ the whole org.
 ## Existing frontend role assumptions
 
 Production route/component code contains **51 executable role decisions across
-38 files**:
+38 files, verified by
+`node scripts/benchmarks/audit-frontend-role-sites.mjs --expect=51`:
 
 - 19 `useCanWrite()` calls;
 - 23 `useIsAdmin()` calls;
