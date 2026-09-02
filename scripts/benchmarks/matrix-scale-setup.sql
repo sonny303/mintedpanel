@@ -69,6 +69,15 @@ CREATE TABLE providers (
   verification_state text NOT NULL DEFAULT 'verified'
 );
 
+CREATE TABLE status_configs (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL REFERENCES organizations(id),
+  track text NOT NULL,
+  label text NOT NULL,
+  action_bucket text NOT NULL,
+  UNIQUE (org_id, track, label)
+);
+
 CREATE TABLE payers (
   id uuid PRIMARY KEY,
   org_id uuid,
@@ -101,7 +110,7 @@ CREATE TABLE contracts (
   group_id uuid REFERENCES provider_groups(id),
   payer_id uuid REFERENCES payers(id),
   state text NOT NULL,
-  contracting_status text NOT NULL,
+  contracting_status_id uuid REFERENCES status_configs(id),
   effective_date date,
   expiration_date date,
   UNIQUE (group_id, payer_id, state)
@@ -143,6 +152,7 @@ $$;
 ALTER TABLE provider_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facilities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE providers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE status_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credential_cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contracts ENABLE ROW LEVEL SECURITY;
@@ -155,6 +165,9 @@ CREATE POLICY facilities_select
   USING (org_id IN (SELECT user_org_ids()));
 CREATE POLICY providers_select
   ON providers FOR SELECT TO matrix_spike_client
+  USING (org_id IN (SELECT user_org_ids()));
+CREATE POLICY status_configs_select
+  ON status_configs FOR SELECT TO matrix_spike_client
   USING (org_id IN (SELECT user_org_ids()));
 CREATE POLICY payers_select
   ON payers FOR SELECT TO matrix_spike_client
@@ -171,6 +184,7 @@ GRANT SELECT ON
   provider_groups,
   facilities,
   providers,
+  status_configs,
   payers,
   credential_cases,
   contracts
@@ -192,6 +206,20 @@ SELECT
   md5('user-' || provider_count)::uuid,
   'billing'
 FROM seed_scales;
+
+INSERT INTO status_configs (id, org_id, track, label, action_bucket)
+SELECT
+  md5('contract-status-' || provider_count || '-' || status_code)::uuid,
+  md5('org-' || provider_count)::uuid,
+  'contracting',
+  status_label,
+  action_bucket
+FROM seed_scales
+CROSS JOIN (
+  VALUES
+    ('in_network', 'In network', 'complete'),
+    ('in_progress', 'Contracting', 'ours')
+) AS statuses(status_code, status_label, action_bucket);
 
 INSERT INTO payers (id, org_id, name, status)
 SELECT md5('payer-' || payer_no)::uuid, NULL, 'Payer ' || lpad(payer_no::text, 2, '0'), 'active'
@@ -326,7 +354,7 @@ INSERT INTO contracts (
   group_id,
   payer_id,
   state,
-  contracting_status,
+  contracting_status_id,
   effective_date,
   expiration_date
 )
@@ -338,7 +366,10 @@ SELECT
   md5('group-' || provider_count || '-' || group_no)::uuid,
   md5('payer-' || payer_no)::uuid,
   state_code,
-  CASE WHEN (group_no + payer_no) % 5 = 0 THEN 'in_progress' ELSE 'in_network' END,
+  md5(
+    'contract-status-' || provider_count || '-' ||
+    CASE WHEN (group_no + payer_no) % 5 = 0 THEN 'in_progress' ELSE 'in_network' END
+  )::uuid,
   CASE
     WHEN (group_no + payer_no) % 5 <> 0 THEN DATE '2026-01-01'
   END,
@@ -354,6 +385,7 @@ ANALYZE client_group_grants;
 ANALYZE provider_groups;
 ANALYZE facilities;
 ANALYZE providers;
+ANALYZE status_configs;
 ANALYZE payers;
 ANALYZE credential_cases;
 ANALYZE contracts;

@@ -98,7 +98,10 @@ const prelude = (scale, rls) => {
 };
 
 const grantedGroupsSql = (scale) => {
-  const values = Array.from({ length: 7 }, (_, index) => `'${uuid("group", scale, index + 1)}'::uuid`);
+  const values = Array.from(
+    { length: 7 },
+    (_, index) => `'${uuid("group", scale, index + 1)}'::uuid`,
+  );
   return `ARRAY[${values.join(", ")}]`;
 };
 
@@ -120,9 +123,10 @@ const selectColumns = `
   f.state AS "facilityState",
   c.case_status AS "caseStatus",
   c.submitted_date AS "submittedDate",
+  c.approved_date AS "approvedDate",
   c.expected_effective_date AS "expectedEffectiveDate",
   c.confirmed_effective_date AS "confirmedEffectiveDate",
-  ct.contracting_status AS "contractStatus",
+  contract_status.label AS "contractStatus",
   ct.effective_date AS "contractEffectiveDate",
   c.updated_at AS "updatedAt"`;
 
@@ -140,7 +144,10 @@ LEFT JOIN matrix_spike.contracts ct
   ON ct.org_id = c.org_id
  AND ct.group_id = c.group_id
  AND ct.payer_id = c.payer_id
- AND ct.state = c.state`;
+ AND ct.state = c.state
+LEFT JOIN matrix_spike.status_configs contract_status
+  ON contract_status.id = ct.contracting_status_id
+ AND contract_status.org_id = c.org_id`;
 
 const orderBy = `
 ORDER BY lower(p.last_name), lower(p.first_name), p.id, y.name, y.id`;
@@ -165,8 +172,8 @@ ${orderBy}`;
   AND c.state = 'NC'
   AND c.payer_id = '${payerId}'::uuid
   AND (
-    p.first_name ILIKE '%00042%'
-    OR p.last_name ILIKE '%00042%'
+    p.first_name ILIKE '%00041%'
+    OR p.last_name ILIKE '%00041%'
   )
 ${orderBy}`;
   const providerDrilldown = `${full.replace(orderBy, "")}
@@ -203,9 +210,10 @@ SELECT
   f.state AS "facilityState",
   c.case_status AS "caseStatus",
   c.submitted_date AS "submittedDate",
+  c.approved_date AS "approvedDate",
   c.expected_effective_date AS "expectedEffectiveDate",
   c.confirmed_effective_date AS "confirmedEffectiveDate",
-  ct.contracting_status AS "contractStatus",
+  contract_status.label AS "contractStatus",
   ct.effective_date AS "contractEffectiveDate",
   c.updated_at AS "updatedAt"
 FROM provider_page p
@@ -223,6 +231,9 @@ LEFT JOIN matrix_spike.contracts ct
  AND ct.group_id = c.group_id
  AND ct.payer_id = c.payer_id
  AND ct.state = c.state
+LEFT JOIN matrix_spike.status_configs contract_status
+  ON contract_status.id = ct.contracting_status_id
+ AND contract_status.org_id = c.org_id
 ORDER BY lower(p.last_name), lower(p.first_name), p.id, y.name, y.id`;
   return {
     full_matrix: full,
@@ -242,18 +253,7 @@ const measureLatency = (name, scale, rls, query) => {
     "utf8",
   );
 
-  command("pgbench", [
-    "-n",
-    "-c",
-    "1",
-    "-j",
-    "1",
-    "-t",
-    "3",
-    "-f",
-    scriptPath,
-    databaseUrl,
-  ]);
+  command("pgbench", ["-n", "-c", "1", "-j", "1", "-t", "3", "-f", scriptPath, databaseUrl]);
 
   const prefix = resolve(tempDir, `${scale}-${name}-${mode}-latency`);
   command("pgbench", [
@@ -371,4 +371,11 @@ const output = {
   measurements,
 };
 
-process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+const serialized = `${JSON.stringify(output, null, 2)}\n`;
+const outputPath = process.env.MATRIX_BENCH_OUTPUT;
+if (outputPath) {
+  writeFileSync(outputPath, serialized, "utf8");
+  process.stdout.write(`${outputPath}\n`);
+} else {
+  process.stdout.write(serialized);
+}

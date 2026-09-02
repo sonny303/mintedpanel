@@ -1,4 +1,5 @@
-#!/usr/bin/env -S npx vite-node
+// Loaded through run-matrix-derive-benchmark.mjs so the existing Vite
+// dependency handles TypeScript and the repository's path aliases.
 
 import os from "node:os";
 import { performance } from "node:perf_hooks";
@@ -58,8 +59,7 @@ function fixture(providerCount: number): CasesMatrixInput {
         (providerIndex + payerIndex) % statuses.length === 5 ? "2026-06-01" : null,
       createdAt: "2026-01-01T00:00:00.000Z",
       caseNumber: providerIndex * 20 + payerIndex + 1,
-      submittedDate:
-        (providerIndex + payerIndex) % statuses.length >= 2 ? "2026-03-01" : null,
+      submittedDate: (providerIndex + payerIndex) % statuses.length >= 2 ? "2026-03-01" : null,
     }));
   });
   const targets = groups.flatMap((group) =>
@@ -151,7 +151,8 @@ process.stdout.write(
       method: {
         runs,
         implementation: "src/lib/casesMatrix.ts buildCasesMatrix",
-        inputs: "20 payers, seven groups, five states, one task per case, follow-up on 25% of cases",
+        inputs:
+          "20 payers, seven groups, five states, one task per case, follow-up on 25% of cases",
         timingExcludes: "network, React reconciliation, and DOM layout/paint",
       },
       measurements,
