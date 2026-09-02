@@ -30,12 +30,37 @@ negative, and deliberate-leak assertions in the API isolation gate.
 
 ## Evidence status
 
-| Marker             | Meaning                                                                                                                                                                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Repo-confirmed** | Read from this branch's code, generated schema, or migration replay on 2026-09-02.                                                                                              |
-| **Brief-live**     | Supplied in the spike brief as queried from hosted Supabase on 2026-09-02. Supabase MCP required authentication in this run, so these counts could not be independently re-run. |
-| **Recommendation** | Proposed design; not current behavior or an approved product decision.                                                                                                          |
-| **Assumption**     | Must be confirmed before implementation.                                                                                                                                        |
+| Marker              | Meaning                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Repo-confirmed**  | Read from this branch's code, generated schema, or migration replay on 2026-09-02.                                          |
+| **Hosted-verified** | Independently re-queried against hosted project `fkvuhfsqcmujywzgczmc` on 2026-09-02 via read-only SQL. Matches the source. |
+| **Recommendation**  | Proposed design; not current behavior or an approved product decision.                                                      |
+| **Assumption**      | Must be confirmed before implementation.                                                                                    |
+
+### Hosted verification, 2026-09-02
+
+The first pass of this spike could not reach Supabase, so its live counts were
+carried from the brief and its RLS classification came from replaying the
+checked-in migrations. Both have since been re-run against hosted with
+read-only queries. No data was written.
+
+**Every structural number in this document reproduced exactly.** The migration
+replay is a faithful proxy for hosted: 155 policies, the same 58/46/37/14
+command split, and an identical classification (145 membership-dependent, 144
+`user_org_ids()`, 1 direct `memberships`, 94 role-aware, 93 `user_role()`, 1
+`user_is_admin_anywhere()`, 10 not membership-dependent, and the load-bearing
+**51** role-agnostic SELECT policies with **0** role-agnostic non-SELECT
+policies). The 62-table count, 3 orgs, 7 groups, and 6 all-admin memberships
+also reproduced.
+
+Gaps that hosted did expose are recorded in S2 and S4, not here: the client
+matrix cell grain is not 1:1 with cases, the forecast columns are almost
+entirely unpopulated, and S2's column audit covers a dead table. One security
+finding surfaced during this pass that is **out of scope for the portal
+question and tracked separately** in
+[`docs/security/authenticated-rpc-grant-review.md`](../security/authenticated-rpc-grant-review.md).
+It is a build pre-req for any surface that issues Supabase tokens to people
+outside the company, this portal included.
 
 No production data was written. No live cross-tenant leak was found. The
 cross-group exposure described below is a design incompatibility with a future
@@ -43,20 +68,32 @@ below-org caller, not a leak under the current org-only identity model.
 
 ## Verified current state
 
-| Fact                                                                                       | Evidence                                                                                                                                               | Status         |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| Membership identity is unique per `(org_id, user_id)` and carries one role.                | `src/integrations/supabase/types.ts` (`memberships`); `supabase/migrations/20260704210000_baseline_live_schema.sql` (`memberships_org_id_user_id_key`) | Repo-confirmed |
-| Membership and pending-invite role checks allow only `admin`, `specialist`, and `billing`. | baseline migration constraints `memberships_role_check` and `pending_invites_role_check`                                                               | Repo-confirmed |
-| The TypeScript role union is duplicated in three places.                                   | `src/types/index.ts`, `src/lib/auth-store.ts`, `src/server/guard.ts`                                                                                   | Repo-confirmed |
-| Current authorization scope is an org, never a group set.                                  | `src/server/guard.ts`; all `AuthContext` service calls carry `orgId` but no granted groups                                                             | Repo-confirmed |
-| Current memberships: 6, all admin.                                                         | S1 brief's live query                                                                                                                                  | Brief-live     |
-| Current org/group counts: 3 orgs and 7 groups.                                             | S1 brief's live query                                                                                                                                  | Brief-live     |
-| Public RLS final state: 155 policies over the brief's 62 public tables.                    | `node scripts/benchmarks/audit-rls-policy-snapshot.mjs --expect=155`; table count is brief-live                                                        | Mixed          |
+| Fact                                                                                       | Evidence                                                                                                                                               | Status          |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| Membership identity is unique per `(org_id, user_id)` and carries one role.                | `src/integrations/supabase/types.ts` (`memberships`); `supabase/migrations/20260704210000_baseline_live_schema.sql` (`memberships_org_id_user_id_key`) | Repo-confirmed  |
+| Membership and pending-invite role checks allow only `admin`, `specialist`, and `billing`. | baseline migration constraints `memberships_role_check` and `pending_invites_role_check`                                                               | Repo-confirmed  |
+| The TypeScript role union is duplicated in three places.                                   | `src/types/index.ts`, `src/lib/auth-store.ts`, `src/server/guard.ts`                                                                                   | Repo-confirmed  |
+| Current authorization scope is an org, never a group set.                                  | `src/server/guard.ts`; all `AuthContext` service calls carry `orgId` but no granted groups                                                             | Repo-confirmed  |
+| Current memberships: 6, all admin.                                                         | Hosted `memberships` count and distinct role                                                                                                           | Hosted-verified |
+| Current org/group counts: 3 orgs and 7 groups.                                             | Hosted `organizations` / `provider_groups` counts                                                                                                      | Hosted-verified |
+| Public RLS final state: 155 policies over 62 public tables.                                | `node scripts/benchmarks/audit-rls-policy-snapshot.mjs --expect=155`, re-queried against hosted `pg_policies` and `pg_class`                           | Hosted-verified |
 
 Seven groups across three orgs proves that org is coarser than group. It does
 **not**, by itself, prove which groups belong to one client. An authoritative
 client-to-group ownership source does not exist in the repository; that missing
 business mapping is what prevents literal zero-touch client provisioning.
+
+Hosted `party_role_assignments` carries only two role keys today, `owner` and
+`customer_escalation_contact`, across 6 `parties` rows. Neither is scoped to a
+provider group, so this is a contact directory, not an ownership mapping. It
+confirms rather than resolves risk 1 below.
+
+Hosted also shows five tables with RLS enabled and **zero** policies, which is
+deny-all under any non-service role: `provider_ssn_vault`,
+`payer_catalog_changes`, `public_rpc_attempts`, and two `_backup` tables. The
+SSN vault is therefore unreachable through PostgREST regardless of role, which
+narrows the option-A blast radius by one of its worst cases. The 51 SELECT
+policies remain the real exposure.
 
 ## How the current API guard works
 
@@ -141,12 +178,41 @@ expressions.
 | SELECT policies that grant org reads through membership with **no role check** |       **51** |
 | Membership-dependent non-SELECT policies without a role check                  |        **0** |
 
+Every count in this table was re-queried against hosted `pg_policies` on
+2026-09-02 and matched exactly.
+
 The dangerous option-A blast radius is the **51 SELECT policies**, not all 155.
-A new `client` membership would immediately satisfy these org-wide reads,
-including `providers`, `provider_documents`, `tasks`, `touches`, `audit_log`,
-and `status_history`. The 93 role-aware writes already enumerate admin and/or
-specialist, so an unknown client role usually fails closed; reads fail open to
-the whole org.
+A new `client` membership would immediately satisfy these org-wide reads. The
+93 role-aware writes already enumerate admin and/or specialist, so an unknown
+client role usually fails closed; reads fail open to the whole org.
+
+Those 51 policies sit on 51 distinct tables, one policy each. The full hosted
+list is worse than the six tables named in the first pass, because it is not
+only PHI and internal workflow. It also includes identity and pending-token
+tables:
+
+| Category                | Tables reachable by a hypothetical `client` membership                                                                                                                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Person/PHI              | `providers`, `provider_documents`, `state_licenses`, `provider_field_verifications`                                                                                                                                                                                                                                       |
+| Internal workflow       | `tasks`, `touches`, `notes`, `credential_cases`, `case_facilities`, `case_status_history`, `status_history`, `status_configs`, `contracts`, `enrollment_facts`, `denial_reason_codes`, `communication_event`                                                                                                              |
+| Generation/provenance   | `case_generation_runs`, `case_generation_run_rows`, `case_generation_exclusions`, `import_runs`, `import_rows`, `fill_sessions`                                                                                                                                                                                           |
+| **Identity and tokens** | **`memberships`, `profiles`, `pending_invites`, `provider_ssn_intake_links`, `party_capture_links`, `parties`, `party_role_assignments`**                                                                                                                                                                                 |
+| Org/config              | `organizations`, `provider_groups`, `facilities`, `group_insurance_policies`, `provider_group_assignments`, `provider_facility_assignments`, `payers`, `payer_contacts`, `payer_network_targets`, `payer_pipeline_history`, `org_payer_assignments`, `org_payer_settings`, `next_best_action_configs`, `field_dictionary` |
+| SOP/portal              | `sop_templates`, `sop_template_versions`, `portals`, `portal_field_maps`                                                                                                                                                                                                                                                  |
+| Audit                   | `audit_log`                                                                                                                                                                                                                                                                                                               |
+| Dormant                 | `launches`, `msos`, `mso_routing_rules`                                                                                                                                                                                                                                                                                   |
+
+The identity and token row is the one that changes the argument. Option A does
+not merely over-share business data with a client. It would let an external
+account enumerate every internal staff member (`memberships`, `profiles`),
+every unclaimed invite (`pending_invites`), and every outstanding SSN-intake and
+capture link with its recipient email, state, and expiry
+(`provider_ssn_intake_links`, `party_capture_links`). Those two link tables
+store `token_hash` rather than a replayable token, so this is not direct token
+theft. It is still a targeted phishing inventory: which provider is currently
+being asked for an SSN, and at which address.
+
+Option A should be treated as rejected on this basis, not merely scored lowest.
 
 ## Existing frontend role assumptions
 
@@ -262,15 +328,15 @@ spike:
 
 ## Open risks, ranked
 
-| Rank | Risk / decision                                                         | Why it matters                                                                                                                                                            |
-| ---: | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|    1 | **No authoritative client → group mapping exists.**                     | “Zero manual configuration” is impossible at first access unless a CRM/contract source supplies this mapping. Product must define who grants groups and from what source. |
-|    2 | **Existing internal routes are org-only and PHI/internal-data rich.**   | A route-reuse shortcut would defeat both S1 scope and S2 allowlists.                                                                                                      |
-|    3 | **A provider may belong to several groups.**                            | Filtering on frozen `providers.group_id` would omit valid rows and can mis-scope results.                                                                                 |
-|    4 | **Grant revocation and caching semantics are undefined.**               | Cache TTL must not outlive the promised revocation SLA; safest v1 is a grant check per request.                                                                           |
-|    5 | **Mixed internal/client identities need product-entry disambiguation.** | A user with both capabilities must choose context; the server must never infer broader access.                                                                            |
-|    6 | **Group ownership may cross org boundaries.**                           | Recommended context is one org plus groups; cross-org clients need multiple explicit contexts, not one widened query.                                                     |
-|    7 | **Invite lifecycle is missing.**                                        | Email verification, expiry, replay, removal, and last-owner safeguards need decisions and audit coverage.                                                                 |
+| Rank | Risk / decision                                                          | Why it matters                                                                                                                                                                                                                                                          |
+| ---: | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    1 | **No authoritative client → group mapping exists.**                      | “Zero manual configuration” is impossible at first access unless a CRM/contract source supplies this mapping. Product must define who grants groups and from what source.                                                                                               |
+|    2 | **Existing internal routes are org-only and PHI/internal-data rich.**    | A route-reuse shortcut would defeat both S1 scope and S2 allowlists.                                                                                                                                                                                                    |
+|    3 | **A provider may belong to several groups — measured, not theoretical.** | Hosted: **9 of 21 providers (43%) hold more than one group assignment**, and **11 assignment rows point at a group other than the provider's frozen `providers.group_id`**. Filtering on the mirror would mis-scope nearly half the roster today, at current data size. |
+|    4 | **Grant revocation and caching semantics are undefined.**                | Cache TTL must not outlive the promised revocation SLA; safest v1 is a grant check per request.                                                                                                                                                                         |
+|    5 | **Mixed internal/client identities need product-entry disambiguation.**  | A user with both capabilities must choose context; the server must never infer broader access.                                                                                                                                                                          |
+|    6 | **Group ownership may cross org boundaries.**                            | Recommended context is one org plus groups; cross-org clients need multiple explicit contexts, not one widened query.                                                                                                                                                   |
+|    7 | **Invite lifecycle is missing.**                                         | Email verification, expiry, replay, removal, and last-owner safeguards need decisions and audit coverage.                                                                                                                                                               |
 
 ## What S2 and S4 must establish
 

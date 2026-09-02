@@ -1,9 +1,56 @@
 # Client portal spike synthesis — S1, S2, S4
 
-**Date:** 2026-09-02  
+**Date:** 2026-09-02 (hosted-verified same day)  
 **Scope:** client owner / executive sponsor v1; provider self-view excluded  
-**Decision package:** investigation complete; product decisions and hosted
-revalidation remain before build
+**Decision package:** investigation complete and verified against the live
+database; product decisions remain before build
+
+## Hosted verification summary
+
+The spike was written without database access, so its live counts came from the
+brief and its RLS analysis came from replaying checked-in migrations. All of it
+has since been re-queried against hosted `fkvuhfsqcmujywzgczmc` with read-only
+SQL. No data was written.
+
+**The structural work held up completely.** Every RLS number, every column
+count, and every cardinality reproduced exactly:
+
+| Claim                                               | Hosted result      |
+| --------------------------------------------------- | ------------------ |
+| 155 public RLS policies, split 58/46/37/14          | Exact match        |
+| 145 membership-dependent, 94 role-aware, 10 neither | Exact match        |
+| **51 role-agnostic SELECT policies, 0 non-SELECT**  | **Exact match**    |
+| 62 public tables                                    | Exact match        |
+| 378 columns across 23 tables                        | Exact match, 23/23 |
+| 3 orgs, 7 groups, 6 memberships all admin           | Exact match        |
+| Four-part case key with `NULLS NOT DISTINCT`        | Confirmed          |
+| Benchmark harness mirrors hosted indexes            | Confirmed faithful |
+
+That is unusually clean, and it means the migration replay is a trustworthy
+proxy for hosted going forward. The architecture recommendation (option B,
+API-only client access, no `memberships` row) is **unchanged and strengthened**.
+
+**Three things hosted exposed that the repo could not show**, all of which
+change build scope rather than architecture:
+
+1. **The matrix cell grain is not one-to-one with cases.** Rows = provider,
+   columns = payer, over a _set_ of granted groups, is not the case key. A real
+   hosted provider has two live cases with one payer in two states with two
+   different statuses. Correctness bug, present today at 21 providers, blocks
+   the DTO shape. See S4.
+2. **The forecast the portal exists to deliver has almost no data.**
+   `expected_effective_date` is populated on 0 of 42 cases, `contracts` is
+   empty, `enrollment_facts` has 2 rows. "When can I bill" is unanswerable from
+   today's data. See S2.
+3. **The column audit classified a dead table and missed the live one.**
+   `case_generation_exclusions` is empty; `case_generation_run_rows` holds the
+   127-row disposition ledger. See S2.
+
+One security finding surfaced that is **not a portal design question** and is
+tracked separately in
+[`docs/security/authenticated-rpc-grant-review.md`](../security/authenticated-rpc-grant-review.md).
+It is a pre-req for any surface that hands Supabase tokens to people outside
+the company.
 
 ## Outcome
 
@@ -52,9 +99,13 @@ Why:
 
 - Current API authorization resolves exactly one org membership; no group-
   scoped context exists.
-- Replaying checked-in migrations yields 155 public RLS policies: 145
-  membership-dependent and 94 role-aware. Fifty-one SELECT policies grant
-  org-wide reads based on membership without checking role.
+- Hosted carries 155 public RLS policies: 145 membership-dependent and 94
+  role-aware. Fifty-one SELECT policies grant org-wide reads based on
+  membership without checking role. Migration replay and hosted agree exactly.
+  Those 51 sit on 51 distinct tables and include `memberships`, `profiles`,
+  `pending_invites`, `provider_ssn_intake_links`, and `party_capture_links`, so
+  option A would expose staff identity and pending-token inventory, not just
+  business data. See S1.
 - Billing is write-restricted by RLS/API checks, but generally reads the whole
   org. It is not a client-safe role.
 - Existing provider detail, case context, tasks/touches, document signing, and
@@ -94,16 +145,18 @@ Why:
 
 ## Unresolved decisions and blockers
 
-| Priority | Decision/blocker                                                                                                         | Default until answered                                                                                                             |
-| -------: | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-|        1 | What authoritative source maps a client to one or more groups, and who approves the initial grant?                       | No automatic access. Literal zero-manual-config onboarding is not currently achievable.                                            |
-|        2 | Supabase MCP was unauthenticated, blocking hosted column parity checks and the required scratch-project benchmark rerun. | Treat repo column audit and local timings as evidence, not hosted certification.                                                   |
-|        3 | What exactly makes a provider “in Raleigh”: any assignment, primary provider facility, or case primary facility?         | Any active provider-facility assignment in `facilities.city = Raleigh` is recommended.                                             |
-|        4 | What exact facts make “Ready to bill” true?                                                                              | Do not display a confirmed billing date until credentialing, contract, facility, and payer effective requirements are all defined. |
-|        5 | Are payer references/issued IDs, provider contacts, TIN last four, license summaries, or documents client-visible?       | No.                                                                                                                                |
-|        6 | Does an active payer target without a case mean “Not started,” and is a denied case “Attention needed” or “Closed”?      | Product must set the matrix population and status semantics.                                                                       |
-|        7 | How quickly must revocation take effect?                                                                                 | Resolve active grants per request; do not cache authorization across requests.                                                     |
-|        8 | Can one person hold both internal and client access, or client contexts across orgs?                                     | Support explicit context choice; never union scopes automatically.                                                                 |
+| Priority | Decision/blocker                                                                                                                                                                                                                                                                                   | Default until answered                                                                                                               |
+| -------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+|        1 | What authoritative source maps a client to one or more groups, and who approves the initial grant?                                                                                                                                                                                                 | No automatic access. Literal zero-manual-config onboarding is not currently achievable.                                              |
+|        2 | **RESOLVED.** Hosted column parity, RLS classification, and cardinality all verified 2026-09-02 and matched exactly. Only the regional timing rerun on the scratch project remains, and it is low priority at 21 live providers.                                                                   | None. Treat the schema analysis as certified.                                                                                        |
+|       1= | **NEW, BLOCKING.** A `(provider, payer)` cell can hold more than one case when the grant spans groups or a provider spans states. Proven on hosted.                                                                                                                                                | Section the client matrix by (group, state) as the internal matrix already does. Do not resolve it in the UI.                        |
+|       1= | **NEW, BLOCKING.** The forecast columns are effectively empty on hosted, so a "when can I bill" surface would show unknown everywhere.                                                                                                                                                             | Ship a status-only v1. Sequence coordinator date-capture before any forecast surface.                                                |
+|        3 | What exactly makes a provider “in Raleigh”: any assignment, primary provider facility, or case primary facility?                                                                                                                                                                                   | Any active provider-facility assignment in `facilities.city = Raleigh` is recommended.                                               |
+|        4 | What exact facts make “Ready to bill” true? **Narrower than first written:** the facts already have columns (`expected_effective_date`, `confirmed_effective_date`, `contract_executed_date`, `contracts.effective_date`, `facilities.effective_date`). Only the boolean combination is undecided. | Do not display a confirmed billing date until the combination is agreed. Note this is moot for v1 while the columns are unpopulated. |
+|        5 | Are payer references/issued IDs, provider contacts, TIN last four, license summaries, or documents client-visible?                                                                                                                                                                                 | No.                                                                                                                                  |
+|        6 | Does an active payer target without a case mean “Not started,” and is a denied case “Attention needed” or “Closed”?                                                                                                                                                                                | Product must set the matrix population and status semantics.                                                                         |
+|        7 | How quickly must revocation take effect?                                                                                                                                                                                                                                                           | Resolve active grants per request; do not cache authorization across requests.                                                       |
+|        8 | Can one person hold both internal and client access, or client contexts across orgs?                                                                                                                                                                                                               | Support explicit context choice; never union scopes automatically.                                                                   |
 
 ## Contract, data, and privacy risks
 
@@ -183,8 +236,22 @@ Use different messages/actions for:
 
 ## Next step
 
-Product should answer the yes/no list in S2 and the ownership/readiness
-decisions above. Then hosted operators authenticate Supabase tooling, run the
-read-only production schema diff and scratch benchmark, and attach those
-results to these docs. Only after that confirmation should the team draft an
-epic, user stories, or build acceptance criteria.
+The read-only hosted schema diff is done and attached above. What remains is
+product, in this order:
+
+1. **Decide the cell grain** (blocking, and cheapest to answer: section by
+   group and state, matching the internal matrix).
+2. **Decide whether v1 forecasts at all**, given the empty date columns. If
+   yes, the date-capture workflow change is sequenced first and it is a
+   coordinator process change, not engineering.
+3. **Answer the S2 yes/no list** and the client-to-group ownership question,
+   which is still the one thing that makes zero-touch onboarding impossible.
+4. **Clear the RPC grant pre-req** tracked in
+   [`docs/security/authenticated-rpc-grant-review.md`](../security/authenticated-rpc-grant-review.md)
+   before any external token is issued.
+
+The scratch-project timing rerun is no longer a gate. It is worth doing before
+a 3,000-provider customer signs, not before an epic is written.
+
+Only after 1 through 3 should the team draft an epic, user stories, or build
+acceptance criteria.

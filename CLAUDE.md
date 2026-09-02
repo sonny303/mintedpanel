@@ -230,7 +230,12 @@ before any schema work.
 `20260825120000_e611_pdf_field_maps.sql`):
 
 - `20260810120000_purge_unreferenced_catalog_payers.sql` — **needs a second PM
-  sign-off. Never agent-apply.**
+  sign-off. Never agent-apply.** **Flag, 2026-09-02:** hosted
+  `supabase_migrations.schema_migrations` carries a row named
+  `purge_unreferenced_catalog_payers` at version `20260812020511`, so something
+  by that name may already have been applied under a different timestamp.
+  Verify the objects before treating this as still pending, and do not
+  re-apply on the strength of this list alone.
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 

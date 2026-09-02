@@ -14,9 +14,47 @@ measured database time.
 ## Evidence status and limitation
 
 The spike required writes to scratch Supabase project
-`vmznysvietfaddakkegt`. Supabase MCP required authentication in this run, so
-the regional scratch seed could not be executed. The checked-in harness refuses
-the production ref `fkvuhfsqcmujywzgczmc`; no production data was written.
+`vmznysvietfaddakkegt`. That seed has still not been run, so the regional
+end-to-end rerun remains open. The checked-in harness refuses the production
+ref `fkvuhfsqcmujywzgczmc`; no production data was written.
+
+**Hosted read-only verification, 2026-09-02.** What could be checked against
+hosted without writing has been:
+
+- **The harness models hosted indexes faithfully.** This was the main risk in a
+  synthetic benchmark and it holds. Hosted `providers` really does carry only
+  `providers_pkey` plus the partial `idx_providers_pending_verification`, and
+  `matrix-scale-setup.sql` creates exactly that pair. The case and contract
+  index sets match too. The reported 50-provider page timings therefore already
+  include the sequential scan and sort that hosted would do, rather than
+  flattering the result with an index production does not have.
+- **The production refusal guard is real**, not just documented.
+- **The four-part case key is confirmed on hosted**:
+  `credential_cases_provider_group_payer_state_key` on
+  `(provider_id, group_id, payer_id, state) NULLS NOT DISTINCT`.
+- **One structural assumption did not survive.** See "The cell grain is not
+  one-to-one with cases" below. It is not a scale problem and it reproduces at
+  current data size.
+
+### Current production scale, for prioritisation
+
+| Entity                 | Hosted today | S4 model |
+| ---------------------- | -----------: | -------: |
+| Providers              |       **21** |    3,000 |
+| Cases                  |       **42** |   60,000 |
+| Payers (global)        |        **9** |       20 |
+| Facilities             |       **38** |       40 |
+| Active network targets |       **75** |      140 |
+| Contracts              |        **0** |      700 |
+
+Largest single org: 11 providers, 17 cases.
+
+The model is roughly 143x current provider count. Nothing in today's dataset
+forces paging, virtualization, or a cursor. That does not invalidate the
+finding, because the 3,000-provider promise is the question that was asked and
+the disproof of the unbounded grid stands. It does change sequencing: the
+paging work is insurance against a sales promise, not relief for a live
+performance problem. Build the correctness items first.
 
 Measurements below are real, repeatable local PostgreSQL 16.15 numbers on a
 4-vCPU Intel Xeon VM with 16 GiB RAM and a local Unix socket. They establish a
@@ -175,6 +213,54 @@ approximately 11 ms RLS p95, 741 KiB raw for the deliberately wide
 denormalized row shape, and 35 ms optimistic render p95. A normalized DTO that
 emits provider and payer labels once should be smaller.
 
+## The cell grain is not one-to-one with cases
+
+**This is a correctness bug in the proposed read shape, not a performance
+finding, and it reproduces on hosted today at 21 providers.**
+
+The recommended matrix is rows = provider, columns = payer, scoped to a _set_
+of granted groups. The case key is four-part: provider + group + payer + state.
+Provider and payer are two of those four. So one `(provider, payer)` cell can
+match more than one case whenever the granted set spans several groups or the
+provider works in several states.
+
+Verified against hosted with the exact query shape recommended below, for one
+real org with three granted groups:
+
+- 8 providers in the page, 8 payer columns, so **64 cells**;
+- the query returned **65 rows**.
+
+The extra row is a real provider with two live cases for the same payer:
+different group, different state (`CA` and `ID`), and **different statuses**
+(`submitted` and `in_progress`). One cell, two truths, no rule for which one
+wins.
+
+The internal `/cases` matrix does not have this problem because it never asks
+the question. `casesMatrix.ts` derives a section at a time, where a section is
+one group **and** one state, so section + row + column is exactly the four-part
+key and "one cell = one case" is true by construction. `CLAUDE.md` calls that
+pinning out explicitly. The client design drops it, because a client grant is a
+_set_ of groups and the executive question spans states.
+
+Silently taking the first row would show an executive a status that is real but
+arbitrary, and would flip between page loads as row order changes. Options,
+cheapest first:
+
+1. **Section the client matrix the same way the internal one does**, by
+   (group, state). Consistent with existing code and provably correct. Costs a
+   flatter, longer page.
+2. **Make state a required filter** and section by group only. Reduces but does
+   not remove collisions: a provider in two granted groups in the same state
+   still collides.
+3. **Let a cell hold several cases** and define a documented reduction, for
+   example worst-status-wins with the count surfaced. Most flexible, most
+   product surface, and the reduction rule is a new decision.
+
+Do not resolve this in the UI. A cell that renders one of two cases is a data
+contract problem, and it will reach exports and aggregate counts too.
+
+**Product decision required before build.** Add it to the S2 yes/no list.
+
 ## Recommended read strategy
 
 Use one client-specific API query with:
@@ -221,6 +307,21 @@ this spike. Add a composite case filter index only if the scratch
 `EXPLAIN ANALYZE` or realistic concurrent load misses the proposed budget;
 the current state/payer/provider queries do not justify one.
 
+**Hosted note.** This is the one index the design actually needs, and it is
+worth stating more plainly than "future". Hosted `providers` has no `org_id`
+index at all, only the primary key and the partial pending-verification index.
+Every org-scoped provider query in the whole application is a sequential scan
+today. At 21 rows that is free and invisible. The cursor page above sorts the
+whole org's provider set on every request, so this index is what makes the
+50-provider window a window rather than a full sort with a `LIMIT` on top.
+
+Separately, hosted carries two pairs of duplicate indexes on
+`payer_network_targets`: `idx_payer_network_targets_org_id` and
+`payer_network_targets_org_idx` cover the same column, as do
+`idx_payer_network_targets_payer_id` and `payer_network_targets_payer_idx`.
+Harmless but wasteful on every write. Unrelated to the portal; worth folding
+into whatever migration lands the cursor index.
+
 ## UX and workflow requirements exposed by scale
 
 - Loading must reserve the grid structure, announce progress, and preserve
@@ -245,9 +346,16 @@ the current state/payer/provider queries do not justify one.
 
 ## Decisions and blockers
 
-1. **Hosted proof:** authenticate Supabase MCP and rerun against
+0. **Cell grain (new, blocking):** decide how a `(provider, payer)` cell
+   resolves when the granted group set or the state span produces more than one
+   case. Reproduced on hosted today. See the section above. This blocks the DTO
+   shape, so it outranks everything else here.
+1. **Hosted proof:** the schema, index, and key assumptions are now verified
+   against hosted read-only. What remains is the timing rerun against
    `vmznysvietfaddakkegt`; local timings cannot establish regional end-to-end
-   p95.
+   p95. Lower priority than it looks: at 21 providers there is no live
+   performance problem to measure, and the local numbers already disprove the
+   unbounded grid.
 2. **Raleigh semantics:** use `facilities.city` plus active provider-facility
    assignments, not provider home address. Product must confirm whether “in
    Raleigh” means assigned to any Raleigh facility, the case's selected

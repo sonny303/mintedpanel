@@ -1,7 +1,8 @@
 # S2 — Client-safe data surface
 
-**Status:** field classification complete against the checked-in schema;
-hosted column recheck remains blocked by Supabase MCP authentication  
+**Status:** field classification complete and **hosted-verified 2026-09-02**;
+one table-selection error corrected below; the readiness derivation is
+data-blocked, not schema-blocked  
 **Persona:** client owner / executive sponsor; provider self-view is out of
 scope  
 **Default:** never expose a source row. Client API DTOs contain only fields
@@ -27,11 +28,8 @@ grants, explicit source projections, and query-level exclusion predicates.
 
 ## Evidence and completeness
 
-The S2 brief required a live `information_schema.columns` query. Supabase MCP
-required authentication in this run, so hosted could not be independently
-queried. The classification was built from
-`src/integrations/supabase/types.ts` and checked-in migration final state on
-2026-09-02:
+The classification was built from `src/integrations/supabase/types.ts` and
+checked-in migration final state on 2026-09-02:
 
 - 14 named tables from the brief;
 - 9 additional tables required by current joins, grains, status history, and
@@ -39,9 +37,53 @@ queried. The classification was built from
 - 23 tables and **378 source columns total**.
 
 Run `node scripts/benchmarks/audit-client-surface-columns.mjs` to prove every
-generated `Row` column in those tables appears exactly once below. This proves
-repository completeness, not hosted parity. A hosted `information_schema`
-diff is a pre-build blocker.
+generated `Row` column in those tables appears exactly once below.
+
+**Hosted parity: confirmed.** The pre-build `information_schema` diff has since
+been run against hosted project `fkvuhfsqcmujywzgczmc` with read-only SQL. All
+23 tables matched their repo column count exactly, summing to 378. There is no
+schema drift between `types.ts` and hosted for any table on this surface, so
+every verdict below applies to a column that really exists.
+
+| Table                           | Cols | Table                        | Cols |
+| ------------------------------- | ---: | ---------------------------- | ---: |
+| `providers`                     |   53 | `payers`                     |   24 |
+| `provider_groups`               |   43 | `tasks`                      |   18 |
+| `credential_cases`              |   28 | `touches`                    |   18 |
+| `facilities`                    |   28 | `launches`                   |   15 |
+| `state_licenses`                |   14 | `provider_documents`         |   15 |
+| `enrollment_facts`              |   13 | `contracts`                  |   12 |
+| `case_generation_exclusions`    |   13 | `audit_log`                  |   12 |
+| `case_status_history`           |   12 | `status_history`             |   11 |
+| `status_configs`                |    9 | `provider_group_assignments` |    8 |
+| `provider_facility_assignments` |    8 | `payer_network_targets`      |    8 |
+| `case_facilities`               |    7 | `msos`                       |    5 |
+| `organizations`                 |    4 |                              |      |
+
+### Correction: one audited table is dead, and the live one is missing
+
+Hosted row counts show the audit picked the wrong generation table.
+`case_generation_exclusions` holds **0 rows**. The live disposition ledger is
+`case_generation_run_rows` at **127 rows**, carrying `disposition`
+(`created` 42, `skipped` 60, `skipped_existing` 22, `enrolled` 3), `reason`,
+and an `exclusion_id` pointer. `CLAUDE.md` names it as the ledger, and it is
+what any "Closed / not pursued" client status must read.
+
+The 378 figure is correct for the tables chosen, but the choice is wrong here.
+Classify `case_generation_run_rows` before build:
+
+| Columns                                                           | Verdict     | Reason                                                                                               |
+| ----------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| `provider_id`, `group_id`, `payer_id`, `state`                    | **Visible** | The four-part key needed to place a "not pursued" cell on the matrix.                                |
+| `disposition`                                                     | **Masked**  | Coarsen to the client vocabulary. Never return the raw token: `skipped_existing` is internal detail. |
+| `reason`                                                          | **Never**   | Free text authored by coordinators; same risk class as notes.                                        |
+| `id`, `org_id`, `run_id`, `case_id`, `exclusion_id`, `created_at` | **Never**   | Internal provenance and scope.                                                                       |
+| `sop_template_id`, `sop_version`, `sop_resolution_tier`           | **Never**   | Internal SOP resolution detail.                                                                      |
+
+Two more audited tables are dormant on hosted: `launches` (0 rows) and `msos`
+(0 rows), matching the `CLAUDE.md` deprecation list. Their 20 columns are all
+already marked Never, so no verdict changes, but they should be dropped from
+the surface's scope rather than carried as if live.
 
 The brief's statement that a case is provider + payer + state is stale:
 `credential_cases` is currently unique on provider + group + payer + state.
@@ -309,6 +351,59 @@ The exact `ready_to_bill` predicate and whether `denied` maps to attention or
 closed are product decisions. Until answered, the API must not claim a billing
 date.
 
+### The schema already draws the estimate/confirmed line
+
+An earlier note asked product to invent an estimate-versus-confirmed
+distinction. It already exists. Hosted `credential_cases` carries no generic
+`effective_date`; it carries **`expected_effective_date`** and
+**`confirmed_effective_date`** as separate columns, plus `approved_date`,
+`submitted_date`, and `contract_executed_date`. `enrollment_facts.effective_date`,
+`contracts.effective_date`, and `facilities.effective_date` supply the rest.
+
+Every one of those is already classified Visible above. So the open question is
+narrower than "what facts make ready-to-bill true?" The facts have columns. What
+is undecided is only the boolean combination: which of the four must be true,
+and whether an expected date may drive a displayed forecast at all.
+
+### The forecast is data-blocked, and that is the real v1 constraint
+
+This is the finding that should move the roadmap. Hosted population of the
+exact columns the portal's headline question depends on:
+
+| Field                                       | Populated | Of  |
+| ------------------------------------------- | --------: | --- |
+| `credential_cases.expected_effective_date`  |     **0** | 42  |
+| `credential_cases.confirmed_effective_date` |     **1** | 42  |
+| `credential_cases.contract_executed_date`   |     **0** | 42  |
+| `credential_cases.approved_date`            |     **1** | 42  |
+| `contracts` rows (entire table)             |     **0** | 0   |
+| `enrollment_facts` live rows (org-wide)     |     **2** | 2   |
+
+Case status is healthy by comparison: 22 submitted, 13 not_started, 5
+in_progress, 1 approved, 1 in_review.
+
+The consequence is concrete. A portal shipped against today's data would answer
+"when can I bill?" with **unknown for essentially every cell**, and
+`ready_to_bill` would be reachable by at most one case in the entire system.
+Any contract-gated readiness predicate returns false everywhere, because the
+`contracts` table is empty.
+
+The spike's instinct to never collapse a missing date into zero days is right.
+What it did not know is that missing is not the edge case. It is the default.
+
+Two implications for product:
+
+1. **v1 is a status portal, not a forecast portal.** "Where is each provider
+   with each payer" is answerable today from `case_status`, which is populated.
+   "When can I bill" is not, and no API design fixes that.
+2. **Date capture is the prerequisite, and it is a coordinator workflow
+   change, not an engineering task.** Until `expected_effective_date` and
+   `confirmed_effective_date` are filled as part of normal case work, a
+   forecast surface will display an empty column to an executive. That is worse
+   than not shipping it, because it reads as "nothing is happening."
+
+Sequence the date-capture change before, or alongside, the portal build.
+
 ## Recommended read surface
 
 Use API DTOs only for the wire contract:
@@ -344,14 +439,24 @@ in UI filtering:
 2. `providers.reference_only = false`.
 3. `providers.status <> 'terminated'`.
 4. `providers.verification_state <> 'pending_verification'` (missing from the
-   brief but already enforced by the internal matrix).
+   brief but already enforced by the internal matrix). Hosted currently holds
+   **0** such rows and only the value `verified`, so this predicate is a no-op
+   today. Keep it anyway: it is defensive, it is indexed
+   (`idx_providers_pending_verification`), and import is what creates these rows.
 5. Provider/group scope comes from active
    `provider_group_assignments`, never frozen `providers.group_id`.
 6. Provider/facility cohorts use `provider_facility_assignments`; product must
    define primary-vs-any semantics.
 7. `provider_groups.is_active = true`.
 8. `facilities.is_active = true AND facilities.reference_only = false`.
-9. Payers are active, not archived, and not merged.
+9. Payers are active, not archived, and not merged. **Name the columns
+   explicitly.** Hosted `payers` carries four overlapping signals: `status`
+   (`NOT NULL DEFAULT 'active'`), `is_active` (**nullable**, default true),
+   `archived_at`, and `merged_into_id`. A rule that says "active" without
+   naming one is ambiguous, and `is_active IS NULL` would silently drop rows
+   under a naive `is_active = true`. Recommended predicate:
+   `status = 'active' AND merged_into_id IS NULL`, which is what the verified
+   query in S4 uses.
 10. `payer_network_targets.status = 'active'` when targets define columns.
 11. Every joined org-owned table is independently constrained to
     `ctx.orgId`; every group-bearing row is intersected with
@@ -381,6 +486,15 @@ Default remains “no” until each is answered.
 11. Are terminated providers and historical enrollments entirely absent from
     v1 rather than available behind a history filter?
 12. May clients export the same allowlisted DTO, with no additional columns?
+13. **(New, blocking.)** When a granted group set or a multi-state provider
+    produces more than one case for the same `(provider, payer)` cell, what
+    does the cell show? Section by group and state like the internal matrix,
+    require a state filter, or define a documented reduction? Proven to occur
+    on hosted today; see S4.
+14. **(New.)** Should v1 ship a forecast at all, given that
+    `expected_effective_date` is populated on 0 of 42 hosted cases and
+    `contracts` is empty? A status-only v1 is answerable from today's data; a
+    forecast is not.
 
 ## Audit behavior
 
