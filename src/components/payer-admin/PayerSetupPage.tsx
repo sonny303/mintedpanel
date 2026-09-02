@@ -33,8 +33,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePayers, useReactivatePayer, useSops } from "@/hooks/useAdmin";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
+import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { fmtDate } from "@/lib/format";
-import { catalogSetupPayers } from "@/lib/payerSetup";
+import { catalogSetupPayers, networkPayerIdsFromTargets } from "@/lib/payerSetup";
+import { resolvePayerNextAction } from "@/lib/payerNextAction";
 import {
   DEFAULT_PAYER_SETUP_FILTERS,
   DEFAULT_PAYER_SETUP_PAGE_SIZE,
@@ -53,6 +55,8 @@ import { PAYER_KIND_LABELS, formatStates } from "@/lib/payerDirectory";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
 import { useIsAdmin } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import type { FunnelRow } from "@/lib/payerReadinessFunnel";
+import { ArrowRight } from "lucide-react";
 
 const KPI_CARDS: Array<{ key: PayerSetupKpiKey; label: string }> = [
   { key: "all", label: "All payers" },
@@ -245,9 +249,76 @@ function DefaultTemplateCard() {
   );
 }
 
+function NextActionCell({
+  row,
+  funnel,
+  inNetwork,
+}: {
+  row: PayerSetupViewRow;
+  funnel: FunnelRow | null;
+  inNetwork: boolean;
+}) {
+  if (row.archived) {
+    return <span className="text-[12.5px] text-muted-foreground">Archived</span>;
+  }
+  const action = resolvePayerNextAction({ funnel, inNetwork, archived: false });
+
+  if (action.kind === "ready" || action.kind === "ready_no_form") {
+    return <StatusPill status="green" label={action.label} />;
+  }
+
+  if (action.kind === "author_template") {
+    return (
+      <Link
+        to="/admin/templates/new"
+        search={{ payerId: row.payerId, tier: "global" }}
+        className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
+      >
+        {action.label} <ArrowRight className="h-3 w-3" />
+      </Link>
+    );
+  }
+
+  if (action.kind === "attach_group") {
+    return (
+      <Link
+        to="/groups"
+        className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
+      >
+        {action.label} <ArrowRight className="h-3 w-3" />
+      </Link>
+    );
+  }
+
+  if (action.templateId && action.intent) {
+    return (
+      <Link
+        to="/admin/templates/$id"
+        params={{ id: action.templateId }}
+        search={{ intent: action.intent }}
+        className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
+      >
+        {action.label} <ArrowRight className="h-3 w-3" />
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      to="/admin/payer-admin/setup/$payerId"
+      params={{ payerId: row.payerId }}
+      search={action.detailTab ? { tab: action.detailTab } : undefined}
+      className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
+    >
+      {action.label} <ArrowRight className="h-3 w-3" />
+    </Link>
+  );
+}
+
 export function PayerSetupPage() {
   const payersQ = usePayers();
   const funnel = usePayerReadinessFunnel();
+  const targetsQ = usePayerNetworkTargets();
   const isAdmin = useIsAdmin();
   const reactivateMut = useReactivatePayer();
 
@@ -259,6 +330,17 @@ export function PayerSetupPage() {
     setFilters((prev) => ({ ...prev, ...patch }));
     setPage(1);
   };
+
+  const networkIds = useMemo(
+    () => networkPayerIdsFromTargets(targetsQ.data ?? []),
+    [targetsQ.data],
+  );
+
+  const funnelByPayer = useMemo(() => {
+    const map = new Map<string, FunnelRow>();
+    for (const row of funnel.rows ?? []) map.set(row.payerId, row);
+    return map;
+  }, [funnel.rows]);
 
   // Catalog inclusion (no group-attach filter). Archived rows ride the same
   // rule with the opt-in flag; funnel rows (active payers only) carry the
@@ -300,7 +382,7 @@ export function PayerSetupPage() {
         description={
           isLoading
             ? "Loading payers…"
-            : `${totalCount} payer${totalCount === 1 ? "" : "s"} in the catalog`
+            : `${totalCount} payer${totalCount === 1 ? "" : "s"} in the catalog. Attaching a payer to a group happens on Groups → Payer Network.`
         }
       />
 
@@ -398,7 +480,7 @@ export function PayerSetupPage() {
             </div>
           ) : (
             <div className="mt-4 overflow-x-auto rounded-[6px] border border-[#E8E5E0] bg-white">
-              <table className="w-full min-w-[720px] border-collapse text-left">
+              <table className="w-full min-w-[800px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-[#E8E5E0] bg-[#FBFBF9] text-[11px] font-semibold uppercase tracking-[.05em] text-muted-foreground">
                     <th scope="col" className="px-4 py-2.5 font-semibold">
@@ -413,13 +495,15 @@ export function PayerSetupPage() {
                     <th scope="col" className="px-4 py-2.5 font-semibold">
                       Template status
                     </th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">
+                      Next action
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {slice.pageRows.map((row) => (
                     <tr key={row.payerId} className="border-b border-[#F0EEEA] last:border-b-0">
                       <td className="px-4 py-3">
-                        {/* The payer name is the ONLY link in the row. */}
                         <Link
                           to="/admin/payer-admin/setup/$payerId"
                           params={{ payerId: row.payerId }}
@@ -443,6 +527,13 @@ export function PayerSetupPage() {
                           isAdmin={isAdmin}
                           reactivatingId={reactivatingId ?? null}
                           onReactivate={handleReactivate}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <NextActionCell
+                          row={row}
+                          funnel={funnelByPayer.get(row.payerId) ?? null}
+                          inNetwork={networkIds.has(row.payerId)}
                         />
                       </td>
                     </tr>

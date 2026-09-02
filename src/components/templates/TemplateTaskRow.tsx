@@ -45,6 +45,7 @@ import {
 import { isValidEmail } from "@/lib/contactValidation";
 import { DOCUMENT_KIND_META, parseDocumentKind, requireableDocumentKinds } from "@/lib/documents";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { portalDisplayName, portalsForPicker } from "@/lib/portalRetirement";
 import type { Portal, SOPStepType } from "@/types";
 import type { TokenGroup } from "@/lib/tokenGroups";
 
@@ -1049,11 +1050,14 @@ function PortalStepSelect({
 }) {
   const [showAll, setShowAll] = useState(false);
 
-  const matching = templatePayerId ? portals.filter((p) => p.payerId === templatePayerId) : [];
+  const matching = templatePayerId
+    ? portalsForPicker(portals, step.portalKey).filter((p) => p.payerId === templatePayerId)
+    : [];
   // Fall back to the full list when the payer has no portals (or the template
   // has no payer) — otherwise the user would see an empty picker.
+  const visiblePortals = portalsForPicker(portals, step.portalKey);
   const useAll = showAll || !templatePayerId || matching.length === 0;
-  const base = useAll ? portals : matching;
+  const base = useAll ? visiblePortals : matching;
 
   const selectedKey = normalizePortalKey(step.portalKey);
   const selected = selectedKey
@@ -1065,7 +1069,7 @@ function PortalStepSelect({
   const value = selected ? selected.portalKey : NO_PORTAL;
 
   const canToggle =
-    Boolean(templatePayerId) && matching.length > 0 && portals.length > matching.length;
+    Boolean(templatePayerId) && matching.length > 0 && visiblePortals.length > matching.length;
 
   const registerCta = onRequestRegister ? (
     <button
@@ -1094,7 +1098,7 @@ function PortalStepSelect({
         ) : null}
       </div>
 
-      {portals.length === 0 ? (
+      {visiblePortals.length === 0 ? (
         <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
           No portal registered{templatePayerId ? " for this payer" : ""}.{" "}
           {onRequestRegister ? (
@@ -1117,7 +1121,7 @@ function PortalStepSelect({
               <SelectItem value={NO_PORTAL}>No portal (not linked)</SelectItem>
               {options.map((p) => (
                 <SelectItem key={p.id} value={p.portalKey}>
-                  {p.name}
+                  {portalDisplayName(p)}
                 </SelectItem>
               ))}
             </SelectContent>

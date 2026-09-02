@@ -70,12 +70,13 @@ const NAMES = new Map([
 ]);
 
 describe("tabs", () => {
-  it("carries the six designed tabs and defaults unknown values to overview", () => {
+  it("carries the seven designed tabs and defaults unknown values to overview", () => {
     expect(PAYER_DETAIL_TABS).toEqual([
       "overview",
       "enrollments",
       "cases",
       "templates",
+      "portals",
       "scorecard",
       "manage",
     ]);
