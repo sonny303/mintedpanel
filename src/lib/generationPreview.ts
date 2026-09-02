@@ -10,10 +10,12 @@
 // before today — the exact E1.8 derivation) FURTHER FILTERED to providers
 // holding at least one provider_facility_assignments row at a facility of
 // the group (presence-based — that table has no end_date/status). THEN
-// intersected with the provider's footprint in the TARGET STATE: an active
-// assigned clinic of that group in that state, OR a license on file for
-// that state. Group-wide "works at any clinic" is not enough — proposing
-// Aetna-TX for a CO-only provider is work that cannot create value.
+// intersected with the provider's footprint in the TARGET STATE, which lives
+// in src/lib/providerFootprint.ts and is SHARED with the provider Readiness
+// card so the two surfaces can never disagree: an active assigned clinic of
+// that group in that state, OR a license on file for that state. Group-wide
+// "works at any clinic" is not enough — proposing Aetna-TX for a CO-only
+// provider is work that cannot create value.
 // Because the candidate set is a subset of the E1.8 readiness universe,
 // every candidate key resolves in the readiness matrix. A license gap on
 // a state they DO work in still rides readiness; it is not a skip.
@@ -26,6 +28,11 @@
 // stores anything, and nothing mutates append-only history.
 
 import { canonicalLabel } from "@/lib/canonicalStatuses";
+import {
+  buildFootprintIndex,
+  providerFootprintFor,
+  type ProviderFootprint,
+} from "@/lib/providerFootprint";
 import { DENIED_LABEL } from "@/lib/statusLabels";
 import type { CaseGenerationExclusionReason as ExclusionReason } from "@/types";
 
@@ -166,58 +173,12 @@ export function previewRowKey(
   return `${row.providerId}|${row.groupId}|${row.payerId}|${row.state}`;
 }
 
-function clinicStatesByProviderGroup(
-  facilities: readonly GenerationFacilityInput[],
-  assignments: readonly GenerationFacilityAssignmentInput[],
-): Map<string, Set<string>> {
-  const facilityById = new Map(facilities.map((f) => [f.id, f]));
-  const out = new Map<string, Set<string>>();
-  for (const fa of assignments) {
-    if (!fa.providerId || !fa.facilityId) continue;
-    const facility = facilityById.get(fa.facilityId);
-    if (!facility?.groupId) continue;
-    if (facility.isActive === false) continue;
-    const state = facility.state?.trim();
-    if (!state) continue;
-    const key = `${fa.providerId}|${facility.groupId}`;
-    if (!out.has(key)) out.set(key, new Set());
-    out.get(key)?.add(state);
-  }
-  return out;
-}
-
-function licenseStatesByProvider(
-  licenses: readonly GenerationLicenseInput[],
-): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>();
-  for (const license of licenses) {
-    if (!license.providerId) continue;
-    const state = license.state.trim();
-    if (!state) continue;
-    if (!out.has(license.providerId)) out.set(license.providerId, new Set());
-    out.get(license.providerId)?.add(state);
-  }
-  return out;
-}
-
-function qualifiesForTargetState(
-  providerId: string,
-  groupId: string,
-  state: string,
-  clinicStates: Map<string, Set<string>>,
-  licenseStates: Map<string, Set<string>>,
-): { clinic: boolean; licensed: boolean } {
-  const clinic = clinicStates.get(`${providerId}|${groupId}`)?.has(state) === true;
-  const licensed = licenseStates.get(providerId)?.has(state) === true;
-  return { clinic, licensed };
-}
-
 function derivationReason(
   providerName: string,
   groupName: string,
   payerName: string,
   state: string,
-  footprint: { clinic: boolean; licensed: boolean },
+  footprint: ProviderFootprint,
 ): string {
   const why = footprint.clinic
     ? `works at a ${groupName} clinic in ${state}`
@@ -256,8 +217,11 @@ export function buildGenerationPreview(input: GenerationPreviewInput): Generatio
     clinicProvidersByGroup.get(groupId)?.add(fa.providerId);
   }
 
-  const clinicStates = clinicStatesByProviderGroup(input.facilities, input.facilityAssignments);
-  const licenseStates = licenseStatesByProvider(input.licenses ?? []);
+  const footprintIndex = buildFootprintIndex({
+    facilities: input.facilities,
+    facilityAssignments: input.facilityAssignments,
+    licenses: input.licenses,
+  });
 
   // Existing-case indexes for the TE-6 two-branch match.
   const nullGroupCases = new Map<string, GenerationExistingCaseInput>();
@@ -285,12 +249,11 @@ export function buildGenerationPreview(input: GenerationPreviewInput): Generatio
       const provider = providerById.get(providerId);
       if (!provider) continue; // terminated / unknown providers never produce rows
 
-      const footprint = qualifiesForTargetState(
+      const footprint = providerFootprintFor(
+        footprintIndex,
         providerId,
         target.groupId,
         target.state,
-        clinicStates,
-        licenseStates,
       );
       if (!footprint.clinic && !footprint.licensed) continue;
 
