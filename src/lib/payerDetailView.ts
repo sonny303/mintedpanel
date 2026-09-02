@@ -27,6 +27,7 @@ export const PAYER_DETAIL_TABS = [
   "enrollments",
   "cases",
   "templates",
+  "portals",
   "scorecard",
   "manage",
 ] as const;
@@ -38,6 +39,7 @@ export const PAYER_DETAIL_TAB_LABELS: Record<PayerDetailTab, string> = {
   enrollments: "Enrollments",
   cases: "Cases",
   templates: "Templates",
+  portals: "Portals",
   scorecard: "Scorecard",
   manage: "Manage",
 };

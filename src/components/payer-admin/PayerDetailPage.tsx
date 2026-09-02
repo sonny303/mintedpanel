@@ -12,19 +12,16 @@
 //
 // Tab bodies mount lazily — each owns its own hooks, so opening Overview never
 // fetches the scorecard's fill/status-history caches.
-import { useMemo, useRef } from "react";
-import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { PayerCasesTab } from "@/components/payer-admin/PayerCasesTab";
 import { PayerEnrollmentsTab } from "@/components/payer-admin/PayerEnrollmentsTab";
 import { PayerManageTab } from "@/components/payer-admin/PayerManageTab";
 import { PayerOverviewTab } from "@/components/payer-admin/PayerOverviewTab";
+import { PayerPortalsTab } from "@/components/payer-admin/PayerPortalsTab";
 import { PayerScorecardPanel } from "@/components/payer-admin/PayerScorecardPanel";
 import { PayerTemplatesTab } from "@/components/payer-admin/PayerTemplatesTab";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
+import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
 import { catalogAction } from "@/lib/payerCatalogActions";
 import { PAYER_KIND_LABELS } from "@/lib/payerDirectory";
 import {
@@ -32,10 +29,17 @@ import {
   PAYER_DETAIL_TAB_LABELS,
   type PayerDetailTab,
 } from "@/lib/payerDetailView";
+import { resolvePayerNextAction } from "@/lib/payerNextAction";
 import { networkPayerIdsFromTargets } from "@/lib/payerSetup";
 import { useIsAdmin } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type { Payer, PayerCatalogStatus, PayerKind } from "@/types";
+import { ArrowRight } from "lucide-react";
+import { useMemo, useRef } from "react";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusPill, type StatusColor } from "@/components/StatusPill";
 
 const KIND_PILL: Record<PayerKind, StatusColor> = {
   commercial: "brand",
@@ -234,6 +238,8 @@ export function PayerDetailPage({
         ) : null}
       </header>
 
+      <PayerNextStepBanner payerId={payerId} inNetwork={inNetwork} archived={Boolean(payer.archivedAt)} />
+
       <div
         role="tablist"
         aria-label="Payer sections"
@@ -307,9 +313,68 @@ function TabBody({
       return <PayerCasesTab payer={payer} />;
     case "templates":
       return <PayerTemplatesTab payer={payer} />;
+    case "portals":
+      return <PayerPortalsTab payer={payer} />;
     case "scorecard":
       return <PayerScorecardPanel payer={payer} />;
     case "manage":
       return <PayerManageTab payer={payer} />;
   }
+}
+
+function PayerNextStepBanner({
+  payerId,
+  inNetwork,
+  archived,
+}: {
+  payerId: string;
+  inNetwork: boolean;
+  archived: boolean;
+}) {
+  const funnel = usePayerReadinessFunnel();
+  const row = useMemo(
+    () => (funnel.rows ?? []).find((r) => r.payerId === payerId) ?? null,
+    [funnel.rows, payerId],
+  );
+  const action = resolvePayerNextAction({ funnel: row, inNetwork, archived });
+
+  if (funnel.isLoading) return <Skeleton className="h-14 w-full rounded-[6px]" />;
+  if (funnel.isError) return null;
+
+  const cta =
+    action.kind === "author_template" ? (
+      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+        <Link to="/admin/templates/new" search={{ payerId, tier: "global" }}>
+          {action.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        </Link>
+      </Button>
+    ) : action.kind === "attach_group" ? (
+      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+        <Link to="/groups">
+          {action.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        </Link>
+      </Button>
+    ) : action.templateId && action.intent ? (
+      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+        <Link
+          to="/admin/templates/$id"
+          params={{ id: action.templateId }}
+          search={{ intent: action.intent }}
+        >
+          {action.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        </Link>
+      </Button>
+    ) : action.kind === "ready" || action.kind === "ready_no_form" ? (
+      <StatusPill status="green" label={action.label} />
+    ) : null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-[6px] border border-[#E8E5E0] bg-white px-4 py-3">
+      <div className="min-w-[200px] flex-1">
+        <div className="text-[13px] font-semibold text-foreground">Next step: {action.label}</div>
+        <div className="text-[12px] text-muted-foreground">{action.description}</div>
+      </div>
+      {cta}
+    </div>
+  );
 }
