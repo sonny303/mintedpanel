@@ -72,10 +72,11 @@ for (const line of readFileSync(documentPath, "utf8").split("\n")) {
   }
   if (!activeTable) continue;
 
-  const row = /^\| ((?:`[^`]+`(?:, )?)+) \| \*\*(Visible|Masked|Never)\*\* \|/.exec(line);
-  if (!row) continue;
-  const verdict = row[2].toLowerCase();
-  for (const token of row[1].matchAll(/`([^`]+)`/g)) {
+  const cells = line.split("|");
+  const verdictMatch = /\*\*(Visible|Masked|Never)\*\*/.exec(cells[2] ?? "");
+  if (!verdictMatch) continue;
+  const verdict = verdictMatch[1].toLowerCase();
+  for (const token of (cells[1] ?? "").matchAll(/`([^`]+)`/g)) {
     const column = token[1];
     const tableClassifications = classified.get(activeTable);
     if (!tableClassifications || !generated.get(activeTable)?.has(column)) {
