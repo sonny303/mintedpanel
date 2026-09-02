@@ -7,11 +7,12 @@
 // the source caches on every read. The generation entry is case-centric
 // ("Generate cases", the canonical noun — the nav says Cases) and lands on
 // the provider-scoped /generation grid (E6.3 TS-127).
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -34,7 +35,9 @@ import {
   useEnrollmentReadiness,
   useProviderReadinessFacts,
 } from "@/hooks/useEnrollmentReadiness";
-import { useProviderGroupAssignments } from "@/hooks/useProviders";
+import { useProviderAssignments, useProviderGroupAssignments } from "@/hooks/useProviders";
+import { useFacilities, useOrgStateLicenses } from "@/hooks/useLookups";
+import { buildFootprintIndex, hasStateFootprint } from "@/lib/providerFootprint";
 import {
   filterReadinessRows,
   type ReadinessCheck,
@@ -123,32 +126,58 @@ export function ProviderReadinessSection({ providerId }: { providerId: string })
   const readiness = useEnrollmentReadiness();
   const assignmentsQ = useProviderGroupAssignments();
   const factsQ = useProviderReadinessFacts();
+  // The footprint inputs — the SAME rows /generation reads for candidacy, so
+  // the two surfaces agree on which states this provider belongs in. All three
+  // are org-scoped shared caches; readiness already holds two of them.
+  const facilitiesQ = useFacilities();
+  const facilityAssignmentsQ = useProviderAssignments();
+  const licensesQ = useOrgStateLicenses();
   const [filters, setFilters] = useState<ReadinessFilters>(ALL_FILTERS);
+  const [showAllTargets, setShowAllTargets] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
 
-  if (readiness.isError) {
+  const footprint = useMemo(
+    () =>
+      buildFootprintIndex({
+        facilities: facilitiesQ.data ?? [],
+        facilityAssignments: facilityAssignmentsQ.data ?? [],
+        licenses: licensesQ.data ?? [],
+      }),
+    [facilitiesQ.data, facilityAssignmentsQ.data, licensesQ.data],
+  );
+
+  if (readiness.isError || facilityAssignmentsQ.isError) {
     return (
       <div className="flex items-center gap-3">
         <p className="text-[13px] text-[#B91C1C]">Couldn&apos;t load readiness inputs.</p>
-        <Button variant="outline" size="sm" onClick={readiness.refetch}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            readiness.refetch();
+            if (facilityAssignmentsQ.isError) void facilityAssignmentsQ.refetch();
+          }}
+        >
           Retry
         </Button>
       </div>
     );
   }
-  if (!readiness.rows) {
+  // Wait for the footprint inputs too — scoping on a half-built index would
+  // render every row out-of-footprint and flash an empty table.
+  if (!readiness.rows || facilityAssignmentsQ.data === undefined) {
     return <Skeleton className="h-16 w-full" />;
   }
 
   // The record's slice of the org matrix: this provider's rows only.
-  const myRows = readiness.rows.filter((r) => r.providerId === providerId);
+  const allMyRows = readiness.rows.filter((r) => r.providerId === providerId);
   const today = localTodayIso();
   const hasGroup = (assignmentsQ.data ?? []).some(
     (a) => a.providerId === providerId && (a.endDate == null || a.endDate.slice(0, 10) >= today),
   );
   const hasFacts = (factsQ.data ?? []).some((f) => f.providerId === providerId);
 
-  if (myRows.length === 0) {
+  if (allMyRows.length === 0) {
     // Assignment is in but the 5-minute facts cache hasn't caught up yet —
     // keep the skeleton up rather than the misleading "attach payers" empty.
     if (hasGroup && !hasFacts && factsQ.isFetching) {
@@ -181,6 +210,18 @@ export function ProviderReadinessSection({ providerId }: { providerId: string })
     );
   }
 
+  // Scope the record to states this provider actually works in: an active
+  // clinic of that group there, or a license on file. A group targeting eight
+  // states does not make its PT licensed in eight states, and those rows can
+  // never go green — they only bury the ones that can. The org matrix
+  // underneath is unchanged (generation and the queue still read it whole);
+  // this is a display scope, and the toggle reveals the rest.
+  const inFootprint = allMyRows.filter((r) =>
+    hasStateFootprint(footprint, providerId, r.groupId, r.state),
+  );
+  const outOfFootprintCount = allMyRows.length - inFootprint.length;
+  const myRows = showAllTargets ? allMyRows : inFootprint;
+
   const groupName = (id: string) =>
     readiness.groups.find((g) => g.id === id)?.name ?? "Unknown group";
   const payerName = (id: string) =>
@@ -192,12 +233,27 @@ export function ProviderReadinessSection({ providerId }: { providerId: string })
   const ready = myRows.filter((r) => r.ready).length;
   const rowKey = (r: ReadinessRow) => `${r.groupId}|${r.payerId}|${r.state}`;
 
+  const scopeToggle =
+    outOfFootprintCount > 0 ? (
+      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-muted-foreground">
+        <Checkbox
+          checked={showAllTargets}
+          onCheckedChange={(v) => setShowAllTargets(v === true)}
+          aria-label="Show all group targets"
+        />
+        Show all group targets ({outOfFootprintCount} outside this provider&apos;s states)
+      </label>
+    ) : null;
+
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-4">
         <p className="text-[13px] text-muted-foreground">
-          The pre-flight check before enrollment starts: one row per group, payer, and state from
-          the active payer targets. Readiness is advisory — nothing here blocks creating cases.
+          The pre-flight check before enrollment starts: one row per group, payer, and state,{" "}
+          {showAllTargets
+            ? "across every active payer target for this provider's groups."
+            : "for the states this provider works in."}{" "}
+          Readiness is advisory — nothing here blocks creating cases.
         </p>
         <Button asChild className="shrink-0 bg-[#1B4D3E] hover:bg-[#163F33]">
           <Link to="/generation" search={{ provider: providerId }}>
@@ -260,7 +316,15 @@ export function ProviderReadinessSection({ providerId }: { providerId: string })
         </span>
       </div>
 
-      {visible.length === 0 ? (
+      {scopeToggle}
+
+      {myRows.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">
+          This provider has no clinic or license in any state their groups target, so there is
+          nothing to pre-flight yet. Add a license or a facility assignment, or show all group
+          targets above.
+        </p>
+      ) : visible.length === 0 ? (
         <p className="text-[13px] text-muted-foreground">No rows match the current filters.</p>
       ) : (
         <Table>

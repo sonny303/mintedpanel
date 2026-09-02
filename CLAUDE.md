@@ -428,6 +428,12 @@ file** — it is not on the one-door allowlist and must not be added.
 
 Candidates = active `payer_network_targets` × group roster, filtered to
 providers with a facility assignment **and a footprint in the target state**.
+That footprint rule (an active assigned clinic of that group in that state, OR
+a license on file for it) lives in **`src/lib/providerFootprint.ts`** and is
+shared with the provider Readiness card — one definition, so the two surfaces
+can never disagree about which states a provider belongs in. Build the index
+once per derivation with `buildFootprintIndex`, then ask
+`hasStateFootprint` / `providerFootprintFor` per row.
 Buckets (candidate / enrolled / existing / excluded) are pure
 (`src/lib/generationGrid.ts`), and the confirm bar states a sum invariant —
 every candidate is accounted for.
@@ -455,6 +461,20 @@ creates tasks), `src/lib/nextBestActions.ts` (fixed shipped ranking; the config
 seam was removed), `src/lib/providerGaps.ts`, `src/lib/reports.ts` (grouped
 index — adding a report is one registry entry + one route),
 `src/lib/casesMatrix.ts` (the `/cases` Matrix board — see below).
+
+**The readiness matrix is deliberately WIDE, and that is not what any one
+screen shows.** `evaluateEnrollmentReadiness` emits active targets × group
+roster with no footprint filter, because three consumers need the superset:
+`useGenerationPreview` (soft-warn chips), `useNextBestActions`, and
+`services/nextBestAction.ts` (the `/api` route) all look rows up by case key,
+and a filtered matrix would miss keys. **Scope at the render layer, never
+inside the evaluator.** `ProviderReadinessSection` does exactly that: it shows
+only states the provider has a footprint in, with a "Show all group targets"
+checkbox that reveals the rest (a group targeting eight states does not make
+its PT licensed in eight states, and those rows can never go green). Note the
+UI hook does NOT pass `contracts`, so on that card the payer axis carries no
+information the `(group, state)` pair doesn't already — the other two callers
+do pass it.
 
 `casesMatrix.ts` derives the provider × payer board a section at a time, where
 a section is **one group + one state**. That pinning is what makes "one cell =

@@ -438,3 +438,94 @@ test("TS-44: group state gap + stale CAQH stay advisory — nothing blocked, no 
   await page.getByRole("option", { name: "License not verified" }).click();
   await expect(card).toContainText("No rows match the current filters.");
 });
+
+test("MP-BUG: the record scopes readiness to the states the provider works in", async ({
+  context,
+  page,
+}) => {
+  // Marc's real shape, reduced: one group targeting EIGHT states, one clinic
+  // (ID), one license (ID). The seven other target states are the group's
+  // footprint, not his — before this fix they rendered as 7 more rows, each
+  // carrying three license gaps he could never close.
+  const targetStates = ["CO", "ID", "KS", "NC", "OR", "SC", "TX", "WI"];
+  const fixtures = makeFixtures({
+    party_role_assignments: contactAssignments(ORG_SHELBY, "shelby"),
+    provider_groups: [
+      { ...groupRow(ORG_SHELBY, "g-2", "Shelby Performance Group LLC"), states: targetStates },
+    ],
+    facilities: [
+      facilityRow(ORG_SHELBY, "f-id", "g-2", "Caldwell Clinic", "ID"),
+      // The group also runs a TX clinic — Marc is not assigned to it, so TX
+      // is the group's footprint and never his.
+      facilityRow(ORG_SHELBY, "f-tx", "g-2", "Katy Clinic", "TX"),
+    ],
+    providers: [readyProvider(ORG_SHELBY, "pr-m", "Marc", "Douek")],
+    provider_group_assignments: [
+      { id: "ga-m", org_id: ORG_SHELBY, provider_id: "pr-m", group_id: "g-2", is_primary: true },
+    ],
+    provider_facility_assignments: [
+      {
+        id: "fa-m",
+        org_id: ORG_SHELBY,
+        provider_id: "pr-m",
+        facility_id: "f-id",
+        is_primary: true,
+        created_at: "2026-07-10T00:00:00Z",
+      },
+    ],
+    state_licenses: [
+      {
+        id: "lic-m",
+        org_id: ORG_SHELBY,
+        provider_id: "pr-m",
+        state: "ID",
+        license_number: "1471680",
+        expiration_date: "2028-01-06",
+        verified_status: "verified",
+      },
+    ],
+    payers: [payerRow("pay-aetna", "Aetna", targetStates)],
+    org_payer_assignments: [
+      { id: "opa-1", org_id: ORG_SHELBY, payer_id: "pay-aetna", starter: false },
+    ],
+    payer_network_targets: targetStates.map((state, i) => ({
+      id: `pnt-${i}`,
+      org_id: ORG_SHELBY,
+      payer_id: "pay-aetna",
+      group_id: "g-2",
+      state,
+      status: "active",
+      created_at: "2026-07-12T00:00:00Z",
+    })),
+    provider_documents: groupDocs(ORG_SHELBY, "g-2"),
+  });
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/providers/pr-m");
+  await page.getByRole("tab", { name: "Cases" }).click();
+  const card = page.locator("#readiness");
+
+  // Default scope: ID only — the one state he holds a clinic and a licence in.
+  await expect(card).toContainText("of 1 ready", { timeout: 30000 });
+  await expect(card.locator("tbody tr")).toHaveCount(1);
+  await expect(card).toContainText("for the states this provider works in");
+  for (const state of targetStates.filter((s) => s !== "ID")) {
+    await expect(card.locator("tbody tr", { hasText: `Aetna${state}` })).toHaveCount(0);
+  }
+
+  // The other seven are disclosed, not silently dropped.
+  const toggle = card.getByLabel("Show all group targets");
+  await expect(card).toContainText("7 outside this provider's states");
+  await toggle.click();
+  await expect(card).toContainText("of 8 ready");
+  await expect(card.locator("tbody tr")).toHaveCount(8);
+  await expect(card).toContainText("across every active payer target");
+
+  // Un-toggling returns to the scoped view, and the whole pass stored nothing
+  // (the E1.8 derived contract is untouched by the scope).
+  await toggle.click();
+  await expect(card.locator("tbody tr")).toHaveCount(1);
+  expect(writes).toHaveLength(0);
+});
