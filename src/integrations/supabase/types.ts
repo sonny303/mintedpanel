@@ -4,7 +4,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17";
+    PostgrestVersion: "14.5";
   };
   public: {
     Tables: {
@@ -2064,7 +2064,7 @@ export type Database = {
           retired_by?: string | null;
           storage_path: string;
           supersedes_id?: string | null;
-          template_id: string;
+          template_id?: string | null;
           version?: number;
         };
         Update: {
@@ -4098,10 +4098,6 @@ export type Database = {
             };
             Returns: string;
           };
-      delete_org_sop_template: {
-        Args: { p_org_id: string; p_template_id: string };
-        Returns: Json;
-      };
       create_payer: {
         Args: {
           p_aliases?: string[];
@@ -4163,6 +4159,14 @@ export type Database = {
           p_recipient_email: string;
           p_recipient_name?: string;
         };
+        Returns: Json;
+      };
+      delete_case: {
+        Args: { p_case_id: string; p_org_id: string };
+        Returns: undefined;
+      };
+      delete_org_sop_template: {
+        Args: { p_org_id: string; p_template_id: string };
         Returns: Json;
       };
       delete_payer_contact: {

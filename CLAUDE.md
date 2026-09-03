@@ -223,11 +223,12 @@ before any schema work.
 
 **Repo-only migrations awaiting an operator apply** (a starting hint only —
 **always verify the object on hosted**, never trust this list. As of
-2026-08-25, object-verified applied and dropped from this list:
+2026-09-03, object-verified applied and dropped from this list:
 `20260824170000_payer_forms.sql`, `20260812130000_payer_contacts_select_opa_retire.sql`,
 `20260812140000_sop_template_multi_state.sql`, `20260813120000_e610_control_options.sql`,
 `20260814180000_author_global_sop_returns_jsonb.sql`,
-`20260825120000_e611_pdf_field_maps.sql`):
+`20260825120000_e611_pdf_field_maps.sql`,
+`20260903210000_delete_org_sop_template.sql`):
 
 - `20260810120000_purge_unreferenced_catalog_payers.sql` — **needs a second PM
   sign-off. Never agent-apply.**
@@ -236,6 +237,11 @@ before any schema work.
 
 Because some are unapplied, a `types.ts` regen may **delete** types for columns
 the repo just added. Check before regenerating.
+
+**Known hosted-only drift:** `delete_case(p_case_id, p_org_id)` exists on hosted
+with no repo migration, no app caller, and no doc entry — surfaced by the
+2026-09-03 types regen, which carries it into `types.ts`. Provenance unknown; do
+not build on it without tracing where it came from.
 
 ### Key RPCs
 
