@@ -98,9 +98,11 @@ describe("isUnfillableToken / UNFILLABLE_FAMILIES", () => {
   });
 
   it("never claims a token one surface can fill", () => {
-    // license/user resolve on web only. Withdrawing them would delete working
-    // web mappings — narrowing per-surface is DYN-TOKEN-02, not this bite.
+    // user resolves on web only; license/groupInsurance now resolve on both
+    // (TOKEN-05). Withdrawing either would delete working mappings —
+    // narrowing per-surface is DYN-TOKEN-02, not this bite.
     expect(isUnfillableToken("license.expirationDate")).toBe(false);
+    expect(isUnfillableToken("groupInsurance.policyNumber")).toBe(false);
     expect(isUnfillableToken("user.name")).toBe(false);
     expect(isUnfillableToken("provider.npi")).toBe(false);
   });
