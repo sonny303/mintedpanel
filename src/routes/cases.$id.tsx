@@ -31,10 +31,13 @@ import {
   useSetPayerReference,
   useSetPrimaryCaseFacility,
 } from "@/hooks/useCases";
-import { useCoordinators, useFacilities } from "@/hooks/useLookups";
+import { useCoordinators, useFacilities, useStateLicensesByProvider } from "@/hooks/useLookups";
+import { useGroupInsurancePolicies } from "@/hooks/useOrgSettings";
 import { useProviderAssignments } from "@/hooks/useProviders";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { caseFacilityOptions } from "@/lib/caseFacility";
+import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
+import { pickLicenseForState } from "@/lib/licensePick";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseStatusControl } from "@/components/cases/CaseStatusControl";
@@ -63,6 +66,10 @@ function CaseDetailPage() {
   const facilityAssignmentsQ = useProviderAssignments();
   const caseFacilitiesQ = useCaseFacilities(id);
   const c = caseQ.data;
+  const licensesQ = useStateLicensesByProvider(c?.providerId);
+  // DYN-TOKEN-05 — policies for the CASE's group (not the provider's primary
+  // mirror). Empty string keeps the query disabled until a group is known.
+  const policiesQ = useGroupInsurancePolicies(c?.groupId ?? "");
 
   const setStatusM = useSetCaseStatus();
   const logTouchM = useLogTouch();
@@ -93,11 +100,38 @@ function CaseDetailPage() {
     );
   }, [c?.providerId, c?.groupId, c?.facilityId, facilityAssignmentsQ.data, facilitiesQ.data]);
 
-  // token -> value map for the TaskDrawer's pdf-step form filler, from the
-  // data this page already holds (no extra fetch). PHI stays in the browser.
+  // DYN-TOKEN-05 — which of the provider's state licenses the license.* tokens
+  // mean. The CASE names exactly one state (it is part of the 4-part case key),
+  // so this is unambiguous here in a way the web profile's ?state= param has to
+  // ask for. Same shared rule either way: no state match, or several licenses
+  // and no state, resolves to null rather than to a plausible wrong number on a
+  // payer application.
+  const caseLicense = useMemo(
+    () => pickLicenseForState(licensesQ.data ?? [], c?.state).row,
+    [licensesQ.data, c?.state],
+  );
+
+  // DYN-TOKEN-05 — which group insurance policy groupInsurance.* tokens mean.
+  // Same shared rule as the web profile (malpractice → primary → newest end
+  // date). The CASE's groupId decides which policies are candidates; the web
+  // profile uses the provider's primary group because it has no case.
+  const caseGroupInsurance = useMemo(
+    () => pickGroupInsurancePolicy(policiesQ.data ?? [], Boolean(c?.groupId)).row,
+    [policiesQ.data, c?.groupId],
+  );
+
+  // token -> value map for the TaskDrawer's pdf-step form filler and the Payer
+  // PDF action, from the data this page already holds. PHI stays in the browser.
   const stepTokenValues = useMemo(
-    () => buildProviderTokenValues(c?.provider ?? null, c?.group ?? null, c?.facility ?? null),
-    [c?.provider, c?.group, c?.facility],
+    () =>
+      buildProviderTokenValues(
+        c?.provider ?? null,
+        c?.group ?? null,
+        c?.facility ?? null,
+        caseLicense,
+        caseGroupInsurance,
+      ),
+    [c?.provider, c?.group, c?.facility, caseLicense, caseGroupInsurance],
   );
 
   if (caseQ.isLoading) {

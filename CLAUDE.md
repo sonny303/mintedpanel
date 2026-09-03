@@ -351,18 +351,19 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
 
 ### Frozen mirrors and deprecated columns (read, never write)
 
-| Column / table                                                                | State                                                                         |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                |
-| `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`      |
-| `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                |
-| `credential_cases.credentialing_status_id`, `payer_pipeline_state`            | read-only dual-write mirrors of `case_status`                                 |
-| `payers.payer_slug`, `last_synced_at`, `avg_decision_days`, `resolution_id_*` | deprecated in place — no writer                                               |
-| `launches` table, `providers.launch_id`                                       | legacy; nothing reads or writes them                                          |
-| `notes` table                                                                 | dormant for case/task (moved to `touches`); **still live for provider notes** |
-| `msos`, `mso_routing_rules`                                                   | dormant — routing engine deleted app-side                                     |
-| `org_payer_settings`, `next_best_action_configs`, `payer_catalog_changes`     | dormant                                                                       |
-| `org_payer_assignments.starter`                                               | dormant                                                                       |
+| Column / table                                                                | State                                                                                                                                            |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                                                                                   |
+| `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`                                                                         |
+| `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                                                                                   |
+| `credential_cases.credentialing_status_id`, `payer_pipeline_state`            | read-only dual-write mirrors of `case_status`                                                                                                    |
+| `payers.payer_slug`, `last_synced_at`, `avg_decision_days`, `resolution_id_*` | deprecated in place — no writer                                                                                                                  |
+| `providers.license_*` (number/state/issue/expiration)                         | **never written; null for every provider.** `state_licenses` is the real grain and what provider create/update writes — `license.*` is canonical |
+| `launches` table, `providers.launch_id`                                       | legacy; nothing reads or writes them                                                                                                             |
+| `notes` table                                                                 | dormant for case/task (moved to `touches`); **still live for provider notes**                                                                    |
+| `msos`, `mso_routing_rules`                                                   | dormant — routing engine deleted app-side                                                                                                        |
+| `org_payer_settings`, `next_best_action_configs`, `payer_catalog_changes`     | dormant                                                                                                                                          |
+| `org_payer_assignments.starter`                                               | dormant                                                                                                                                          |
 
 ## Cross-cutting subsystems
 
@@ -610,6 +611,14 @@ control silently dates a break to a fill that never touched it.**
   an inbound-email writer must ship a constraint migration **before** inserting.
 - The Pre-Credentialing sentinel payer workflow code is intact but unreachable
   (no creatable payer carries the name).
+- **The token picker offers more than either fill can resolve, and the payer-PDF
+  sample fill used to hide it.** `useTokenCatalog()` serves one 157-token
+  catalog to BOTH mappers. TOKEN-01/06 narrowed the mapping pickers and made
+  the sample fill honest via `PDF_FILL_FAMILIES` (`fillTokenReach.ts`). The
+  real payer-PDF path (`buildProviderTokenValues`) now reaches `provider.*` /
+  `group.*` / `facility.*` / `license.*` / `groupInsurance.*`. Remaining
+  web-only gap: `assignment.*`, `user.*`. Measured posture per family in
+  `docs/ops/dyn-token-00-parity-spike.md` — read it before adding a token.
 - The extension's picker is driven from the served `catalog`;
   `src/shared/quickCards.ts` holds only the default layout and projection
   helpers, not a field-list mirror. (An older note here claimed otherwise —

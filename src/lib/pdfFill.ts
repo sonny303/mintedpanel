@@ -14,6 +14,10 @@
 import { buildEntityTokenValues, composeAddressToken } from "@/lib/entityTokens";
 import { normalizeFieldLabel } from "@/lib/tokenFormat";
 import type { Facility, FieldDictionaryEntry, Provider, ProviderGroup } from "@/types";
+// Type-only, like csvImport/payerForm/providerGroup do — no runtime edge from
+// lib into services.
+import type { StateLicense } from "@/services/lookups";
+import type { InsurancePolicy } from "@/services/orgSettings";
 
 /** One PDF form field name resolved (or not) to a catalog token. */
 export interface PdfFieldMapping {
@@ -109,12 +113,32 @@ export function resolvePdfValues(
 // (entityTokens) rather than a hand-written list: this map used to name ~40 of
 // the catalog's provider/group/facility tokens, so a mapped field whose column
 // simply was not listed here filled as "no_value".
+//
+// DYN-TOKEN-05 — `license` and `groupInsurance` are child-row entities that
+// have to be CHOSEN. A provider commonly holds several state licenses; a group
+// commonly holds several insurance policies. The caller resolves each with the
+// shared pick rule (`pickLicenseForState` / `pickGroupInsurancePolicy` — the
+// same rules the web fill uses) and passes the row, or passes null. Null is a
+// legitimate answer: those tokens then resolve to no_value, exactly as they
+// did before these parameters existed.
+//
+// Do NOT re-derive the picks in here. The state / group that disambiguates
+// them belongs to the case, which this pure function has no business knowing
+// about.
 export function buildProviderTokenValues(
   provider: Provider | null,
   group: ProviderGroup | null,
   facility: Facility | null,
+  license: StateLicense | null = null,
+  groupInsurance: InsurancePolicy | null = null,
 ): Record<string, string> {
-  const out = buildEntityTokenValues({ provider, group, facility });
+  const out = buildEntityTokenValues({
+    provider,
+    group,
+    facility,
+    license,
+    groupInsurance,
+  });
   const address = facility
     ? composeAddressToken([facility.street, facility.city, facility.state, facility.zip])
     : null;
