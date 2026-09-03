@@ -8,6 +8,7 @@
 import { ExternalLink } from "lucide-react";
 import { usePortals } from "@/hooks/usePortals";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { portalDisplayName } from "@/lib/portalRetirement";
 import { PortalVerificationPill } from "./PortalVerificationPill";
 
 export function PortalStepLink({ portalKey }: { portalKey: string | null | undefined }) {
@@ -30,7 +31,7 @@ export function PortalStepLink({ portalKey }: { portalKey: string | null | undef
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-2.5 py-1.5 text-[12px]">
-      <span className="font-medium text-foreground">{portal.name}</span>
+      <span className="font-medium text-foreground">{portalDisplayName(portal)}</span>
       {portal.formUrl ? (
         <a
           href={portal.formUrl}

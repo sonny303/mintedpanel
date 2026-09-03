@@ -47,7 +47,7 @@ const FORM_DESCRIPTION: Record<FunnelFormSuggestion, string> = {
   register_portal: "Register the portal this checklist fills, then capture fields in Workbench.",
   train_mappings: "Map captured fields so Workbench can auto-fill.",
   repair_drift: "Repair broken field mappings, then re-prove in Workbench.",
-  run_dry_test: "Run the mock dry run in Workbench Train forms, then Mark proven.",
+  run_dry_test: "Run the mock dry run in Workbench, then Mark proven — proven is never automatic.",
 };
 
 /**

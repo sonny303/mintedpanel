@@ -238,7 +238,11 @@ export function PayerDetailPage({
         ) : null}
       </header>
 
-      <PayerNextStepBanner payerId={payerId} inNetwork={inNetwork} archived={Boolean(payer.archivedAt)} />
+      <PayerNextStepBanner
+        payerId={payerId}
+        inNetwork={inNetwork}
+        archived={Boolean(payer.archivedAt)}
+      />
 
       <div
         role="tablist"
@@ -340,22 +344,36 @@ function PayerNextStepBanner({
 
   if (funnel.isLoading) return <Skeleton className="h-14 w-full rounded-[6px]" />;
   if (funnel.isError) return null;
+  // A next-step bar with nothing to do is pure pixel cost.
+  if (action.kind === "ready" || action.kind === "ready_no_form" || archived) return null;
 
   const cta =
     action.kind === "author_template" ? (
-      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+      <Button
+        asChild
+        size="sm"
+        className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+      >
         <Link to="/admin/templates/new" search={{ payerId, tier: "global" }}>
           {action.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Link>
       </Button>
     ) : action.kind === "attach_group" ? (
-      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+      <Button
+        asChild
+        size="sm"
+        className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+      >
         <Link to="/groups">
           {action.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Link>
       </Button>
     ) : action.templateId && action.intent ? (
-      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+      <Button
+        asChild
+        size="sm"
+        className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+      >
         <Link
           to="/admin/templates/$id"
           params={{ id: action.templateId }}
@@ -364,8 +382,6 @@ function PayerNextStepBanner({
           {action.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Link>
       </Button>
-    ) : action.kind === "ready" || action.kind === "ready_no_form" ? (
-      <StatusPill status="green" label={action.label} />
     ) : null;
 
   return (

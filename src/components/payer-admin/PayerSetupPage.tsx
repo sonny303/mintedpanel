@@ -259,7 +259,9 @@ function NextActionCell({
   inNetwork: boolean;
 }) {
   if (row.archived) {
-    return <span className="text-[12.5px] text-muted-foreground">Archived</span>;
+    // Badge lives under Template status — do not repeat "Archived" here
+    // (strict-mode e2e and visual noise).
+    return <span className="text-[12.5px] text-muted-foreground">—</span>;
   }
   const action = resolvePayerNextAction({ funnel, inNetwork, archived: false });
 

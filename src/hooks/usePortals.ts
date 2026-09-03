@@ -15,10 +15,7 @@ import {
 import { listPortalFieldMapsFromApp } from "@/services/portalFieldMaps";
 import { listRecentFillsFromApp } from "@/services/fillSessions";
 import { publishTemplate } from "@/services/templates";
-import {
-  listPortalStepReferences,
-  unlinkPortalKeyFromTasks,
-} from "@/lib/portalRetirement";
+import { listPortalStepReferences, unlinkPortalKeyFromTasks } from "@/lib/portalRetirement";
 import type { FillSession, Portal, SOPTemplate } from "@/types";
 
 export function usePortals() {
@@ -105,6 +102,10 @@ export function useSavePortalFormUrl() {
 /**
  * Stop using a portal: publish every referencing template with portalKey
  * cleared on matching steps, then hide the portal from pickers (name prefix).
+ *
+ * Fail-closed: the portal is hidden ONLY after every unlink publish succeeds.
+ * A mid-loop failure leaves the portal visible and reports how many templates
+ * were already unlinked (full atomicity would need an RPC — out of scope).
  */
 export function useStopUsingPortal() {
   const qc = useQueryClient();
@@ -123,19 +124,32 @@ export function useStopUsingPortal() {
         const t = templates.find((x) => x.id === ref.templateId);
         if (t) byTemplate.set(t.id, t);
       }
-      for (const t of byTemplate.values()) {
-        const { next, changed } = unlinkPortalKeyFromTasks(
-          t.taskDefinitions ?? [],
-          portal.portalKey,
-        );
-        if (!changed) continue;
-        await publishTemplate(
-          t.id,
-          t.currentVersion ?? 1,
-          t.name,
-          next,
-          `Unlinked portal ${portal.portalKey} (stop using)`,
-          t.requiredProfileAttributes,
+      const toPublish = [...byTemplate.values()].filter((t) => {
+        const { changed } = unlinkPortalKeyFromTasks(t.taskDefinitions ?? [], portal.portalKey);
+        return changed;
+      });
+      let published = 0;
+      try {
+        for (const t of toPublish) {
+          const { next, changed } = unlinkPortalKeyFromTasks(
+            t.taskDefinitions ?? [],
+            portal.portalKey,
+          );
+          if (!changed) continue;
+          await publishTemplate(
+            t.id,
+            t.currentVersion ?? 1,
+            t.name,
+            next,
+            `Unlinked portal ${portal.portalKey} (stop using)`,
+            t.requiredProfileAttributes,
+          );
+          published += 1;
+        }
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "publish failed";
+        throw new Error(
+          `Unlinked ${published} of ${toPublish.length} template${toPublish.length === 1 ? "" : "s"}; portal still visible. ${detail}`,
         );
       }
       return hidePortalFromPickers(portal);

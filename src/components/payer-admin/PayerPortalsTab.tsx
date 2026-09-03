@@ -38,8 +38,7 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
         <div className="border-b border-[#E8E5E0] px-5 py-4">
           <h2 className="text-[16px] font-semibold text-foreground">Portals — {payer.name}</h2>
           <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-            Portal keys are permanent identity. Renaming a key means registering a new portal and
-            relinking. Row opens URL edit and stop-using.
+            Row opens URL edit and stop-using. Portal keys are permanent identity.
           </p>
         </div>
         <div className="p-5">
@@ -62,7 +61,9 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
             <Skeleton className="h-28 w-full rounded-[6px]" />
           ) : rows.length === 0 ? (
             <div className="rounded-[6px] border border-dashed border-[#DCDAD4] px-4 py-10 text-center">
-              <div className="text-[14px] font-semibold text-foreground">No portals for this payer</div>
+              <div className="text-[14px] font-semibold text-foreground">
+                No portals for this payer
+              </div>
               <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
                 Register a portal from a template&apos;s online-form step (Form setup), or when an
                 Action links one during authoring.
@@ -96,8 +97,12 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
                       }}
                     >
                       <td className="px-3">
-                        <div className="text-[13px] font-medium text-foreground">{row.displayName}</div>
-                        <code className="text-[11px] text-muted-foreground">{row.portal.portalKey}</code>
+                        <div className="text-[13px] font-medium text-foreground">
+                          {row.displayName}
+                        </div>
+                        <code className="text-[11px] text-muted-foreground">
+                          {row.portal.portalKey}
+                        </code>
                       </td>
                       <td
                         className="max-w-[220px] truncate px-3 font-mono text-[12px] text-muted-foreground"
@@ -117,7 +122,9 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
                       <td className="px-3 text-[13px] text-muted-foreground">
                         {row.usedByCount} step{row.usedByCount === 1 ? "" : "s"}
                       </td>
-                      <td className="px-3 text-[13px] text-muted-foreground">{row.lastProvenLabel}</td>
+                      <td className="px-3 text-[13px] text-muted-foreground">
+                        {row.lastProvenLabel}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

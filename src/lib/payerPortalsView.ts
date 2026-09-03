@@ -11,23 +11,11 @@ import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, PortalFieldMap, SOPTemplate } from "@/types";
 
 export type PayerPortalStatusKey =
-  | "hidden"
-  | "drift"
-  | "proven"
-  | "trained"
-  | "captured"
-  | "registered"
-  | "no_fields";
+  "hidden" | "drift" | "proven" | "trained" | "captured" | "registered" | "no_fields";
 
 /** Matches StatusPill tones used by the Portals tab — kept local so this
  * module stays free of component imports. */
-export type PayerPortalStatusTone =
-  | "green"
-  | "amber"
-  | "red"
-  | "blue"
-  | "neutral"
-  | "brand";
+export type PayerPortalStatusTone = "green" | "amber" | "red" | "blue" | "neutral" | "brand";
 
 export interface PayerPortalStatus {
   key: PayerPortalStatusKey;

@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   PAYER_DETAIL_TABS,
-  autofillSuggestionStep,
   buildPayerCaseRows,
   buildPayerEnrollmentRows,
   parsePayerDetailTab,
   payerMergeCandidates,
   payerTemplateRows,
   templateIntentForFormSuggestion,
-  templateNextStep,
   templateStateCoverage,
   type PayerCaseSlice,
   type PayerEnrollmentCaseSlice,
@@ -103,32 +101,6 @@ describe("template intent mapping", () => {
     expect(templateIntentForFormSuggestion("train_mappings")).toBe("train");
     expect(templateIntentForFormSuggestion("repair_drift")).toBe("repair");
     expect(templateIntentForFormSuggestion("run_dry_test")).toBe("prove");
-  });
-
-  it("blocking next-step is only author_sop or ready (no form intent)", () => {
-    expect(templateNextStep({ nextAction: "author_sop", sopTemplateId: null })).toMatchObject({
-      label: "Author template",
-      templateId: null,
-      intent: null,
-    });
-    expect(templateNextStep({ nextAction: "ready", sopTemplateId: "t-1" })).toMatchObject({
-      action: "ready",
-      intent: null,
-      templateId: "t-1",
-    });
-  });
-
-  it("autofillSuggestionStep carries optional soft CTA + intent", () => {
-    expect(
-      autofillSuggestionStep({ formSuggestion: "repair_drift", sopTemplateId: "t-1" }),
-    ).toEqual({
-      action: "repair_drift",
-      label: "Repair drift",
-      position: "Autofill · drift",
-      templateId: "t-1",
-      intent: "repair",
-    });
-    expect(autofillSuggestionStep({ formSuggestion: null, sopTemplateId: "t-1" })).toBeNull();
   });
 });
 

@@ -365,7 +365,7 @@ export function FormStepPanel({
                     rel="noreferrer"
                     className="underline underline-offset-2"
                   >
-                    Open portal in a new tab (does not capture)
+                    Open portal
                   </a>
                 ) : (
                   <span>No form URL</span>
@@ -446,10 +446,10 @@ export function FormStepPanel({
               </p>
             ) : null}
 
-            {portal ? (
+            {portal && !portal.provenAt ? (
               <WorkbenchHandoffBlock
                 formUrl={portal.formUrl}
-                mode={portal.provenAt ? "maintain" : maps.length === 0 ? "capture" : "prove"}
+                mode={maps.length === 0 ? "capture" : "prove"}
                 onCopyReturnLink={() => void copyReturnLink()}
               />
             ) : null}
@@ -490,30 +490,17 @@ function WorkbenchHandoffBlock({
   onCopyReturnLink,
 }: {
   formUrl: string | null;
-  mode: "capture" | "prove" | "maintain";
+  mode: "capture" | "prove";
   onCopyReturnLink: () => void;
 }) {
-  const title =
+  const body =
     mode === "capture"
-      ? "Finish capture in Minted Workbench"
-      : mode === "prove"
-        ? "Prove this form in Minted Workbench"
-        : "Finish this in Minted Workbench";
+      ? "Capture fields in the Workbench extension (Send for approval). Panel never submits the form."
+      : "Run the mock dry run in the Workbench extension, then Mark proven — proven is never automatic.";
   return (
     <div className="space-y-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-3 py-3">
-      <p className="text-[12px] font-semibold text-foreground">{title}</p>
-      <p className="text-[12px] text-muted-foreground">
-        Minted Panel does not submit payer portal forms and cannot read the live page. Capture and
-        prove run in the Workbench Chrome extension.
-      </p>
-      <ol className="list-decimal space-y-0.5 pl-4 text-[12px] text-muted-foreground">
-        <li>Open the form page</li>
-        <li>Open the Workbench side panel</li>
-        <li>Capture fields (Send for approval)</li>
-        <li>Run the mock dry run — no real PHI, nothing submitted</li>
-        <li>Mark proven</li>
-      </ol>
-      <div className="flex flex-wrap items-center gap-3 pt-1">
+      <p className="text-[12px] text-muted-foreground">{body}</p>
+      <div className="flex flex-wrap items-center gap-3">
         {formUrl ? (
           <a
             href={formUrl}
@@ -521,7 +508,7 @@ function WorkbenchHandoffBlock({
             rel="noreferrer"
             className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
           >
-            Open portal in a new tab (does not capture)
+            Open portal
           </a>
         ) : null}
         <button
