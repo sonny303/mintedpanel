@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   FIELD_NOT_FOUND_REASON,
+  HIDDEN_KIND,
+  HIDDEN_REASON,
   OTHER_PAGE_KIND,
   OTHER_PAGE_REASON,
   brokenMapsForFill,
   buildDriftByPortal,
+  isHiddenSkip,
+  isNoEvidenceSkip,
   isOnPageNotFound,
   isOtherPageSkip,
   latestRealFillPerPortal,
@@ -54,6 +58,13 @@ const otherPage = (label: string, mapId?: string) => ({
   ...(mapId ? { mapId } : {}),
 });
 
+const hidden = (label: string, mapId?: string) => ({
+  label,
+  reason: HIDDEN_REASON,
+  kind: HIDDEN_KIND,
+  ...(mapId ? { mapId } : {}),
+});
+
 describe("parseSkippedEntries", () => {
   it("returns [] for non-array jsonb", () => {
     expect(parseSkippedEntries(null)).toEqual([]);
@@ -94,6 +105,28 @@ describe("isOnPageNotFound / isOtherPageSkip", () => {
     expect(isOtherPageSkip({ kind: "skipped", reason: OTHER_PAGE_REASON })).toBe(true);
     expect(isOtherPageSkip({ kind: OTHER_PAGE_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(true);
     expect(isOtherPageSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+  });
+
+  it("treats either hidden half as a hidden skip, and never as drift", () => {
+    expect(isHiddenSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(true);
+    expect(isHiddenSkip({ kind: "skipped", reason: HIDDEN_REASON })).toBe(true);
+    expect(isHiddenSkip({ kind: HIDDEN_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(true);
+    expect(isHiddenSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+    expect(isOnPageNotFound({ kind: HIDDEN_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+    expect(isOnPageNotFound({ kind: "skipped", reason: HIDDEN_REASON })).toBe(false);
+  });
+
+  it("keeps the three reasons distinct — no pin collides with another", () => {
+    expect(new Set([FIELD_NOT_FOUND_REASON, OTHER_PAGE_REASON, HIDDEN_REASON]).size).toBe(3);
+    expect(new Set(["skipped", OTHER_PAGE_KIND, HIDDEN_KIND]).size).toBe(3);
+    expect(isHiddenSkip({ kind: OTHER_PAGE_KIND, reason: OTHER_PAGE_REASON })).toBe(false);
+    expect(isOtherPageSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(false);
+  });
+
+  it("folds off-page and hidden into one no-evidence predicate", () => {
+    expect(isNoEvidenceSkip({ kind: OTHER_PAGE_KIND, reason: OTHER_PAGE_REASON })).toBe(true);
+    expect(isNoEvidenceSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(true);
+    expect(isNoEvidenceSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
   });
 });
 
@@ -220,6 +253,33 @@ describe("brokenMapsForFill", () => {
       [m1, m2],
     );
     expect(broken.map((m) => m.id)).toEqual(["m2"]);
+  });
+
+  it("a hidden report is not drift, even mixed with a genuine miss", () => {
+    // The selector RESOLVED — it just pointed into an inactive panel. Counting
+    // that as a dead selector would send a trainer to re-map a working field.
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [hidden("NPI", "m1"), notFound("CAQH ID", "m2")],
+      },
+      [m1, m2],
+    );
+    expect(broken.map((m) => m.id)).toEqual(["m2"]);
+  });
+
+  it("a partial hidden producer is not drift (kind or reason alone)", () => {
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [
+          { label: "NPI", reason: HIDDEN_REASON, kind: "skipped", mapId: "m1" },
+          { label: "CAQH ID", reason: FIELD_NOT_FOUND_REASON, kind: HIDDEN_KIND, mapId: "m2" },
+        ],
+      },
+      [m1, m2],
+    );
+    expect(broken).toEqual([]);
   });
 
   it("a partial other_page producer is not drift (kind or reason alone)", () => {
@@ -414,6 +474,78 @@ describe("lastWorkingAt (S6.4)", () => {
       },
     ];
     expect(lastWorkingAt(S64_MAP, onlyOffPage)).toBeNull();
+  });
+
+  it("walks past a hidden report instead of treating it as last worked", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [hidden("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-11T00:00:00Z",
+        fieldsFilled: 6,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-11T00:00:00Z");
+  });
+
+  it("returns null when every real fill is hidden — no inferred success", () => {
+    const onlyHidden: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [hidden("#npi", "m-npi")],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, onlyHidden)).toBeNull();
+  });
+
+  it("walks past a partial hidden producer (kind overwritten to skipped)", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [{ kind: "skipped", reason: HIDDEN_REASON, mapId: "m-npi", label: "#npi" }],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-02T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-02T00:00:00Z");
+  });
+
+  it("walks past a mix of off-page and hidden to the last real success", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [hidden("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-15T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [otherPage("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-03T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-03T00:00:00Z");
   });
 
   it("walks past a partial other_page producer (kind overwritten to skipped)", () => {
