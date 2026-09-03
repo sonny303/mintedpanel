@@ -46,6 +46,7 @@ import { TrackingIdField } from "@/components/cases/pipeline/TrackingIdField";
 import { isTerminalCaseStatus } from "@/lib/caseStatus";
 import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
+import { DeleteCaseAction } from "@/components/cases/DeleteCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
 
@@ -215,6 +216,7 @@ function CaseDetailPage() {
         ) : null}
 
         <ReapplyCaseAction c={c} canEdit={canEdit} />
+        <DeleteCaseAction c={c} isAdmin={isAdmin} />
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">

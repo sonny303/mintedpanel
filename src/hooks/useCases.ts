@@ -7,6 +7,7 @@ import {
   addCaseFacility,
   appendCaseTasks,
   createCase,
+  deleteCase,
   getCase,
   getCaseFacilities,
   getCases,
@@ -278,5 +279,26 @@ export function useCaseDenialEntries() {
     queryFn: () => listCaseDenialEntries(),
     enabled: orgId !== "no-org",
     staleTime: THIRTY_SECONDS,
+  });
+}
+
+/** Admin hard-delete — frees the 4-part key for generation. */
+export function useDeleteCase() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (caseId: string) => deleteCase(caseId),
+    onSuccess: (_data, caseId) => {
+      qc.removeQueries({ queryKey: queryKeys.case(orgId, caseId) });
+      qc.removeQueries({ queryKey: queryKeys.caseFacilities(orgId, caseId) });
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["touches", orgId] });
+      qc.invalidateQueries({ queryKey: ["enrollment-facts", orgId] });
+      qc.invalidateQueries({ queryKey: ["case-generation-exclusions", orgId] });
+      qc.invalidateQueries({ queryKey: ["generation-case-rows", orgId] });
+      qc.invalidateQueries({ queryKey: ["generation-runs", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
   });
 }
