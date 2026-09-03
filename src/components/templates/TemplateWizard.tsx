@@ -36,6 +36,7 @@ import {
   History,
   Plus,
   Save,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -47,6 +48,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -81,7 +83,7 @@ import {
   type ActionPresetId,
   type EditableTask,
 } from "@/components/templates/editableTemplate";
-import { useCreateSop, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
+import { useCreateSop, useDeleteOrgSop, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
 import { useAuthoringPayers } from "@/hooks/usePayerCatalog";
 import { useAuthorGlobalSop } from "@/hooks/useGlobalAuthoring";
 import { useFormDrift } from "@/hooks/useFormDrift";
@@ -259,9 +261,11 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const createMut = useCreateSop();
   const authorGlobalMut = useAuthorGlobalSop();
   const updateMut = useUpdateSop(initial?.id ?? "");
+  const deleteMut = useDeleteOrgSop(initial?.id ?? "");
   const publishMut = usePublishSop(initial?.id ?? "");
   const saveDraftMut = useSaveSopTemplateDraft();
   const deleteDraftMut = useDeleteSopTemplateDraft();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const portals = useMemo<Portal[]>(() => portalsQ.data ?? [], [portalsQ.data]);
 
@@ -1037,6 +1041,19 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     }
   }
 
+  async function handleDeletePermanently() {
+    if (!initial || isGlobal) return;
+    try {
+      await deleteMut.mutateAsync();
+      toast.success(`Deleted “${initial.name}” — existing cases keep their checklist`);
+      setDirty(false);
+      setDeleteOpen(false);
+      exitEditor();
+    } catch (err) {
+      toast.error(errorMessage(err, "Delete failed"));
+    }
+  }
+
   const canGoBack = step > 1;
   const canGoNext = step < 3;
 
@@ -1101,6 +1118,16 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                     </>
                   )}
                 </Button>
+                {!isGlobal ? (
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                ) : null}
               </>
             ) : null}
           </div>
@@ -1589,6 +1616,38 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           canRestore={canEdit}
           onClose={() => setHistoryOpen(false)}
         />
+      ) : null}
+
+      {deleteOpen && initial && !isGlobal ? (
+        <Dialog open onOpenChange={(o) => !o && !deleteMut.isPending && setDeleteOpen(false)}>
+          <DialogContent className="sm:max-w-md border-[#E8E5E0] shadow-none">
+            <DialogHeader>
+              <DialogTitle>Delete permanently?</DialogTitle>
+              <DialogDescription>
+                “{initial.name}” will be removed from future case generation. Cases that already
+                used this template keep their checklist. Attached payer PDFs are retired (files stay
+                available for those cases). Portals and field maps are left alone. This cannot be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleteMut.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => void handleDeletePermanently()}
+                disabled={deleteMut.isPending}
+              >
+                {deleteMut.isPending ? "Deleting…" : "Delete permanently"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {discardDialog}

@@ -1588,8 +1588,10 @@ export interface ProviderDocument {
 
 export interface PayerForm {
   id: string;
-  /** The template the form was uploaded on — payer and states are read from it. */
-  templateId: string;
+  /** The template the form was uploaded on — payer and states are read from it.
+   * Nullable after the owning template is hard-deleted (form stays retired so
+   * older cases can still download). */
+  templateId: string | null;
   payerId: string;
   /** Stable lineage id: the identity a TEMPLATE ACTION points at. */
   familyId: string;
