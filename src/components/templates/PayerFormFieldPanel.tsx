@@ -175,13 +175,17 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   // DYN-TOKEN-01 — mock ONLY what the real payer-PDF fill could resolve.
   // `mockValueForToken` is documented "always non-empty": it answers any token
   // via a field-name heuristic. Mocking every mapped token therefore made a
-  // mapping that can never fill (license.expirationDate, user.name — families
+  // mapping that can never fill (user.name, assignment.* — families
   // `buildProviderTokenValues` does not pass) demo perfectly, and the sample
   // is the trainer's only feedback signal.
   //
   // Out-of-reach tokens are OMITTED rather than blanked, so they travel the
   // same path a real case gives them: planPayerFormFill classifies an absent
   // value as `empty_token` and the existing UI already shows that as a gap.
+  //
+  // DYN-TOKEN-05 — `license.*` IS reachable now (case page picks one). Keep
+  // `isPdfFillableToken` / `PDF_FILL_FAMILIES` in step with that, or the
+  // sample fill will teach the opposite of the case fill again.
   const sampleValues = useMemo(() => {
     const values: Record<string, string> = {};
     for (const map of maps) {

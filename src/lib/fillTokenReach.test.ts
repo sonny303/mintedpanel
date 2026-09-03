@@ -17,15 +17,17 @@ import {
 } from "@/lib/fillTokenReach";
 
 describe("isPdfFillableToken", () => {
-  it("admits exactly the three families buildProviderTokenValues passes", () => {
+  it("admits exactly the families buildProviderTokenValues passes", () => {
     expect(isPdfFillableToken("provider.npi")).toBe(true);
     expect(isPdfFillableToken("group.tin")).toBe(true);
     expect(isPdfFillableToken("facility.city")).toBe(true);
+    // DYN-TOKEN-05 — case page picks a state_licenses row and passes it.
+    expect(isPdfFillableToken("license.licenseNumber")).toBe(true);
+    expect(isPdfFillableToken("license.expirationDate")).toBe(true);
   });
 
   it("rejects every family with no row in hand on the case page", () => {
     for (const token of [
-      "license.expirationDate",
       "assignment.isPrimary",
       "groupInsurance.policyNumber",
       "user.name",
@@ -38,12 +40,16 @@ describe("isPdfFillableToken", () => {
   });
 
   // The bug this constant exists to prevent: ENTITY_TOKEN_FAMILIES includes
-  // `mso` because the SOP resolver passes an MSO row. buildProviderTokenValues
-  // does not, so reusing that list here would claim reach the PDF fill lacks.
-  it("is NOT ENTITY_TOKEN_FAMILIES — mso is in that list and unreachable here", () => {
+  // `mso` because the SOP resolver passes an MSO row, and omits `license`
+  // because that module does not choose a child row. buildProviderTokenValues
+  // is the opposite on both counts — reusing that list would lie either way.
+  it("is NOT ENTITY_TOKEN_FAMILIES — mso yes there / no here; license inverted", () => {
     expect(ENTITY_TOKEN_FAMILIES).toContain("mso");
+    expect(ENTITY_TOKEN_FAMILIES).not.toContain("license");
     expect(PDF_FILL_FAMILIES).not.toContain("mso");
+    expect(PDF_FILL_FAMILIES).toContain("license");
     expect(isPdfFillableToken("mso.name")).toBe(false);
+    expect(isPdfFillableToken("license.state")).toBe(true);
   });
 });
 

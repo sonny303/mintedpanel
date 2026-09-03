@@ -219,15 +219,16 @@ and the sample from advertising them is not.**
 
 ## Recommended posture per family
 
-| Family                          | Posture                                                                                                                           |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`, `group`, `facility` | **Parity is the contract.** Both paths resolve; pin it with a test so a new column can't silently break one side.                 |
-| `license`, `assignment`         | **Build PDF parity.** Both are already resolved per-case on web from data the case page can reach; the row is genuinely in reach. |
-| `groupInsurance`                | **Build PDF parity.** Same shape — one policy pick, already implemented once in `providerProfile.ts`.                             |
-| `user`                          | **Build PDF parity.** Cheapest of all: five keys from the caller's own `profiles` row, no case scoping.                           |
-| `payer`, `contract`, `mso`      | **Withdraw from the picker**, or mark unfillable. Unresolvable on both paths by design. Offering them is the defect.              |
-| org contacts                    | **Decide, don't drift.** Web resolves them; the picker hides them. Either offer them and build PDF parity, or say why not.        |
-| `system.today` (proposed)       | **Blocked until the above is settled** — D-DYN-4.                                                                                 |
+| Family                          | Posture                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `provider`, `group`, `facility` | **Parity is the contract.** Both paths resolve; pin it with a test so a new column can't silently break one side.            |
+| `license`                       | **PDF parity BUILT** (TOKEN-05). Sample fill admits it via `PDF_FILL_FAMILIES`. `assignment.*` still needs PDF parity.       |
+| `assignment`                    | **Build PDF parity.** Already resolved per-case on web from data the case page can reach; unused today (zero approved maps). |
+| `groupInsurance`                | **Build PDF parity.** Same shape — one policy pick, already implemented once in `providerProfile.ts`.                        |
+| `user`                          | **Build PDF parity.** Cheapest of all: five keys from the caller's own `profiles` row, no case scoping.                      |
+| `payer`, `contract`, `mso`      | **Withdraw from the picker**, or mark unfillable. Unresolvable on both paths by design. Offering them is the defect.         |
+| org contacts                    | **Decide, don't drift.** Web resolves them; the picker hides them. Either offer them and build PDF parity, or say why not.   |
+| `system.today` (proposed)       | **Blocked until the above is settled** — D-DYN-4.                                                                            |
 
 ---
 
@@ -305,6 +306,18 @@ which state, which policy) do not port cleanly from `providerProfile.ts`.
   web route has to ask via `?state=`. It never falls back: several licenses and
   no state resolves to null, because a plausible wrong license number on a
   payer application is worse than a blank.
+- **`PDF_FILL_FAMILIES` must include `license`.** The sample fill reads that
+  list via `isPdfFillableToken`. Leaving it at provider/group/facility after
+  the resolver landed would teach trainers that `license.*` cannot fill when
+  the case fill now can — the exact TOKEN-01 lie, reintroduced. Fixed
+  2026-09-03 (cleanup pass).
+- **Hosted data (2026-09-03):** three of the four broken `provider.license*`
+  global maps were repointed to `license.*`. The fourth —
+  `aetna_direct` `#medicalLicenseNumber` (`a1f760e6-…`), token
+  `provider.licenseState` against a license-**number** label — was a second,
+  separate mis-map. PM call: do not repoint to `license.state`. Reset to
+  `proposed` / null token so UAT can remapping from scratch onto
+  `license.licenseNumber`.
 - **Still open:** `assignment.*` and `groupInsurance.*` PDF parity. Both are
   unused today (zero approved maps), so neither is urgent.
 
