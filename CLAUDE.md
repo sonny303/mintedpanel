@@ -231,6 +231,9 @@ before any schema work.
 
 - `20260810120000_purge_unreferenced_catalog_payers.sql` — **needs a second PM
   sign-off. Never agent-apply.**
+- `20260903210000_delete_case_rpc.sql` — admin `delete_case` hard-delete RPC;
+  apply via Supabase MCP when authenticated (object-verify
+  `pg_proc.proname = 'delete_case'`).
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 
@@ -250,6 +253,14 @@ All are repo migrations unless noted.
   rules, admin corrections, optimistic concurrency, append-only history with
   `reason_code_id`. At Approved, each **expected** payer ID must be supplied or
   explicitly acked missing. Exactly one overload; never add a defaulted arg.
+- **`delete_case(p_org_id, p_case_id)`** — admin-only SECURITY DEFINER hard
+  delete. Removes the case and case-scoped children (touches, tasks,
+  status_history, case_facilities; DB cascades for case_status_history /
+  payer_pipeline_history / fill_sessions). Voids matching active generation
+  exclusions; when status was `approved`, expires the live enrollment fact at
+  the same 4-part key. Writes one `audit_log` DELETE row. Does not delete
+  `audit_log` or batch `communication_event` parents. Migration
+  `20260903210000` (repo; hosted apply when Supabase MCP is authenticated).
 - **`create_organization(...)`** — SECURITY DEFINER bootstrap (the org's first
   member can't satisfy RLS). Inserts org + admin membership + the 22 canonical
   `status_configs` + audit row. Sales rep is **optional** — omitting it creates
@@ -446,8 +457,10 @@ flagged fallback. Exclusions are reasoned and voided-not-deleted.
 ### Touchlog
 
 `touches` is the single case-activity spine: `entry_type ∈ {touchpoint, note,
-system_event, task_update}`, append-only. **Corrections are appends, never
-edits.** Only touchpoints carry `touch_type`/`outcome`; seven canonical touch
+system_event, task_update}`, append-only for ordinary writers. **Corrections
+are appends, never edits.** Admin hard-delete of a case (`delete_case`) is the
+controlled carve-out that removes that case's touch rows. Only touchpoints
+carry `touch_type`/`outcome`; seven canonical touch
 types. `src/lib/touchOutcomes.ts` is the channel→outcome source of truth.
 
 Follow-up cadence uses a **carry-forward reducer** (`src/lib/followUps.ts`):

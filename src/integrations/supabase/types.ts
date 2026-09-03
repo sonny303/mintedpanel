@@ -4161,6 +4161,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      delete_case: {
+        Args: { p_case_id: string; p_org_id: string };
+        Returns: undefined;
+      };
       delete_payer_contact: {
         Args: { p_id: string; p_org_id: string };
         Returns: undefined;
