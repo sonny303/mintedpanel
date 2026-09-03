@@ -1,7 +1,7 @@
 // MP-1 / MP-2 — portal maintenance drawer: update URL (with trust-reset
 // warning) and stop-using (unlink references + hide from pickers). Reuses
 // updatePortalUrl / upsertGlobalPortal / publishTemplate — no new backend.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/StatusPill";
@@ -15,9 +15,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import { useSops } from "@/hooks/useAdmin";
-import { usePortalFieldMaps, useSavePortalFormUrl, useStopUsingPortal } from "@/hooks/usePortals";
-import { useFormDrift } from "@/hooks/useFormDrift";
+import { useSavePortalFormUrl, useStopUsingPortal } from "@/hooks/usePortals";
+import { useFieldRegistryEditor } from "@/hooks/useFieldRegistryEditor";
+import { PortalFieldRegistry } from "@/components/portals/PortalFieldRegistry";
 import { fmtDate } from "@/lib/format";
 import { displayPortalUrl, payerPortalStatus } from "@/lib/payerPortalsView";
 import {
@@ -25,7 +28,7 @@ import {
   listPortalStepReferences,
   portalDisplayName,
 } from "@/lib/portalRetirement";
-import { useIsAdmin } from "@/lib/permissions";
+import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { Portal } from "@/types";
 
 const URL_RESET_WARNING =
@@ -50,32 +53,34 @@ export function PortalDrawer({
   onPortalUpdated,
 }: PortalDrawerProps) {
   const isAdmin = useIsAdmin();
+  const canWrite = useCanWrite();
   const templatesQ = useSops();
-  const mapsQ = usePortalFieldMaps(portal.portalKey);
-  const drift = useFormDrift();
   const saveUrlMut = useSavePortalFormUrl();
   const stopMut = useStopUsingPortal();
+  // Same editor the Template Editor's Form setup step mounts — field maps are
+  // portal-keyed, so training and drift repair belong to the portal, not to
+  // whichever template step happens to link it.
+  const registry = useFieldRegistryEditor({ portal });
 
   const [url, setUrl] = useState(portal.formUrl ?? "");
   const [confirmStop, setConfirmStop] = useState(false);
   const [ackUnlink, setAckUnlink] = useState(false);
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const autoOpened = useRef(false);
 
   useEffect(() => {
     setUrl(portal.formUrl ?? "");
     setConfirmStop(false);
     setAckUnlink(false);
+    setMappingOpen(false);
+    autoOpened.current = false;
   }, [portal.id, portal.formUrl]);
 
-  const maps = useMemo(
-    () => (mapsQ.data ?? []).filter((m) => m.status !== "retired"),
-    [mapsQ.data],
-  );
-  const approvedCount = maps.filter((m) => m.status === "approved").length;
-  const driftCount = drift.driftByPortal.get(portal.portalKey)?.length ?? 0;
+  const driftCount = registry.staleIds.size;
   const status = payerPortalStatus({
     portal,
-    mapCount: maps.length,
-    approvedCount,
+    mapCount: registry.rows.length,
+    approvedCount: registry.approvedCount,
     driftCount,
   });
 
@@ -88,10 +93,24 @@ export function PortalDrawer({
   const dirty = url.trim() !== (portal.formUrl ?? "").trim();
   const hidden = isPortalHiddenFromPickers(portal);
   const isGlobal = portal.orgId === null;
+  // Mirror the Template Editor's rule so the same person keeps the same job:
+  // shared rows are trained by any writer (the RPC is the real gate), org-tier
+  // rows stay admin-only. Billing is read-only on both, unlike the editor.
+  const canEditMaps = isGlobal ? canWrite : isAdmin;
+  const needsAttention = registry.coverage.needsDecision > 0 || registry.staleIds.size > 0;
   const busy = saveUrlMut.isPending || stopMut.isPending;
 
-  const recaptureTemplateId =
-    preferTemplateId ?? refs[0]?.templateId ?? null;
+  // Open the mapping block on the work, ONCE, when the maps land — the counts
+  // are zero on mount (the query is still in flight), so an uncontrolled
+  // `defaultOpen` reads false and a drifted form opens folded. Auto-open never
+  // fires twice, so a deliberate collapse stays collapsed.
+  useEffect(() => {
+    if (autoOpened.current || !needsAttention) return;
+    autoOpened.current = true;
+    setMappingOpen(true);
+  }, [needsAttention]);
+
+  const recaptureTemplateId = preferTemplateId ?? refs[0]?.templateId ?? null;
 
   async function saveUrl() {
     if (!dirty) return;
@@ -123,7 +142,9 @@ export function PortalDrawer({
   return (
     <>
       <Dialog open onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="max-w-lg gap-0 border-[#E8E5E0] p-0 shadow-none">
+        {/* Wider than a two-field drawer needs: the field registry rows carry
+            a token picker and wrap badly under ~700px. */}
+        <DialogContent className="max-w-3xl gap-0 border-[#E8E5E0] p-0 shadow-none">
           <DialogHeader className="border-b border-[#E8E5E0] px-5 py-4">
             <DialogTitle className="text-[15px] font-semibold">
               {portalDisplayName(portal)}
@@ -263,7 +284,10 @@ export function PortalDrawer({
                     </thead>
                     <tbody>
                       {refs.map((ref) => (
-                        <tr key={`${ref.templateId}-${ref.taskIndex}-${ref.stepIndex}`} className="border-b border-[#F0EEEA] last:border-0">
+                        <tr
+                          key={`${ref.templateId}-${ref.taskIndex}-${ref.stepIndex}`}
+                          className="border-b border-[#F0EEEA] last:border-0"
+                        >
                           <td className="px-3 py-2">
                             <Link
                               to="/admin/templates/$id"
@@ -282,6 +306,58 @@ export function PortalDrawer({
                   </table>
                 </div>
               )}
+            </section>
+
+            {/* Field mapping, in the surface that owns the portal. The editor
+                keeps the same block for first-time authoring; this one is the
+                maintenance host — repair drift or re-decide a field after a
+                URL change without opening a template. Opens on the work when
+                there is any, stays folded when the form is settled. */}
+            <section className="space-y-2 border-t border-[#E8E5E0] pt-3">
+              <Collapsible open={mappingOpen} onOpenChange={setMappingOpen}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="group flex w-full items-center justify-between gap-2 text-left"
+                  >
+                    <span className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Field mapping
+                      </h3>
+                      {driftCount > 0 ? (
+                        <StatusPill status="red" label={`${driftCount} broken`} />
+                      ) : null}
+                      {registry.coverage.needsDecision > 0 && driftCount === 0 ? (
+                        <StatusPill
+                          status="amber"
+                          label={`${registry.coverage.needsDecision} to decide`}
+                        />
+                      ) : null}
+                    </span>
+                    <span className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                      {registry.coverage.mapped} of {registry.coverage.total} mapped
+                      <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-3">
+                  {registry.isLoading ? (
+                    <p className="text-[12px] text-muted-foreground">Loading fields…</p>
+                  ) : (
+                    <PortalFieldRegistry
+                      editor={registry}
+                      canEdit={canEditMaps}
+                      pickerModal
+                      emptyState={
+                        <p className="text-[12px] text-muted-foreground">
+                          No fields captured yet. Capture runs in Minted Workbench on the live form
+                          page.
+                        </p>
+                      }
+                    />
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             </section>
 
             {isAdmin && !hidden ? (
@@ -352,7 +428,12 @@ export function PortalDrawer({
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => setConfirmStop(false)} disabled={busy}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmStop(false)}
+                disabled={busy}
+              >
                 Cancel
               </Button>
               <Button

@@ -1,4 +1,5 @@
 import { test, expect, type Route } from "@playwright/test";
+import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // Payer & Cases design bundle, screen 3 (Slice C) — the TABBED Payer Detail
 // over the mock harness, one test per designed state:
@@ -19,6 +20,11 @@ import { test, expect, type Route } from "@playwright/test";
 //                              and both typed rejections are SURFACED (the
 //                              blocking open-case count / the conflicting
 //                              C-<n> list), never swallowed into a toast.
+//   Portals (#portals)       — the payer-scoped portal inventory, and the
+//                              drawer's FIELD MAPPING block: a mapping
+//                              decision made here writes the same shared row,
+//                              through the same RPC, as the Template Editor's
+//                              Form setup step.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -299,6 +305,66 @@ function buildDb(): Record<string, Row[]> {
   };
 }
 
+const PORTAL_KEY = "aetna_az_enrollment";
+
+const TOKEN_CATALOG = [
+  { table: "providers", token: "provider.npi", column: "npi" },
+  { table: "providers", token: "provider.firstName", column: "first_name" },
+  { table: "provider_groups", token: "group.tin", column: "tin" },
+];
+
+function portalRow(extra: Row = {}): Row {
+  return {
+    id: "portal-aetna",
+    org_id: null, // global tier — inherited by every org
+    portal_key: PORTAL_KEY,
+    name: "Aetna AZ Enrollment",
+    payer_id: AETNA_ID,
+    form_url: "https://portal.aetna.test/enroll",
+    is_verified: true,
+    last_verified_at: "2026-07-14T00:00:00Z",
+    proven_at: null,
+    url_changed_at: null,
+    created_at: "2026-07-13T00:00:00Z",
+    updated_at: "2026-07-14T00:00:00Z",
+    ...extra,
+  };
+}
+
+/** Shared-tier (`org_id IS NULL`) field map — where trained forms live. */
+function fieldMapRow(
+  id: string,
+  label: string,
+  extra: { status: string; source: string; token?: string | null; sortOrder: number },
+): Row {
+  return {
+    id,
+    org_id: null,
+    portal_key: PORTAL_KEY,
+    url_pattern: null,
+    page_step: null,
+    map_type: "web",
+    selector: `#${id}`,
+    selector_fallbacks: null,
+    source: extra.source,
+    token: extra.token ?? null,
+    hardcoded_value: null,
+    transform: null,
+    field_type: "text",
+    notes: extra.source === "manual" ? "Captured from the form" : null,
+    status: extra.status,
+    field_label: label,
+    display_label: null,
+    section: "Identity",
+    sort_order: extra.sortOrder,
+    form_section: null,
+    confidence: 60,
+    control_options: null,
+    created_at: "2026-07-13T00:00:00Z",
+    updated_at: "2026-07-13T00:00:00Z",
+  };
+}
+
 interface RecordedCall {
   path: string;
   body: Record<string, unknown>;
@@ -327,6 +393,23 @@ async function fulfillSupabase(route: Route) {
 
     if (fn === "list_global_payers") return json(db.payers.filter((p) => p.org_id === null));
     if (fn === "claim_invites") return json(0);
+    if (fn === "get_sop_field_tokens") return json(TOKEN_CATALOG);
+    // The shared-tier trainer. Field maps carry no org, so this RPC is the
+    // ONLY way a decision can be written — the Portals-drawer test asserts the
+    // drawer uses it rather than a table PATCH.
+    if (fn === "train_global_field_map") {
+      const row = db.portal_field_maps.find((m) => m.id === body.p_id && m.org_id === null);
+      if (!row) return json({ message: "Field map not found" }, 400);
+      const source = String(body.p_source ?? "");
+      Object.assign(row, {
+        status: body.p_status,
+        source,
+        token: body.p_token ?? null,
+        hardcoded_value: source === "hardcoded" ? (body.p_hardcoded_value ?? null) : null,
+        updated_at: "2026-07-28T00:00:00Z",
+      });
+      return json(row);
+    }
     if (fn === "update_payer") {
       const row = db.payers.find((p) => p.id === body.p_payer_id);
       if (!row) return json({ message: "payer_not_found" }, 400);
@@ -420,7 +503,14 @@ async function fulfillSupabase(route: Route) {
     return json(wantsObject ? {} : [{}], 201);
   }
 
-  const rows = (db[table] ?? []).filter(matchFilters);
+  // listPortals selects a `payers(...)` embed and the harness must synthesize
+  // it, or a portals fixture drifts from the real wire shape.
+  const rows = withPortalPayerEmbed(
+    table,
+    url.searchParams.get("select"),
+    (db[table] ?? []).filter(matchFilters),
+    db.payers ?? [],
+  );
   if (wantsObject) {
     if (rows.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
     return json(rows[0]);
@@ -717,4 +807,118 @@ test("a non-admin reads every tab but is offered no lifecycle verb", async ({ co
   await expect(page.getByText("Managed by an admin")).toBeVisible();
   await expect(page.getByRole("button", { name: "Archive payer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Merge payer" })).toHaveCount(0);
+});
+
+test("portals — the inventory lists this payer's portals and the row opens maintenance", async ({
+  context,
+  page,
+}) => {
+  await seed(context);
+  db!.portals = [portalRow()];
+  // One template step links the portal, so "Used by" is a real count and the
+  // drawer's reference list is not the empty state.
+  db!.sop_templates[0].task_definitions = [
+    {
+      title: "Submit the application",
+      steps: [{ label: "Portal", stepType: "online_form", portalKey: PORTAL_KEY }],
+    },
+  ];
+  await openDetail(page);
+  await tab(page, "Portals").click();
+
+  await expect(page.getByText(PORTAL_KEY)).toBeVisible({ timeout: 15000 });
+  const row = page.getByRole("row").filter({ hasText: PORTAL_KEY });
+  await expect(row).toContainText("Global");
+  await expect(row).toContainText("1 step");
+
+  await row.click();
+  // The maintenance jobs the redesign exists for, on the portal itself.
+  await expect(page.getByLabel("Form URL")).toHaveValue("https://portal.aetna.test/enroll");
+  await expect(page.getByRole("button", { name: "Stop using this portal" }).first()).toBeVisible();
+  await expect(page.getByText("Keys cannot be renamed", { exact: false })).toBeVisible();
+});
+
+test("portals — the drawer trains fields through the shared RPC, same as the editor", async ({
+  context,
+  page,
+}) => {
+  await seed(context);
+  db!.portals = [portalRow()];
+  db!.portal_field_maps = [
+    fieldMapRow("npi", "NPI Number", {
+      status: "approved",
+      source: "token",
+      token: "provider.npi",
+      sortOrder: 1,
+    }),
+    fieldMapRow("tinstate", "Tax ID State", {
+      status: "proposed",
+      source: "manual",
+      sortOrder: 2,
+    }),
+    // A second undecided row keeps the attention queue non-empty, so the
+    // verification stamp never fires and this test stays about the decision.
+    fieldMapRow("tineff", "Tax ID Effective Date", {
+      status: "proposed",
+      source: "manual",
+      sortOrder: 3,
+    }),
+  ];
+  await openDetail(page);
+  await tab(page, "Portals").click();
+  await page.getByRole("row").filter({ hasText: PORTAL_KEY }).click();
+
+  // Field mapping is a first-class block in the drawer, opened on the work:
+  // two rows need a decision, so the section is expanded on mount.
+  await expect(page.getByText("Field mapping")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("2 to decide")).toBeVisible();
+  await expect(page.getByText("1 of 3 mapped", { exact: true })).toBeVisible();
+  // A DECIDED row stays listed and editable here too — the registry is a
+  // working surface, never a queue.
+  await expect(page.getByText("NPI Number")).toBeVisible();
+
+  const target = page.locator("div.space-y-1\\.5.px-3.py-2", { hasText: "Tax ID State" }).first();
+  await target.getByRole("combobox", { name: /Map Tax ID State to a token/i }).click();
+  const menu = page.getByRole("listbox", { name: "Token options" });
+  // A modal dialog turns off pointer events on everything outside its own
+  // layer, and the picker's options are portaled to <body>. Filtering by
+  // keyboard and clicking an option must BOTH work here, or the drawer looks
+  // like a working trainer and is not one.
+  await page.keyboard.type("tin");
+  await expect(menu.getByRole("option", { name: "group.tin" })).toBeVisible();
+  await menu.getByRole("option", { name: "group.tin" }).click();
+
+  await expect(async () => {
+    const written = (db?.portal_field_maps ?? []).find((m) => m.id === "tinstate");
+    expect(written?.token).toBe("group.tin");
+    expect(written?.status).toBe("approved");
+  }).toPass({ timeout: 15000 });
+
+  // The wire contract is the editor's: shared rows are written ONLY through
+  // the SECURITY DEFINER RPC, never a direct table PATCH.
+  expect(rpcCalls.some((c) => c.path === "train_global_field_map")).toBe(true);
+  expect(tableWrites.filter((w) => w.table === "portal_field_maps")).toEqual([]);
+});
+
+test("portals — a settled form folds its mapping block away", async ({ context, page }) => {
+  await seed(context);
+  db!.portals = [portalRow()];
+  db!.portal_field_maps = [
+    fieldMapRow("npi", "NPI Number", {
+      status: "approved",
+      source: "token",
+      token: "provider.npi",
+      sortOrder: 1,
+    }),
+  ];
+  await openDetail(page);
+  await tab(page, "Portals").click();
+  await page.getByRole("row").filter({ hasText: PORTAL_KEY }).click();
+
+  // Nothing needs attention, so the drawer stays a maintenance summary: the
+  // count is on the header, the row list is not dumped into the dialog.
+  await expect(page.getByText("1 of 1 mapped", { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("NPI Number")).toHaveCount(0);
+  await page.getByText("Field mapping").click();
+  await expect(page.getByText("NPI Number")).toBeVisible();
 });

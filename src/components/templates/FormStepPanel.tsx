@@ -11,7 +11,7 @@
 // never pays for its content.
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,37 +26,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
-import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
-import {
-  useApproveField,
-  useFinishTraining,
-  useManualField,
-  useTokenCatalog,
-  useReproposeField,
-  useSetFieldMapHardcoded,
-  useSetFieldMapTransform,
-  useUpdateSharedFieldRegistry,
-  useAddSharedRegistryField,
-} from "@/hooks/useMappingReview";
-import {
-  useSetGlobalPortalFlags,
-  useTrainGlobalFieldMap,
-  useUpsertGlobalPortal,
-} from "@/hooks/useGlobalAuthoring";
+import { usePortals } from "@/hooks/usePortals";
+import { useUpsertGlobalPortal } from "@/hooks/useGlobalAuthoring";
 import { useCreatePortal } from "@/hooks/usePortals";
-import { useFormDrift } from "@/hooks/useFormDrift";
+import { useFieldRegistryEditor } from "@/hooks/useFieldRegistryEditor";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
-import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
-import {
-  classifyFieldMap,
-  registryCoverage,
-  sectionRenamePatches,
-  type RegistryRow,
-} from "@/lib/fieldRegistry";
-import { groupTokens } from "@/lib/tokenGroups";
-import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { PortalDrawer } from "@/components/portals/PortalDrawer";
+import { PortalFieldRegistry } from "@/components/portals/PortalFieldRegistry";
 import { portalDisplayName } from "@/lib/portalRetirement";
 import { useLocation } from "@tanstack/react-router";
 
@@ -110,21 +87,6 @@ export function FormStepPanel({
   const orgId = useActiveOrgId() ?? "no-org";
   const qc = useQueryClient();
   const portalsQ = usePortals();
-  const mapsQ = usePortalFieldMaps(portalKey ?? undefined);
-  const tokensQ = useTokenCatalog();
-  const drift = useFormDrift();
-
-  const approveMut = useApproveField();
-  const manualMut = useManualField();
-  const hardcodedMut = useSetFieldMapHardcoded();
-  const transformMut = useSetFieldMapTransform();
-  const trainGlobalMut = useTrainGlobalFieldMap();
-  const reproposeMut = useReproposeField();
-  const renameMut = useUpdateSharedFieldRegistry();
-  const addFieldMut = useAddSharedRegistryField();
-  const [addFieldLabel, setAddFieldLabel] = useState("");
-  const finishTrainingMut = useFinishTraining();
-  const globalFlagsMut = useSetGlobalPortalFlags();
 
   const portal = useMemo(
     () =>
@@ -133,6 +95,10 @@ export function FormStepPanel({
         : undefined,
     [portalsQ.data, portalKey],
   );
+
+  // Every training write lives here, shared with the Portals drawer. The step
+  // contributes nothing to it but the key.
+  const registry = useFieldRegistryEditor({ portal, portalKey });
 
   async function copyReturnLink() {
     try {
@@ -143,27 +109,9 @@ export function FormStepPanel({
     }
   }
 
-  const maps = useMemo(
-    () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey && m.status !== "retired"),
-    [mapsQ.data, portalKey],
-  );
-  const brokenIds = useMemo(() => {
-    const rows = portalKey ? (drift.driftByPortal.get(portalKey) ?? []) : [];
-    return new Set(rows.map((m) => m.id));
-  }, [drift.driftByPortal, portalKey]);
-
-  // Queue-first ordering (F6.5.4): broken mappings lead, then undecided
-  // (proposed) captures. Decided, unbroken rows need no attention.
-  const approvedCount = useMemo(() => maps.filter((m) => m.status === "approved").length, [maps]);
-
-  // E6.9: ONE derivation for the coverage read-out and the registry list via
-  // the classifier. `brokenIds` doubles as the stale set — map ids the latest
-  // real fill reported as not found on the page (form drift, D7).
-  const coverage = useMemo(
-    () => registryCoverage(maps as RegistryRow[], brokenIds),
-    [maps, brokenIds],
-  );
-  const groupedTokens = useMemo(() => groupTokens(tokensQ.data ?? []), [tokensQ.data]);
+  // Queue-first ordering (F6.5.4) and the coverage read-out come from the
+  // shared editor: broken mappings lead, then undecided (proposed) captures.
+  const { rows: maps, staleIds: brokenIds, coverage, approvedCount } = registry;
 
   const stateLabel: { label: string; tone: StatusColor } = !portal
     ? { label: "Not registered", tone: "neutral" }
@@ -174,145 +122,6 @@ export function FormStepPanel({
         : maps.length > 0
           ? { label: "Captured", tone: "amber" }
           : { label: "Registered · no fields", tone: "amber" };
-
-  const invalidateMaps = () => {
-    void qc.invalidateQueries({ queryKey: ["portal-field-maps", orgId] });
-    void qc.invalidateQueries({ queryKey: queryKeys.lastFills(orgId) });
-  };
-
-  // Flip verification when this decision empties the attention queue — a human
-  // has now reviewed every captured field (the markPortalVerified semantic).
-  async function maybeFinishTraining(remainingAfter: number) {
-    if (remainingAfter > 0 || !portal) return;
-    try {
-      if (portal.orgId === null) {
-        await globalFlagsMut.mutateAsync({ id: portal.id, verified: true });
-      } else {
-        await finishTrainingMut.mutateAsync(portal.id);
-      }
-      void qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) });
-    } catch {
-      // Verification is a convenience stamp; a failure never blocks training.
-    }
-  }
-
-  // E6.9 F6.9.4 — the three decisions, routed by tier. Shared rows
-  // (org_id IS NULL) can only be written through the SECURITY DEFINER RPCs;
-  // org rows keep the existing org-RLS paths.
-  async function decideRegistry(row: RegistryRow, decision: RegistryDecision) {
-    const map = maps.find((m) => m.id === row.id);
-    if (!map) return;
-    try {
-      if (map.orgId === null) {
-        const patch: GlobalTrainPatch =
-          decision.kind === "token"
-            ? {
-                status: "approved",
-                source: "token",
-                token: decision.token,
-                // Remapping a token must not wipe authored shaping.
-                transform: map.transform ?? null,
-              }
-            : decision.kind === "fixed"
-              ? { status: "approved", source: "hardcoded", hardcodedValue: decision.value }
-              : decision.kind === "human"
-                ? { status: "approved", source: "manual" }
-                : decision.kind === "transform"
-                  ? {
-                      status: "approved",
-                      source: "token",
-                      token: map.token,
-                      transform: decision.transform,
-                    }
-                  : { status: "proposed", source: "manual" };
-        await trainGlobalMut.mutateAsync({ id: map.id, patch });
-      } else if (decision.kind === "token") {
-        await approveMut.mutateAsync({
-          id: map.id,
-          token: decision.token,
-          fieldLabel: map.fieldLabel,
-        });
-      } else if (decision.kind === "human") {
-        await manualMut.mutateAsync({ id: map.id, fieldLabel: map.fieldLabel });
-      } else if (decision.kind === "unmap") {
-        await reproposeMut.mutateAsync({
-          id: map.id,
-          previous: { token: map.token, source: map.source },
-        });
-      } else if (decision.kind === "fixed") {
-        await hardcodedMut.mutateAsync({
-          id: map.id,
-          value: decision.value,
-          fieldLabel: map.fieldLabel,
-        });
-      } else {
-        await transformMut.mutateAsync({ id: map.id, transform: decision.transform });
-      }
-      invalidateMaps();
-      // Keep the E6.5 verification stamp working: a decision that empties the
-      // attention queue means a human has now reviewed every captured field.
-      // Unmapping ADDS to the queue, so it never finishes training.
-      if (decision.kind !== "unmap") {
-        const wasPending = classifyFieldMap(map, { stale: brokenIds.has(map.id) }).needsDecision;
-        if (wasPending) await maybeFinishTraining(coverage.needsDecision - 1);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save the decision");
-    }
-  }
-
-  // F6.9.5 — inline rename writes display_label ONLY; the payer's raw
-  // field_label is never touched, so a re-capture cannot clobber it.
-  async function renameRegistryRow(row: RegistryRow, displayLabel: string | null) {
-    const map = maps.find((m) => m.id === row.id);
-    if (!map) return;
-    if (map.orgId !== null) {
-      toast.error("Renaming applies to the shared form library, not to an org override.");
-      return;
-    }
-    try {
-      await renameMut.mutateAsync([{ id: map.id, displayLabel }]);
-      invalidateMaps();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not rename the field");
-    }
-  }
-
-  // Section headings write the admin `section` column on every row in the
-  // group (same shared-tier gate as field rename). Clearing falls back to the
-  // captured form_section / page step.
-  async function renameRegistrySection(rows: RegistryRow[], section: string | null) {
-    if (rows.length === 0) return;
-    const shared = rows
-      .map((row) => maps.find((m) => m.id === row.id))
-      .filter((m): m is NonNullable<typeof m> => Boolean(m));
-    if (shared.length === 0) return;
-    if (shared.some((m) => m.orgId !== null)) {
-      toast.error("Renaming sections applies to the shared form library, not to an org override.");
-      return;
-    }
-    try {
-      await renameMut.mutateAsync(sectionRenamePatches(shared, section));
-      invalidateMaps();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not rename the section");
-    }
-  }
-
-  // F6.9.6 — the Data-fields "Add field" affordance, folded into the registry.
-  // A manual row is a first-class registry row: renameable, sectionable, and
-  // decidable by all three actions.
-  async function addRegistryField() {
-    const label = addFieldLabel.trim();
-    if (!label || !portalKey) return;
-    try {
-      await addFieldMut.mutateAsync({ portalKey, label });
-      setAddFieldLabel("");
-      invalidateMaps();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add the field");
-    }
-  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -394,50 +203,7 @@ export function FormStepPanel({
               </Button>
             ) : null}
 
-            {/* E6.9 F6.9.3: EVERY row, always — decided rows included. The old
-                queue dropped a field the moment it was approved, so a wrong
-                mapping was unreachable from the editor. */}
-            {portal && canEdit ? (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  value={addFieldLabel}
-                  onChange={(e) => setAddFieldLabel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void addRegistryField();
-                  }}
-                  placeholder="Add a field by name…"
-                  aria-label="Add a field to the registry"
-                  className="h-7 w-64 text-[12px]"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[12px]"
-                  disabled={addFieldLabel.trim() === ""}
-                  onClick={() => void addRegistryField()}
-                >
-                  Add field
-                </Button>
-              </div>
-            ) : null}
-
-            {portal && maps.length > 0 ? (
-              <FieldRegistryList
-                rows={maps}
-                staleIds={brokenIds}
-                canEdit={canEdit}
-                groupedTokens={groupedTokens}
-                onDecide={decideRegistry}
-                onRename={renameRegistryRow}
-                onRenameSection={renameRegistrySection}
-              />
-            ) : null}
-            {portal && maps.length > 0 && coverage.needsDecision === 0 ? (
-              <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[#1B4D3E]" />
-                Every captured field has a decision.
-              </p>
-            ) : null}
+            {portal ? <PortalFieldRegistry editor={registry} canEdit={canEdit} /> : null}
 
             {portal ? (
               <WorkbenchHandoffBlock

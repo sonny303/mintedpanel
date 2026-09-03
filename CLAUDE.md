@@ -571,6 +571,19 @@ Stale rows keep their controls — staleness is information, not a lock.
 Re-capture is drift **repair**, not a reset: it refreshes presentation columns
 and leaves decisions untouched.
 
+**Two hosts, one wiring.** Field maps are keyed by `portal_key`, never by
+template or step, so the same training/repair job runs from the Template
+Editor's Form setup step (authoring) and from the payer **Portals tab drawer**
+(maintenance — repair drift or re-decide a field after a URL change without
+opening a template). Both mount `PortalFieldRegistry`
+(`src/components/portals/`) over one `useFieldRegistryEditor`
+(`src/hooks/useFieldRegistryEditor.ts`), which owns every decision write and
+routes tier off the **row** (`org_id IS NULL` = shared, RPC-only). No template
+context reaches it — `isGlobalAuthoring` governs portal REGISTRATION only,
+which stays in the editor. `src/hooks/fieldRegistryHosts.test.ts` pins that;
+its allowlist may only **shrink**, and `PayerFormFieldPanel` (the E6.11
+payer-PDF trainer) sits on it as a known duplicate of the same routing.
+
 ## Known warts — don't rediscover these
 
 - `PROVIDER_LIST_COLUMNS` is a **partial projection**; list rows are typed
@@ -599,6 +612,16 @@ and leaves decisions untouched.
   close-delay interval, pointer parked anywhere. `MatrixCellPopover.tsx`
   prevents `onOpenAutoFocus` always and `onCloseAutoFocus` unless the user
   actually put focus inside. Copy that hook, don't re-wire the handlers.
+- **A Radix `Popover` portaled out of a modal `Dialog` renders fine and is
+  dead.** The dialog puts `pointer-events: none` on `<body>`, which the
+  portaled content inherits, so every option is visible and unclickable; its
+  focus scope also pulls focus off the popover's own search box, so the thing
+  cannot be filtered by keyboard either. The fix is `modal` on the popover,
+  which gives it its own layer — and then its `onOpenAutoFocus` must be left
+  to run. `TokenPicker` takes that as a `modal` prop, threaded from the host
+  as `pickerModal` (`FieldRegistryList` → `PortalFieldRegistry` →
+  `PortalDrawer`). Off everywhere else on purpose: on an ordinary page it adds
+  a scroll lock and a focus trap the editor does not want.
 
 ## UI conventions
 

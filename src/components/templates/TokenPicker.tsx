@@ -26,6 +26,16 @@ interface TokenPickerProps {
    * action (append `{{token}}` to an email body) there is no selected token to
    * display — the control is a menu, not a value. */
   clearOnSelect?: boolean;
+  /**
+   * Set when this picker renders inside a MODAL dialog (the portal drawer).
+   * Radix Dialog puts `pointer-events: none` on `<body>` while it is open and
+   * the popover content is portaled to body, so without this every option is
+   * visible and unclickable — and the dialog's focus trap keeps the search
+   * field from taking focus. `modal` gives the popover its own layer, which
+   * restores both. Left off elsewhere: on an ordinary page it would add a
+   * scroll lock and a focus trap the editor does not want.
+   */
+  modal?: boolean;
 }
 
 export function TokenPicker({
@@ -37,6 +47,7 @@ export function TokenPicker({
   className,
   disabled = false,
   clearOnSelect = false,
+  modal = false,
 }: TokenPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -53,6 +64,7 @@ export function TokenPicker({
 
   return (
     <Popover
+      modal={modal}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
@@ -86,8 +98,16 @@ export function TokenPicker({
       <PopoverContent
         align="start"
         className="w-80 border-[#E8E5E0] p-0 shadow-none"
-        // Keep focus in the search field; selecting an option closes via setOpen.
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        // Keep focus in the search field; selecting an option closes via
+        // setOpen. On an ordinary page the Input's own `autoFocus` does that
+        // and Radix's container focus is suppressed. Inside a modal dialog it
+        // does NOT: the dialog's focus scope pulls focus back to the trigger
+        // and the picker becomes unsearchable by keyboard, so there the
+        // popover's own (modal) focus scope is left to run.
+        onOpenAutoFocus={(e) => {
+          if (modal) return;
+          e.preventDefault();
+        }}
       >
         <div className="border-b border-[#F0EEEA] p-2">
           <Input

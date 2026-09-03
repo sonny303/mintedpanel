@@ -68,6 +68,9 @@ interface Props {
   onRename: (row: RegistryRow, displayLabel: string | null) => void | Promise<void>;
   /** Rename the admin section for every row in a group (writes `section`). */
   onRenameSection: (rows: RegistryRow[], section: string | null) => void | Promise<void>;
+  /** Set when the list renders inside a modal dialog — see TokenPicker's
+   * `modal` prop, which is what actually keeps the options clickable there. */
+  pickerModal?: boolean;
 }
 
 const PILL: Record<FieldDecision, { label: string; tone: StatusColor }> = {
@@ -87,6 +90,7 @@ export function FieldRegistryList({
   onDecide,
   onRename,
   onRenameSection,
+  pickerModal = false,
 }: Props) {
   const sections = groupRegistryRows(rows, staleIds);
   if (sections.length === 0) return null;
@@ -119,6 +123,7 @@ export function FieldRegistryList({
                 groupedTokens={groupedTokens}
                 onDecide={onDecide}
                 onRename={onRename}
+                pickerModal={pickerModal}
               />
             ))}
           </div>
@@ -225,6 +230,7 @@ function RegistryRowEditor({
   groupedTokens,
   onDecide,
   onRename,
+  pickerModal,
 }: {
   row: RegistryRow;
   stale: boolean;
@@ -232,6 +238,7 @@ function RegistryRowEditor({
   groupedTokens: TokenGroup[];
   onDecide: Props["onDecide"];
   onRename: Props["onRename"];
+  pickerModal: boolean;
 }) {
   const classification = classifyFieldMap(row, { stale });
   const pill = PILL[classification.decision];
@@ -374,6 +381,7 @@ function RegistryRowEditor({
             value={classification.decision === "token" ? (row.token ?? "") : ""}
             groupedTokens={groupedTokens}
             onValueChange={(token) => void onDecide(row, { kind: "token", token })}
+            modal={pickerModal}
           />
 
           {pickerOptions.length > 0 ? (
