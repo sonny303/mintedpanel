@@ -349,19 +349,19 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
 
 ### Frozen mirrors and deprecated columns (read, never write)
 
-| Column / table                                                                | State                                                                         |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                |
-| `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`      |
-| `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                |
-| `credential_cases.credentialing_status_id`, `payer_pipeline_state`            | read-only dual-write mirrors of `case_status`                                 |
-| `payers.payer_slug`, `last_synced_at`, `avg_decision_days`, `resolution_id_*` | deprecated in place — no writer                                               |
-| `providers.license_number`, `license_state`, `license_issue_date`, `license_expiration_date` | **never written, null for every provider.** `state_licenses` is the real grain (one row per state) and is what provider create/update writes. Their `provider.license*` tokens are withdrawn from the mapping pickers; `license.*` is canonical |
-| `launches` table, `providers.launch_id`                                       | legacy; nothing reads or writes them                                          |
-| `notes` table                                                                 | dormant for case/task (moved to `touches`); **still live for provider notes** |
-| `msos`, `mso_routing_rules`                                                   | dormant — routing engine deleted app-side                                     |
-| `org_payer_settings`, `next_best_action_configs`, `payer_catalog_changes`     | dormant                                                                       |
-| `org_payer_assignments.starter`                                               | dormant                                                                       |
+| Column / table                                                                | State                                                                                                                                            |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                                                                                   |
+| `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`                                                                         |
+| `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                                                                                   |
+| `credential_cases.credentialing_status_id`, `payer_pipeline_state`            | read-only dual-write mirrors of `case_status`                                                                                                    |
+| `payers.payer_slug`, `last_synced_at`, `avg_decision_days`, `resolution_id_*` | deprecated in place — no writer                                                                                                                  |
+| `providers.license_*` (number/state/issue/expiration)                         | **never written; null for every provider.** `state_licenses` is the real grain and what provider create/update writes — `license.*` is canonical |
+| `launches` table, `providers.launch_id`                                       | legacy; nothing reads or writes them                                                                                                             |
+| `notes` table                                                                 | dormant for case/task (moved to `touches`); **still live for provider notes**                                                                    |
+| `msos`, `mso_routing_rules`                                                   | dormant — routing engine deleted app-side                                                                                                        |
+| `org_payer_settings`, `next_best_action_configs`, `payer_catalog_changes`     | dormant                                                                                                                                          |
+| `org_payer_assignments.starter`                                               | dormant                                                                                                                                          |
 
 ## Cross-cutting subsystems
 

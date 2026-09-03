@@ -31,11 +31,7 @@ import {
   useSetPayerReference,
   useSetPrimaryCaseFacility,
 } from "@/hooks/useCases";
-import {
-  useCoordinators,
-  useFacilities,
-  useStateLicensesByProvider,
-} from "@/hooks/useLookups";
+import { useCoordinators, useFacilities, useStateLicensesByProvider } from "@/hooks/useLookups";
 import { useProviderAssignments } from "@/hooks/useProviders";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { caseFacilityOptions } from "@/lib/caseFacility";
