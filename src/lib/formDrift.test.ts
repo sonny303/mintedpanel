@@ -85,9 +85,7 @@ describe("parseSkippedEntries", () => {
 describe("isOnPageNotFound / isOtherPageSkip", () => {
   it("requires both kind and reason for on-page drift", () => {
     expect(isOnPageNotFound({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(true);
-    expect(isOnPageNotFound({ kind: OTHER_PAGE_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(
-      false,
-    );
+    expect(isOnPageNotFound({ kind: OTHER_PAGE_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(false);
     expect(isOnPageNotFound({ kind: "skipped", reason: OTHER_PAGE_REASON })).toBe(false);
   });
 
