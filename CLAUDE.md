@@ -571,6 +571,26 @@ Stale rows keep their controls — staleness is information, not a lock.
 Re-capture is drift **repair**, not a reset: it refreshes presentation columns
 and leaves decisions untouched.
 
+### Fill-skip telemetry pins (`src/lib/formDrift.ts`)
+
+`fill_sessions.fields_skipped` carries `{ label, reason, mapId?, kind }` from
+the extension content script. **This panel owns the wording**; the extension
+mirrors it (`src/shared/fillPage.ts`, `src/shared/hiddenField.ts`). Three
+disjoint pins, and a new one is added here FIRST:
+
+| kind         | reason                          | Meaning                                   |
+| ------------ | ------------------------------- | ----------------------------------------- |
+| `skipped`    | `field not found on this page`  | dead selector — **the only drift**        |
+| `other_page` | `field belongs to another page` | exact off-page map (DYN-PAGE-01)          |
+| `hidden`     | `field is hidden on this page`  | resolved into an inactive panel (PAGE-02) |
+
+Drift needs **both** halves (`isOnPageNotFound`); the two no-evidence kinds
+match on **either** half, so a producer that overwrites `kind` still cannot
+become drift. `lastWorkingAt` walks past every no-evidence kind
+(`isNoEvidenceSkip`) — "not reported broken" is only success when the fill
+actually tested the selector. **Add a kind to that predicate, or a hidden
+control silently dates a break to a fill that never touched it.**
+
 ## Known warts — don't rediscover these
 
 - `PROVIDER_LIST_COLUMNS` is a **partial projection**; list rows are typed

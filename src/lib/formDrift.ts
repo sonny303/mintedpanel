@@ -8,9 +8,10 @@
 // reports `{ label, reason, mapId?, kind }` entries in fill_sessions
 // .fields_skipped (src/background/fill.ts). Drift is still only a
 // `kind: "skipped"` entry whose reason is the exact FIELD_NOT_FOUND_REASON
-// wording. Off-page misses (DYN-PAGE) use a distinct kind AND reason so the
-// extension Fix-it strip (reason-only) and this module (reason+kind) cannot
-// confuse them with a broken on-page selector. The E4.2 dry-run shape
+// wording. Off-page misses and hidden-control misses (DYN-PAGE) each use a
+// distinct kind AND reason so the extension Fix-it strip (reason-only) and
+// this module (reason+kind) cannot confuse either with a broken on-page
+// selector. The E4.2 dry-run shape
 // (`{ selector, label, reason: "unmapped" | "empty_token" }`) shares the
 // column but never matches either predicate.
 import type { FillSession, PortalFieldMap } from "@/types";
@@ -18,7 +19,7 @@ import type { FillSession, PortalFieldMap } from "@/types";
 // The extension content script's EXACT wording when a trained selector matched
 // nothing on the live page — the one signal that a mapping no longer fits the
 // form (minted-extension src/content/fillEngine.ts). Any other skip reason
-// (no value, manual, file upload, other page) is NOT drift.
+// (no value, manual, file upload, other page, hidden control) is NOT drift.
 export const FIELD_NOT_FOUND_REASON = "field not found on this page";
 
 /** Producer kind for a map that belongs to a different exact URL-page. */
@@ -27,6 +28,13 @@ export const OTHER_PAGE_KIND = "other_page";
 /** Distinct from FIELD_NOT_FOUND_REASON — the extension Fix-it strip keys on
  * reason alone. Panel-first pin; DYN-PAGE-01 must emit this exact string. */
 export const OTHER_PAGE_REASON = "field belongs to another page";
+
+/** Producer kind for a target that resolved but sits in an inactive panel. */
+export const HIDDEN_KIND = "hidden";
+
+/** Distinct from both reasons above, for the same reason-only Fix-it strip.
+ * Panel-first pin; DYN-PAGE-02 must emit this exact string. */
+export const HIDDEN_REASON = "field is hidden on this page";
 
 // One parsed entry of a LIVE fill's fields_skipped array.
 export interface SkippedEntry {
@@ -46,6 +54,21 @@ export function isOnPageNotFound(entry: Pick<SkippedEntry, "kind" | "reason">): 
  * cannot become drift or inferred success. */
 export function isOtherPageSkip(entry: Pick<SkippedEntry, "kind" | "reason">): boolean {
   return entry.kind === OTHER_PAGE_KIND || entry.reason === OTHER_PAGE_REASON;
+}
+
+/** Hidden-control miss: the selector RESOLVED, but to a control in an inactive
+ * wizard panel, so the fill declined to write it. Kind or reason is enough,
+ * same partial-producer tolerance as isOtherPageSkip. */
+export function isHiddenSkip(entry: Pick<SkippedEntry, "kind" | "reason">): boolean {
+  return entry.kind === HIDDEN_KIND || entry.reason === HIDDEN_REASON;
+}
+
+/** A skip that proves nothing either way: the mapping was neither attempted
+ * against a live control nor found missing. Off-page and hidden both qualify —
+ * treating either as success would date a break to a fill that never tested
+ * the selector. */
+export function isNoEvidenceSkip(entry: Pick<SkippedEntry, "kind" | "reason">): boolean {
+  return isOtherPageSkip(entry) || isHiddenSkip(entry);
 }
 
 // fields_skipped is client-supplied jsonb — parse defensively, dropping anything
@@ -203,14 +226,15 @@ function fillReportsBroken(
   );
 }
 
-/** Did this fill report THIS mapping as off-page? That is no evidence it
- * worked and no evidence it broke — the page was not the one being filled. */
-function fillReportsOtherPage(
+/** Did this fill report THIS mapping as off-page or hidden? Either is no
+ * evidence it worked and no evidence it broke — off-page means the page was
+ * not the one being filled, hidden means the control was there but inert. */
+function fillReportsNoEvidence(
   fill: FillHistoryEntry,
   map: Pick<PortalFieldMap, "id" | "selector">,
 ): boolean {
   return parseSkippedEntries(fill.fieldsSkipped).some(
-    (e) => isOtherPageSkip(e) && skippedEntryMatchesMap(e, map),
+    (e) => isNoEvidenceSkip(e) && skippedEntryMatchesMap(e, map),
   );
 }
 
@@ -236,15 +260,15 @@ function isBefore(a: string, b: string): boolean {
  *   - the fill landed at least one field, so "no skip report" means something;
  *   - the mapping already existed when the fill ran — otherwise its absence
  *     from the skip list says nothing about it;
- *   - and the fill did NOT report it not-found or off-page.
+ *   - and the fill did NOT report it not-found, off-page, or hidden.
  *
- * An `other_page` report is explicit no-evidence: walk to an older fill. Do
- * not treat "not reported broken" as success when the fill said the field
- * belonged to another page.
+ * An `other_page` or `hidden` report is explicit no-evidence: walk to an older
+ * fill. Do not treat "not reported broken" as success when the fill said the
+ * field belonged to another page, or that its control sat in an inactive panel.
  *
  * The remaining weak link is a mapping that existed but was never attempted
- * and never reported off-page. That would still read as "worked", so this is
- * a floor on staleness, not a precise last-success timestamp. */
+ * and never reported off-page or hidden. That would still read as "worked", so
+ * this is a floor on staleness, not a precise last-success timestamp. */
 export function lastWorkingAt(
   map: Pick<PortalFieldMap, "id" | "portalKey" | "selector" | "createdAt">,
   history: readonly FillHistoryEntry[],
@@ -255,7 +279,7 @@ export function lastWorkingAt(
     if ((fill.fieldsFilled ?? 0) <= 0) continue;
     if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
     if (fillReportsBroken(fill, map)) continue;
-    if (fillReportsOtherPage(fill, map)) continue;
+    if (fillReportsNoEvidence(fill, map)) continue;
     return fill.startedAt;
   }
   return null;
