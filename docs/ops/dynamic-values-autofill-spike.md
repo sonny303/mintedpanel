@@ -43,15 +43,15 @@ or deferred until clean evidence exists.
 
 ## Locked decisions (PM, 2026-09-03)
 
-| ID        | Decision                                                                                         | Consequence                                                                                   |
-| --------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| D-DYN-1   | Organize work by engineering dependencies and requirements                                       | Preserve original list numbering, but do not force it into implementation order              |
-| D-DYN-2   | `system.today` means the coordinator’s browser-local calendar date                               | Never resolve it from server UTC; compute once at the fill action                             |
-| D-DYN-3   | An offered token has the same meaning on an online portal and payer PDF                           | No surface may advertise a token its real fill path cannot resolve                            |
-| D-DYN-4   | Full token parity is a separate prerequisite, not hidden inside the dynamic-date build            | Complete DYN-TOKEN-00 before exposing `system.today`                                           |
-| D-DYN-5   | Dynamic-date v1 is today only                                                                     | No offsets, formulas, future-date syntax, or `case.*` family                                  |
-| Existing  | Extension never submits payer forms                                                               | Fill and report only; the human reviews and submits                                            |
-| Existing  | Token keys stay bare and literal                                                                  | No `@system.today(+30d)` mini-language at the field-map join                                   |
+| ID       | Decision                                                                               | Consequence                                                                     |
+| -------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| D-DYN-1  | Organize work by engineering dependencies and requirements                             | Preserve original list numbering, but do not force it into implementation order |
+| D-DYN-2  | `system.today` means the coordinator’s browser-local calendar date                     | Never resolve it from server UTC; compute once at the fill action               |
+| D-DYN-3  | An offered token has the same meaning on an online portal and payer PDF                | No surface may advertise a token its real fill path cannot resolve              |
+| D-DYN-4  | Full token parity is a separate prerequisite, not hidden inside the dynamic-date build | Complete DYN-TOKEN-00 before exposing `system.today`                            |
+| D-DYN-5  | Dynamic-date v1 is today only                                                          | No offsets, formulas, future-date syntax, or `case.*` family                    |
+| Existing | Extension never submits payer forms                                                    | Fill and report only; the human reviews and submits                             |
+| Existing | Token keys stay bare and literal                                                       | No `@system.today(+30d)` mini-language at the field-map join                    |
 
 There are no unresolved PM questions in this spike. `phone_digits` and
 `uppercase` are treated as dormant legacy constraint allowances, not an
@@ -122,20 +122,20 @@ Stop:
 
 ### Code-verified paths
 
-| Finding                         | Evidence                                                                                                                                                             |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Portal-wide map fetch           | extension `src/background/api.ts` `getPortalFieldMaps(portalKey)` has no page filter                                                                                  |
-| Page-blind planning             | extension `src/background/fill.ts` `planFill` filters map type/status/source/value, never `pageStep`                                                                  |
-| Exact drift reason              | extension `src/content/fillEngine.ts` emits `field not found on this page`; panel `src/lib/formDrift.ts` counts that reason only when `kind === "skipped"`             |
-| Blanket live-fill kind          | extension `src/background/fill.ts` stamps every content-script skip as `kind: "skipped"`                                                                              |
-| Workbench duplicates predicate  | extension `src/shared/fixit.ts` counts the reason string and ignores kind; a new off-page reason must differ                                                          |
-| Page metadata already exists    | extension `src/shared/apiTypes.ts` carries `PortalFieldMap.pageStep`; panel `src/services/portalFieldMaps.ts` selects `page_step`                                      |
-| Capture checks visibility       | extension `src/content/captureScan.ts` `isCapturableControl`                                                                                                         |
-| Fill does not check visibility  | extension `src/content/fillEngine.ts` `resolveTarget` uses selectors without a visibility guard                                                                       |
-| Panel historical inference risk | panel `src/lib/formDrift.ts` `lastWorkingAt` treats “not reported broken” as worked when any field landed; a new off-page kind would otherwise become false success    |
-| PDF resolver is narrower        | panel `src/routes/cases.$id.tsx` → `buildProviderTokenValues`; `src/lib/pdfFill.ts` resolves provider/group/facility only                                              |
-| Sample fill masks missing data  | `src/components/templates/PayerFormFieldPanel.tsx` uses `mockValueForToken`, which returns a value for tokens the real PDF case resolver cannot supply                 |
-| Transform contract has 4 layers | DB CHECK; panel UI/RPC and `applyRegistryTransform`; extension `applyTransform`                                                                                       |
+| Finding                         | Evidence                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Portal-wide map fetch           | extension `src/background/api.ts` `getPortalFieldMaps(portalKey)` has no page filter                                                                                |
+| Page-blind planning             | extension `src/background/fill.ts` `planFill` filters map type/status/source/value, never `pageStep`                                                                |
+| Exact drift reason              | extension `src/content/fillEngine.ts` emits `field not found on this page`; panel `src/lib/formDrift.ts` counts that reason only when `kind === "skipped"`          |
+| Blanket live-fill kind          | extension `src/background/fill.ts` stamps every content-script skip as `kind: "skipped"`                                                                            |
+| Workbench duplicates predicate  | extension `src/shared/fixit.ts` counts the reason string and ignores kind; a new off-page reason must differ                                                        |
+| Page metadata already exists    | extension `src/shared/apiTypes.ts` carries `PortalFieldMap.pageStep`; panel `src/services/portalFieldMaps.ts` selects `page_step`                                   |
+| Capture checks visibility       | extension `src/content/captureScan.ts` `isCapturableControl`                                                                                                        |
+| Fill does not check visibility  | extension `src/content/fillEngine.ts` `resolveTarget` uses selectors without a visibility guard                                                                     |
+| Panel historical inference risk | panel `src/lib/formDrift.ts` `lastWorkingAt` treats “not reported broken” as worked when any field landed; a new off-page kind would otherwise become false success |
+| PDF resolver is narrower        | panel `src/routes/cases.$id.tsx` → `buildProviderTokenValues`; `src/lib/pdfFill.ts` resolves provider/group/facility only                                           |
+| Sample fill masks missing data  | `src/components/templates/PayerFormFieldPanel.tsx` uses `mockValueForToken`, which returns a value for tokens the real PDF case resolver cannot supply              |
+| Transform contract has 4 layers | DB CHECK; panel UI/RPC and `applyRegistryTransform`; extension `applyTransform`                                                                                     |
 
 ### Hosted snapshot: directional only
 
@@ -235,18 +235,18 @@ ORDER BY portal_key;
 
 The table keeps the source list order. “Depends on” controls build order.
 
-| #  | Enhancement                                      | Current verdict                                                            | Rec      | Depends on                         | Effort |
-| -- | ------------------------------------------------ | -------------------------------------------------------------------------- | -------- | ---------------------------------- | ------ |
-| 1  | Dynamic values (`system.today`)                  | Valid; v1 is browser-local today on web and PDF                             | fix      | DYN-TOKEN-00 + parity build        | M      |
-| 2a | Radio/select value↔label mismatch                | Shipped in E6.10                                                            | monitor  | Ops re-capture                     | —      |
-| 2b | Cascading / asynchronously loaded options        | Mechanism gap confirmed; prevalence unmeasured                              | postpone | Named payer fixture after re-capture | M   |
-| 2c | Div-based / shadow-DOM controls                  | Explicit E6.10 non-goal; widget-library-specific automation                 | postpone | Named required payer failure       | L      |
-| 3  | Conditional fields create false drift           | Plausible but currently inseparable from off-page noise                     | postpone | DYN-PAGE-00..02 + clean telemetry  | M      |
-| 4  | Input masks (phone, TIN, ZIP)                    | Real class; transform contract is already uneven                            | monitor  | DYN-XFORM-00 + named mask failure  | M      |
-| 5  | Multi-step wizards                               | Capture shipped; fill-side page awareness is discovered Gap 0               | fix      | DYN-PAGE-00..02                    | S+S+S  |
-| 6  | Auth timeout / 2FA / CAPTCHA                     | Auth/preflight/manual-submit posture shipped; bot pacing has no evidence     | monitor  | First observed portal block        | —      |
-| 7  | Re-capture must preserve decisions               | Shipped in E6.9/E6.10                                                       | monitor  | None                               | —      |
-| 0  | Page-blind fill → false drift (discovered)       | Code-proven trust defect on multi-page portals                              | fix      | Panel consumer before extension producer | S+S+S |
+| #   | Enhancement                                | Current verdict                                                          | Rec      | Depends on                               | Effort |
+| --- | ------------------------------------------ | ------------------------------------------------------------------------ | -------- | ---------------------------------------- | ------ |
+| 1   | Dynamic values (`system.today`)            | Valid; v1 is browser-local today on web and PDF                          | fix      | DYN-TOKEN-00 + parity build              | M      |
+| 2a  | Radio/select value↔label mismatch          | Shipped in E6.10                                                         | monitor  | Ops re-capture                           | —      |
+| 2b  | Cascading / asynchronously loaded options  | Mechanism gap confirmed; prevalence unmeasured                           | postpone | Named payer fixture after re-capture     | M      |
+| 2c  | Div-based / shadow-DOM controls            | Explicit E6.10 non-goal; widget-library-specific automation              | postpone | Named required payer failure             | L      |
+| 3   | Conditional fields create false drift      | Plausible but currently inseparable from off-page noise                  | postpone | DYN-PAGE-00..02 + clean telemetry        | M      |
+| 4   | Input masks (phone, TIN, ZIP)              | Real class; transform contract is already uneven                         | monitor  | DYN-XFORM-00 + named mask failure        | M      |
+| 5   | Multi-step wizards                         | Capture shipped; fill-side page awareness is discovered Gap 0            | fix      | DYN-PAGE-00..02                          | S+S+S  |
+| 6   | Auth timeout / 2FA / CAPTCHA               | Auth/preflight/manual-submit posture shipped; bot pacing has no evidence | monitor  | First observed portal block              | —      |
+| 7   | Re-capture must preserve decisions         | Shipped in E6.9/E6.10                                                    | monitor  | None                                     | —      |
+| 0   | Page-blind fill → false drift (discovered) | Code-proven trust defect on multi-page portals                           | fix      | Panel consumer before extension producer | S+S+S  |
 
 ---
 
@@ -311,16 +311,16 @@ maps that landed, so the panel cannot infer which page was present.
 The web and PDF trainers share `useTokenCatalog()`, but their real resolvers do
 not share a capability contract.
 
-| Token family                        | Mapping picker | Web profile/fill                                      | Real payer-PDF fill |
-| ----------------------------------- | -------------- | ----------------------------------------------------- | ------------------- |
-| `provider.*`, `group.*`, `facility.*` | offered      | resolved                                              | resolved            |
-| `license.*`                         | offered        | resolved by requested case state                      | missing             |
-| `assignment.*`                      | offered        | resolved by selected facility                         | missing             |
-| `groupInsurance.*`                  | offered        | resolved by policy selection                          | missing             |
-| `user.*`                            | offered        | resolved from caller profile/auth                     | missing             |
-| `payer.*`, `mso.*`, `contract.*`    | offered        | deliberately returned null: profile route has no case | missing             |
-| org-contact families                | not in mapping picker | appended to web profile/quick-card surfaces      | missing             |
-| `system.today`                      | not yet offered | not yet resolved                                      | not yet resolved    |
+| Token family                          | Mapping picker        | Web profile/fill                                      | Real payer-PDF fill |
+| ------------------------------------- | --------------------- | ----------------------------------------------------- | ------------------- |
+| `provider.*`, `group.*`, `facility.*` | offered               | resolved                                              | resolved            |
+| `license.*`                           | offered               | resolved by requested case state                      | missing             |
+| `assignment.*`                        | offered               | resolved by selected facility                         | missing             |
+| `groupInsurance.*`                    | offered               | resolved by policy selection                          | missing             |
+| `user.*`                              | offered               | resolved from caller profile/auth                     | missing             |
+| `payer.*`, `mso.*`, `contract.*`      | offered               | deliberately returned null: profile route has no case | missing             |
+| org-contact families                  | not in mapping picker | appended to web profile/quick-card surfaces           | missing             |
+| `system.today`                        | not yet offered       | not yet resolved                                      | not yet resolved    |
 
 `PayerFormFieldPanel` makes this harder to detect: its sample fill uses
 `mockValueForToken`, which returns a non-empty synthetic value for essentially
@@ -457,12 +457,12 @@ which failure exists.
 
 Before adding a transform, reconcile four sources:
 
-| Layer                       | Current behavior                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------------------- |
-| Baseline DB CHECK           | allows `date_mmddyyyy`, `state_abbrev`, `phone_digits`, `uppercase`                           |
-| Panel UI + both writers     | allow `date_mmddyyyy`, `state_abbrev` only                                                     |
-| Extension web fill          | implements those two; unknown values pass through raw; full state names are abbreviated       |
-| Panel PDF fill              | implements those two; unknown values pass through raw; `state_abbrev` only uppercases 2 letters |
+| Layer                   | Current behavior                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| Baseline DB CHECK       | allows `date_mmddyyyy`, `state_abbrev`, `phone_digits`, `uppercase`                             |
+| Panel UI + both writers | allow `date_mmddyyyy`, `state_abbrev` only                                                      |
+| Extension web fill      | implements those two; unknown values pass through raw; full state names are abbreviated         |
+| Panel PDF fill          | implements those two; unknown values pass through raw; `state_abbrev` only uppercases 2 letters |
 
 The E6.10 migration explicitly chose the two authorable transforms, so the
 extra baseline values are dormant allowance, not a feature requirement. Do not
@@ -495,19 +495,19 @@ open a payer-specific bite on the first confirmed block.
 
 ## 3M register (current)
 
-| ID               | 3M   | Area                 | Finding                                                        | Sev | Effort | Cadence    | Rec      | Why it still hurts                                      |
-| ---------------- | ---- | -------------------- | -------------------------------------------------------------- | --- | ------ | ---------- | -------- | ------------------------------------------------------- |
-| DYN-PAGE-SIGNAL  | Muri | Work / drift         | Off-page maps become false broken selectors                    | S1  | S+S    | daily      | fix      | Repair badges and payer funnel lose trust               |
-| DYN-PAGE-HIDDEN  | Muri | Work fill            | Hidden resolved controls can be written and counted            | S1  | S      | daily      | fix      | Wrong-page data can land silently                       |
-| DYN-TOKEN-PARITY | Mura | Web + PDF mapping    | One picker advertises unequal runtime capabilities             | S1  | L      | daily      | A trained PDF can prove green, then fill blank          |
-| DYN-TODAY        | Mura | Signature/date boxes | No browser-local runtime date token                             | S2  | M      | daily      | Coordinator retypes a predictable value                 |
-| DYN-RECAPTURE    | Muda | Trained catalog      | Older rows lack vocabulary or remain undecided                 | S2  | ops    | once-payer | ops      | Existing capability is not converted into coverage      |
-| DYN-XFORM        | Mura | Transform contract   | DB, writers, web and PDF disagree                              | S2  | M      | setup      | Unknown strings silently fill raw                       |
-| DYN-ASYNC        | Muri | Cascading controls   | Synchronous loop cannot wait for dependent options             | S2  | M      | daily      | Affected portals require manual correction              |
-| DYN-CONDITIONAL  | Muda | Drift                | Conditional absence is not distinguishable after page noise    | S2  | M      | daily      | Building now may suppress real defects                  |
-| DYN-CUSTOM       | Muri | Custom widgets       | Generic support would be widget-library-specific automation    | S3  | L      | rare       | Broad build creates fragile maintenance burden          |
-| DYN-AUTH-PACING  | Muda | Portal access        | Bot pacing proposal has no observed failure                    | S3  | —      | rare       | Slowing all fills creates work without evidence         |
-| DYN-CLOSED       | Muda | Backlog              | Items 2a, 5 capture, and 7 describe shipped behavior           | S3  | —      | setup      | Rebuilding them spends effort without user value        |
+| ID               | 3M   | Area                 | Finding                                                     | Sev | Effort | Cadence    | Rec                                              | Why it still hurts                                 |
+| ---------------- | ---- | -------------------- | ----------------------------------------------------------- | --- | ------ | ---------- | ------------------------------------------------ | -------------------------------------------------- |
+| DYN-PAGE-SIGNAL  | Muri | Work / drift         | Off-page maps become false broken selectors                 | S1  | S+S    | daily      | fix                                              | Repair badges and payer funnel lose trust          |
+| DYN-PAGE-HIDDEN  | Muri | Work fill            | Hidden resolved controls can be written and counted         | S1  | S      | daily      | fix                                              | Wrong-page data can land silently                  |
+| DYN-TOKEN-PARITY | Mura | Web + PDF mapping    | One picker advertises unequal runtime capabilities          | S1  | L      | daily      | A trained PDF can prove green, then fill blank   |
+| DYN-TODAY        | Mura | Signature/date boxes | No browser-local runtime date token                         | S2  | M      | daily      | Coordinator retypes a predictable value          |
+| DYN-RECAPTURE    | Muda | Trained catalog      | Older rows lack vocabulary or remain undecided              | S2  | ops    | once-payer | ops                                              | Existing capability is not converted into coverage |
+| DYN-XFORM        | Mura | Transform contract   | DB, writers, web and PDF disagree                           | S2  | M      | setup      | Unknown strings silently fill raw                |
+| DYN-ASYNC        | Muri | Cascading controls   | Synchronous loop cannot wait for dependent options          | S2  | M      | daily      | Affected portals require manual correction       |
+| DYN-CONDITIONAL  | Muda | Drift                | Conditional absence is not distinguishable after page noise | S2  | M      | daily      | Building now may suppress real defects           |
+| DYN-CUSTOM       | Muri | Custom widgets       | Generic support would be widget-library-specific automation | S3  | L      | rare       | Broad build creates fragile maintenance burden   |
+| DYN-AUTH-PACING  | Muda | Portal access        | Bot pacing proposal has no observed failure                 | S3  | —      | rare       | Slowing all fills creates work without evidence  |
+| DYN-CLOSED       | Muda | Backlog              | Items 2a, 5 capture, and 7 describe shipped behavior        | S3  | —      | setup      | Rebuilding them spends effort without user value |
 
 ---
 
@@ -699,10 +699,10 @@ open a payer-specific bite on the first confirmed block.
 
 ## Lanes
 
-| Code                                                         | Ops                    | Separate prerequisite | Postpone / evidence gate                         |
-| ------------------------------------------------------------ | ---------------------- | --------------------- | ------------------------------------------------ |
-| DYN-PAGE-00, DYN-PAGE-01, DYN-PAGE-02, DYN-TODAY-01         | OPS-DYN-RECAPTURE      | DYN-TOKEN-00          | DYN-ASYNC, conditional presence, custom widgets  |
-| DYN-XFORM-00 only when E6.11 B8 names exact transform needs  | Hosted aggregate re-run | —                     | CAPTCHA/pacing until first confirmed block       |
+| Code                                                        | Ops                     | Separate prerequisite | Postpone / evidence gate                        |
+| ----------------------------------------------------------- | ----------------------- | --------------------- | ----------------------------------------------- |
+| DYN-PAGE-00, DYN-PAGE-01, DYN-PAGE-02, DYN-TODAY-01         | OPS-DYN-RECAPTURE       | DYN-TOKEN-00          | DYN-ASYNC, conditional presence, custom widgets |
+| DYN-XFORM-00 only when E6.11 B8 names exact transform needs | Hosted aggregate re-run | —                     | CAPTCHA/pacing until first confirmed block      |
 
 ---
 
