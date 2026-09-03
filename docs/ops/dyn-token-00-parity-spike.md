@@ -285,12 +285,20 @@ which state, which policy) do not port cleanly from `providerProfile.ts`.
 - **Depends on:** 03 · **Must settle D3** (`provider.licenseNumber` vs
   `license.licenseNumber`) before writing code.
 
-### BITE-DYN-TOKEN-06 — withdraw or mark `payer.*` / `contract.*` / `mso.*`
+### BITE-DYN-TOKEN-06 — withdraw `payer.*` / `contract.*` / `mso.*`
 
-- **Repos:** panel · **Risk:** low · **Depends on:** 02
-- **PM decision needed:** withdraw from the picker entirely, or keep them
-  visible and permanently marked unfillable. Zero approved maps use them, so
-  either is non-breaking today.
+- **Repos:** panel · **Risk:** low
+- **PM decision (2026-09-03): WITHDRAW.** Not marked-but-visible — removed from
+  both mapping pickers outright. Zero maps reference these families in any
+  status, so nothing is orphaned.
+- **Depends on:** nothing, once "withdraw" is the answer. The dependency on 02
+  existed only for the "mark" option, which needed 02's presentation layer.
+- **Scope note:** the withdrawal belongs in the mapping surfaces, **not** in
+  `listTokenCatalog()`. That catalog has a third consumer — the SOP authoring
+  picker — which already applies its own reachability filter
+  (`filterAuthoringTokens` → `isResolvableToken`) and legitimately admits
+  `mso.*`, because `buildSopTokenMap` passes an MSO row. Filtering the shared
+  catalog would silently narrow SOP authoring.
 
 **No locked API contract has to widen for any of these.** Every one is
 panel-internal: the PDF fill is a browser-side path that never crosses `/api`,
