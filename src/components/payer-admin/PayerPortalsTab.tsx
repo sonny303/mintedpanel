@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PortalDrawer } from "@/components/portals/PortalDrawer";
+import { PortalDrawer } from "@/components/PortalDrawer";
 import { useSops } from "@/hooks/useAdmin";
 import { usePortalFieldMaps, usePortals } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";

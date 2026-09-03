@@ -57,7 +57,7 @@ import {
 import { groupTokens } from "@/lib/tokenGroups";
 import { filterMappingTokens } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
-import { PortalDrawer } from "@/components/portals/PortalDrawer";
+import { PortalDrawer } from "@/components/PortalDrawer";
 import { portalDisplayName } from "@/lib/portalRetirement";
 import { useLocation } from "@tanstack/react-router";
 

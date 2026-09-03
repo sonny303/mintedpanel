@@ -32,10 +32,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePayers, useReactivatePayer, useSops } from "@/hooks/useAdmin";
+import { useActiveNetworkPayerIds } from "@/hooks/useActiveNetworkPayerIds";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
-import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { fmtDate } from "@/lib/format";
-import { catalogSetupPayers, networkPayerIdsFromTargets } from "@/lib/payerSetup";
+import { catalogSetupPayers } from "@/lib/payerSetup";
 import { resolvePayerNextAction } from "@/lib/payerNextAction";
 import {
   DEFAULT_PAYER_SETUP_FILTERS,
@@ -320,7 +320,7 @@ function NextActionCell({
 export function PayerSetupPage() {
   const payersQ = usePayers();
   const funnel = usePayerReadinessFunnel();
-  const targetsQ = usePayerNetworkTargets();
+  const networkIds = useActiveNetworkPayerIds();
   const isAdmin = useIsAdmin();
   const reactivateMut = useReactivatePayer();
 
@@ -332,11 +332,6 @@ export function PayerSetupPage() {
     setFilters((prev) => ({ ...prev, ...patch }));
     setPage(1);
   };
-
-  const networkIds = useMemo(
-    () => networkPayerIdsFromTargets(targetsQ.data ?? []),
-    [targetsQ.data],
-  );
 
   const funnelByPayer = useMemo(() => {
     const map = new Map<string, FunnelRow>();
