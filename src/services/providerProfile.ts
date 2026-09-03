@@ -39,6 +39,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
+import { pickLicenseForState } from "@/lib/licensePick";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { Provider } from "@/types";
 
@@ -170,18 +171,12 @@ function parseCatalog(raw: Json): CatalogEntry[] {
   return entries;
 }
 
+// Delegates to the shared rule so the payer-PDF fill cannot pick a DIFFERENT
+// license than this route would for the same provider and state. Behavior is
+// unchanged; the definition simply moved (src/lib/licensePick.ts).
 function pickLicense(licenses: Row[], state: string | undefined): SourcePick {
-  if (licenses.length === 0) return { row: null, reason: "provider has no state licenses" };
-  if (state) {
-    const match = licenses.find((l) => String(l.state ?? "").toUpperCase() === state);
-    if (!match) return { row: null, reason: `provider has no ${state} license` };
-    return { row: match };
-  }
-  if (licenses.length === 1) return { row: licenses[0] };
-  return {
-    row: null,
-    reason: `provider has ${licenses.length} state licenses; pass ?state=XX to select one`,
-  };
+  const picked = pickLicenseForState(licenses, state);
+  return picked.row ? { row: picked.row } : { row: null, reason: picked.reason };
 }
 
 // Which facility (if any) the facility.*/assignment.* tokens resolve from.

@@ -236,8 +236,10 @@ and the sample from advertising them is not.**
 Each is one reviewable change. **None is approved by this spike** — they are
 the shape the work takes, for separate PM sign-off.
 
-**Status:** 01 and 06 are BUILT (see below); the family-reach map they share
-lives in `src/lib/fillTokenReach.ts`. 02–05 remain proposals.
+**Status:** 01, 06 and the `license.*` half of 05 are BUILT (see below). The
+family-reach map they share lives in `src/lib/fillTokenReach.ts`; the license
+selection rule in `src/lib/licensePick.ts`. 02, 03, 04 and the rest of 05
+remain proposals.
 
 ### BITE-DYN-TOKEN-01 — honest sample fill _(do first)_
 
@@ -291,8 +293,20 @@ Three child-row picks. Split further if the selection rules (which license for
 which state, which policy) do not port cleanly from `providerProfile.ts`.
 
 - **Repos:** panel · **Risk:** medium — selection rules, not plumbing
-- **Depends on:** 03 · **Must settle D3** (`provider.licenseNumber` vs
-  `license.licenseNumber`) before writing code.
+- **D3 SETTLED 2026-09-03: `license.*` is canonical.** `providers.license_*`
+  has no writer and is null for all 21 hosted providers; provider create and
+  update write `state_licenses` rows. The four `provider.license*` tokens are
+  withdrawn from the mapping pickers and the columns are documented deprecated
+  in place — not dropped (additive-schema rule).
+- **`license.*` PDF resolver BUILT 2026-09-03.** `pickLicenseForState`
+  (`src/lib/licensePick.ts`) is now the ONE selection rule, shared by
+  `providerProfile.ts` and the case page. The case names exactly one state —
+  it is part of the 4-part case key — so the PDF pick is unambiguous where the
+  web route has to ask via `?state=`. It never falls back: several licenses and
+  no state resolves to null, because a plausible wrong license number on a
+  payer application is worse than a blank.
+- **Still open:** `assignment.*` and `groupInsurance.*` PDF parity. Both are
+  unused today (zero approved maps), so neither is urgent.
 
 ### BITE-DYN-TOKEN-06 — withdraw `payer.*` / `contract.*` / `mso.*`
 

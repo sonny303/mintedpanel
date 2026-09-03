@@ -8,10 +8,12 @@ import {
   PDF_FILL_FAMILIES,
   UNFILLABLE_FAMILIES,
   WEB_FILL_FAMILIES,
+  WITHDRAWN_TOKENS,
   filterMappingTokens,
   isPdfFillableToken,
   isUnfillableToken,
   isWebFillableToken,
+  isWithdrawnToken,
 } from "@/lib/fillTokenReach";
 
 describe("isPdfFillableToken", () => {
@@ -92,6 +94,43 @@ describe("isUnfillableToken / UNFILLABLE_FAMILIES", () => {
   });
 });
 
+describe("WITHDRAWN_TOKENS (DYN-TOKEN-05)", () => {
+  it("withdraws the four dead providers.license_* columns", () => {
+    for (const token of [
+      "provider.licenseNumber",
+      "provider.licenseState",
+      "provider.licenseIssueDate",
+      "provider.licenseExpirationDate",
+    ]) {
+      expect(isWithdrawnToken(token)).toBe(true);
+    }
+  });
+
+  it("withdraws TOKENS, not the provider family — the rest still map", () => {
+    expect(isWithdrawnToken("provider.npi")).toBe(false);
+    expect(isWithdrawnToken("provider.firstName")).toBe(false);
+    expect(isPdfFillableToken("provider.npi")).toBe(true);
+  });
+
+  // license.* is the canonical spelling and must NOT be caught by this list.
+  it("leaves the real state_licenses tokens alone", () => {
+    for (const token of [
+      "license.licenseNumber",
+      "license.state",
+      "license.issueDate",
+      "license.expirationDate",
+    ]) {
+      expect(isWithdrawnToken(token)).toBe(false);
+    }
+  });
+
+  it("names only provider.* tokens — a family withdrawal would be the wrong tool", () => {
+    for (const token of WITHDRAWN_TOKENS) {
+      expect(token.startsWith("provider.")).toBe(true);
+    }
+  });
+});
+
 describe("filterMappingTokens", () => {
   const catalog = [
     { token: "provider.npi" },
@@ -107,6 +146,19 @@ describe("filterMappingTokens", () => {
       "provider.npi",
       "license.expirationDate",
       "user.name",
+    ]);
+  });
+
+  it("also drops the individually withdrawn tokens", () => {
+    const withLegacy = [
+      { token: "provider.npi" },
+      { token: "provider.licenseNumber" },
+      { token: "provider.licenseState" },
+      { token: "license.licenseNumber" },
+    ];
+    expect(filterMappingTokens(withLegacy).map((e) => e.token)).toEqual([
+      "provider.npi",
+      "license.licenseNumber",
     ]);
   });
 

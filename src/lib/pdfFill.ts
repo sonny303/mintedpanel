@@ -14,6 +14,9 @@
 import { buildEntityTokenValues, composeAddressToken } from "@/lib/entityTokens";
 import { normalizeFieldLabel } from "@/lib/tokenFormat";
 import type { Facility, FieldDictionaryEntry, Provider, ProviderGroup } from "@/types";
+// Type-only, like csvImport/payerForm/providerGroup do — no runtime edge from
+// lib into services.
+import type { StateLicense } from "@/services/lookups";
 
 /** One PDF form field name resolved (or not) to a catalog token. */
 export interface PdfFieldMapping {
@@ -109,12 +112,23 @@ export function resolvePdfValues(
 // (entityTokens) rather than a hand-written list: this map used to name ~40 of
 // the catalog's provider/group/facility tokens, so a mapped field whose column
 // simply was not listed here filled as "no_value".
+//
+// DYN-TOKEN-05 — `license` is the fourth entity, and unlike the other three it
+// has to be CHOSEN. A provider commonly holds several state licenses, so the
+// caller resolves one with `pickLicenseForState` (the same rule the web fill
+// uses) against the CASE's state and passes the row, or passes null. Null is a
+// legitimate answer: the license tokens then resolve to no_value, exactly as
+// they did before this parameter existed.
+//
+// Do NOT re-derive the pick in here. The state that disambiguates it belongs
+// to the case, which this pure function has no business knowing about.
 export function buildProviderTokenValues(
   provider: Provider | null,
   group: ProviderGroup | null,
   facility: Facility | null,
+  license: StateLicense | null = null,
 ): Record<string, string> {
-  const out = buildEntityTokenValues({ provider, group, facility });
+  const out = buildEntityTokenValues({ provider, group, facility, license });
   const address = facility
     ? composeAddressToken([facility.street, facility.city, facility.state, facility.zip])
     : null;
