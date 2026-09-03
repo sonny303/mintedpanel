@@ -6,17 +6,27 @@
 //
 // The telemetry contract with minted-extension is LOCKED: the content script
 // reports `{ label, reason, mapId?, kind }` entries in fill_sessions
-// .fields_skipped (src/background/fill.ts), and only a `kind: "skipped"` entry
-// whose reason is the exact FIELD_NOT_FOUND_REASON wording counts as drift.
-// The E4.2 dry-run shape (`{ selector, label, reason: "unmapped" |
-// "empty_token" }`) shares the column but never matches either predicate.
+// .fields_skipped (src/background/fill.ts). Drift is still only a
+// `kind: "skipped"` entry whose reason is the exact FIELD_NOT_FOUND_REASON
+// wording. Off-page misses (DYN-PAGE) use a distinct kind AND reason so the
+// extension Fix-it strip (reason-only) and this module (reason+kind) cannot
+// confuse them with a broken on-page selector. The E4.2 dry-run shape
+// (`{ selector, label, reason: "unmapped" | "empty_token" }`) shares the
+// column but never matches either predicate.
 import type { FillSession, PortalFieldMap } from "@/types";
 
 // The extension content script's EXACT wording when a trained selector matched
 // nothing on the live page — the one signal that a mapping no longer fits the
 // form (minted-extension src/content/fillEngine.ts). Any other skip reason
-// (no value, manual, file upload) is NOT drift.
+// (no value, manual, file upload, other page) is NOT drift.
 export const FIELD_NOT_FOUND_REASON = "field not found on this page";
+
+/** Producer kind for a map that belongs to a different exact URL-page. */
+export const OTHER_PAGE_KIND = "other_page";
+
+/** Distinct from FIELD_NOT_FOUND_REASON — the extension Fix-it strip keys on
+ * reason alone. Panel-first pin; DYN-PAGE-01 must emit this exact string. */
+export const OTHER_PAGE_REASON = "field belongs to another page";
 
 // One parsed entry of a LIVE fill's fields_skipped array.
 export interface SkippedEntry {
@@ -24,6 +34,18 @@ export interface SkippedEntry {
   reason: string;
   kind: string;
   mapId: string | null;
+}
+
+/** Genuine on-page selector miss. Both halves are required. */
+export function isOnPageNotFound(entry: Pick<SkippedEntry, "kind" | "reason">): boolean {
+  return entry.kind === "skipped" && entry.reason === FIELD_NOT_FOUND_REASON;
+}
+
+/** Off-page miss. Kind or reason is enough so a partial producer (kind
+ * overwritten to "skipped", or a mismatched reason on the new kind) still
+ * cannot become drift or inferred success. */
+export function isOtherPageSkip(entry: Pick<SkippedEntry, "kind" | "reason">): boolean {
+  return entry.kind === OTHER_PAGE_KIND || entry.reason === OTHER_PAGE_REASON;
 }
 
 // fields_skipped is client-supplied jsonb — parse defensively, dropping anything
@@ -94,9 +116,7 @@ export function brokenMapsForFill(
   fill: DriftFill,
   fieldMaps: readonly PortalFieldMap[],
 ): PortalFieldMap[] {
-  const notFound = parseSkippedEntries(fill.fieldsSkipped).filter(
-    (e) => e.kind === "skipped" && e.reason === FIELD_NOT_FOUND_REASON,
-  );
+  const notFound = parseSkippedEntries(fill.fieldsSkipped).filter(isOnPageNotFound);
   if (notFound.length === 0) return [];
 
   const liveMaps = fieldMaps.filter(
@@ -161,6 +181,15 @@ export interface FillHistoryEntry {
   isTest?: boolean | null;
 }
 
+/** Join a skip report to a mapping: mapId first, report label for pre-mapId
+ * telemetry. A reported-but-unmatched id does not fall back to the label. */
+function skippedEntryMatchesMap(
+  entry: SkippedEntry,
+  map: Pick<PortalFieldMap, "id" | "selector">,
+): boolean {
+  return entry.mapId ? entry.mapId === map.id : entry.label === reportLabelOf(map);
+}
+
 /** Did this fill report THIS mapping as not-found? Same join as
  * brokenMapsForFill (mapId first, report label for pre-mapId telemetry), but
  * without the repaired-since filter: here we are asking a historical question
@@ -169,12 +198,19 @@ function fillReportsBroken(
   fill: FillHistoryEntry,
   map: Pick<PortalFieldMap, "id" | "selector">,
 ): boolean {
-  const label = reportLabelOf(map);
   return parseSkippedEntries(fill.fieldsSkipped).some(
-    (e) =>
-      e.kind === "skipped" &&
-      e.reason === FIELD_NOT_FOUND_REASON &&
-      (e.mapId ? e.mapId === map.id : e.label === label),
+    (e) => isOnPageNotFound(e) && skippedEntryMatchesMap(e, map),
+  );
+}
+
+/** Did this fill report THIS mapping as off-page? That is no evidence it
+ * worked and no evidence it broke — the page was not the one being filled. */
+function fillReportsOtherPage(
+  fill: FillHistoryEntry,
+  map: Pick<PortalFieldMap, "id" | "selector">,
+): boolean {
+  return parseSkippedEntries(fill.fieldsSkipped).some(
+    (e) => isOtherPageSkip(e) && skippedEntryMatchesMap(e, map),
   );
 }
 
@@ -200,11 +236,15 @@ function isBefore(a: string, b: string): boolean {
  *   - the fill landed at least one field, so "no skip report" means something;
  *   - the mapping already existed when the fill ran — otherwise its absence
  *     from the skip list says nothing about it;
- *   - and the fill did NOT report it not-found.
+ *   - and the fill did NOT report it not-found or off-page.
  *
- * The weak link is a mapping that existed but was never attempted (a page the
- * fill did not reach). That would read as "worked", so this is a floor on
- * staleness, not a precise last-success timestamp. It is presented that way. */
+ * An `other_page` report is explicit no-evidence: walk to an older fill. Do
+ * not treat "not reported broken" as success when the fill said the field
+ * belonged to another page.
+ *
+ * The remaining weak link is a mapping that existed but was never attempted
+ * and never reported off-page. That would still read as "worked", so this is
+ * a floor on staleness, not a precise last-success timestamp. */
 export function lastWorkingAt(
   map: Pick<PortalFieldMap, "id" | "portalKey" | "selector" | "createdAt">,
   history: readonly FillHistoryEntry[],
@@ -215,6 +255,7 @@ export function lastWorkingAt(
     if ((fill.fieldsFilled ?? 0) <= 0) continue;
     if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
     if (fillReportsBroken(fill, map)) continue;
+    if (fillReportsOtherPage(fill, map)) continue;
     return fill.startedAt;
   }
   return null;
