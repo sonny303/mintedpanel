@@ -17,18 +17,26 @@
  * Families the REAL payer-PDF fill resolves.
  *
  * `buildProviderTokenValues` (`src/lib/pdfFill.ts`) passes
- * `{ provider, group, facility, license }` — the entities the case page
- * already holds (license via `pickLicenseForState` against the case state),
- * deliberately, so the fill needs no extra fetch and PHI stays in the browser.
+ * `{ provider, group, facility, license, groupInsurance }` — the entities the
+ * case page holds (license via `pickLicenseForState` against the case state;
+ * groupInsurance via `pickGroupInsurancePolicy` against the case's group
+ * policies), deliberately, so PHI stays in the browser.
  *
  * This is NOT `ENTITY_TOKEN_FAMILIES`, which lists `mso` (SOP resolver) and
- * omits `license` (child-row, chosen by the caller). Reusing that constant
- * here would claim a reach the PDF path does not have, or miss one it does.
+ * omits the child-row families the caller chooses. Reusing that constant here
+ * would claim a reach the PDF path does not have, or miss one it does.
  *
- * DYN-TOKEN-05 added `license`. Keep this list in step with the entities
- * `buildProviderTokenValues` actually passes — the sample fill reads it.
+ * DYN-TOKEN-05 added `license` then `groupInsurance`. Keep this list in step
+ * with the entities `buildProviderTokenValues` actually passes — the sample
+ * fill reads it.
  */
-export const PDF_FILL_FAMILIES: readonly string[] = ["provider", "group", "facility", "license"];
+export const PDF_FILL_FAMILIES: readonly string[] = [
+  "provider",
+  "group",
+  "facility",
+  "license",
+  "groupInsurance",
+];
 
 /**
  * Families the web profile resolves — the six source rows

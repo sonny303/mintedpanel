@@ -6,6 +6,8 @@ import {
   resolvePdfValues,
 } from "./pdfFill";
 import type { Facility, FieldDictionaryEntry, Provider, ProviderGroup } from "@/types";
+import type { StateLicense } from "@/services/lookups";
+import type { InsurancePolicy } from "@/services/orgSettings";
 
 function dictEntry(
   labelNormalized: string,
@@ -123,6 +125,25 @@ describe("buildProviderTokenValues", () => {
     zip: "78701",
   } as Facility;
 
+  const license = {
+    state: "TX",
+    licenseNumber: "TX-PT-99",
+    expirationDate: "2027-12-31",
+  } as unknown as StateLicense;
+
+  const groupInsurance = {
+    id: "gp-1",
+    orgId: "org-1",
+    groupId: "g-1",
+    insuranceType: "professional_liability",
+    coverageLevel: "primary",
+    insurerName: "Acme Malpractice",
+    policyNumber: "POL-42",
+    policyStartDate: "2025-01-01",
+    policyEndDate: "2026-12-31",
+    notes: null,
+  } as InsurancePolicy;
+
   it("emits bare catalog tokens for non-empty provider/group/facility values", () => {
     const map = buildProviderTokenValues(provider, group, facility);
     expect(map["provider.firstName"]).toBe("Jordan");
@@ -141,6 +162,21 @@ describe("buildProviderTokenValues", () => {
 
   it("tolerates null provider/group/facility", () => {
     expect(buildProviderTokenValues(null, null, null)).toEqual({});
+  });
+
+  // DYN-TOKEN-05 — license and groupInsurance are caller-chosen child rows.
+  it("emits license.* and groupInsurance.* when those rows are passed", () => {
+    const map = buildProviderTokenValues(provider, group, facility, license, groupInsurance);
+    expect(map["license.licenseNumber"]).toBe("TX-PT-99");
+    expect(map["license.state"]).toBe("TX");
+    expect(map["groupInsurance.policyNumber"]).toBe("POL-42");
+    expect(map["groupInsurance.insurerName"]).toBe("Acme Malpractice");
+  });
+
+  it("omits license.* and groupInsurance.* when those rows are null", () => {
+    const map = buildProviderTokenValues(provider, group, facility, null, null);
+    expect("license.licenseNumber" in map).toBe(false);
+    expect("groupInsurance.policyNumber" in map).toBe(false);
   });
 });
 

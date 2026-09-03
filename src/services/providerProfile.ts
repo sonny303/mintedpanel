@@ -39,6 +39,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
+import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
 import { pickLicenseForState } from "@/lib/licensePick";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { Provider } from "@/types";
@@ -223,41 +224,12 @@ function selectFacility(
   };
 }
 
-// E4.3 F4.3.5 Q4 (PM decision 2026-07-17): a group holding SEVERAL policies
-// resolves deterministically — filter to the malpractice policy
-// (insurance_type 'professional_liability'), newest policy_end_date wins.
-// Additive refinement: a sole policy still resolves as before (whatever its
-// type), and zero-malpractice multi-policy groups stay honestly unresolved.
-const MALPRACTICE_INSURANCE_TYPE = "professional_liability";
-
+// Delegates to the shared rule so the payer-PDF fill cannot pick a DIFFERENT
+// policy than this route would for the same group. Behavior is unchanged; the
+// definition simply moved (src/lib/groupInsurancePick.ts).
 function pickPolicy(policies: Row[], hasGroup: boolean): SourcePick {
-  if (!hasGroup) return { row: null, reason: "provider has no group" };
-  if (policies.length === 0) return { row: null, reason: "group has no insurance policies" };
-  if (policies.length === 1) return { row: policies[0] };
-  const malpractice = policies.filter(
-    (p) => String(p.insurance_type ?? "") === MALPRACTICE_INSURANCE_TYPE,
-  );
-  if (malpractice.length === 0) {
-    return {
-      row: null,
-      reason: `group has ${policies.length} insurance policies and none is malpractice (${MALPRACTICE_INSURANCE_TYPE}); not resolvable to a single row`,
-    };
-  }
-  // The group's PRIMARY malpractice policy wins outright (20260729120000 —
-  // at most one per group by partial unique index); secondary policies only
-  // resolve when no primary is on file. Within a level the newest
-  // policy_end_date wins and a date-less policy never beats a dated one.
-  // Ties (and all-null dates) break by id so the pick is stable across reads.
-  const sorted = [...malpractice].sort((a, b) => {
-    const aPrimary = String(a.coverage_level ?? "primary") === "primary";
-    const bPrimary = String(b.coverage_level ?? "primary") === "primary";
-    if (aPrimary !== bPrimary) return aPrimary ? -1 : 1;
-    const aEnd = typeof a.policy_end_date === "string" ? a.policy_end_date : "";
-    const bEnd = typeof b.policy_end_date === "string" ? b.policy_end_date : "";
-    if (aEnd !== bEnd) return bEnd.localeCompare(aEnd);
-    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
-  });
-  return { row: sorted[0] };
+  const picked = pickGroupInsurancePolicy(policies, hasGroup);
+  return picked.row ? { row: picked.row } : { row: null, reason: picked.reason };
 }
 
 export async function getProviderProfile(

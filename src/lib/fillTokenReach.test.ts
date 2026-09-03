@@ -24,12 +24,14 @@ describe("isPdfFillableToken", () => {
     // DYN-TOKEN-05 — case page picks a state_licenses row and passes it.
     expect(isPdfFillableToken("license.licenseNumber")).toBe(true);
     expect(isPdfFillableToken("license.expirationDate")).toBe(true);
+    // DYN-TOKEN-05 — case page picks a group_insurance_policies row and passes it.
+    expect(isPdfFillableToken("groupInsurance.policyNumber")).toBe(true);
+    expect(isPdfFillableToken("groupInsurance.insurerName")).toBe(true);
   });
 
   it("rejects every family with no row in hand on the case page", () => {
     for (const token of [
       "assignment.isPrimary",
-      "groupInsurance.policyNumber",
       "user.name",
       "payer.name",
       "contract.effectiveDate",
@@ -40,16 +42,20 @@ describe("isPdfFillableToken", () => {
   });
 
   // The bug this constant exists to prevent: ENTITY_TOKEN_FAMILIES includes
-  // `mso` because the SOP resolver passes an MSO row, and omits `license`
-  // because that module does not choose a child row. buildProviderTokenValues
-  // is the opposite on both counts — reusing that list would lie either way.
-  it("is NOT ENTITY_TOKEN_FAMILIES — mso yes there / no here; license inverted", () => {
+  // `mso` because the SOP resolver passes an MSO row, and omits `license` /
+  // `groupInsurance` because that module does not choose a child row.
+  // buildProviderTokenValues is the opposite on mso and now reaches both
+  // child-row families — reusing that list would lie either way.
+  it("is NOT ENTITY_TOKEN_FAMILIES — mso yes there / no here; child rows inverted", () => {
     expect(ENTITY_TOKEN_FAMILIES).toContain("mso");
     expect(ENTITY_TOKEN_FAMILIES).not.toContain("license");
+    expect(ENTITY_TOKEN_FAMILIES).not.toContain("groupInsurance");
     expect(PDF_FILL_FAMILIES).not.toContain("mso");
     expect(PDF_FILL_FAMILIES).toContain("license");
+    expect(PDF_FILL_FAMILIES).toContain("groupInsurance");
     expect(isPdfFillableToken("mso.name")).toBe(false);
     expect(isPdfFillableToken("license.state")).toBe(true);
+    expect(isPdfFillableToken("groupInsurance.policyNumber")).toBe(true);
   });
 });
 

@@ -32,9 +32,11 @@ import {
   useSetPrimaryCaseFacility,
 } from "@/hooks/useCases";
 import { useCoordinators, useFacilities, useStateLicensesByProvider } from "@/hooks/useLookups";
+import { useGroupInsurancePolicies } from "@/hooks/useOrgSettings";
 import { useProviderAssignments } from "@/hooks/useProviders";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { caseFacilityOptions } from "@/lib/caseFacility";
+import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
 import { pickLicenseForState } from "@/lib/licensePick";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { CaseHeader } from "@/components/cases/CaseHeader";
@@ -65,6 +67,9 @@ function CaseDetailPage() {
   const caseFacilitiesQ = useCaseFacilities(id);
   const c = caseQ.data;
   const licensesQ = useStateLicensesByProvider(c?.providerId);
+  // DYN-TOKEN-05 — policies for the CASE's group (not the provider's primary
+  // mirror). Empty string keeps the query disabled until a group is known.
+  const policiesQ = useGroupInsurancePolicies(c?.groupId ?? "");
 
   const setStatusM = useSetCaseStatus();
   const logTouchM = useLogTouch();
@@ -106,6 +111,15 @@ function CaseDetailPage() {
     [licensesQ.data, c?.state],
   );
 
+  // DYN-TOKEN-05 — which group insurance policy groupInsurance.* tokens mean.
+  // Same shared rule as the web profile (malpractice → primary → newest end
+  // date). The CASE's groupId decides which policies are candidates; the web
+  // profile uses the provider's primary group because it has no case.
+  const caseGroupInsurance = useMemo(
+    () => pickGroupInsurancePolicy(policiesQ.data ?? [], Boolean(c?.groupId)).row,
+    [policiesQ.data, c?.groupId],
+  );
+
   // token -> value map for the TaskDrawer's pdf-step form filler and the Payer
   // PDF action, from the data this page already holds. PHI stays in the browser.
   const stepTokenValues = useMemo(
@@ -115,8 +129,9 @@ function CaseDetailPage() {
         c?.group ?? null,
         c?.facility ?? null,
         caseLicense,
+        caseGroupInsurance,
       ),
-    [c?.provider, c?.group, c?.facility, caseLicense],
+    [c?.provider, c?.group, c?.facility, caseLicense, caseGroupInsurance],
   );
 
   if (caseQ.isLoading) {

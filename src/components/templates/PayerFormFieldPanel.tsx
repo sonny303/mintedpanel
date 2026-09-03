@@ -183,9 +183,10 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   // same path a real case gives them: planPayerFormFill classifies an absent
   // value as `empty_token` and the existing UI already shows that as a gap.
   //
-  // DYN-TOKEN-05 — `license.*` IS reachable now (case page picks one). Keep
-  // `isPdfFillableToken` / `PDF_FILL_FAMILIES` in step with that, or the
-  // sample fill will teach the opposite of the case fill again.
+  // DYN-TOKEN-05 — `license.*` and `groupInsurance.*` ARE reachable now
+  // (case page picks each). Keep `isPdfFillableToken` / `PDF_FILL_FAMILIES`
+  // in step with that, or the sample fill will teach the opposite of the
+  // case fill again.
   const sampleValues = useMemo(() => {
     const values: Record<string, string> = {};
     for (const map of maps) {

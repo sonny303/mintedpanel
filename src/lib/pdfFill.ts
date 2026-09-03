@@ -17,6 +17,7 @@ import type { Facility, FieldDictionaryEntry, Provider, ProviderGroup } from "@/
 // Type-only, like csvImport/payerForm/providerGroup do — no runtime edge from
 // lib into services.
 import type { StateLicense } from "@/services/lookups";
+import type { InsurancePolicy } from "@/services/orgSettings";
 
 /** One PDF form field name resolved (or not) to a catalog token. */
 export interface PdfFieldMapping {
@@ -113,22 +114,31 @@ export function resolvePdfValues(
 // the catalog's provider/group/facility tokens, so a mapped field whose column
 // simply was not listed here filled as "no_value".
 //
-// DYN-TOKEN-05 — `license` is the fourth entity, and unlike the other three it
-// has to be CHOSEN. A provider commonly holds several state licenses, so the
-// caller resolves one with `pickLicenseForState` (the same rule the web fill
-// uses) against the CASE's state and passes the row, or passes null. Null is a
-// legitimate answer: the license tokens then resolve to no_value, exactly as
-// they did before this parameter existed.
+// DYN-TOKEN-05 — `license` and `groupInsurance` are child-row entities that
+// have to be CHOSEN. A provider commonly holds several state licenses; a group
+// commonly holds several insurance policies. The caller resolves each with the
+// shared pick rule (`pickLicenseForState` / `pickGroupInsurancePolicy` — the
+// same rules the web fill uses) and passes the row, or passes null. Null is a
+// legitimate answer: those tokens then resolve to no_value, exactly as they
+// did before these parameters existed.
 //
-// Do NOT re-derive the pick in here. The state that disambiguates it belongs
-// to the case, which this pure function has no business knowing about.
+// Do NOT re-derive the picks in here. The state / group that disambiguates
+// them belongs to the case, which this pure function has no business knowing
+// about.
 export function buildProviderTokenValues(
   provider: Provider | null,
   group: ProviderGroup | null,
   facility: Facility | null,
   license: StateLicense | null = null,
+  groupInsurance: InsurancePolicy | null = null,
 ): Record<string, string> {
-  const out = buildEntityTokenValues({ provider, group, facility, license });
+  const out = buildEntityTokenValues({
+    provider,
+    group,
+    facility,
+    license,
+    groupInsurance,
+  });
   const address = facility
     ? composeAddressToken([facility.street, facility.city, facility.state, facility.zip])
     : null;

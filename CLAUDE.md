@@ -610,15 +610,12 @@ control silently dates a break to a fill that never touched it.**
 - The Pre-Credentialing sentinel payer workflow code is intact but unreachable
   (no creatable payer carries the name).
 - **The token picker offers more than either fill can resolve, and the payer-PDF
-  sample fill hides it.** `useTokenCatalog()` serves one 157-token catalog to
-  BOTH mappers, but the web profile resolves ~132 of them while
-  `buildProviderTokenValues` (`src/lib/pdfFill.ts`, the real payer-PDF path)
-  reaches only `provider.*` / `group.*` / `facility.*`. Neither fill lies —
-  the profile returns a reason, `planPayerFormFill` reports `empty_token` —
-  but `PayerFormFieldPanel`'s sample fill runs on `mockValueForToken`, which
-  is documented "always non-empty", so an unfillable PDF mapping demos
-  perfectly. No live PDF mapping is affected yet. Measured, with the posture
-  per family and the build bites, in
+  sample fill used to hide it.** `useTokenCatalog()` serves one 157-token
+  catalog to BOTH mappers. TOKEN-01/06 narrowed the mapping pickers and made
+  the sample fill honest via `PDF_FILL_FAMILIES` (`fillTokenReach.ts`). The
+  real payer-PDF path (`buildProviderTokenValues`) now reaches `provider.*` /
+  `group.*` / `facility.*` / `license.*` / `groupInsurance.*`. Remaining
+  web-only gap: `assignment.*`, `user.*`. Measured posture per family in
   `docs/ops/dyn-token-00-parity-spike.md` — read it before adding a token.
 - The extension's picker is driven from the served `catalog`;
   `src/shared/quickCards.ts` holds only the default layout and projection

@@ -102,40 +102,43 @@ mode today.
 
 ### PDF — `buildProviderTokenValues`
 
-`src/lib/pdfFill.ts:112`, called once at `src/routes/cases.$id.tsx:98` and
-passed down through `CaseTasksPanel` → `PayerFormActionRow` → `planPayerFormFill`.
+`src/lib/pdfFill.ts`, called once at `src/routes/cases.$id.tsx` and passed
+down through `CaseTasksPanel` → `PayerFormActionRow` → `planPayerFormFill`.
 
 ```ts
-buildEntityTokenValues({ provider, group, facility }); // + composed facility.address
+buildEntityTokenValues({ provider, group, facility, license, groupInsurance });
+// + composed facility.address
 ```
 
-Three prefixes. That is the whole reach. It builds from entities the case page
-already holds, deliberately — no extra fetch, PHI stays in the browser — and
-`entityTokens.ts` says so plainly in its own comment: child-row families
-(`assignment`, `groupInsurance`, `license`) and case-scoped families are _"NOT
-here: no row is in hand."_
+At spike time this was three prefixes (`provider` / `group` / `facility`).
+TOKEN-05 added `license` and `groupInsurance` as caller-chosen child rows —
+the case page picks each with the shared rule and passes the row (or null).
+`assignment` and the case-scoped families remain absent: no row in hand.
 
-A token outside those three prefixes is simply absent from the map. It is not
+A token outside the passed entities is simply absent from the map. It is not
 mis-resolved, and `planPayerFormFill` reports it as `empty_token` — a gap the
 coordinator sees before downloading.
 
 ## Capability matrix
 
-| Family           | Tokens | Mapping picker  | Web fill                     | Real payer-PDF fill |
-| ---------------- | -----: | --------------- | ---------------------------- | ------------------- |
-| `provider`       |     46 | offered         | ✅ resolved                  | ✅ resolved         |
-| `group`          |     39 | offered         | ✅ resolved                  | ✅ resolved         |
-| `facility`       |     23 | offered         | ✅ resolved (by selection)   | ✅ resolved         |
-| `license`        |      9 | offered         | ✅ resolved (by case state)  | ❌ no row in hand   |
-| `groupInsurance` |      7 | offered         | ✅ resolved (policy pick)    | ❌ no row in hand   |
-| `assignment`     |      3 | offered         | ✅ resolved (facility pick)  | ❌ no row in hand   |
-| `user`           |      5 | offered         | ✅ resolved (caller profile) | ❌ not built        |
-| `payer`          |     18 | offered         | ⚠️ null + reason             | ❌ no row in hand   |
-| `contract`       |      5 | offered         | ⚠️ null + reason             | ❌ no row in hand   |
-| `mso`            |      2 | offered         | ⚠️ null + reason             | ❌ not built        |
-| org contacts     |      — | **not offered** | ✅ resolved (default holder) | ❌ not built        |
+| Family           | Tokens | Mapping picker  | Web fill                     | Real payer-PDF fill    |
+| ---------------- | -----: | --------------- | ---------------------------- | ---------------------- |
+| `provider`       |     46 | offered         | ✅ resolved                  | ✅ resolved            |
+| `group`          |     39 | offered         | ✅ resolved                  | ✅ resolved            |
+| `facility`       |     23 | offered         | ✅ resolved (by selection)   | ✅ resolved            |
+| `license`        |      9 | offered         | ✅ resolved (by case state)  | ✅ resolved (TOKEN-05) |
+| `groupInsurance` |      7 | offered         | ✅ resolved (policy pick)    | ✅ resolved (TOKEN-05) |
+| `assignment`     |      3 | offered         | ✅ resolved (facility pick)  | ❌ no row in hand      |
+| `user`           |      5 | offered         | ✅ resolved (caller profile) | ❌ not built           |
+| `payer`          |     18 | withdrawn       | ⚠️ null + reason             | ❌ no row in hand      |
+| `contract`       |      5 | withdrawn       | ⚠️ null + reason             | ❌ no row in hand      |
+| `mso`            |      2 | withdrawn       | ⚠️ null + reason             | ❌ not built           |
+| org contacts     |      — | **not offered** | ✅ resolved (default holder) | ❌ not built           |
 
-**Both:** 108 (69%) · **Web only:** 24 (15%) · **Neither:** 25 (16%).
+**Spike-time counts (before TOKEN builds):** Both 108 (69%) · Web only 24
+(15%) · Neither 25 (16%). Post TOKEN-05/06 the PDF path also reaches
+`license.*` + `groupInsurance.*`, and the mapping pickers no longer offer
+`payer.*` / `contract.*` / `mso.*`.
 
 ⚠️ = offered but deliberately unresolvable without a case; the web path names
 the reason rather than guessing. Not a bug — a documented boundary. It is still
@@ -155,10 +158,12 @@ resolves that the picker never offers, so nobody can map to them.
 (`src/lib/mockFillProfile.ts`) ends in a heuristic fallthrough that is
 documented as _"Deterministic; always non-empty."_
 
-So `license.expirationDate` on a payer PDF samples as `2026-01-15` and fills
-blank in every real case, forever. The trainer's only feedback signal confirms
-a mapping that cannot work. **This is the highest-severity finding in this
-spike** — it actively teaches the wrong thing.
+So `license.expirationDate` on a payer PDF sampled as `2026-01-15` and filled
+blank in every real case, forever. The trainer's only feedback signal confirmed
+a mapping that cannot work. **This was the highest-severity finding in this
+spike** — it actively taught the wrong thing. TOKEN-01 closed it for the
+sample fill; TOKEN-05 then made `license.*` / `groupInsurance.*` actually
+resolvable on the case path.
 
 Worth being precise about scope: `mockValueForToken` is correct for the _web_
 dry run it was built for (E6.5 F6.5.3), where the mapping is the thing under
@@ -222,9 +227,9 @@ and the sample from advertising them is not.**
 | Family                          | Posture                                                                                                                      |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `provider`, `group`, `facility` | **Parity is the contract.** Both paths resolve; pin it with a test so a new column can't silently break one side.            |
-| `license`                       | **PDF parity BUILT** (TOKEN-05). Sample fill admits it via `PDF_FILL_FAMILIES`. `assignment.*` still needs PDF parity.       |
+| `license`                       | **PDF parity BUILT** (TOKEN-05). Sample fill admits it via `PDF_FILL_FAMILIES`.                                              |
 | `assignment`                    | **Build PDF parity.** Already resolved per-case on web from data the case page can reach; unused today (zero approved maps). |
-| `groupInsurance`                | **Build PDF parity.** Same shape — one policy pick, already implemented once in `providerProfile.ts`.                        |
+| `groupInsurance`                | **PDF parity BUILT** (TOKEN-05). Same shared `pickGroupInsurancePolicy` as the web profile; sample fill admits it.           |
 | `user`                          | **Build PDF parity.** Cheapest of all: five keys from the caller's own `profiles` row, no case scoping.                      |
 | `payer`, `contract`, `mso`      | **Withdraw from the picker**, or mark unfillable. Unresolvable on both paths by design. Offering them is the defect.         |
 | org contacts                    | **Decide, don't drift.** Web resolves them; the picker hides them. Either offer them and build PDF parity, or say why not.   |
@@ -237,9 +242,11 @@ and the sample from advertising them is not.**
 Each is one reviewable change. **None is approved by this spike** — they are
 the shape the work takes, for separate PM sign-off.
 
-**Status:** 01, 06 and the `license.*` half of 05 are BUILT (see below). The
-family-reach map they share lives in `src/lib/fillTokenReach.ts`; the license
-selection rule in `src/lib/licensePick.ts`. 02, 03, 04 and the rest of 05
+**Status:** 01, 06 and the `license.*` / `groupInsurance.*` halves of 05 are
+BUILT (see below). The family-reach map they share lives in
+`src/lib/fillTokenReach.ts`; the license selection rule in
+`src/lib/licensePick.ts`; the policy selection rule in
+`src/lib/groupInsurancePick.ts`. 02, 03, 04 and the `assignment.*` half of 05
 remain proposals.
 
 ### BITE-DYN-TOKEN-01 — honest sample fill _(do first)_
@@ -306,11 +313,20 @@ which state, which policy) do not port cleanly from `providerProfile.ts`.
   web route has to ask via `?state=`. It never falls back: several licenses and
   no state resolves to null, because a plausible wrong license number on a
   payer application is worse than a blank.
-- **`PDF_FILL_FAMILIES` must include `license`.** The sample fill reads that
-  list via `isPdfFillableToken`. Leaving it at provider/group/facility after
-  the resolver landed would teach trainers that `license.*` cannot fill when
-  the case fill now can — the exact TOKEN-01 lie, reintroduced. Fixed
-  2026-09-03 (cleanup pass).
+- **`groupInsurance.*` PDF resolver BUILT 2026-09-03.**
+  `pickGroupInsurancePolicy` (`src/lib/groupInsurancePick.ts`) is now the ONE
+  selection rule, extracted from `providerProfile.ts` so the web profile and
+  the case page cannot disagree. Rule: no group → null; zero policies → null;
+  sole policy → that one; several → malpractice
+  (`professional_liability`) only, primary coverage first, newest
+  `policy_end_date` within a level, id tiebreak. The case page loads policies
+  for the **case's** `groupId` (the web profile uses the provider's primary
+  group because it has no case — different input, same pick rule).
+- **`PDF_FILL_FAMILIES` must include `license` and `groupInsurance`.** The
+  sample fill reads that list via `isPdfFillableToken`. Leaving a family out
+  after its resolver landed would teach trainers it cannot fill when the case
+  fill now can — the exact TOKEN-01 lie, reintroduced. Fixed for `license`
+  2026-09-03 (cleanup pass); for `groupInsurance` in the same build.
 - **Hosted data (2026-09-03):** three of the four broken `provider.license*`
   global maps were repointed to `license.*`. The fourth —
   `aetna_direct` `#medicalLicenseNumber` (`a1f760e6-…`), token
@@ -318,8 +334,8 @@ which state, which policy) do not port cleanly from `providerProfile.ts`.
   separate mis-map. PM call: do not repoint to `license.state`. Reset to
   `proposed` / null token so UAT can remapping from scratch onto
   `license.licenseNumber`.
-- **Still open:** `assignment.*` and `groupInsurance.*` PDF parity. Both are
-  unused today (zero approved maps), so neither is urgent.
+- **Still open:** `assignment.*` PDF parity. Unused today (zero approved maps),
+  so not urgent.
 
 ### BITE-DYN-TOKEN-06 — withdraw `payer.*` / `contract.*` / `mso.*`
 
