@@ -1,7 +1,8 @@
 # DYN-TOKEN-00 — token-parity prerequisite
 
-**Status:** decision-ready findings. **No product code or schema change in this
-PR.** Build bites remain separately approvable.
+**Status:** decision-ready findings. **The TOKEN-00 bite itself changed no
+product code and no schema.** Build bites are separately approvable; the two
+that have since landed are marked **BUILT** below.
 **Date:** 2026-09-03 · **Bite:** `BITE-DYN-TOKEN-00`
 **Depends on:** none. Ran parallel to the DYN-PAGE tranche (now fully merged).
 **Blocks:** `BITE-DYN-TODAY-01` (browser-local `system.today`), per D-DYN-4.
@@ -235,6 +236,9 @@ and the sample from advertising them is not.**
 Each is one reviewable change. **None is approved by this spike** — they are
 the shape the work takes, for separate PM sign-off.
 
+**Status:** 01 and 06 are BUILT (see below); the family-reach map they share
+lives in `src/lib/fillTokenReach.ts`. 02–05 remain proposals.
+
 ### BITE-DYN-TOKEN-01 — honest sample fill _(do first)_
 
 Stop `PayerFormFieldPanel`'s sample from resolving what a real case cannot.
@@ -245,6 +249,11 @@ reaches, and render an out-of-reach token as the gap it will really be.
 - **DoD:** the sample fill cannot claim support the case fill lacks (this is
   the DoD clause the spike's own definition of done names).
 - **Non-goals:** changing the web dry run's mock profile, which is correct.
+- **BUILT 2026-09-03.** `sampleValues` now mocks only `isPdfFillableToken`
+  tokens. Out-of-reach tokens are **omitted, not blanked**, so they take the
+  same path a real case gives them — `planPayerFormFill` classifies an absent
+  value as `empty_token` and the existing UI already renders that as a gap.
+  The sample-fill toast additionally counts them by name.
 
 ### BITE-DYN-TOKEN-02 — resolver-aware picker
 
@@ -299,6 +308,9 @@ which state, which policy) do not port cleanly from `providerProfile.ts`.
   (`filterAuthoringTokens` → `isResolvableToken`) and legitimately admits
   `mso.*`, because `buildSopTokenMap` passes an MSO row. Filtering the shared
   catalog would silently narrow SOP authoring.
+- **BUILT 2026-09-03.** `filterMappingTokens` applied in `FormStepPanel` (web)
+  and `PayerFormFieldPanel` (payer PDF). `listTokenCatalog()` is unchanged, so
+  the SOP authoring picker keeps `mso.*`.
 
 **No locked API contract has to widen for any of these.** Every one is
 panel-internal: the PDF fill is a browser-side path that never crosses `/api`,

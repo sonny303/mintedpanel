@@ -55,6 +55,7 @@ import {
   type RegistryRow,
 } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
+import { filterMappingTokens } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 
 export interface FormStepPanelProps {
@@ -144,7 +145,13 @@ export function FormStepPanel({
     () => registryCoverage(maps as RegistryRow[], brokenIds),
     [maps, brokenIds],
   );
-  const groupedTokens = useMemo(() => groupTokens(tokensQ.data ?? []), [tokensQ.data]);
+  // DYN-TOKEN-06 — the picker offers only what some fill can resolve.
+  // payer.*/contract.*/mso.* are case-scoped with no case in hand, so mapping
+  // a field to one could only ever leave it blank.
+  const groupedTokens = useMemo(
+    () => groupTokens(filterMappingTokens(tokensQ.data ?? [])),
+    [tokensQ.data],
+  );
 
   const stateLabel: { label: string; tone: StatusColor } = !portal
     ? { label: "Not registered", tone: "neutral" }
