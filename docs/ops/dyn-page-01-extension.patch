@@ -1,0 +1,582 @@
+From 6cab4d0e49689aab89436773ef696ca3ee74634d Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 3 Sep 2026 20:20:13 +0000
+Subject: [PATCH] Report exact off-page fill misses without calling them drift.
+
+Carry pageStep on fill instructions, match the open URL tail to a trained exact page bucket, and skip other-page maps with the panel-pinned other_page kind/reason. Ambiguous Page N identity keeps ordinary not-found. Stop overwriting producer kinds when logging fill events.
+---
+ src/background/fill.plan.test.ts |  11 ++-
+ src/background/fill.ts           |   8 ++-
+ src/background/mockFill.ts       |   1 +
+ src/content/fillEngine.test.ts   | 119 ++++++++++++++++++++++++++++++-
+ src/content/fillEngine.ts        |  31 +++++++-
+ src/shared/fill.ts               |  16 ++++-
+ src/shared/fillPage.test.ts      |  85 ++++++++++++++++++++++
+ src/shared/fillPage.ts           |  79 ++++++++++++++++++++
+ src/shared/fixit.drift.test.ts   |  17 ++++-
+ src/shared/fixit.ts              |   9 ++-
+ 10 files changed, 365 insertions(+), 11 deletions(-)
+ create mode 100644 src/shared/fillPage.test.ts
+ create mode 100644 src/shared/fillPage.ts
+
+diff --git a/src/background/fill.plan.test.ts b/src/background/fill.plan.test.ts
+index 847c532..1a0621f 100644
+--- a/src/background/fill.plan.test.ts
++++ b/src/background/fill.plan.test.ts
+@@ -19,7 +19,7 @@ function map(over: Partial<PortalFieldMap> & Pick<PortalFieldMap, "id" | "select
+     orgId: over.orgId ?? null,
+     portalKey: over.portalKey ?? "demo",
+     urlPattern: null,
+-    pageStep: null,
++    pageStep: over.pageStep ?? null,
+     mapType: over.mapType ?? "web",
+     selector: over.selector,
+     selectorFallbacks: over.selectorFallbacks ?? null,
+@@ -76,6 +76,15 @@ describe("planFill", () => {
+     expect(plan.instructions).toHaveLength(1);
+     expect(plan.instructions[0]?.label).toBe("First Name");
+     expect(plan.instructions[0]?.value).toBe("Ada");
++    expect(plan.instructions[0]?.pageStep).toBeNull();
++  });
++
++  it("carries trained pageStep onto each instruction (DYN-PAGE-01)", () => {
++    const plan = planFill(
++      [map({ id: "a", selector: "label:First Name", pageStep: "credentials" })],
++      profile,
++    );
++    expect(plan.instructions[0]?.pageStep).toBe("credentials");
+   });
+ 
+   it("routes file/manual/no_mapping/no_value into manual with kinds", () => {
+diff --git a/src/background/fill.ts b/src/background/fill.ts
+index 10226a2..a585aa2 100644
+--- a/src/background/fill.ts
++++ b/src/background/fill.ts
+@@ -148,6 +148,7 @@ export function planFill(maps: PortalFieldMap[], profile: ProviderProfileRespons
+       selectorFallbacks: map.selectorFallbacks ?? [],
+       fieldType: map.fieldType,
+       value: applyTransform(String(raw), map.transform),
++      pageStep: map.pageStep ?? null,
+     });
+     if (map.source === "manual_partial") {
+       manual.push({
+@@ -290,9 +291,12 @@ export async function fillPortal(request: FillRequest): Promise<FillSummary> {
+       startedAt,
+       completedAt,
+       fieldsFilled: pageResult.filled.length,
++      // Preserve producer kinds (other_page). Content not-found historically
++      // omitted kind — default those to "skipped" so the panel drift predicate
++      // still matches. Never blanket-overwrite every skip to "skipped".
+       fieldsSkipped: [
+-        ...pageResult.skipped.map((f) => ({ ...f, kind: "skipped" })),
+-        ...manual.map((f) => ({ ...f, kind: "manual" })),
++        ...pageResult.skipped.map((f) => ({ ...f, kind: f.kind ?? "skipped" })),
++        ...manual.map((f) => ({ ...f, kind: f.kind ?? "manual" })),
+       ],
+     });
+   } catch (error) {
+diff --git a/src/background/mockFill.ts b/src/background/mockFill.ts
+index 11678bc..4ae188f 100644
+--- a/src/background/mockFill.ts
++++ b/src/background/mockFill.ts
+@@ -69,6 +69,7 @@ export function planMockFill(maps: PortalFieldMap[]): MockDryRunPlan {
+       selectorFallbacks: map.selectorFallbacks ?? [],
+       fieldType: map.fieldType,
+       value: applyTransform(value, map.transform),
++      pageStep: map.pageStep ?? null,
+     });
+   }
+ 
+diff --git a/src/content/fillEngine.test.ts b/src/content/fillEngine.test.ts
+index b52df13..97dd957 100644
+--- a/src/content/fillEngine.test.ts
++++ b/src/content/fillEngine.test.ts
+@@ -2,9 +2,11 @@
+  * @vitest-environment jsdom
+  */
+ import { beforeEach, describe, expect, it } from "vitest";
+-import { applyFill, clearPortalForm } from "./fillEngine";
++import { applyFill, applyFillOnPage, clearPortalForm } from "./fillEngine";
+ import { describeSelectorMatches } from "./elementPicker";
+ import type { FillInstruction } from "../shared/fill";
++import { OTHER_PAGE_KIND, OTHER_PAGE_REASON } from "../shared/fillPage";
++import { FIELD_NOT_FOUND_REASON } from "../shared/fixit";
+ 
+ function instr(
+   over: Partial<FillInstruction> & Pick<FillInstruction, "label" | "selector">,
+@@ -16,6 +18,7 @@ function instr(
+     selectorFallbacks: over.selectorFallbacks ?? [],
+     fieldType: over.fieldType ?? "text",
+     value: over.value ?? "Ada",
++    pageStep: over.pageStep ?? null,
+   };
+ }
+ 
+@@ -58,7 +61,12 @@ describe("applyFill", () => {
+     ]);
+     expect(miss.filled).toEqual([]);
+     expect(miss.skipped).toEqual([
+-      { label: "Missing", reason: "field not found on this page", mapId: "m1" },
++      {
++        label: "Missing",
++        reason: "field not found on this page",
++        mapId: "m1",
++        kind: "skipped",
++      },
+     ]);
+   });
+ 
+@@ -78,6 +86,106 @@ describe("applyFill", () => {
+     );
+   });
+ 
++  it("reports exact other-page maps without writing them (DYN-PAGE-01)", () => {
++    document.body.innerHTML = `
++      <input id="npi" type="text" />
++      <input id="tin" type="text" />
++    `;
++    const result = applyFillOnPage(
++      [
++        instr({
++          label: "NPI",
++          selector: "#npi",
++          value: "123",
++          pageStep: "credentials",
++          mapId: "m-npi",
++        }),
++        instr({
++          label: "TIN",
++          selector: "#tin",
++          value: "99",
++          pageStep: "tax-id",
++          mapId: "m-tin",
++        }),
++      ],
++      "https://payer.example/enroll/credentials",
++    );
++    expect(result.filled).toEqual(["NPI"]);
++    expect((document.getElementById("npi") as HTMLInputElement).value).toBe("123");
++    expect((document.getElementById("tin") as HTMLInputElement).value).toBe("");
++    expect(result.skipped).toEqual([
++      {
++        label: "TIN",
++        reason: OTHER_PAGE_REASON,
++        mapId: "m-tin",
++        kind: OTHER_PAGE_KIND,
++      },
++    ]);
++  });
++
++  it("keeps ordinary not-found when page identity is ambiguous", () => {
++    document.body.innerHTML = `<input id="npi" type="text" />`;
++    const result = applyFillOnPage(
++      [
++        instr({
++          label: "NPI",
++          selector: "#npi",
++          value: "1",
++          pageStep: "credentials",
++        }),
++        instr({
++          label: "TIN",
++          selector: "#gone",
++          value: "2",
++          pageStep: "Page 2",
++          mapId: "m-tin",
++        }),
++      ],
++      "https://payer.example/enroll/unknown-step",
++    );
++    expect(result.filled).toEqual(["NPI"]);
++    expect(result.skipped).toEqual([
++      {
++        label: "TIN",
++        reason: FIELD_NOT_FOUND_REASON,
++        mapId: "m-tin",
++        kind: "skipped",
++      },
++    ]);
++  });
++
++  it("does not classify Page N maps as other_page even on a known URL page", () => {
++    document.body.innerHTML = `<input id="legacy" type="text" />`;
++    const result = applyFillOnPage(
++      [
++        instr({
++          label: "Legacy",
++          selector: "#legacy",
++          value: "ok",
++          pageStep: "Page 1",
++        }),
++        instr({
++          label: "On page",
++          selector: "#missing-on-page",
++          value: "x",
++          pageStep: "credentials",
++          mapId: "m-on",
++        }),
++      ],
++      "https://payer.example/enroll/credentials",
++    );
++    // Page 1 is ambiguous → attempted; credentials on credentials → attempted.
++    expect(result.filled).toEqual(["Legacy"]);
++    expect(result.skipped).toEqual([
++      {
++        label: "On page",
++        reason: FIELD_NOT_FOUND_REASON,
++        mapId: "m-on",
++        kind: "skipped",
++      },
++    ]);
++  });
++
+   it("skips disabled/readonly and file inputs", () => {
+     document.body.innerHTML = `
+       <input id="ro" type="text" readonly />
+@@ -172,7 +280,12 @@ describe("applyFill", () => {
+       }),
+     ]);
+     expect(gone.skipped).toEqual([
+-      { label: "State", reason: "field not found on this page", mapId: "m1" },
++      {
++        label: "State",
++        reason: "field not found on this page",
++        mapId: "m1",
++        kind: "skipped",
++      },
+     ]);
+   });
+ 
+diff --git a/src/content/fillEngine.ts b/src/content/fillEngine.ts
+index f98eb91..d0ba384 100644
+--- a/src/content/fillEngine.ts
++++ b/src/content/fillEngine.ts
+@@ -8,6 +8,12 @@ import type {
+   FillPageResult,
+   ReportedField,
+ } from "../shared/fill";
++import {
++  isOtherPageInstruction,
++  otherPageReport,
++  resolveFillPage,
++} from "../shared/fillPage";
++import { FIELD_NOT_FOUND_REASON } from "../shared/fixit";
+ 
+ // Label text comparison: case- and whitespace-insensitive, trailing
+ // colons/required-markers stripped ("First Name *" matches "First Name").
+@@ -261,16 +267,39 @@ function countPageFields(): number {
+ }
+ 
+ export function applyFill(instructions: FillInstruction[]): FillPageResult {
++  return applyFillOnPage(
++    instructions,
++    typeof location !== "undefined" ? location.href : null,
++  );
++}
++
++/** Apply instructions against an explicit page URL. Exported for unit tests;
++ * production always goes through `applyFill` → `location.href`. */
++export function applyFillOnPage(
++  instructions: FillInstruction[],
++  pageUrl: string | null,
++): FillPageResult {
+   const filled: string[] = [];
+   const skipped: ReportedField[] = [];
++  // Exact URL-tail identity only. Ambiguous / missing → null → every
++  // instruction is attempted and unresolved selectors stay ordinary drift.
++  const currentPage = resolveFillPage(
++    pageUrl,
++    instructions.map((i) => i.pageStep),
++  );
+   for (const instruction of instructions) {
+     try {
++      if (isOtherPageInstruction(instruction, currentPage)) {
++        skipped.push(otherPageReport(instruction));
++        continue;
++      }
+       const target = resolveTarget(instruction);
+       if (!target) {
+         skipped.push({
+           label: instruction.label,
+-          reason: "field not found on this page",
++          reason: FIELD_NOT_FOUND_REASON,
+           mapId: instruction.mapId,
++          kind: "skipped",
+         });
+         continue;
+       }
+diff --git a/src/shared/fill.ts b/src/shared/fill.ts
+index 1493093..8bf0747 100644
+--- a/src/shared/fill.ts
++++ b/src/shared/fill.ts
+@@ -13,6 +13,10 @@ export interface FillInstruction {
+   selectorFallbacks: string[];
+   fieldType: PortalFieldType;
+   value: string;
++  /** Trained wizard page for this map (`portal_field_maps.page_step`). Null
++   * means legacy / unnamed — fill still attempts it. Used at apply time to
++   * classify exact off-page misses (DYN-PAGE-01). */
++  pageStep: string | null;
+ }
+ 
+ // Why a mapped field wasn't (fully) filled — machine-readable so the fix-it
+@@ -20,7 +24,17 @@ export interface FillInstruction {
+ // reasons: `no_mapping` → the mapping flow (train), `no_value` → the data fix
+ // (provider record); the rest are informational. Optional so records persisted
+ // before this field restore cleanly.
+-export type ReportedFieldKind = "no_mapping" | "no_value" | "file" | "manual" | "review";
++//
++// Telemetry kinds on fill_sessions.fields_skipped also use `skipped` (on-page
++// miss) and `other_page` (exact off-page — DYN-PAGE-01 / panel formDrift).
++export type ReportedFieldKind =
++  | "no_mapping"
++  | "no_value"
++  | "file"
++  | "manual"
++  | "review"
++  | "skipped"
++  | "other_page";
+ 
+ export interface ReportedField {
+   label: string;
+diff --git a/src/shared/fillPage.test.ts b/src/shared/fillPage.test.ts
+new file mode 100644
+index 0000000..ca62864
+--- /dev/null
++++ b/src/shared/fillPage.test.ts
+@@ -0,0 +1,85 @@
++import { describe, expect, it } from "vitest";
++import type { FillInstruction } from "./fill";
++import {
++  OTHER_PAGE_KIND,
++  OTHER_PAGE_REASON,
++  isExactFillPageIdentity,
++  isOtherPageInstruction,
++  otherPageReport,
++  resolveFillPage,
++} from "./fillPage";
++
++function instr(pageStep: string | null, over: Partial<FillInstruction> = {}): FillInstruction {
++  return {
++    mapId: over.mapId ?? "m1",
++    label: over.label ?? "Field",
++    selector: over.selector ?? "#f",
++    selectorFallbacks: [],
++    fieldType: "text",
++    value: "x",
++    pageStep,
++  };
++}
++
++describe("isExactFillPageIdentity", () => {
++  it("rejects null, blank, and Page N sequence fallbacks", () => {
++    expect(isExactFillPageIdentity(null)).toBe(false);
++    expect(isExactFillPageIdentity("")).toBe(false);
++    expect(isExactFillPageIdentity("Page 1")).toBe(false);
++    expect(isExactFillPageIdentity("Page 12")).toBe(false);
++  });
++
++  it("accepts URL-tail and heading page names", () => {
++    expect(isExactFillPageIdentity("credentials")).toBe(true);
++    expect(isExactFillPageIdentity("Practice details")).toBe(true);
++  });
++});
++
++describe("resolveFillPage", () => {
++  it("returns null for single-page / null pageStep portals", () => {
++    expect(resolveFillPage("https://payer.example/enroll/credentials", [null])).toBeNull();
++    expect(resolveFillPage("https://payer.example/enroll", ["credentials"])).toBeNull();
++  });
++
++  it("matches exact URL-tail to a trained exact page", () => {
++    expect(
++      resolveFillPage("https://payer.example/enroll/credentials?sid=1", [
++        "credentials",
++        "tax-id",
++      ]),
++    ).toBe("credentials");
++  });
++
++  it("returns null when the URL does not match any exact page", () => {
++    expect(
++      resolveFillPage("https://payer.example/enroll/other", ["credentials", "tax-id"]),
++    ).toBeNull();
++  });
++
++  it("ignores Page N buckets when matching — never treats them as identity", () => {
++    expect(
++      resolveFillPage("https://payer.example/enroll/Page%201", ["Page 1", "credentials"]),
++    ).toBeNull();
++  });
++});
++
++describe("isOtherPageInstruction / otherPageReport", () => {
++  it("classifies only exact different pages when current identity is known", () => {
++    expect(isOtherPageInstruction(instr("tax-id"), "credentials")).toBe(true);
++    expect(isOtherPageInstruction(instr("credentials"), "credentials")).toBe(false);
++    expect(isOtherPageInstruction(instr(null), "credentials")).toBe(false);
++    expect(isOtherPageInstruction(instr("Page 2"), "credentials")).toBe(false);
++    expect(isOtherPageInstruction(instr("tax-id"), null)).toBe(false);
++  });
++
++  it("emits the panel-pinned kind and reason", () => {
++    expect(otherPageReport(instr("tax-id", { label: "TIN", mapId: "m-tin" }))).toEqual({
++      label: "TIN",
++      reason: OTHER_PAGE_REASON,
++      mapId: "m-tin",
++      kind: OTHER_PAGE_KIND,
++    });
++    expect(OTHER_PAGE_KIND).toBe("other_page");
++    expect(OTHER_PAGE_REASON).toBe("field belongs to another page");
++  });
++});
+diff --git a/src/shared/fillPage.ts b/src/shared/fillPage.ts
+new file mode 100644
+index 0000000..b6aa485
+--- /dev/null
++++ b/src/shared/fillPage.ts
+@@ -0,0 +1,79 @@
++// DYN-PAGE-01 — exact URL-page identity for fill apply.
++//
++// Capture already stores pageStep; fill historically ignored it and tried
++// every approved map on every wizard page. Off-page misses then used the
++// same reason the panel calls drift. This module is the fill-side matcher:
++// exact URL-tail ↔ an existing exact page bucket. No selector-overlap scoring
++// and no "Page N" guessing — when identity is ambiguous, callers keep today's
++// not-found behavior.
++//
++// Kind/reason strings are pinned to match panel `src/lib/formDrift.ts`
++// (DYN-PAGE-00). The extension Fix-it strip keys on reason alone, so the
++// off-page reason MUST differ from FIELD_NOT_FOUND_REASON.
++
++import { pageUrlTail } from "./trainForms";
++import type { FillInstruction, ReportedField } from "./fill";
++
++/** Producer kind for a map that belongs to a different exact URL-page. */
++export const OTHER_PAGE_KIND = "other_page";
++
++/** Distinct from "field not found on this page" — Fix-it keys on reason alone. */
++export const OTHER_PAGE_REASON = "field belongs to another page";
++
++/** Capture's sequence fallback (`Page 1`, `Page 2`, …) — never a fill identity. */
++const SEQUENCE_PAGE_RE = /^Page \d+$/i;
++
++function tidyPageName(value: string | null | undefined): string | null {
++  const text = (value ?? "").trim().replace(/\s+/g, " ");
++  return text.length > 0 ? text : null;
++}
++
++/** True when pageStep is a stable named bucket (URL-tail or heading), not the
++ * sequence fallback and not an empty/legacy null. */
++export function isExactFillPageIdentity(pageStep: string | null | undefined): boolean {
++  const name = tidyPageName(pageStep);
++  if (name == null) return false;
++  return !SEQUENCE_PAGE_RE.test(name);
++}
++
++/** Match the open URL to an existing exact page bucket. Returns null when the
++ * URL has no tail, the tail is not among trained exact pages, or every trained
++ * page is ambiguous — callers must then preserve ordinary not-found. */
++export function resolveFillPage(
++  pageUrl: string | null | undefined,
++  pageSteps: readonly (string | null | undefined)[],
++): string | null {
++  const tail = tidyPageName(pageUrlTail(pageUrl));
++  if (tail == null) return null;
++
++  const exact = new Set<string>();
++  for (const step of pageSteps) {
++    if (!isExactFillPageIdentity(step)) continue;
++    const name = tidyPageName(step);
++    if (name != null) exact.add(name);
++  }
++  return exact.has(tail) ? tail : null;
++}
++
++/** An instruction belongs on another exact page when we know the current page
++ * AND the instruction names a different exact page. Null / Page N / matching
++ * current page → attempt as today. */
++export function isOtherPageInstruction(
++  instruction: Pick<FillInstruction, "pageStep">,
++  currentPage: string | null,
++): boolean {
++  if (currentPage == null) return false;
++  if (!isExactFillPageIdentity(instruction.pageStep)) return false;
++  return tidyPageName(instruction.pageStep) !== currentPage;
++}
++
++export function otherPageReport(
++  instruction: Pick<FillInstruction, "label" | "mapId">,
++): ReportedField {
++  return {
++    label: instruction.label,
++    reason: OTHER_PAGE_REASON,
++    mapId: instruction.mapId,
++    kind: OTHER_PAGE_KIND,
++  };
++}
+diff --git a/src/shared/fixit.drift.test.ts b/src/shared/fixit.drift.test.ts
+index 51208c0..460eab3 100644
+--- a/src/shared/fixit.drift.test.ts
++++ b/src/shared/fixit.drift.test.ts
+@@ -1,6 +1,10 @@
+ // S4.1 — the drift signal on the offer card, and the report-snapshot rule.
+ import { describe, expect, it } from "vitest";
+-import { FIELD_NOT_FOUND_REASON, countBrokenSelectors } from "./fixit";
++import {
++  FIELD_NOT_FOUND_REASON,
++  OTHER_PAGE_REASON,
++  countBrokenSelectors,
++} from "./fixit";
+ import type { ReportedField } from "./fill";
+ 
+ describe("countBrokenSelectors (S4.1 drift strip)", () => {
+@@ -15,6 +19,12 @@ describe("countBrokenSelectors (S4.1 drift strip)", () => {
+     mapId: "m2",
+     kind: "no_value",
+   };
++  const otherPage: ReportedField = {
++    label: "TIN",
++    reason: OTHER_PAGE_REASON,
++    mapId: "m3",
++    kind: "other_page",
++  };
+ 
+   it("counts only dead selectors, not data gaps", () => {
+     expect(countBrokenSelectors([broken, dataGap, broken])).toBe(2);
+@@ -22,6 +32,11 @@ describe("countBrokenSelectors (S4.1 drift strip)", () => {
+     expect(countBrokenSelectors([])).toBe(0);
+   });
+ 
++  it("does not count exact other-page skips as drift (DYN-PAGE-01)", () => {
++    expect(countBrokenSelectors([broken, otherPage])).toBe(1);
++    expect(countBrokenSelectors([otherPage])).toBe(0);
++  });
++
+   it("classifies from the REASON, so reports predating `kind` still count", () => {
+     // The content script's wording is the wire signal; a persisted report from
+     // before ReportedField.kind existed must still raise the strip.
+diff --git a/src/shared/fixit.ts b/src/shared/fixit.ts
+index 5197412..8ffe431 100644
+--- a/src/shared/fixit.ts
++++ b/src/shared/fixit.ts
+@@ -54,9 +54,14 @@ export function providerFixPath(providerId: string): string {
+ // literal lives in one place on this side of the wire.
+ export const FIELD_NOT_FOUND_REASON = "field not found on this page";
+ 
++// Re-export the off-page pin so the Fix-it strip and fill engine share one
++// import surface. Definitions live in fillPage.ts beside the matcher.
++export { OTHER_PAGE_KIND, OTHER_PAGE_REASON } from "./fillPage";
++
+ /** How many of a fill's skipped fields are dead selectors (drift), not data
+- * gaps. Defensive: a report persisted before `kind` existed still classifies,
+- * because the reason string is the signal. */
++ * gaps or exact off-page misses. Defensive: a report persisted before `kind`
++ * existed still classifies, because the reason string is the signal. Off-page
++ * uses a distinct reason so this count cannot inflate from multi-page fills. */
+ export function countBrokenSelectors(skipped: readonly ReportedField[]): number {
+   return skipped.filter((f) => f.reason === FIELD_NOT_FOUND_REASON).length;
+ }
+-- 
+2.43.0
+
