@@ -23,6 +23,7 @@ import {
   listTemplateVersions,
   publishTemplate,
   updateTemplate,
+  deleteOrgSopTemplate,
   type TemplateInput,
 } from "@/services/templates";
 import type { SOPTaskDefinition } from "@/types";
@@ -174,6 +175,21 @@ export function useUpdateSop(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.template(orgId, id) });
+    },
+  });
+}
+
+/** Hard-delete an org-authored SOP. Invalidates the templates list; the head
+ * cache for this id is removed (the row no longer exists). */
+export function useDeleteOrgSop(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: () => deleteOrgSopTemplate(id),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: queryKeys.template(orgId, id) });
+      qc.removeQueries({ queryKey: queryKeys.templateVersions(orgId, id) });
+      qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
     },
   });
 }

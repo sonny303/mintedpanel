@@ -258,9 +258,11 @@ All are repo migrations unless noted.
   `merge_payer`** — the ONLY payers write path. The table itself is
   INSERT/UPDATE-locked for org roles.
 - **`author_global_sop`**, **`publish_sop_template_version`**,
-  **`upsert_global_portal`**, **`train_global_field_map`**,
+  **`delete_org_sop_template`**, **`upsert_global_portal`**, **`train_global_field_map`**,
   **`propose_shared_field_map`**, **`update_shared_field_registry`** — the
-  global/shared authoring tier.
+  global/shared authoring tier. `delete_org_sop_template` is admin-only and
+  org-authored only: nulls task/run-row stamps, retires attached payer PDFs
+  (Storage kept), deletes versions + head. Archive remains the softer path.
 - **`commit_import_run(p_run_id, p_plan jsonb)`** — transactional staged import
   commit. The RPC owns its audit rows; the service must not also `writeAudit`.
 - **`stage_import_rows`** — batched staging, `ON CONFLICT DO NOTHING` +
