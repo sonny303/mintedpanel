@@ -57,6 +57,9 @@ import {
 import { groupTokens } from "@/lib/tokenGroups";
 import { filterMappingTokens } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
+import { PortalDrawer } from "@/components/PortalDrawer";
+import { portalDisplayName } from "@/lib/portalRetirement";
+import { useLocation } from "@tanstack/react-router";
 
 export interface FormStepPanelProps {
   /** The step's portal key, already normalized (null = no portal linked). */
@@ -88,6 +91,8 @@ export function FormStepPanel({
 }: FormStepPanelProps) {
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
 
   // PortalStepSelect's "Register portal" button (and the empty-registry path)
   // bumps the signal so registration stays one click away without a dead
@@ -97,6 +102,11 @@ export function FormStepPanel({
     setOpen(true);
     setRegisterOpen(true);
   }, [openRegisterSignal]);
+
+  // Re-expand when an intent deep-link lands (pathname/search change).
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen, location.pathname]);
 
   const orgId = useActiveOrgId() ?? "no-org";
   const qc = useQueryClient();
@@ -124,6 +134,15 @@ export function FormStepPanel({
         : undefined,
     [portalsQ.data, portalKey],
   );
+
+  async function copyReturnLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Return link copied");
+    } catch {
+      toast.error("Could not copy the return link");
+    }
+  }
 
   const maps = useMemo(
     () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey && m.status !== "retired"),
@@ -337,7 +356,7 @@ export function FormStepPanel({
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-                <span className="font-medium text-foreground">{portal.name}</span>
+                <span className="font-medium text-foreground">{portalDisplayName(portal)}</span>
                 {portal.orgId === null ? <StatusPill status="brand" label="Global" /> : null}
                 {portal.formUrl ? (
                   <a
@@ -346,11 +365,20 @@ export function FormStepPanel({
                     rel="noreferrer"
                     className="underline underline-offset-2"
                   >
-                    Open form
+                    Open portal
                   </a>
                 ) : (
                   <span>No form URL</span>
                 )}
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="font-medium text-[#1B4D3E] underline underline-offset-2"
+                    onClick={() => setDrawerOpen(true)}
+                  >
+                    Edit URL
+                  </button>
+                ) : null}
                 {/* Informational only — no readiness semantics (D13). */}
                 <span>
                   {coverage.mapped} of {coverage.total} mapped overall
@@ -371,19 +399,6 @@ export function FormStepPanel({
               >
                 Register {isGlobalAuthoring ? "global " : ""}portal
               </Button>
-            ) : null}
-
-            {portal && maps.length === 0 ? (
-              <div className="space-y-1.5 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[12px] text-[#92400E]">
-                <p className="font-medium">No form fields captured yet.</p>
-                <p>
-                  Capture happens in the Minted browser extension, not here. Open this portal
-                  {portal.formUrl ? " (use “Open form” above)" : ""}, then in the extension side
-                  panel choose <span className="font-medium">“Capture this form”</span> →{" "}
-                  <span className="font-medium">“Send for approval.”</span> The proposed mappings
-                  land here to train. “Open form” only opens the page — it does not capture.
-                </p>
-              </div>
             ) : null}
 
             {/* E6.9 F6.9.3: EVERY row, always — decided rows included. The old
@@ -431,13 +446,12 @@ export function FormStepPanel({
               </p>
             ) : null}
 
-            {portal ? (
-              <p className="border-t border-[#E8E5E0] pt-2 text-[12px] text-muted-foreground">
-                To prove this form, open the portal in the Workbench extension’s{" "}
-                <span className="font-medium">Train forms</span> tab, run the mock dry run there,
-                then <span className="font-medium">Mark proven</span> manually — proven is never
-                automatic.
-              </p>
+            {portal && !portal.provenAt ? (
+              <WorkbenchHandoffBlock
+                formUrl={portal.formUrl}
+                mode={maps.length === 0 ? "capture" : "prove"}
+                onCopyReturnLink={() => void copyReturnLink()}
+              />
             ) : null}
           </div>
         </CollapsibleContent>
@@ -455,7 +469,57 @@ export function FormStepPanel({
           }}
         />
       ) : null}
+
+      {drawerOpen && portal ? (
+        <PortalDrawer
+          portal={portal}
+          payerId={templatePayerId ?? portal.payerId ?? ""}
+          onClose={() => setDrawerOpen(false)}
+          onPortalUpdated={() => {
+            void qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) });
+          }}
+        />
+      ) : null}
     </Collapsible>
+  );
+}
+
+function WorkbenchHandoffBlock({
+  formUrl,
+  mode,
+  onCopyReturnLink,
+}: {
+  formUrl: string | null;
+  mode: "capture" | "prove";
+  onCopyReturnLink: () => void;
+}) {
+  const body =
+    mode === "capture"
+      ? "Capture fields in the Workbench extension (Send for approval). Panel never submits the form."
+      : "Run the mock dry run in the Workbench extension, then Mark proven — proven is never automatic.";
+  return (
+    <div className="space-y-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-3 py-3">
+      <p className="text-[12px] text-muted-foreground">{body}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        {formUrl ? (
+          <a
+            href={formUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+          >
+            Open portal
+          </a>
+        ) : null}
+        <button
+          type="button"
+          onClick={onCopyReturnLink}
+          className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+        >
+          Copy return link to this step
+        </button>
+      </div>
+    </div>
   );
 }
 
