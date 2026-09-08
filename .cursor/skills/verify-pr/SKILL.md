@@ -4,9 +4,8 @@ description: >-
   Adversarial verify-and-fix workflow for pull request code: restates behavior
   and assumptions, hunts failure modes, writes minimal exposing tests, fixes only
   proven failures, then drafts a careful PR description. Use when the user asks
-  to verify a PR, verify PR, run verify-pr, adversarial review a change, or
-  attach /verify-pr.
-disable-model-invocation: true
+  to review a PR, review this PR, PR review, review the pull request, verify a
+  PR, verify PR, run verify-pr, adversarial review a change, or attach /verify-pr.
 ---
 
 # Verify PR
