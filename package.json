@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "lint:epics": "node scripts/check-epic-hygiene.mjs",
     "test": "vitest run",
+    "test:release": "node --test scripts/release/*.test.mjs",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "wiki:build": "node scripts/build-wiki-site.mjs"
