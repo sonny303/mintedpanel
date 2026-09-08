@@ -22,6 +22,18 @@ rule wins. This source setting is defense in depth; older refs do not contain
 it. The coordinator must freeze Vercel Git publishing and verify pending runs
 **before pushing setup changes**. [Vercel Git configuration](https://vercel.com/docs/project-configuration/git-configuration)
 
+For the hosted boundary, disconnect the project's Git repository connection with
+`vercel git disconnect --yes` against the independently verified project/team,
+then read back an absent project `link` and no competing active deployments.
+GitHub retains the repository, PRs and CI; the intended delivery workflow uploads
+the reviewed source with its explicit target configuration. Deployment commands
+must not reconnect the Git provider automatically.
+
+`gitProviderOptions.createDeployments = "disabled"` controls GitHub deployment
+records; it does **not** stop Vercel builds. Do not use that field as freeze proof.
+An HTTP success or settings readback must be followed by a controlled push and
+deployment/alias inspection. [Vercel Git CLI](https://vercel.com/docs/cli/git)
+
 `scripts/release/source-controls.test.mjs` rejects an enabled/default Git setting
 and restoration of the retired isolation workflow. These are source regression
 checks, not proof of hosted permissions, branch protection or approval behavior.
