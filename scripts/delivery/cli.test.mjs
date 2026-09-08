@@ -52,6 +52,18 @@ test("even a trusted-looking environment with secrets and PASS flags cannot acti
   }
 });
 
+test("shared staging/production Vercel project keeps hosted activation blocked", async () => {
+  const { releaseTarget } = await import("../release/contract.mjs");
+  const { ACTIVATION_BLOCKERS } = await import("./boundary.mjs");
+  assert.equal(
+    releaseTarget("staging").vercelProjectId,
+    releaseTarget("production").vercelProjectId,
+  );
+  assert.ok(
+    ACTIVATION_BLOCKERS.includes("SEPARATE_STAGING_PROJECT_AND_G0_ALLOWLIST_PENDING"),
+  );
+});
+
 test("workflow source has one Production job, no production secrets before its gate, and no mid-mutation concurrency cancellation", async () => {
   const root = new URL("../../.github/workflows/", import.meta.url);
   const production = await readFile(new URL("production-release.yml", root), "utf8");
