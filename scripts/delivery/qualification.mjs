@@ -254,6 +254,6 @@ export function assertProductionBaselineAttestation(value, { now }) {
     attestationDigest: canonicalDigest(value),
     recordedAt: value.recordedAt,
     freshness: "HISTORICAL_ONLY",
-    backupPolicy: "UNRESOLVED",
+    backupEligibility: "NOT_EVALUATED",
   };
 }

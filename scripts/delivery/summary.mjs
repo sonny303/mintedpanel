@@ -1,38 +1,29 @@
 import { canonicalDigest } from "../release/contract.mjs";
-import { requireCondition, requireId, requireSha } from "./boundary.mjs";
+import { createApprovalIntent } from "./intent.mjs";
 
-/** Caller obtains bundle through loadRelease; this never authenticates local JSON. */
-export function approvalSummary({ bundle, runId, runAttempt, workflowSha }) {
-  requireId(runId);
-  requireSha(workflowSha);
-  requireCondition(runAttempt === 1, "FRESH_APPROVAL_RUN_REQUIRED");
-  const { record, releaseDigest, artifactId, artifactDigest, stagingRunId } = bundle;
-  requireCondition(canonicalDigest(record) === releaseDigest, "IMMUTABLE_RECORD_MISMATCH");
-  const request = {
-    version: 1,
-    runId,
-    runAttempt,
-    workflowSha,
-    sourceSha: record.context.source.sha,
-    releaseDigest,
-    releaseArtifactId: artifactId,
-    releaseArtifactDigest: artifactDigest,
-    stagingRunId,
-    migrationPlanDigest: canonicalDigest(record.context.migrationPlan),
-  };
+/** Inputs come from authenticated staging and historical production baseline loaders. */
+export function approvalSummary(inputs) {
+  const request = createApprovalIntent(inputs);
+  const stage = request.staging.qualification;
+  const context = stage.preflight.record.context;
+  const expected = request.expectedProduction.attestation;
   const markdown = [
     "## Production approval request",
     "",
-    `Source: \`${request.sourceSha}\``,
-    `Release record: \`${releaseDigest}\``,
-    `Database plan: \`${request.migrationPlanDigest}\` (${record.context.migrationPlan.mode})`,
-    `Current production deployment: \`${record.context.baseline.deploymentId}\``,
-    `Tested staging deployment: \`${record.context.staging.deploymentId}\``,
-    `Supported installed production extensions: ${record.context.supportedExtensionVersions.join(", ")}`,
+    `Source: \`${context.source.sha}\``,
+    `Approval intent: \`${canonicalDigest(request)}\``,
+    `Database plan: \`${canonicalDigest(context.migrationPlan)}\` (${context.migrationPlan.mode})`,
+    `Previously recorded production deployment: \`${expected.baseline.deploymentId}\``,
+    `Previously recorded production schema: \`${expected.baseline.schemaDigest}\``,
+    `Production baseline recorded at: ${expected.recordedAt} (historical expectation; current state is checked after approval)`,
+    `Tested staging deployment: \`${stage.result.candidate.deploymentId}\``,
+    `Supported installed production extensions: ${expected.supportedExtensionVersions.join(", ")}`,
     "",
-    "Approval authorizes this source and compatible database plan. The production build is created after approval with domains withheld, checked, then promoted by exact deployment ID. Failed postchecks permit app rollback only when the current database and supported installed extensions remain compatible. Database changes are never automatically reversed.",
+    "Approval authorizes this exact source, workflow, recorded production baseline/configuration, tested staging result and compatible database plan. After approval, the protected job selects and verifies a fresh matching production backup: same database, baseline schema and migration lineage, no older than 24 hours, with every required recovery scope and a restore demonstrated within 4 hours. Its exact identity is then sealed into the execution record and rechecked before changes. A staging backup cannot qualify.",
     "",
-    "Any changed source, workflow, record, configuration, baseline, plan or expired evidence requires a fresh run and approval. Reruns are refused.",
+    "The production build is created after approval with domains withheld, checked, then promoted by exact deployment ID. Failed postchecks permit app rollback within the 5-minute recovery target only with current database and installed-extension compatibility evidence. Database changes are never automatically reversed.",
+    "",
+    "Changed approved identities or expired qualification require a fresh run and approval. A different backup may be selected only during the post-approval selection phase; replacing the sealed execution backup is refused. Reruns are refused.",
   ].join("\n");
   return { request, markdown };
 }

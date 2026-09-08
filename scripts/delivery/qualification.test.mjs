@@ -138,7 +138,7 @@ test("production baseline attestation stays historical even when older than a sn
   const value = baselineAttestationFixture();
   const result = assertProductionBaselineAttestation(value, { now: "2026-09-10T18:00:00.000Z" });
   assert.equal(result.freshness, "HISTORICAL_ONLY");
-  assert.equal(result.backupPolicy, "UNRESOLVED");
+  assert.equal(result.backupEligibility, "NOT_EVALUATED");
   assert.equal(result.recordedAt, value.recordedAt);
 });
 

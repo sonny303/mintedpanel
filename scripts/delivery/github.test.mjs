@@ -3,13 +3,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
 import { canonicalDigest } from "../release/contract.mjs";
-import { fixture, NOW, rebind } from "../release/test-fixtures.mjs";
+import { intentFixture } from "./intent-fixtures.mjs";
 import { APPROVER_ID, REPOSITORY, WORKFLOWS } from "./boundary.mjs";
 import {
   admitSuccessfulMain,
   createGitHub,
   loadProductionBaselineAttestation,
-  loadRelease,
   loadStagingQualification,
   readArtifactJson,
   verifyProductionApproval,
@@ -59,13 +58,7 @@ function run(path = WORKFLOWS.production, event = "workflow_dispatch", sha = "c"
 
 function approvalSimulator() {
   const currentRun = run();
-  const request = {
-    runId: "42",
-    runAttempt: 1,
-    workflowSha: currentRun.head_sha,
-    sourceSha: "a".repeat(40),
-    releaseDigest: "b".repeat(64),
-  };
+  const request = intentFixture();
   const environment = {
     id: 99,
     can_admins_bypass: false,
@@ -108,6 +101,7 @@ function approvalSimulator() {
         runAttempt: 1,
         workflowSha: "c".repeat(40),
         request,
+        now: QUALIFIED_NOW,
       }),
   };
 }
@@ -290,25 +284,23 @@ test("simulator: exact main-qualified production workflow retains the approval c
 });
 
 function artifactSimulator() {
-  const f = fixture();
-  f.record.context.workflow.path = WORKFLOWS.staging;
-  f.policy.workflow.path = WORKFLOWS.staging;
-  rebind(f);
+  const qualification = qualificationFixture();
+  const sourceSha = qualification.preflight.record.context.source.sha;
   const producer = {
     ...run(WORKFLOWS.staging, "workflow_run"),
     id: 12345,
     status: "completed",
     conclusion: "success",
+    run_started_at: "2026-09-08T17:58:00.000Z",
+    updated_at: QUALIFIED_NOW,
   };
-  const bytes = singleFileZip("release.json", {
-    record: f.record,
-    policy: f.policy,
-    observed: f.observed,
+  const bytes = singleFileZip("staging-qualification.json", {
+    qualification,
     sourceCiRunId: "50",
   });
   const metadata = {
     id: 7,
-    name: "minted-release-12345-1",
+    name: "minted-staging-qualification-12345-1",
     expired: false,
     digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
     workflow_run: { id: 12345, head_sha: producer.head_sha, head_branch: "main" },
@@ -319,12 +311,12 @@ function artifactSimulator() {
       if (path === "/actions/runs/12345") return producer;
       if (path === "/actions/runs/50")
         return {
-          ...run(WORKFLOWS.ci, "push", f.record.context.source.sha),
+          ...run(WORKFLOWS.ci, "push", sourceSha),
           id: 50,
           status: "completed",
           conclusion: "success",
         };
-      if (path === "/git/ref/heads/main") return { object: { sha: f.record.context.source.sha } };
+      if (path === "/git/ref/heads/main") return { object: { sha: sourceSha } };
       throw new Error("unexpected simulated read");
     },
     async archive() {
@@ -336,7 +328,13 @@ function artifactSimulator() {
     metadata,
     bytes,
     github,
-    load: () => loadRelease({ github, stagingRunId: "12345", artifactId: 7, now: NOW }),
+    load: () =>
+      loadStagingQualification({
+        github,
+        stagingRunId: "12345",
+        artifactId: 7,
+        now: QUALIFIED_NOW,
+      }),
   };
 }
 
@@ -344,7 +342,7 @@ test("simulator: record requires a successful trusted producer, exact artifact m
   const s = artifactSimulator();
   const result = await s.load();
   assert.equal(result.artifactId, 7);
-  assert.equal(result.releaseDigest, canonicalDigest(result.record));
+  assert.equal(result.qualificationDigest, canonicalDigest(result.qualification));
 });
 
 for (const [name, change] of [
@@ -504,7 +502,7 @@ test("authenticated baseline attestation requires a successful approved Producti
   const result = await s.load();
   assert.equal(result.productionEligibility, "NOT_EVALUATED");
   assert.equal(result.freshness, "HISTORICAL_ONLY");
-  assert.equal(result.backupPolicy, "UNRESOLVED");
+  assert.equal(result.backupEligibility, "NOT_EVALUATED");
   assert.equal(result.recordedAt, s.value.recordedAt);
   assert.equal(result.reviewerId, APPROVER_ID);
 });

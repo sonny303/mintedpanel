@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { inflateRawSync } from "node:zlib";
-import { canonicalDigest, validateRelease } from "../release/contract.mjs";
+import { canonicalDigest } from "../release/contract.mjs";
+import { assertApprovalIntent } from "./intent.mjs";
+import { approvalSummary } from "./summary.mjs";
 import {
   assertProductionBaselineAttestation,
   assertStagingQualification,
@@ -188,39 +190,6 @@ async function pinnedArtifact({ github, artifactId, run, name, filename, digest 
   return { value: readArtifactJson(bytes, filename), metadata };
 }
 
-/** Only a successful trusted staging producer can supply a release record. */
-export async function loadRelease({ github, stagingRunId, artifactId, now }) {
-  const run = await github.request("GET", `/actions/runs/${requireId(stagingRunId)}`);
-  trustedRun(run, { path: WORKFLOWS.staging, event: "workflow_run", sha: run.head_sha });
-  const { value, metadata } = await pinnedArtifact({
-    github,
-    artifactId,
-    run,
-    name: `minted-release-${run.id}-${run.run_attempt}`,
-    filename: "release.json",
-  });
-  const { record, policy, observed, sourceCiRunId } = value;
-  requireCondition(
-    record?.context?.workflow?.runId === stagingRunId &&
-      record.context.workflow.runAttempt === run.run_attempt &&
-      record.context.workflow.sha === run.head_sha &&
-      record.context.workflow.path === WORKFLOWS.staging,
-    "RECORD_PRODUCER",
-  );
-  await admitSuccessfulMain({ github, runId: sourceCiRunId, sha: record.context.source.sha });
-  const result = validateRelease({ record, policy, observed, expectedTarget: "production", now });
-  requireCondition(result.ok, "RELEASE_CONTRACT_REJECTED");
-  return {
-    record,
-    policy,
-    observed,
-    releaseDigest: result.digest,
-    artifactId: metadata.id,
-    artifactDigest: metadata.digest,
-    stagingRunId,
-  };
-}
-
 /** Review history lacks attempt timestamps. Every release uses a fresh run, attempt 1. */
 export async function verifyProductionApproval({
   github,
@@ -228,7 +197,9 @@ export async function verifyProductionApproval({
   runAttempt,
   workflowSha,
   request,
+  now = new Date().toISOString(),
 }) {
+  assertApprovalIntent(request, { now });
   requireCondition(runAttempt === 1, "FRESH_APPROVAL_RUN_REQUIRED");
   const run = await github.request("GET", `/actions/runs/${requireId(runId)}`);
   trustedRun(run, {
@@ -239,10 +210,7 @@ export async function verifyProductionApproval({
   });
   requireCondition(run.run_attempt === 1 && run.status === "in_progress", "APPROVAL_RUN_STATE");
   requireCondition(
-    request.runId === runId &&
-      request.runAttempt === 1 &&
-      request.workflowSha === workflowSha &&
-      /^[a-f0-9]{64}$/.test(request.releaseDigest),
+    request.runId === runId && request.runAttempt === 1 && request.workflowSha === workflowSha,
     "APPROVAL_BINDING",
   );
   const review = await readProductionReview({ github, runId });
@@ -389,6 +357,7 @@ export async function loadApprovalRequest({
   workflowSha,
   artifactId,
   artifactDigest,
+  now = new Date().toISOString(),
 }) {
   requireCondition(/^sha256:[a-f0-9]{64}$/.test(artifactDigest), "APPROVAL_ARTIFACT_PIN_REQUIRED");
   const run = await github.request("GET", `/actions/runs/${requireId(runId)}`);
@@ -407,9 +376,58 @@ export async function loadApprovalRequest({
     filename: "approval-request.json",
     digest: artifactDigest,
   });
+  assertApprovalIntent(value, { now });
+  requireCondition(
+    Number.isFinite(Date.parse(run.run_started_at)) &&
+      Date.parse(run.run_started_at) <= Date.parse(value.preparedAt),
+    "ARTIFACT_PRODUCER_TIME",
+  );
   requireCondition(
     value.runId === runId && value.workflowSha === workflowSha && value.runAttempt === 1,
     "APPROVAL_BINDING",
   );
   return value;
+}
+
+/** GitHub-only preparation: no production collector or production credentials are accepted. */
+export async function prepareProductionApproval({
+  github,
+  stagingRunId,
+  stagingArtifactId,
+  baselineRunId,
+  baselineArtifactId,
+  baselineArtifactDigest,
+  runId,
+  runAttempt,
+  workflowSha,
+  now,
+}) {
+  requireCondition(runAttempt === 1, "FRESH_APPROVAL_RUN_REQUIRED");
+  const run = await github.request("GET", `/actions/runs/${requireId(runId)}`);
+  trustedRun(run, {
+    path: WORKFLOWS.production,
+    event: "workflow_dispatch",
+    sha: workflowSha,
+    completed: false,
+  });
+  requireCondition(run.run_attempt === 1 && run.status === "in_progress", "APPROVAL_RUN_STATE");
+  requireCondition(
+    Number.isFinite(Date.parse(run.run_started_at)) &&
+      Date.parse(run.run_started_at) <= Date.parse(now),
+    "ARTIFACT_PRODUCER_TIME",
+  );
+  const staging = await loadStagingQualification({
+    github,
+    stagingRunId,
+    artifactId: stagingArtifactId,
+    now,
+  });
+  const baseline = await loadProductionBaselineAttestation({
+    github,
+    runId: baselineRunId,
+    artifactId: baselineArtifactId,
+    artifactDigest: baselineArtifactDigest,
+    now,
+  });
+  return approvalSummary({ staging, baseline, runId, runAttempt, workflowSha, now });
 }
