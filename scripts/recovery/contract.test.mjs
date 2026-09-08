@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { canonicalDigest } from "../release/contract.mjs";
 import {
   STAGING,
@@ -56,11 +58,9 @@ function fixture() {
     imageArchitecture: "arm64",
     serverVersion: STAGING.serverVersion,
     database: "postgres",
-    address: "127.0.0.1",
-    port: 55432,
-    publishedAddresses: ["127.0.0.1"],
-    publishedPort: 55432,
-    containerPort: 5432,
+    transport: "docker-exec-stdin",
+    publishedPortCount: 0,
+    configuredPortBindingCount: 0,
     networkName: `${PROFILE}-${expectedRunId}`,
     networkId: digest("f"),
     networkInternal: true,
@@ -245,13 +245,13 @@ const rejects = [
   [
     "remote restore",
     (x) => {
-      x.target.address = STAGING.host;
+      x.target.transport = "tcp";
     },
   ],
   [
-    "all-interface port",
+    "effective published port",
     (x) => {
-      x.target.publishedAddresses = ["0.0.0.0"];
+      x.target.publishedPortCount = 1;
     },
   ],
   [
@@ -321,9 +321,9 @@ const rejects = [
     },
   ],
   [
-    "port mapping mismatch",
+    "configured host port binding",
     (x) => {
-      x.target.publishedPort = 55433;
+      x.target.configuredPortBindingCount = 1;
     },
   ],
   [
@@ -422,7 +422,7 @@ test("rejects stale credential source observations", () => {
 });
 
 test("metadata CLI accepts fresh synthetic evidence and emits only digest fields", async (t) => {
-  const directory = await mkdtemp("/private/tmp/minted-recovery-metadata-");
+  const directory = await mkdtemp(join(realpathSync(tmpdir()), "minted-recovery-metadata-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const input = fixture();
   const offset = Date.now() - Date.parse(now) - 1000;

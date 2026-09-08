@@ -5,7 +5,7 @@ export const STAGING = Object.freeze({
   host: "aws-0-ca-central-1.pooler.supabase.com",
   port: 5432,
   database: "postgres",
-  serverVersion: "17.6.1.147",
+  serverVersion: "17.6",
 });
 export const POSTGRES_IMAGE =
   "supabase/postgres@sha256:ed13bb5ea4576948d5c0bec58fad3854d0fc27524e7a910ecab56ed9f96390c4";
@@ -193,11 +193,9 @@ export function validateLocalTarget({ target, expectedRunId, expectedSocket, now
     imageArchitecture: (v) => v === "arm64",
     serverVersion: (v) => v === STAGING.serverVersion,
     database: (v) => v === "postgres",
-    address: (v) => v === "127.0.0.1",
-    port: (v) => integer(v) && v >= 1024 && v <= 65535,
-    publishedPort: (v) => v === target.port,
-    containerPort: (v) => v === 5432,
-    publishedAddresses: (v) => Array.isArray(v) && v.length === 1 && v[0] === "127.0.0.1",
+    transport: (v) => v === "docker-exec-stdin",
+    publishedPortCount: (v) => v === 0,
+    configuredPortBindingCount: (v) => v === 0,
     networkName: (v) => v === `${PROFILE}-${expectedRunId}`,
     networkId: hash,
     networkInternal: (v) => v === true,

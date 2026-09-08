@@ -21,6 +21,8 @@ The executable constant uses `supabase/postgres@sha256:…`; a mutable tag alone
 insufficient. The multi-platform index digest is
 `sha256:ac581882596ed0e46937ea6dd53a627d09f53e005d7264c2082a7ff7b62eaaca`.
 Record both image identity and the actual SQL server version before import.
+The normalized SQL `serverVersion` is `17.6`; `17.6.1.147` identifies the Supabase
+image build and is pinned separately by its content digest.
 The Supabase CLI 2.84.2 default image `17.6.1.095` is not this baseline.
 
 The coordinator installed Colima 0.10.3, Lima 2.1.4, Docker CLI 29.6.2 and age
@@ -186,6 +188,18 @@ until these prerequisites are established from actual access.
 
 ## Local restore procedure and ownership proof
 
+The read-only collector performs the actual local inspection and fixed SQL identity
+query, then reinspects the same resources for drift:
+
+```sh
+node scripts/recovery/local-target.mjs inspect --run-id TRUSTED_RUN_ID
+```
+
+It uses the fixed local Docker socket, verifies the complete isolation fields and
+requires PostgreSQL 17.6 with scheduled database jobs disabled. It accepts no SQL,
+host, container-name, executable or credential override. Its normalized JSON is
+target identity evidence only; it does not export, restore or claim recovery PASS.
+
 1. Generate a fresh 16-character lowercase hex run ID. Use
    `minted-staging-recovery-<runId>` for the DB container, internal network and
    named volume. Apply `com.minted.recovery.owner=minted-staging-recovery` and
@@ -199,8 +213,9 @@ until these prerequisites are established from actual access.
    `validateLocalTarget` and bind `expectedRunId`/`expectedSocket` independently.
 3. The initial guard requires exactly one DB container on one internal network,
    one task-owned named volume, no host binds/devices/added capabilities, no
-   privileged or host namespace mode, and exactly one TCP database mapping from
-   `127.0.0.1:<port>` to container port 5432. Verify every observed count; do not
+   privileged or host namespace mode, and no configured or effective published
+   ports. The coordinator streams into the verified container through the local
+   Docker socket with `docker exec --interactive`, avoiding a host TCP listener. Verify every observed count; do not
    copy expected safe values into the observation. Inspect immediately before
    any import and again afterward; observations expire after five minutes.
 4. Initialize the pinned local platform baseline while empty. Obtain the reviewed
@@ -214,8 +229,9 @@ until these prerequisites are established from actual access.
    digests. Restore by an explicitly reviewed local-only coordinator. No generic
    executable restore command is provided, so a path or connection override
    cannot direct this helper at staging or production.
-6. The reviewed coordinator must force the proven loopback address/port/database,
-   use fresh local credentials in memory and disable `.psqlrc`. Supply roles,
+6. The reviewed coordinator must force the verified Docker context, container ID,
+   local database and reviewed local role, use `docker exec --interactive` stdin
+   with no host/connection override, and disable `.psqlrc`. Supply roles,
    compatible schema/supplements, then data through protected streams under
    `psql --single-transaction --set ON_ERROR_STOP=1`; capture all subprocess exit
    statuses without logging SQL/errors. A reviewed `session_replication_role`
