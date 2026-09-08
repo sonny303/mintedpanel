@@ -12,7 +12,7 @@ import {
   mkdir,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
@@ -141,4 +141,137 @@ test("CLI failure output never reflects supplied paths, arguments or source byte
   assert.equal(result.status, 2);
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, '{"ok":false,"code":"RECOVERY_STREAM_REJECTED"}\n');
+});
+
+test("abort after the producer has succeeded stops real suspended age and removes partial output", async (t) => {
+  const options = await setup(t);
+  const controller = new AbortController();
+  let child,
+    closed = false,
+    forcedCleanup = false;
+  const producerCompletion = Promise.resolve();
+  const result = sealStream(
+    {
+      ...options,
+      input: Readable.from(["synthetic"]),
+      producerCompletion,
+      signal: controller.signal,
+    },
+    {
+      spawn(path, args, configuration) {
+        child = spawn(path, args, configuration);
+        child.kill("SIGSTOP");
+        child.once("close", () => {
+          closed = true;
+        });
+        setTimeout(() => controller.abort(), 25);
+        return child;
+      },
+    },
+  );
+  const timer = setTimeout(() => {
+    forcedCleanup = true;
+    child?.kill("SIGKILL");
+  }, 1500);
+  t.after(() => {
+    clearTimeout(timer);
+    child?.kill("SIGKILL");
+  });
+  await assert.rejects(result, (error) => !error.message.includes("synthetic"));
+  assert.equal(forcedCleanup, false, "abort must stop age without fallback cleanup");
+  assert.equal(closed, true, "age must be reaped before rejection");
+  assert.deepEqual(await readdir(options.workspace), ["synthetic-identity.txt"]);
+});
+
+test("abort waits for delayed age close and pipelines before cleaning the partial file", async (t) => {
+  const options = await setup(t);
+  const controller = new AbortController();
+  let child,
+    notifyStarted,
+    settled = false,
+    closeDelivered = false;
+  const started = new Promise((resolve) => {
+    notifyStarted = resolve;
+  });
+  const result = sealStream(
+    {
+      ...options,
+      input: Readable.from(["synthetic"]),
+      producerCompletion: Promise.resolve(),
+      signal: controller.signal,
+    },
+    {
+      spawn(path, args, configuration) {
+        child = spawn(path, args, configuration);
+        child.kill("SIGSTOP");
+        const emit = child.emit;
+        child.emit = function (event, ...args) {
+          if (event === "close") {
+            setTimeout(() => {
+              closeDelivered = true;
+              emit.call(this, event, ...args);
+            }, 200);
+            return true;
+          }
+          return emit.call(this, event, ...args);
+        };
+        notifyStarted();
+        return child;
+      },
+    },
+  );
+  result.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  t.after(() => child?.kill("SIGKILL"));
+  await started;
+  controller.abort();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(settled, false);
+  assert.equal(closeDelivered, false);
+  assert.ok((await readdir(options.workspace)).some((name) => name.endsWith(".partial")));
+  await assert.rejects(result, /STREAM_ABORTED/);
+  assert.equal(closeDelivered, true);
+  assert.deepEqual(await readdir(options.workspace), ["synthetic-identity.txt"]);
+});
+
+test("pre-aborted or invalid signals launch no encryption process", async (t) => {
+  const options = await setup(t);
+  const controller = new AbortController();
+  controller.abort();
+  for (const signal of [controller.signal, {}]) {
+    let launches = 0;
+    await assert.rejects(
+      sealStream(
+        { ...options, input: Readable.from(["synthetic"]), signal },
+        {
+          spawn() {
+            launches += 1;
+            throw new Error("private-canary");
+          },
+        },
+      ),
+    );
+    assert.equal(launches, 0);
+  }
+});
+
+test("abort does not wait forever for an external producer promise owned by the caller", async (t) => {
+  const options = await setup(t);
+  const controller = new AbortController();
+  const result = sealStream({
+    ...options,
+    input: Readable.from(["synthetic"]),
+    producerCompletion: new Promise(() => {}),
+    signal: controller.signal,
+  });
+  const timer = setTimeout(() => controller.abort(), 50);
+  t.after(() => clearTimeout(timer));
+  await assert.rejects(result, /STREAM_ABORTED/);
+  assert.deepEqual(await readdir(options.workspace), ["synthetic-identity.txt"]);
 });

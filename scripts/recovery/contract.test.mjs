@@ -395,6 +395,7 @@ test("credential boundary pins staging TLS and read-only sessions", () => {
   assert.equal(result.environment.PGPORT, "5432");
   assert.equal(result.environment.PGUSER, "cli_login_synthetic.vmznysvietfaddakkegt");
   assert.equal(result.environment.PGSSLMODE, "verify-full");
+  assert.match(result.environment.PGSSLROOTCERT, /\/certs\/supabase-root-2021\.crt$/);
   assert.match(result.environment.PGOPTIONS, /default_transaction_read_only=on/);
   assert.equal(result.expiresAt, "2026-09-08T20:04:00.000Z");
 });

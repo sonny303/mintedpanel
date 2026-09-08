@@ -1,9 +1,10 @@
 # Staging recovery — G2 boundary and runbook
 
-This slice supplies local encryption and evidence guards. It does not acquire a
-credential, export a database, create a container, import SQL, or demonstrate a
-successful recovery. The coordinator owns those actions after their prerequisites
-are satisfied. A database import alone is insufficient: Auth, access controls,
+This slice supplies local encryption, a capture-only export API, and evidence
+guards. It does not acquire a credential, create a container, import SQL, or
+demonstrate a successful recovery. The coordinator may invoke the fixed staging
+export API only after its prerequisites are satisfied. A database import alone
+is insufficient: Auth, access controls,
 Storage and Vault recovery must also be proved. Product/schema repairs are outside
 this task. Production backup and recovery evidence is separate and unverified.
 
@@ -32,11 +33,13 @@ identities and capacity before execution. The dedicated profile is
 `minted-staging-recovery`: ARM64, 2 CPUs, 3 GiB memory, 16 GiB data disk and 8 GiB
 root disk, no host mounts, no global context activation or SSH configuration.
 
-Installed PostgreSQL clients are 18.4. `psql` can be used as a client against the
-17.6 server after a connection check. Prefer the pinned image's 17.6 dump tooling
-for a 17.6 restore: PostgreSQL permits newer `pg_dump` to read older servers but
-does not guarantee its output loads into an older major release. Do not silently
-strip new settings or remap SQL to make an 18-generated dump load into 17.
+The capture coordinator pins native PostgreSQL 17.10 dump clients under
+`/opt/homebrew/Cellar/libpq@17/17.10/bin/`, including their bytes and version
+output. The separately installed default 18.4 clients are unchanged. Use the
+pinned 17 clients for this 17.6 restore: PostgreSQL permits newer `pg_dump` to read
+older servers but does not guarantee its output loads into an older major
+release. Do not silently strip settings or remap SQL to make an 18-generated
+dump load into 17.
 [PostgreSQL pg_dump compatibility](https://www.postgresql.org/docs/18/app-pgdump.html).
 
 ## Credential prerequisite
@@ -57,10 +60,29 @@ in memory with `requestedAt`, `receivedAt`, `now`, and fresh `sourceObserved`
 (`{capturedAt, source}`, captured within five minutes).
 It returns a secret-bearing environment plus a conservative deadline computed
 from request start. Never log or serialize this return value. It fixes the host,
-port, project-qualified role and database; enables `verify-full` TLS with system
-roots, a 10-second connection timeout, and read-only default transactions with
-statement/lock timeouts. Confirm the installed libpq can validate the pooler's
-certificate; do not weaken TLS if it fails. [TLS verification](https://www.postgresql.org/docs/18/libpq-ssl.html).
+port, project-qualified role and database; enables `verify-full` TLS with the
+pinned public Supabase CA in `scripts/recovery/certs/supabase-root-2021.crt`, a
+10-second connection timeout, and read-only default transactions. Initial
+statement/lock timeout settings are supplied, but `pg_dump` resets both to zero;
+its explicit `--lock-wait-timeout=5s` bounds initial table locking only. The
+coordinator's independent wall-clock and monotonic watchdog bounds local client
+lifetime. System roots alone failed this pooler's chain validation.
+The certificate is used only through `PGSSLROOTCERT`; no global trust store is
+changed. Confirm the installed libpq can validate the pooler's certificate;
+never weaken TLS if it fails. [TLS verification](https://www.postgresql.org/docs/18/libpq-ssl.html).
+[pg_dump connection and locking behavior](https://github.com/postgres/postgres/blob/REL_17_STABLE/src/bin/pg_dump/pg_dump.c).
+
+The CA's PEM SHA-256 is
+`700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7`;
+its DER SHA-256 fingerprint is
+`807025AD50D4ED219D2C9C7D299C004F824EB00CF7F65AFEF607D07B72E6CAFA`.
+It expires April 26, 2031. Its provenance is the
+[official dashboard configuration at c75e213](https://github.com/supabase/supabase/blob/c75e213ade12d593e39552dce5779be8d2989ad5/apps/studio/hooks/custom-content/custom-content.json),
+which supplies the
+[public certificate download](https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt).
+Require the pinned file's identity, permissions and digest before any source
+process. Certificate rotation requires review and a new hostname-verification
+check; do not replace it from an unverified TLS handshake.
 
 The helper does not connect or enforce process expiry. The trusted exporter must
 check the deadline before every connection and forcibly close every source
@@ -70,6 +92,22 @@ unmanaged shells. Use only the reviewed fixed export commands and minimal proces
 environment; never pass secrets or connection strings in argv or shell text.
 Read-only transaction settings constrain these export sessions; they do not turn
 the privileged login role into a database-enforced read-only principal.
+
+`captureStagingExport` in `scripts/recovery/export.mjs` accepts the credential
+response and observation in memory, plus a private workspace and age public
+recipient. It exposes no credential CLI. It pins and checks the native dump
+binaries, fixed argument vectors and source CA before capture. The full custom
+archive and password-free role dump stream directly to age; a failed producer
+cannot qualify an artifact. Cancellation and deadlines must close both the dump
+and encryption processes and settle their pipelines before cleanup completes.
+
+Its `CAPTURED_ONLY` record binds the supplied observation digest, executable and
+command identities, and ciphertext digests. It does not authenticate a supplied
+catalog observation or prove consistent cross-export snapshots, scope
+completeness, role revocation, restore success or Auth/REST integrity. It reserves
+five seconds before conservative credential expiry for local shutdown. Client
+termination cannot establish server role revocation or guarantee shutdown during
+OS suspension/failure; these remain explicit operational prerequisites.
 
 The official contract does not establish that `read_only:true` can export every
 required Auth, Vault and role/grant scope without `SET ROLE postgres`. Do not

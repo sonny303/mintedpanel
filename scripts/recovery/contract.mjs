@@ -1,4 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { canonicalDigest } from "../release/contract.mjs";
+
+// Public trust anchor from Supabase's official dashboard source. This file is
+// used by the recovery process only; it never changes the host trust store.
+export const SOURCE_CA = Object.freeze({
+  path: fileURLToPath(new URL("./certs/supabase-root-2021.crt", import.meta.url)),
+  sha256: "700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7",
+});
 
 export const STAGING = Object.freeze({
   ref: "vmznysvietfaddakkegt",
@@ -158,7 +166,7 @@ export function stagingExportEnvironment({
       PGUSER: `${response.role}.${STAGING.ref}`,
       PGPASSWORD: response.password,
       PGSSLMODE: "verify-full",
-      PGSSLROOTCERT: "system",
+      PGSSLROOTCERT: SOURCE_CA.path,
       PGCONNECT_TIMEOUT: "10",
       PGAPPNAME: "minted-staging-recovery-export",
       PGOPTIONS:

@@ -66,21 +66,26 @@ function counter() {
   return { stream, result: () => ({ sha256: hash.digest("hex"), bytes }) };
 }
 
-function launch(age, args) {
-  const child = spawn(age, args, {
+function launch(age, args, execute = spawn) {
+  const child = execute(age, args, {
     stdio: ["pipe", "pipe", "ignore"],
     env: { PATH: "/usr/bin:/bin", LANG: "C" },
   });
+  const reaped = new Promise((resolve) => {
+    child.once("close", (code, signal) => {
+      resolve({ code, signal });
+    });
+  });
   const completion = new Promise((resolve, reject) => {
     child.once("error", () => reject(new RecoveryError("AGE_FAILED")));
-    child.once("close", (code, signal) => {
+    reaped.then(({ code, signal }) => {
       if (code === 0 && !signal) resolve();
       else reject(new RecoveryError("AGE_FAILED"));
     });
   });
   // Attach a handler immediately: the process can fail before streams are ready.
   completion.catch(() => {});
-  return { child, completion };
+  return { child, completion, reaped };
 }
 
 function fileWriter(handle) {
@@ -111,52 +116,94 @@ function fileReader(handle) {
   );
 }
 
-async function transfer({ child, completion, input, output, producerCompletion }) {
-  let timer;
-  const deadline = new Promise((resolve, reject) => {
-    timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      input.destroy();
-      output.destroy();
-      reject(new RecoveryError("STREAM_TIMEOUT"));
-    }, MAX_DURATION_MS);
+async function transfer({
+  child,
+  completion,
+  reaped,
+  input,
+  output,
+  producerCompletion,
+  pipelineCompletions = [],
+  signal,
+}) {
+  let failure, rejectCancelled;
+  const cancelled = new Promise((_, reject) => {
+    rejectCancelled = reject;
   });
-  try {
-    const jobs = [pipeline(input, child.stdin), pipeline(child.stdout, output), completion];
-    if (producerCompletion) jobs.push(producerCompletion);
-    await Promise.race([
-      deadline,
-      Promise.all(
-        jobs.map((job) =>
-          Promise.resolve(job).catch((error) => {
-            child.kill("SIGKILL");
-            throw error;
-          }),
-        ),
+  cancelled.catch(() => {});
+  const cancel = (code) => {
+    if (!failure) {
+      failure = new RecoveryError(code);
+      rejectCancelled(failure);
+    }
+    if (child.exitCode === null) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* Wait for close; never claim reaped. */
+      }
+    }
+    // Destroy both directions so every owned pipeline settles before handles or
+    // partial files are cleaned up. The external producer belongs to its caller.
+    input.destroy(failure);
+    output.destroy(failure);
+    child.stdin.destroy();
+    child.stdout.destroy();
+  };
+  const onAbort = () => cancel("STREAM_ABORTED");
+  const jobs = [
+    pipeline(input, child.stdin),
+    pipeline(child.stdout, output),
+    ...pipelineCompletions,
+    completion,
+  ];
+  for (const job of jobs)
+    job.catch((error) =>
+      cancel(
+        error instanceof RecoveryError && ["STREAM_LIMIT", "AGE_FAILED"].includes(error.code)
+          ? error.code
+          : "STREAM_FAILED",
       ),
-    ]);
+    );
+  const producer = producerCompletion ? Promise.resolve(producerCompletion) : undefined;
+  producer?.catch(() => cancel("PRODUCER_FAILED"));
+  const timer = setTimeout(() => cancel("STREAM_TIMEOUT"), MAX_DURATION_MS);
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+  try {
+    await Promise.race([cancelled, Promise.all([...jobs, producer])]);
+    if (failure) throw failure;
+  } catch {
+    cancel(failure?.code ?? "STREAM_FAILED");
+    throw failure;
   } finally {
     clearTimeout(timer);
-    if (child.exitCode === null) child.kill("SIGKILL");
+    signal?.removeEventListener("abort", onAbort);
+    await Promise.allSettled(jobs);
+    await reaped;
   }
+}
+
+function requireActive(signal) {
+  requireCondition(signal === undefined || signal instanceof AbortSignal, "INVALID_SIGNAL");
+  requireCondition(!signal?.aborted, "STREAM_ABORTED");
 }
 
 // This seals bytes only. A complete backup still requires an independent successful
 // exporter, all scope evidence, and a fresh decryption/restore check.
 // A coordinator with a subprocess exporter MUST pass its exit-status promise.
-export async function sealStream({
-  input,
-  workspace,
-  name,
-  recipient,
-  ageBinary,
-  producerCompletion,
-}) {
+// The optional second argument is a trusted process-launch test seam, not CLI
+// input. Cancellation owns age and its pipelines; the caller owns the producer.
+export async function sealStream(
+  { input, workspace, name, recipient, ageBinary, producerCompletion, signal },
+  { spawn: execute = spawn } = {},
+) {
   const producer = producerCompletion ? Promise.resolve(producerCompletion) : undefined;
   producer?.catch(() => {});
   let partial;
   let handle;
   try {
+    requireActive(signal);
     requireCondition(
       input && typeof input.pipe === "function" && typeof input.destroy === "function",
       "INVALID_INPUT_STREAM",
@@ -169,6 +216,7 @@ export async function sealStream({
     );
     await privatePath(workspace, true);
     const age = await binary(ageBinary);
+    requireActive(signal);
     partial = join(workspace, `.${name}-${randomBytes(8).toString("hex")}.partial`);
     handle = await open(
       partial,
@@ -177,7 +225,8 @@ export async function sealStream({
     );
     const plain = counter();
     const encrypted = counter();
-    const process = launch(age, ["--encrypt", "--recipient", recipient]);
+    requireActive(signal);
+    const process = launch(age, ["--encrypt", "--recipient", recipient], execute);
     const inputDone = pipeline(input, plain.stream);
     const outputDone = pipeline(encrypted.stream, fileWriter(handle));
     inputDone.catch(() => {});
@@ -186,17 +235,23 @@ export async function sealStream({
       ...process,
       input: plain.stream,
       output: encrypted.stream,
-      producerCompletion: Promise.all([inputDone, outputDone, producer]),
+      producerCompletion: producer,
+      pipelineCompletions: [inputDone, outputDone],
+      signal,
     });
+    requireActive(signal);
     requireCondition(plain.result().bytes > 0, "EMPTY_STREAM");
     const result = encrypted.result();
     await handle.sync();
+    requireActive(signal);
     await handle.close();
     handle = undefined;
+    requireActive(signal);
     // link is atomic and refuses to overwrite any existing artifact/symlink.
     await link(partial, join(workspace, `${name}.age`));
     await unlink(partial);
     partial = undefined;
+    requireActive(signal);
     return { name, ...result };
   } catch (error) {
     throw error instanceof RecoveryError ? error : new RecoveryError("SEAL_FAILED");
@@ -248,7 +303,7 @@ export async function verifySealed({ workspace, name, identityPath, ageBinary })
       ...process,
       input: encrypted.stream,
       output: plaintext.stream,
-      producerCompletion: Promise.all([inputDone, outputDone]),
+      pipelineCompletions: [inputDone, outputDone],
     });
     requireCondition(plaintext.result().bytes > 0, "EMPTY_STREAM");
     return { name, ...encrypted.result() };
