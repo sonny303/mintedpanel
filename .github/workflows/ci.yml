@@ -27,6 +27,9 @@ jobs:
       - name: Check release contract and source controls
         run: npm run test:release
 
+      - name: Check delivery controls and provider adapters with simulated data
+        run: npm run test:delivery
+
   build:
     runs-on: ubuntu-latest
     steps:
