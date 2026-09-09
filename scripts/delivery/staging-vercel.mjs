@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { canonicalDigest, releaseTarget } from "../release/contract.mjs";
 import {
   DeliveryError,
+  PRODUCTION_ALIASES,
   REPOSITORY,
   STAGING_ALIASES,
   requireCondition,
@@ -265,13 +266,9 @@ function normalizePage(result, seen) {
 }
 
 function flattenFileTree(value) {
-  requireCondition(
-    Array.isArray(value) &&
-      value.length === 1 &&
-      value[0]?.type === "directory" &&
-      value[0].name === "src",
-    "STAGING_VERCEL_FILE_TREE",
-  );
+  // Vercel returns the deployment upload root as a top-level array of file and
+  // directory entries, not a synthetic single `src` wrapper.
+  requireCondition(Array.isArray(value) && value.length > 0, "STAGING_VERCEL_FILE_TREE");
   const files = [];
   const walk = (entries, prefix = "") => {
     requireCondition(Array.isArray(entries), "STAGING_VERCEL_FILE_TREE");
@@ -285,6 +282,7 @@ function flattenFileTree(value) {
       );
       const file = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.type === "directory") {
+        requireCondition(Array.isArray(entry.children), "STAGING_VERCEL_FILE_TREE");
         walk(entry.children, file);
       } else {
         requireCondition(
@@ -295,7 +293,8 @@ function flattenFileTree(value) {
       }
     }
   };
-  walk(value[0].children);
+  walk(value);
+  requireCondition(files.length > 0, "STAGING_VERCEL_FILE_TREE");
   return files.sort((a, b) => a.file.localeCompare(b.file));
 }
 
@@ -331,11 +330,14 @@ function normalizeCandidate(value, expected, { allowedStagingAliases = [] } = {}
   requireCondition(
     Array.isArray(value.alias) &&
       aliases.size === value.alias.length &&
-      value.alias.every(
-        (alias) =>
-          text(alias) &&
-          (!STAGING_ALIASES.includes(alias) || allowedStagingAliases.includes(alias)),
-      ) &&
+      value.alias.every((alias) => {
+        if (!text(alias)) return false;
+        if (allowedStagingAliases.includes(alias)) return true;
+        // Fixed staging aliases and any production alias are withheld until an
+        // explicit assignAlias / production path. Preview hosts may remain.
+        if (STAGING_ALIASES.includes(alias) || PRODUCTION_ALIASES.includes(alias)) return false;
+        return alias.endsWith(".vercel.app");
+      }) &&
       allowedStagingAliases.every((alias) => aliases.has(alias)) &&
       text(value.url) &&
       value.url.endsWith(".vercel.app"),

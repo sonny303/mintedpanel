@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import { canonicalDigest, releaseTarget } from "../release/contract.mjs";
-import { REPOSITORY, STAGING_ALIASES, WORKFLOWS } from "./boundary.mjs";
+import { REPOSITORY, STAGING_ALIASES, PRODUCTION_ALIASES, WORKFLOWS } from "./boundary.mjs";
 import { createStagingVercel } from "./staging-vercel.mjs";
 
 const execute = promisify(execFile);
@@ -43,28 +43,27 @@ function anonKey() {
 }
 
 function fileTree(files) {
-  const root = { name: "src", type: "directory", mode: 16749, children: [] };
+  // Match Vercel's deployment file tree: a top-level array of root entries.
+  const root = [];
   for (const file of files) {
     const parts = file.file.split("/");
-    let parent = root;
+    let siblings = root;
     for (const part of parts.slice(0, -1)) {
-      let directory = parent.children.find(
-        (entry) => entry.type === "directory" && entry.name === part,
-      );
+      let directory = siblings.find((entry) => entry.type === "directory" && entry.name === part);
       if (!directory) {
         directory = { name: part, type: "directory", mode: 16749, children: [] };
-        parent.children.push(directory);
+        siblings.push(directory);
       }
-      parent = directory;
+      siblings = directory.children;
     }
-    parent.children.push({
+    siblings.push({
       name: parts.at(-1),
       type: "file",
       mode: 33152,
       uid: file.sha,
     });
   }
-  return [root];
+  return root;
 }
 
 async function fixture(t) {
@@ -277,7 +276,7 @@ async function fixture(t) {
   state.build = (extra = {}) =>
     state.provider().build({
       target: TARGET,
-      sourceSha: sha,
+      sourceSha: state.sha,
       releaseDigest: RELEASE,
       withholdDomains: true,
       gitBranch: "staging",
@@ -496,6 +495,38 @@ test("an externally attached staging alias blocks the adapter before alias mutat
     { code: "STAGING_VERCEL_DOMAINS_NOT_WITHHELD" },
   );
   assert.equal(s.calls.filter((call) => call.method === "POST").length, writesBefore);
+});
+
+test("nested source paths verify against a root-level Vercel file tree", async (t) => {
+  const s = await fixture(t);
+  await mkdir(join(s.checkoutRoot, "src"));
+  await writeFile(join(s.checkoutRoot, "src", "index.js"), "export default 1;\n");
+  await git(s.checkoutRoot, "add", ".");
+  await git(s.checkoutRoot, "commit", "-m", "Nested source");
+  s.sha = await git(s.checkoutRoot, "rev-parse", "HEAD");
+  const candidate = await s.build();
+  assert.equal(candidate.readyState, "READY");
+  assert.deepEqual(s.createBodies[0].files.map((file) => file.file).sort(), [
+    ".gitignore",
+    "app.js",
+    "src/index.js",
+  ]);
+});
+
+test("a production alias on a withheld staging candidate cannot bind", async (t) => {
+  const s = await fixture(t);
+  const transport = s.transport;
+  s.transport = async (input) => {
+    const value = await transport(input);
+    if (
+      input.method === "GET" &&
+      new URL(input.path, "https://api.vercel.com").pathname ===
+        "/v13/deployments/dpl_stagingCandidate"
+    )
+      value.alias = [PRODUCTION_ALIASES[1]];
+    return value;
+  };
+  await assert.rejects(s.build(), { code: "STAGING_VERCEL_DOMAINS_NOT_WITHHELD" });
 });
 
 test("unknown provider failures are reduced to static read/write codes", async (t) => {
