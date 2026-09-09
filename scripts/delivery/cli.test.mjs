@@ -59,9 +59,7 @@ test("shared staging/production Vercel project keeps hosted activation blocked",
     releaseTarget("staging").vercelProjectId,
     releaseTarget("production").vercelProjectId,
   );
-  assert.ok(
-    ACTIVATION_BLOCKERS.includes("SEPARATE_STAGING_PROJECT_AND_G0_ALLOWLIST_PENDING"),
-  );
+  assert.ok(ACTIVATION_BLOCKERS.includes("SEPARATE_STAGING_PROJECT_AND_G0_ALLOWLIST_PENDING"));
 });
 
 test("workflow source has one Production job, no production secrets before its gate, and no mid-mutation concurrency cancellation", async () => {
