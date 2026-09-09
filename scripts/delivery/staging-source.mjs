@@ -242,6 +242,10 @@ export async function admitStagingSource(options) {
     await authority();
     const final = await inspectCheckout(checkoutRoot, sourceSha);
     requireCondition(first.treeSha === final.treeSha, "STAGING_CHECKOUT_SHA");
+    // Re-admit after the last local inspect. Each authority() reads main before
+    // staging, so a tip that moves after those reads (or during the final
+    // inspect) must not inherit the earlier PASS.
+    await authority();
     return {
       status: "STAGING_SOURCE_PREFLIGHT_PASSED",
       repository: REPOSITORY,

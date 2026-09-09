@@ -122,8 +122,9 @@ test("real staging checkout and authenticated current main source produce bounde
   });
   assert.equal(JSON.stringify(result).includes(s.root), false);
   assert.equal(JSON.stringify(result).includes("synthetic-token"), false);
-  assert.equal(s.calls.filter((path) => path === "/actions/runs/23").length, 2);
-  assert.equal(s.calls.filter((path) => path === "/git/ref/heads/staging").length, 2);
+  assert.equal(s.calls.filter((path) => path === "/actions/runs/23").length, 3);
+  assert.equal(s.calls.filter((path) => path === "/git/ref/heads/main").length, 3);
+  assert.equal(s.calls.filter((path) => path === "/git/ref/heads/staging").length, 3);
   assert.throws(assertHostedReady, { code: "HOSTED_ACTIVATION_BLOCKED" });
 });
 
@@ -340,6 +341,34 @@ test("staging moving during inspection rejects the earlier ref", async (t) => {
   let stages = 0;
   s.beforeRead = (path) => {
     if (path === "/git/ref/heads/staging" && ++stages === 2) s.stageSha = "b".repeat(40);
+  };
+  await assert.rejects(s.admit(), { code: "STAGING_SOURCE_REF_MISMATCH" });
+});
+
+test("main tip moving after it was read in the last pre-inspect authority round must reject", async (t) => {
+  const s = await fixture(t);
+  let stages = 0;
+  s.beforeRead = (path) => {
+    // Corrupt main after that round already accepted it (main is read before
+    // staging). queueMicrotask runs before the awaited staging payload bind.
+    if (path === "/git/ref/heads/staging" && ++stages === 2) {
+      queueMicrotask(() => {
+        s.mainSha = "b".repeat(40);
+      });
+    }
+  };
+  await assert.rejects(s.admit(), { code: "MAIN_MOVED" });
+});
+
+test("staging tip moving after the final local inspect must reject", async (t) => {
+  const s = await fixture(t);
+  let stages = 0;
+  s.beforeRead = (path) => {
+    if (path === "/git/ref/heads/staging" && ++stages === 2) {
+      setImmediate(() => {
+        s.stageSha = "b".repeat(40);
+      });
+    }
   };
   await assert.rejects(s.admit(), { code: "STAGING_SOURCE_REF_MISMATCH" });
 });
