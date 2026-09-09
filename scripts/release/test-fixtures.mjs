@@ -22,7 +22,10 @@ export function fixture(environment = "production", additive = false) {
   const target = {
     environment,
     vercelTeamId: "team_230fpJ9MgCj9ssW3LiIckfyA",
-    vercelProjectId: "prj_ILhPJbkyaiptdVA8DtsmNyw3tiub",
+    vercelProjectId:
+      environment === "production"
+        ? "prj_ILhPJbkyaiptdVA8DtsmNyw3tiub"
+        : "prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch",
     supabaseRef: environment === "production" ? "fkvuhfsqcmujywzgczmc" : "vmznysvietfaddakkegt",
     vercelEnvironment: environment === "production" ? "production" : "preview",
     gitBranch: environment === "production" ? "main" : "staging",

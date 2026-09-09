@@ -195,7 +195,82 @@ async function inspectCheckout(root, sha) {
       (await git(root, ["rev-parse", "HEAD"])).trim() === sha,
     "STAGING_CHECKOUT_SHA",
   );
-  return { treeSha, trackedFiles: files };
+  return {
+    treeSha,
+    trackedFiles: files,
+    files: [...tracked].map(([file, { mode, blob }]) => Object.freeze({ file, mode, blob })),
+  };
+}
+
+async function collectAdmission(options) {
+  requireCondition(
+    options &&
+      typeof options === "object" &&
+      !Array.isArray(options) &&
+      Object.keys(options).length === 4 &&
+      Object.keys(options).every((key) =>
+        ["github", "checkoutRoot", "ciRunId", "sourceSha"].includes(key),
+      ),
+    "STAGING_SOURCE_OPTIONS",
+  );
+  const { github, checkoutRoot, ciRunId, sourceSha } = options;
+  requireCondition(
+    typeof github?.request === "function" &&
+      typeof checkoutRoot === "string" &&
+      checkoutRoot.length < 4096 &&
+      !/[\u0000-\u001f]/.test(checkoutRoot) &&
+      isAbsolute(checkoutRoot) &&
+      resolve(checkoutRoot) === checkoutRoot,
+    "STAGING_SOURCE_OPTIONS",
+  );
+  requireId(ciRunId);
+  requireCondition(Number.isSafeInteger(Number(ciRunId)), "INVALID_ID");
+  requireSha(sourceSha);
+  const authority = async () => {
+    const run = await admitSuccessfulMain({ github, runId: ciRunId, sha: sourceSha });
+    requireCondition(run.id === Number(ciRunId), "STAGING_SOURCE_CI_ID");
+    const stage = await github.request("GET", "/git/ref/heads/staging");
+    requireCondition(
+      stage?.ref === REF && stage.object?.type === "commit" && stage.object.sha === sourceSha,
+      "STAGING_SOURCE_REF_MISMATCH",
+    );
+  };
+  await authority();
+  const first = await inspectCheckout(checkoutRoot, sourceSha);
+  await authority();
+  const final = await inspectCheckout(checkoutRoot, sourceSha);
+  requireCondition(
+    first.treeSha === final.treeSha && JSON.stringify(first.files) === JSON.stringify(final.files),
+    "STAGING_CHECKOUT_SHA",
+  );
+  // Re-admit after the last local inspect. Each authority() reads main before
+  // staging, so a tip that moves after those reads (or during the final
+  // inspect) must not inherit the earlier PASS.
+  await authority();
+  const preflight = {
+    status: "STAGING_SOURCE_PREFLIGHT_PASSED",
+    repository: REPOSITORY,
+    sourceSha,
+    ciRunId,
+    gitRef: REF,
+    treeSha: final.treeSha,
+    trackedFiles: final.trackedFiles,
+    hostedDeploymentVerified: false,
+    deploymentEligibility: "NOT_EVALUATED",
+  };
+  return { preflight, files: final.files };
+}
+
+async function safelyCollect(options) {
+  try {
+    return await collectAdmission(options);
+  } catch (error) {
+    throw new DeliveryError(
+      error instanceof DeliveryError && SAFE_CODES.has(error.code)
+        ? error.code
+        : "STAGING_SOURCE_PREFLIGHT_FAILED",
+    );
+  }
 }
 
 /**
@@ -204,63 +279,10 @@ async function inspectCheckout(root, sha) {
  * No caller clean flag, file manifest, local metadata or saved PASS is accepted.
  */
 export async function admitStagingSource(options) {
-  try {
-    requireCondition(
-      options &&
-        typeof options === "object" &&
-        !Array.isArray(options) &&
-        Object.keys(options).length === 4 &&
-        Object.keys(options).every((key) =>
-          ["github", "checkoutRoot", "ciRunId", "sourceSha"].includes(key),
-        ),
-      "STAGING_SOURCE_OPTIONS",
-    );
-    const { github, checkoutRoot, ciRunId, sourceSha } = options;
-    requireCondition(
-      typeof github?.request === "function" &&
-        typeof checkoutRoot === "string" &&
-        checkoutRoot.length < 4096 &&
-        !/[\u0000-\u001f]/.test(checkoutRoot) &&
-        isAbsolute(checkoutRoot) &&
-        resolve(checkoutRoot) === checkoutRoot,
-      "STAGING_SOURCE_OPTIONS",
-    );
-    requireId(ciRunId);
-    requireCondition(Number.isSafeInteger(Number(ciRunId)), "INVALID_ID");
-    requireSha(sourceSha);
-    const authority = async () => {
-      const run = await admitSuccessfulMain({ github, runId: ciRunId, sha: sourceSha });
-      requireCondition(run.id === Number(ciRunId), "STAGING_SOURCE_CI_ID");
-      const stage = await github.request("GET", "/git/ref/heads/staging");
-      requireCondition(
-        stage?.ref === REF && stage.object?.type === "commit" && stage.object.sha === sourceSha,
-        "STAGING_SOURCE_REF_MISMATCH",
-      );
-    };
-    await authority();
-    const first = await inspectCheckout(checkoutRoot, sourceSha);
-    await authority();
-    const final = await inspectCheckout(checkoutRoot, sourceSha);
-    requireCondition(first.treeSha === final.treeSha, "STAGING_CHECKOUT_SHA");
-    // Re-admit after the last local inspect. Each authority() reads main before
-    // staging, so a tip that moves after those reads (or during the final
-    // inspect) must not inherit the earlier PASS.
-    await authority();
-    return {
-      status: "STAGING_SOURCE_PREFLIGHT_PASSED",
-      repository: REPOSITORY,
-      sourceSha,
-      ciRunId,
-      gitRef: REF,
-      ...final,
-      hostedDeploymentVerified: false,
-      deploymentEligibility: "NOT_EVALUATED",
-    };
-  } catch (error) {
-    throw new DeliveryError(
-      error instanceof DeliveryError && SAFE_CODES.has(error.code)
-        ? error.code
-        : "STAGING_SOURCE_PREFLIGHT_FAILED",
-    );
-  }
+  return (await safelyCollect(options)).preflight;
+}
+
+/** Internal trusted-composition seam for the fixed Vercel uploader. */
+export async function prepareStagingSourceUpload(options) {
+  return safelyCollect(options);
 }

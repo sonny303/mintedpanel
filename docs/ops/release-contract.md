@@ -73,12 +73,14 @@ A caller that controls all inputs can manufacture a passing contract. G0 cannot
 detect a forged artifact, falsely reported test, incorrect collector or clock.
 
 The allowlist in `scripts/release/contract.mjs` fixes both targets to Vercel team
-`team_230fpJ9MgCj9ssW3LiIckfyA` and project
-`prj_ILhPJbkyaiptdVA8DtsmNyw3tiub`. Staging requires Preview, branch `staging`, and
-Supabase `vmznysvietfaddakkegt`; production requires Production, branch `main`, and
-Supabase `fkvuhfsqcmujywzgczmc`. The repository is `sonny303/mintedpanel`. This is
-an identity comparison, not proof of credential isolation in the shared Vercel
-project. Any target redesign needs a reviewed allowlist change.
+`team_230fpJ9MgCj9ssW3LiIckfyA`. Staging uses the dedicated project
+`prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch`, Preview, branch `staging`, and Supabase
+`vmznysvietfaddakkegt`. Production remains project
+`prj_ILhPJbkyaiptdVA8DtsmNyw3tiub`, Production, branch `main`, and Supabase
+`fkvuhfsqcmujywzgczmc`. The repository is `sonny303/mintedpanel`. This is an
+identity comparison, not proof that the staging credential is isolated or that
+the dedicated project is correctly configured at runtime. Any target redesign
+needs another reviewed allowlist change.
 
 ## Version 1 JSON structure
 

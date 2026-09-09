@@ -18,7 +18,7 @@ export const PRODUCTION_ALIASES = Object.freeze([
 // These are missing capabilities, not flags an operator may override with JSON/env.
 // Removing one requires its reviewed implementation and authenticated evidence.
 export const ACTIVATION_BLOCKERS = Object.freeze([
-  "SEPARATE_STAGING_PROJECT_AND_G0_ALLOWLIST_PENDING",
+  "FIXED_STAGING_PROVIDER_HOSTED_EXECUTION_PENDING",
   "SCOPED_CREDENTIAL_DESTINATIONS_AND_DENIAL_PROOF_PENDING",
   "GIT_DISCONNECT_AND_COMPETING_DEPLOYMENT_READBACK_PENDING",
   "AUTHENTICATED_SCHEMA_LINEAGE_AND_BACKUP_COLLECTORS_MISSING",

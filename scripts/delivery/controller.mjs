@@ -153,6 +153,14 @@ export async function executeDelivery({
   };
   const build = async () => {
     await guard();
+    if (target === "staging") {
+      // Uploading content-addressed source and creating a Preview are provider
+      // mutations even though neither served alias has moved yet. Preserve the
+      // lease if their outcome is uncertain so another writer cannot race the
+      // required reconciliation.
+      mutationStarted = true;
+      event("mutating:staging-candidate");
+    }
     candidate = await services.build({
       target: copy(context.target),
       sourceSha: context.source.sha,
