@@ -427,10 +427,13 @@ export async function commitImportRun(
     enrollmentFacts: 0,
   };
   if (!result.alreadyCommitted) {
-    relationships = await applyProviderRelationships(stagedSnapshot, [
-      ...result.createdProviderIds,
-      ...result.updatedProviderIds,
-    ]);
+    // A blocked source row must not attach relationships through another
+    // committed row with the same NPI. Preserve the reviewed row boundary.
+    const blockedLines = new Set(plan.blocked_entries.map((entry) => entry.line));
+    relationships = await applyProviderRelationships(
+      stagedSnapshot.filter((row) => !blockedLines.has(row.line)),
+      [...result.createdProviderIds, ...result.updatedProviderIds],
+    );
     await ensureFirstFacilityPrimary([...result.createdProviderIds, ...result.updatedProviderIds]);
   }
   return { ...result, relationships };
