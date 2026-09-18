@@ -144,10 +144,11 @@ setup push cannot launch an unattended customer-production deployment.
 Automatic staging remains blocked until its provider credential is proved
 unable to reach customer-production configuration, deployment and promotion.
 Separate secret names and GitHub environment names do not reduce Vercel
-authority. A separate staging project and exact-project token are a proposed
-alternative awaiting the user's architecture decision; this slice neither
-creates that project nor assumes its name, scope or alias policy. Do not place a
-broad Owner token in unattended staging CI.
+authority. The approved dedicated staging project now exists, its identity is in
+the G0 allowlist, and the fixed Preview adapter can validate its project and
+environment metadata. Those code and operator-read facts do not prove the
+unattended staging credential's negative production boundary or its hosted
+execution path. Do not place a broad Owner token in unattended staging CI.
 
 Before declaring G1 active, retain evidence for the hosted freeze, GitHub
 reviewer/ref/check rules, old-workflow retirement, credential quarantine and
