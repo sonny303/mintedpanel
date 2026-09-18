@@ -1,10 +1,16 @@
 name: Staging delivery
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful current-main push CI run ID
+        required: true
+        type: string
+      source_sha:
+        description: Exact current-main commit SHA from that CI run
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,9 +23,7 @@ concurrency:
 jobs:
   staging:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_repository.full_name == 'sonny303/mintedpanel'
+      github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ubuntu-latest
     environment: staging
     permissions:
@@ -41,8 +45,8 @@ jobs:
       - name: Admit exact successful main source
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          MINTED_CI_RUN_ID: ${{ github.event.workflow_run.id }}
-          MINTED_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          MINTED_CI_RUN_ID: ${{ inputs.ci_run_id }}
+          MINTED_SOURCE_SHA: ${{ inputs.source_sha }}
           MINTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           export MINTED_CHECKOUT_SHA="$(git rev-parse HEAD)"

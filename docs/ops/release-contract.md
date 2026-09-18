@@ -10,8 +10,10 @@ meets the contract. It does **not** authenticate its author or demonstrate that
 its assertions happened.
 
 Scope: delivery guardrails only. Product repairs and migration-history repairs
-are separate work. The user approved automatic staging, a single GitHub
-Production approval by `sonny303`, compatible web/database releases, local
+are separate work. Staging is manually dispatched under the current private
+repository controls; production release remains blocked because the GitHub
+Production reviewer gate is not enforced. The intended future release requires
+a single GitHub Production approval by `sonny303`, compatible web/database releases, local
 staging extension tests performed by the user, and a separate restricted
 production Store release process. This validator creates none of those hosted
 controls and does not authorize the first customer release.

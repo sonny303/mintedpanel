@@ -287,7 +287,7 @@ function artifactSimulator() {
   const qualification = qualificationFixture();
   const sourceSha = qualification.preflight.record.context.source.sha;
   const producer = {
-    ...run(WORKFLOWS.staging, "workflow_run"),
+    ...run(WORKFLOWS.staging, "workflow_dispatch"),
     id: 12345,
     status: "completed",
     conclusion: "success",
@@ -376,6 +376,12 @@ for (const [name, change] of [
       s.producer.conclusion = "failure";
     },
   ],
+  [
+    "automatic staging producer",
+    (s) => {
+      s.producer.event = "workflow_run";
+    },
+  ],
 ]) {
   test(`simulator: ${name} denies artifact eligibility`, async () => {
     const s = artifactSimulator();
@@ -438,10 +444,7 @@ function phaseArtifactSimulator(phase) {
     ? { qualification: qualificationFixture(), sourceCiRunId: "50" }
     : baselineAttestationFixture();
   const currentRun = {
-    ...run(
-      isStage ? WORKFLOWS.staging : WORKFLOWS.production,
-      isStage ? "workflow_run" : "workflow_dispatch",
-    ),
+    ...run(isStage ? WORKFLOWS.staging : WORKFLOWS.production, "workflow_dispatch"),
     id: isStage ? 12345 : 42,
     status: "completed",
     conclusion: "success",

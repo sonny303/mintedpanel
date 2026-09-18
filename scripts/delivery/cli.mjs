@@ -36,15 +36,11 @@ export async function runCommand({ args, env, output }) {
     "TRUSTED_WORKFLOW_REQUIRED",
   );
   requireCondition(env.MINTED_CHECKOUT_SHA === workflowSha, "CONTROL_CHECKOUT_MISMATCH");
-  if (command.includes("production")) {
-    requireCondition(
-      env.GITHUB_EVENT_NAME === "workflow_dispatch" && env.GITHUB_RUN_ATTEMPT === "1",
-      "FRESH_APPROVAL_RUN_REQUIRED",
-    );
-    requireId(env.GITHUB_RUN_ID);
-  } else {
-    requireCondition(env.GITHUB_EVENT_NAME === "workflow_run", "TRUSTED_MAIN_REQUIRED");
-  }
+  requireCondition(
+    env.GITHUB_EVENT_NAME === "workflow_dispatch" && env.GITHUB_RUN_ATTEMPT === "1",
+    command.includes("production") ? "FRESH_APPROVAL_RUN_REQUIRED" : "MANUAL_STAGING_RUN_REQUIRED",
+  );
+  requireId(env.GITHUB_RUN_ID);
   if (command === "admit-staging") {
     const github = createGitHub({ token: env.GITHUB_TOKEN });
     await admitSuccessfulMain({

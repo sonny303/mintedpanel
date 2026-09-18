@@ -295,7 +295,7 @@ function withinProducerRun(timestamp, run) {
 /** Authenticates stage-only evidence. This cannot establish production eligibility. */
 export async function loadStagingQualification({ github, stagingRunId, artifactId, now }) {
   const run = await github.request("GET", `/actions/runs/${requireId(stagingRunId)}`);
-  trustedRun(run, { path: WORKFLOWS.staging, event: "workflow_run", sha: run.head_sha });
+  trustedRun(run, { path: WORKFLOWS.staging, event: "workflow_dispatch", sha: run.head_sha });
   const { value, metadata } = await pinnedArtifact({
     github,
     artifactId,

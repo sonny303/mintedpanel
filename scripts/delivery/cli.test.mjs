@@ -36,7 +36,7 @@ test("even a trusted-looking environment with secrets and PASS flags cannot acti
       GITHUB_REPOSITORY: REPOSITORY,
       GITHUB_REF: "refs/heads/main",
       GITHUB_WORKFLOW_REF: `${REPOSITORY}/${WORKFLOWS[production ? "production" : "staging"]}@refs/heads/main`,
-      GITHUB_EVENT_NAME: production ? "workflow_dispatch" : "workflow_run",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
       GITHUB_RUN_ID: "42",
       GITHUB_RUN_ATTEMPT: "1",
       MINTED_WORKFLOW_SHA: sha,
@@ -48,6 +48,28 @@ test("even a trusted-looking environment with secrets and PASS flags cannot acti
     };
     await assert.rejects(runCommand({ args: [command], env, output() {} }), {
       code: "HOSTED_ACTIVATION_BLOCKED",
+    });
+  }
+});
+
+test("staging rejects automatic workflow events and reruns before provider access", async () => {
+  const sha = "a".repeat(40);
+  const base = {
+    GITHUB_ACTIONS: "true",
+    GITHUB_REPOSITORY: REPOSITORY,
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_WORKFLOW_REF: `${REPOSITORY}/${WORKFLOWS.staging}@refs/heads/main`,
+    GITHUB_RUN_ID: "42",
+    GITHUB_RUN_ATTEMPT: "1",
+    MINTED_WORKFLOW_SHA: sha,
+    MINTED_CHECKOUT_SHA: sha,
+  };
+  for (const env of [
+    { ...base, GITHUB_EVENT_NAME: "workflow_run" },
+    { ...base, GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_RUN_ATTEMPT: "2" },
+  ]) {
+    await assert.rejects(runCommand({ args: ["staging"], env, output() {} }), {
+      code: "MANUAL_STAGING_RUN_REQUIRED",
     });
   }
 });
@@ -67,6 +89,11 @@ test("workflow source has one Production job, no production secrets before its g
   const root = new URL("../../.github/workflows/", import.meta.url);
   const production = await readFile(new URL("production-release.yml", root), "utf8");
   const staging = await readFile(new URL("staging-delivery.yml", root), "utf8");
+  assert.match(staging, /workflow_dispatch:/);
+  assert.equal(staging.includes("workflow_run:"), false);
+  assert.match(staging, /github\.run_attempt == 1/);
+  assert.match(staging, /MINTED_CI_RUN_ID: \$\{\{ inputs\.ci_run_id \}\}/);
+  assert.match(staging, /MINTED_SOURCE_SHA: \$\{\{ inputs\.source_sha \}\}/);
   assert.equal((production.match(/environment: Production/g) ?? []).length, 1);
   assert.match(production, /needs: prepare/);
   assert.match(production, /github\.run_attempt == 1/);
