@@ -686,7 +686,14 @@ export async function updateProviderWithLicenses(
       after = camelizeRow<Provider>(data);
       record("providers", "update", [data], before);
     }
-    for (const { command, stored, expectedFields, row } of plans) {
+    // Removes first: the unique (provider, state, number) index rejects an add
+    // that replaces a same-save removal when the add runs while the old row remains.
+    // Updates/adds keep caller order so partial-failure accounting stays predictable.
+    const orderedPlans = [
+      ...plans.filter((plan) => plan.command.type === "remove"),
+      ...plans.filter((plan) => plan.command.type !== "remove"),
+    ];
+    for (const { command, stored, expectedFields, row } of orderedPlans) {
       if (
         command.type === "update" &&
         row &&

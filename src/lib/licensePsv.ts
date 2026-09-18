@@ -5,7 +5,8 @@
 //   may come from email or another source.
 // - Renewal reset: editing a license's expiration date resets the row to
 //   unverified (feeds the R9 Expiration Radar re-verify workflow).
-// - An unchanged row keeps its stored PSV trail untouched.
+// - An unchanged verification status keeps its stamps; the board URL may still
+//   be annotated later without forcing a re-verify.
 
 export type PsvStatus = "unverified" | "verified" | "failed";
 
@@ -78,11 +79,12 @@ export function resolvePsvColumns(
     };
   }
 
-  // Unchanged verification: keep the stored trail verbatim.
+  // Unchanged verification stamps: keep verifier/timestamp, but allow annotating
+  // (or clearing) the board URL later without forcing a re-verify.
   return {
     verified_status: stored.verifiedStatus,
     verified_at: stored.verifiedAt,
     verified_by: stored.verifiedBy,
-    verification_source_url: stored.verificationSourceUrl,
+    verification_source_url: url,
   };
 }

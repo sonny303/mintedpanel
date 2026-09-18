@@ -439,4 +439,86 @@ describe("P03 explicit commands and persisted outcomes", () => {
     expect(f.rows).toEqual(original);
     expect(f.requests).toEqual([]);
   });
+
+  it("replaces the same state and license number in one save when add is listed before remove", async () => {
+    const f = fixture();
+    const existing = structuredClone(f.rows.state_licenses[0]);
+    const base = transport.fetch.getMockImplementation()!;
+    transport.fetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      if (url.pathname.endsWith("/state_licenses") && method === "POST") {
+        const parsed: unknown = init?.body ? JSON.parse(String(init.body)) : null;
+        const row = (Array.isArray(parsed) ? parsed[0] : parsed) as Row | null;
+        if (
+          row &&
+          f.rows.state_licenses.some(
+            (r) =>
+              r.provider_id === (row.provider_id ?? "p1") &&
+              r.state === row.state &&
+              r.license_number === row.license_number,
+          )
+        ) {
+          return new Response(
+            JSON.stringify({
+              code: "23505",
+              message:
+                'duplicate key value violates unique constraint "uq_state_licenses_provider_state_number"',
+            }),
+            { status: 409, headers: { "content-type": "application/json" } },
+          );
+        }
+      }
+      return base(input, init);
+    });
+    await save([
+      {
+        type: "add",
+        values: {
+          ...values(existing),
+          licenseNumber: String(existing.license_number),
+          licenseType: "compact",
+        },
+      },
+      removeCommand(existing),
+    ]);
+    const cos = f.rows.state_licenses.filter((r) => r.state === "CO");
+    expect(cos).toHaveLength(1);
+    expect(cos[0]).toMatchObject({
+      license_number: "CO-123",
+      license_type: "compact",
+    });
+    expect(f.rows.state_licenses.some((r) => r.id === "l1")).toBe(false);
+  });
+
+  it("executes license removes before adds when both appear in one command list", async () => {
+    const f = fixture();
+    const existing = f.rows.state_licenses[0];
+    await save([{ type: "add", values: values(license("l3", "CA")) }, removeCommand(existing)]);
+    const licenseWrites = f.requests.filter(
+      (r) => r.table === "state_licenses" && r.method !== "GET",
+    );
+    expect(licenseWrites.map((r) => r.method)).toEqual(["DELETE", "POST"]);
+  });
+
+  it("persists a board-URL annotation on an already-verified license without clearing stamps", async () => {
+    const f = fixture();
+    Object.assign(f.rows.state_licenses[0], {
+      verified_status: "verified",
+      verified_at: "2026-01-02T00:00:00+00:00",
+      verified_by: "original-verifier",
+      verification_source_url: null,
+    });
+    await save([
+      updateCommand(f.rows.state_licenses[0], {
+        verificationSourceUrl: "https://www.ncbpte.org/license-verification",
+      }),
+    ]);
+    expect(f.rows.state_licenses[0]).toMatchObject({
+      verified_status: "verified",
+      verified_at: "2026-01-02T00:00:00+00:00",
+      verified_by: "original-verifier",
+      verification_source_url: "https://www.ncbpte.org/license-verification",
+    });
+  });
 });
