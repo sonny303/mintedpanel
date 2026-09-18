@@ -12,8 +12,7 @@
 // Education & employment). Home address + malpractice were moved off this form
 // (handoff: collected at creation / managed at the group level). Licenses
 // follow the standard "+ Add license" pattern with per-row Edit/Remove; each
-// write composes the full list into the audited updateProviderWithLicenses
-// sync with an EMPTY provider patch.
+// write sends one explicit license command with an EMPTY provider patch.
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
@@ -51,7 +50,12 @@ import { GroupsFacilitiesPanel } from "@/components/providers/GroupsFacilitiesPa
 import { EnrollmentsPanel } from "@/components/providers/EnrollmentsPanel";
 import { ProviderReadinessSection } from "@/components/providers/ProviderReadinessSection";
 import { AddButton, RecordSectionCard } from "@/components/providers/RecordSectionCard";
-import { EMPTY_LICENSE_DRAFT, type LicenseDraft } from "@/components/onboarding/licenseDraft";
+import {
+  EMPTY_LICENSE_DRAFT,
+  licenseDraftToValues,
+  licenseDraftsEqual,
+  type LicenseDraft,
+} from "@/components/onboarding/licenseDraft";
 import {
   useProvider,
   useProviderAssignments,
@@ -75,7 +79,7 @@ import { isValidEmail } from "@/lib/contactValidation";
 import { isValidNpi } from "@/lib/providerGroup";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { LicenseInput, ProviderInput } from "@/services/providers";
+import { ProviderSaveError, type ProviderInput } from "@/services/providers";
 import type { Provider } from "@/types";
 
 export const Route = createFileRoute("/providers/$id/")({
@@ -588,23 +592,8 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
 }
 
 // ---------- Licenses: standard "+ Add" pattern, per-row Edit / Remove ----------
-// Every write composes the FULL license list (unchanged rows pass through
-// verbatim) into the ONE audited updateProviderWithLicenses sync with an
-// EMPTY provider patch — identity fields and assignments are untouchable
-// from here, and the PSV rules (verify/fail stamps server-side; the board
-// URL is optional; renewal resets to Unverified) ride the same service path
-// as before.
-
-const licenseToInput = (l: StateLicense): LicenseInput => ({
-  id: l.id,
-  state: l.state,
-  licenseNumber: l.licenseNumber,
-  licenseType: l.licenseType,
-  issueDate: l.issueDate,
-  expirationDate: l.expirationDate,
-  verifiedStatus: l.verifiedStatus ?? "unverified",
-  verificationSourceUrl: l.verificationSourceUrl,
-});
+// Commands touch only the selected license. Update/remove carry the original
+// target snapshot; omission and unavailable list data never authorize deletion.
 
 function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite: boolean }) {
   const licensesQ = useStateLicensesByProvider(provider.id);
@@ -612,7 +601,13 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
   const [editing, setEditing] = useState<StateLicense | null>(null);
   const [removing, setRemoving] = useState<StateLicense | null>(null);
 
-  const rows = licensesQ.data ?? [];
+  const rows = licensesQ.data;
+  const reload = async () => {
+    await licensesQ.refetch({ throwOnError: true });
+    setAdding(false);
+    setEditing(null);
+    setRemoving(null);
+  };
   return (
     <>
       <RecordSectionCard
@@ -622,7 +617,20 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
           canWrite ? <AddButton label="Add license" onClick={() => setAdding(true)} /> : undefined
         }
       >
-        {rows.length === 0 ? (
+        {licensesQ.isError ? (
+          <div className="space-y-2">
+            <p role="alert" className="text-[13px] text-[#B91C1C]">
+              Could not load licenses.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void licensesQ.refetch()}>
+              Retry licenses
+            </Button>
+          </div>
+        ) : licensesQ.isPending || !rows ? (
+          <p role="status" className="text-[13px] text-muted-foreground">
+            Loading licenses…
+          </p>
+        ) : rows.length === 0 ? (
           <p className="text-[13px] text-muted-foreground">No state licenses recorded.</p>
         ) : (
           <table className="w-full text-left text-[13px]">
@@ -665,7 +673,7 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
                           type="button"
                           className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
                           aria-label={`Edit ${l.state} license`}
-                          onClick={() => setEditing(l)}
+                          onClick={() => setEditing({ ...l })}
                         >
                           Edit
                         </button>
@@ -673,7 +681,7 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
                           type="button"
                           className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
                           aria-label={`Remove ${l.state} license`}
-                          onClick={() => setRemoving(l)}
+                          onClick={() => setRemoving({ ...l })}
                         >
                           Remove
                         </button>
@@ -689,24 +697,24 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
       {adding ? (
         <LicenseDialog
           provider={provider}
-          licenses={rows}
           license={null}
+          onReload={reload}
           onClose={() => setAdding(false)}
         />
       ) : null}
       {editing ? (
         <LicenseDialog
           provider={provider}
-          licenses={rows}
           license={editing}
+          onReload={reload}
           onClose={() => setEditing(null)}
         />
       ) : null}
       {removing ? (
         <RemoveLicenseDialog
           provider={provider}
-          licenses={rows}
           license={removing}
+          onReload={reload}
           onClose={() => setRemoving(null)}
         />
       ) : null}
@@ -716,38 +724,53 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
 
 function LicenseDialog({
   provider,
-  licenses,
   license,
+  onReload,
   onClose,
 }: {
   provider: Provider;
-  licenses: StateLicense[];
   /** null = add a new license; set = edit this one. */
   license: StateLicense | null;
+  onReload: () => Promise<void>;
   onClose: () => void;
 }) {
   const update = useUpdateProviderWithLicenses(provider.id);
-  const [draft, setDraft] = useState<LicenseDraft>(() =>
-    license
+  const [expected] = useState(() => (license ? { ...license } : null));
+  const [initialDraft] = useState<LicenseDraft>(() =>
+    expected
       ? {
-          id: license.id,
-          state: license.state,
-          licenseNumber: license.licenseNumber ?? "",
-          licenseType: license.licenseType || "full",
-          issueDate: license.issueDate ?? "",
-          expirationDate: license.expirationDate ?? "",
-          verifiedStatus: license.verifiedStatus ?? "unverified",
-          verificationSourceUrl: license.verificationSourceUrl ?? "",
-          storedExpirationDate: license.expirationDate,
-          storedVerifiedAt: license.verifiedAt,
+          id: expected.id,
+          state: expected.state,
+          licenseNumber: expected.licenseNumber ?? "",
+          licenseType: expected.licenseType || "full",
+          issueDate: expected.issueDate ?? "",
+          expirationDate: expected.expirationDate ?? "",
+          verifiedStatus: expected.verifiedStatus ?? "unverified",
+          verificationSourceUrl: expected.verificationSourceUrl ?? "",
+          storedExpirationDate: expected.expirationDate,
+          storedVerifiedAt: expected.verifiedAt,
         }
       : { ...EMPTY_LICENSE_DRAFT },
   );
+  const [draft, setDraft] = useState(initialDraft);
   const [error, setError] = useState<string | null>(null);
+  const [requiresReload, setRequiresReload] = useState(false);
+  const [reloading, setReloading] = useState(false);
+
+  const reload = async () => {
+    setReloading(true);
+    try {
+      await onReload();
+    } catch {
+      setError("Could not reload saved data. Try again.");
+    } finally {
+      setReloading(false);
+    }
+  };
 
   const set = (patch: Partial<LicenseDraft>) => {
     setDraft((d) => ({ ...d, ...patch }));
-    setError(null);
+    if (!requiresReload) setError(null);
   };
 
   const willReset =
@@ -756,31 +779,34 @@ function LicenseDialog({
     draft.verifiedStatus !== "unverified";
 
   const save = () => {
+    if (requiresReload || update.isPending) return;
     if (!draft.state.trim()) {
       setError("State is required.");
       return;
     }
-    const edited: LicenseInput = {
-      id: license?.id ?? null,
-      state: draft.state,
-      licenseNumber: draft.licenseNumber.trim() || null,
-      licenseType: draft.licenseType.trim() || null,
-      issueDate: draft.issueDate.trim() || null,
-      expirationDate: draft.expirationDate.trim() || null,
-      verifiedStatus: draft.verifiedStatus,
-      verificationSourceUrl: draft.verificationSourceUrl.trim() || null,
-    };
-    const next = license
-      ? licenses.map((l) => (l.id === license.id ? edited : licenseToInput(l)))
-      : [...licenses.map(licenseToInput), edited];
+    if (expected && licenseDraftsEqual(draft, initialDraft)) {
+      onClose();
+      return;
+    }
+    const values = licenseDraftToValues(draft);
     update.mutate(
-      { patch: {}, licenses: next },
+      {
+        patch: {},
+        licenseCommands: [
+          expected
+            ? { type: "update", id: expected.id, expected, values }
+            : { type: "add", values },
+        ],
+      },
       {
         onSuccess: () => {
           toast.success(license ? "License saved." : "License added.");
           onClose();
         },
-        onError: (e) => setError(e instanceof Error ? e.message : "Could not save the license."),
+        onError: (e) => {
+          setError(e instanceof Error ? e.message : "Could not save the license.");
+          setRequiresReload(e instanceof ProviderSaveError && e.requiresReload);
+        },
       },
     );
   };
@@ -907,14 +933,24 @@ function LicenseDialog({
               {error}
             </p>
           ) : null}
+          {requiresReload ? (
+            <p className="text-[12px] text-muted-foreground">
+              Reload saved data and review before trying again.
+            </p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
+          {requiresReload ? (
+            <Button variant="outline" disabled={reloading} onClick={() => void reload()}>
+              Reload saved data
+            </Button>
+          ) : null}
           <Button
             className="bg-[#1B4D3E] hover:bg-[#163F33]"
-            disabled={update.isPending}
+            disabled={update.isPending || requiresReload || reloading}
             onClick={save}
           >
             {license ? "Save license" : "Add license"}
@@ -927,30 +963,48 @@ function LicenseDialog({
 
 function RemoveLicenseDialog({
   provider,
-  licenses,
   license,
+  onReload,
   onClose,
 }: {
   provider: Provider;
-  licenses: StateLicense[];
   license: StateLicense;
+  onReload: () => Promise<void>;
   onClose: () => void;
 }) {
   const update = useUpdateProviderWithLicenses(provider.id);
+  const [expected] = useState(() => ({ ...license }));
   const [error, setError] = useState<string | null>(null);
+  const [requiresReload, setRequiresReload] = useState(false);
+  const [reloading, setReloading] = useState(false);
+
+  const reload = async () => {
+    setReloading(true);
+    try {
+      await onReload();
+    } catch {
+      setError("Could not reload saved data. Try again.");
+    } finally {
+      setReloading(false);
+    }
+  };
 
   const remove = () => {
+    if (requiresReload || update.isPending) return;
     update.mutate(
       {
         patch: {},
-        licenses: licenses.filter((l) => l.id !== license.id).map(licenseToInput),
+        licenseCommands: [{ type: "remove", id: expected.id, expected }],
       },
       {
         onSuccess: () => {
           toast.success("License removed.");
           onClose();
         },
-        onError: (e) => setError(e instanceof Error ? e.message : "Could not remove the license."),
+        onError: (e) => {
+          setError(e instanceof Error ? e.message : "Could not remove the license.");
+          setRequiresReload(e instanceof ProviderSaveError && e.requiresReload);
+        },
       },
     );
   };
@@ -970,13 +1024,23 @@ function RemoveLicenseDialog({
             {error}
           </p>
         ) : null}
+        {requiresReload ? (
+          <p className="text-[12px] text-muted-foreground">
+            Reload saved data and review before trying again.
+          </p>
+        ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
+          {requiresReload ? (
+            <Button variant="outline" disabled={reloading} onClick={() => void reload()}>
+              Reload saved data
+            </Button>
+          ) : null}
           <Button
             className="bg-[#1B4D3E] hover:bg-[#163F33]"
-            disabled={update.isPending}
+            disabled={update.isPending || requiresReload || reloading}
             onClick={remove}
           >
             Remove license

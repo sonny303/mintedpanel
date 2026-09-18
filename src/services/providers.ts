@@ -20,7 +20,9 @@ import {
 import { resolvePsvColumns, type PsvStatus, type PsvStored } from "@/lib/licensePsv";
 import { insertAssignmentRows } from "@/services/providerAssignments";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
-import { translateDbError } from "@/lib/dbErrors";
+import { translateDbError, toError } from "@/lib/dbErrors";
+import { licenseSnapshotFields, type LicenseCommand } from "@/lib/licenseCommands";
+export type { LicenseCommand } from "@/lib/licenseCommands";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { Provider, ProviderGroupAssignment, ProviderStatus } from "@/types";
@@ -323,7 +325,7 @@ export interface LicenseInput {
 
 export interface UpdateProviderWithLicensesInput {
   patch: Partial<ProviderInput>;
-  licenses: LicenseInput[];
+  licenseCommands: LicenseCommand[];
   /** E1.3 M:N group assignments; when provided the full set is synced
    * (≥1 required, exactly one primary — invariants enforced in the pure
    * planner) and providers.group_id mirrors the primary. */
@@ -474,251 +476,336 @@ export async function createProviderWithDetails(
   return { provider: created, warnings };
 }
 
+export interface ProviderLicenseServiceCtx extends ProviderServiceCtx {
+  userId: string | null;
+}
+
+export interface AppliedProviderWrite {
+  table: "providers" | "state_licenses" | "provider_group_assignments";
+  operation: "insert" | "update" | "delete";
+  ids: string[];
+  before: unknown;
+  after: unknown;
+}
+
+export interface ProviderSaveOutcome {
+  applied: AppliedProviderWrite[];
+  failedStage: string | null;
+  auditStatus: "not-needed" | "recorded" | "failed";
+  /** A failed request may have committed without returning its response. */
+  uncertain: boolean;
+}
+
+export class ProviderSaveError extends Error {
+  constructor(
+    message: string,
+    public readonly requiresReload: boolean,
+    public readonly outcome: ProviderSaveOutcome | null = null,
+  ) {
+    super(message);
+    this.name = "ProviderSaveError";
+  }
+}
+
 export async function updateProviderWithLicenses(
   id: string,
   input: UpdateProviderWithLicensesInput,
+  ctx: ProviderLicenseServiceCtx = { ...browserCtx(), userId: currentUserId() },
 ): Promise<Provider> {
-  const orgId = requireActiveOrg();
-  const before = await getProvider(id);
-  const { data: licsBefore, error: licsBeforeErr } = await supabase
+  const { orgId, db } = ctx;
+  if (!Array.isArray(input.licenseCommands)) {
+    throw new Error("Explicit license changes are required. Reload before saving.");
+  }
+  const before = await getProvider(id, ctx);
+  if (!before) throw new Error("Provider not found.");
+  const { data: existing, error: readError } = await db
     .from("state_licenses")
     .select("*")
     .eq("org_id", orgId)
     .eq("provider_id", id);
-  if (licsBeforeErr) throw licsBeforeErr;
-  const existing = (licsBefore ?? []) as Array<{
-    id: string;
-    state: string | null;
-    license_number: string | null;
-    expiration_date: string | null;
-    verified_status: string | null;
-    verified_at: string | null;
-    verified_by: string | null;
-    verification_source_url: string | null;
-  }>;
+  if (readError) throw readError;
+  if (!existing) throw new Error("Could not read the provider's licenses. Try again.");
 
-  // E1.3: plan the group-assignment sync BEFORE any write so an invalid set
-  // (empty / no primary) rejects the whole save.
+  const conflict = () =>
+    new ProviderSaveError(
+      "This license changed or was removed. Reload saved data before editing again.",
+      true,
+    );
+  const targeted = new Set<string>();
+  const nowIso = new Date().toISOString();
+  // Validate and prepare every command before any provider/license/group write.
+  const plans = input.licenseCommands.map((command) => {
+    if (!["add", "update", "remove"].includes(command.type)) {
+      throw new Error("Unknown license change.");
+    }
+    let stored: (typeof existing)[number] | undefined;
+    let expectedFields: Array<[string, string | null]> = [];
+    if (command.type !== "add") {
+      if (targeted.has(command.id)) throw new Error("A license may only be changed once per save.");
+      targeted.add(command.id);
+      if (
+        !command.expected ||
+        command.expected.id !== command.id ||
+        command.expected.orgId !== orgId ||
+        command.expected.providerId !== id
+      )
+        throw conflict();
+      try {
+        expectedFields = licenseSnapshotFields(command.expected);
+      } catch {
+        throw conflict();
+      }
+      stored = existing.find((row) => row.id === command.id);
+      if (
+        !stored ||
+        expectedFields.some(([column, value]) => stored![column as keyof typeof stored] !== value)
+      )
+        throw conflict();
+    }
+    if (command.type === "remove") return { command, stored, expectedFields, row: null };
+    const values = command.values;
+    const state = normalizeStateCode(values.state);
+    if (!/^[A-Z]{2}$/.test(state)) throw new Error("State must be a two-letter code.");
+    const psv = resolvePsvColumns(
+      {
+        verifiedStatus: values.verifiedStatus ?? "unverified",
+        verificationSourceUrl: values.verificationSourceUrl ?? null,
+        expirationDate: values.expirationDate,
+      },
+      stored
+        ? {
+            verifiedStatus: stored.verified_status as PsvStatus,
+            verifiedAt: stored.verified_at,
+            verifiedBy: stored.verified_by,
+            verificationSourceUrl: stored.verification_source_url,
+            expirationDate: stored.expiration_date,
+          }
+        : null,
+      nowIso,
+      ctx.userId,
+    );
+    const row = {
+      state,
+      license_number: values.licenseNumber,
+      license_type: values.licenseType,
+      issue_date: values.issueDate,
+      expiration_date: values.expirationDate,
+      ...psv,
+    };
+    return { command, stored, expectedFields, row };
+  });
+
   let assignmentPlan: ReturnType<typeof planAssignmentSync> | null = null;
   let storedAssignments: Array<{ id: string; group_id: string; is_primary: boolean }> = [];
   if (input.groupAssignments) {
-    const { data: gaRows, error: gaErr } = await supabase
+    const { data, error } = await db
       .from("provider_group_assignments")
       .select("id, group_id, is_primary")
       .eq("org_id", orgId)
       .eq("provider_id", id);
-    if (gaErr) throw gaErr;
-    storedAssignments = (gaRows ?? []) as typeof storedAssignments;
+    if (error) throw error;
+    if (!data) throw new Error("Could not read the provider's group assignments. Try again.");
+    storedAssignments = data;
     assignmentPlan = planAssignmentSync(
       input.groupAssignments,
       storedAssignments.map((r) => ({ id: r.id, groupId: r.group_id, isPrimary: r.is_primary })),
     );
   }
-
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
   if ("homeState" in input.patch)
     payload.home_state = normalizeOptionalStateCode(input.patch.homeState);
-  // Frozen legacy mirror: providers.group_id follows the primary assignment.
   if (assignmentPlan) payload.group_id = assignmentPlan.primaryGroupId;
-  // Licenses-only saves (the record's editor) send an EMPTY patch. PostgREST
-  // updates ZERO rows on an empty PATCH body, so `.single()` would 406 — skip
-  // the providers write entirely; the licenses sync below is the whole save.
-  let after: Provider;
-  if (Object.keys(payload).length === 0) {
-    if (!before) throw new Error("Provider not found.");
-    after = before;
-  } else {
-    const { data, error } = await supabase
-      .from("providers")
-      .update(payload as unknown as ProviderUpdate)
-      .eq("id", id)
-      .eq("org_id", orgId)
-      .select("*")
-      .single();
-    if (error) throw translateDbError(error);
-    after = camelizeRow<Provider>(data);
-  }
 
-  const cleanLicenses = input.licenses.filter(
-    (l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType,
-  );
-
-  // Match incoming rows to existing rows by id, else by (state + licenseNumber).
-  const existingById = new Map(existing.map((r) => [r.id, r]));
-  const naturalKey = (state: string | null, num: string | null): string =>
-    `${(state ?? "").toUpperCase()}::${(num ?? "").trim()}`;
-  const existingByNatural = new Map(
-    existing.map((r) => [naturalKey(r.state, r.license_number), r]),
-  );
-
-  const matchedIds = new Set<string>();
-  const toUpdate: Array<{ id: string; row: StateLicenseInsert }> = [];
-  const toInsert: StateLicenseInsert[] = [];
-  const nowIso = new Date().toISOString();
-  const userId = currentUserId();
-
-  const psvStoredOf = (r: (typeof existing)[number]): PsvStored => ({
-    verifiedStatus: (r.verified_status ?? "unverified") as PsvStatus,
-    verifiedAt: r.verified_at,
-    verifiedBy: r.verified_by,
-    verificationSourceUrl: r.verification_source_url,
-    expirationDate: r.expiration_date,
-  });
-
-  for (const l of cleanLicenses) {
-    let match: (typeof existing)[number] | undefined;
-    if (l.id && existingById.has(l.id) && !matchedIds.has(l.id)) {
-      match = existingById.get(l.id);
-    } else {
-      const key = naturalKey(l.state, l.licenseNumber);
-      const cand = existingByNatural.get(key);
-      if (cand && !matchedIds.has(cand.id)) match = cand;
-    }
-    // PSV columns via the pure rule module: stamps server-side, board URL
-    // optional, renewal reset on expiration change (TE-5).
-    const psv = resolvePsvColumns(
-      {
-        verifiedStatus: l.verifiedStatus ?? "unverified",
-        verificationSourceUrl: l.verificationSourceUrl ?? null,
-        expirationDate: l.expirationDate,
+  const outcome: ProviderSaveOutcome = {
+    applied: [],
+    failedStage: null,
+    auditStatus: "not-needed",
+    uncertain: false,
+  };
+  let after = before;
+  let stage = "provider";
+  let attempted = false;
+  const record = (
+    table: AppliedProviderWrite["table"],
+    operation: AppliedProviderWrite["operation"],
+    rows: Array<{ id: string }>,
+    previous: unknown,
+  ) => {
+    if (rows.length)
+      outcome.applied.push({
+        table,
+        operation,
+        ids: rows.map((r) => r.id),
+        before: previous,
+        after: operation === "delete" ? [] : rows,
+      });
+  };
+  const audit = async (complete: boolean) => {
+    const licenseWrites = outcome.applied.filter((entry) => entry.table === "state_licenses");
+    await ctx.writeAudit({
+      actionType: "UPDATE",
+      entityType: "provider",
+      entityId: id,
+      before: { provider: before },
+      after: {
+        outcome: complete ? "complete" : "incomplete",
+        applied: outcome.applied,
+        failedStage: outcome.failedStage,
+        uncertain: outcome.uncertain,
+        diff: {
+          updated: licenseWrites
+            .filter((r) => r.operation === "update")
+            .reduce((sum, r) => sum + r.ids.length, 0),
+          inserted: licenseWrites
+            .filter((r) => r.operation === "insert")
+            .reduce((sum, r) => sum + r.ids.length, 0),
+          deleted: licenseWrites
+            .filter((r) => r.operation === "delete")
+            .reduce((sum, r) => sum + r.ids.length, 0),
+        },
       },
-      match ? psvStoredOf(match) : null,
-      nowIso,
-      userId,
+      description: complete
+        ? `Updated provider ${after.firstName} ${after.lastName}`
+        : `Provider save incomplete for ${before.firstName} ${before.lastName}; review saved data`,
+    });
+    outcome.auditStatus = "recorded";
+  };
+
+  try {
+    if (Object.keys(payload).length) {
+      attempted = true;
+      const { data, error } = await db
+        .from("providers")
+        .update(payload as ProviderUpdate)
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .select("*")
+        .single();
+      if (error) throw translateDbError(error);
+      if (!data) throw new Error("The provider update was not confirmed.");
+      after = camelizeRow<Provider>(data);
+      record("providers", "update", [data], before);
+    }
+    for (const { command, stored, expectedFields, row } of plans) {
+      if (
+        command.type === "update" &&
+        row &&
+        stored &&
+        Object.entries(row).every(
+          ([column, value]) => stored[column as keyof typeof stored] === value,
+        )
+      )
+        continue;
+      stage = `license:${command.type}`;
+      attempted = true;
+      if (command.type === "add" && row) {
+        const { data, error } = await db
+          .from("state_licenses")
+          .insert({ ...row, org_id: orgId, provider_id: id })
+          .select("*")
+          .single();
+        if (error) throw translateDbError(error);
+        if (!data) throw new Error("The license addition was not confirmed.");
+        record("state_licenses", "insert", [data], null);
+      } else {
+        let query =
+          command.type === "remove"
+            ? db.from("state_licenses").delete()
+            : db.from("state_licenses").update(row!);
+        for (const [column, value] of expectedFields) {
+          query = value === null ? query.is(column, null) : query.eq(column, value);
+        }
+        const { data, error } = await query.select("*");
+        if (error) throw translateDbError(error);
+        if (!data || data.length !== 1) throw conflict();
+        record("state_licenses", command.type === "remove" ? "delete" : "update", data, stored);
+      }
+    }
+    // Keep the existing group sync order and behavior. Returned rows allow a
+    // later failure to describe only confirmed effects, without implying rollback.
+    if (assignmentPlan) {
+      const changes = [
+        { operation: "update" as const, ids: assignmentPlan.demoteIds, value: false },
+        { operation: "delete" as const, ids: assignmentPlan.deleteIds, value: false },
+        {
+          operation: "update" as const,
+          ids: assignmentPlan.promoteId ? [assignmentPlan.promoteId] : [],
+          value: true,
+        },
+      ];
+      for (const change of changes) {
+        if (!change.ids.length) continue;
+        stage = `groups:${change.operation}`;
+        attempted = true;
+        const base =
+          change.operation === "delete"
+            ? db.from("provider_group_assignments").delete()
+            : db.from("provider_group_assignments").update({ is_primary: change.value });
+        const { data, error } = await base
+          .eq("org_id", orgId)
+          .eq("provider_id", id)
+          .in("id", change.ids)
+          .select("*");
+        if (error) throw translateDbError(error);
+        record(
+          "provider_group_assignments",
+          change.operation,
+          data ?? [],
+          storedAssignments.filter((r) => change.ids.includes(r.id)),
+        );
+        if (!data || data.length !== change.ids.length)
+          throw new Error("Some group changes were not confirmed.");
+      }
+      if (assignmentPlan.inserts.length) {
+        stage = "groups:insert";
+        attempted = true;
+        const { data, error } = await db
+          .from("provider_group_assignments")
+          .insert(
+            assignmentPlan.inserts.map((a) => ({
+              org_id: orgId,
+              provider_id: id,
+              group_id: a.groupId,
+              is_primary: a.isPrimary,
+            })),
+          )
+          .select("*");
+        if (error) throw translateDbError(error);
+        record("provider_group_assignments", "insert", data ?? [], null);
+        if (!data || data.length !== assignmentPlan.inserts.length)
+          throw new Error("Some group additions were not confirmed.");
+      }
+    }
+  } catch (error) {
+    outcome.failedStage = stage;
+    outcome.uncertain = attempted && !(error instanceof ProviderSaveError);
+    if (attempted) {
+      try {
+        await audit(false);
+      } catch {
+        outcome.auditStatus = "failed";
+      }
+    }
+    const message = toError(error, "Could not save the provider.").message;
+    throw new ProviderSaveError(
+      `${message}${attempted ? " Some changes may already be saved. Reload saved data before trying again." : ""}${outcome.auditStatus === "failed" ? " The audit record could not be saved." : ""}`,
+      attempted || (error instanceof ProviderSaveError && error.requiresReload),
+      outcome,
     );
-    const row: StateLicenseInsert = {
-      org_id: orgId,
-      provider_id: id,
-      state: normalizeStateCode(l.state || ""),
-      license_number: l.licenseNumber,
-      license_type: l.licenseType,
-      issue_date: l.issueDate,
-      expiration_date: l.expirationDate,
-      ...psv,
-    };
-    if (match) {
-      matchedIds.add(match.id);
-      toUpdate.push({ id: match.id, row });
-    } else {
-      toInsert.push(row);
-    }
   }
-
-  const toDeleteIds = existing.filter((r) => !matchedIds.has(r.id)).map((r) => r.id);
-
-  // Delete removed rows and verify the delete actually removed them.
-  if (toDeleteIds.length > 0) {
-    const { data: deleted, error: delErr } = await supabase
-      .from("state_licenses")
-      .delete()
-      .eq("org_id", orgId)
-      .eq("provider_id", id)
-      .in("id", toDeleteIds)
-      .select("id");
-    if (delErr) throw delErr;
-    const removed = new Set(((deleted ?? []) as Array<{ id: string }>).map((r) => r.id));
-    const missed = toDeleteIds.filter((did) => !removed.has(did));
-    if (missed.length > 0) {
-      throw new Error(
-        `Failed to remove ${missed.length} license row(s); permissions may have changed.`,
+  if (outcome.applied.length) {
+    try {
+      await audit(true);
+    } catch {
+      outcome.auditStatus = "failed";
+      outcome.failedStage = "audit";
+      throw new ProviderSaveError(
+        "Changes were saved, but the audit record could not be saved. Reload saved data and review before continuing.",
+        true,
+        outcome,
       );
     }
   }
-
-  // Update matched rows (incl. the resolved PSV columns — renewal reset and
-  // verification stamps ride the same write).
-  for (const { id: licId, row } of toUpdate) {
-    const { error: updErr } = await supabase
-      .from("state_licenses")
-      .update({
-        state: row.state,
-        license_number: row.license_number,
-        license_type: row.license_type,
-        issue_date: row.issue_date,
-        expiration_date: row.expiration_date,
-        verified_status: row.verified_status,
-        verified_at: row.verified_at,
-        verified_by: row.verified_by,
-        verification_source_url: row.verification_source_url,
-      })
-      .eq("id", licId)
-      .eq("org_id", orgId)
-      .eq("provider_id", id);
-    if (updErr) throw translateDbError(updErr);
-  }
-
-  // Insert new rows.
-  if (toInsert.length > 0) {
-    const { error: insErr } = await supabase.from("state_licenses").insert(toInsert);
-    if (insErr) throw translateDbError(insErr);
-  }
-
-  // E1.3: execute the assignment sync in index-safe order — demote surviving
-  // ex-primaries, delete removed rows, promote the new primary, insert new
-  // rows (the partial unique "one primary per provider" can never trip).
-  if (assignmentPlan) {
-    if (assignmentPlan.demoteIds.length > 0) {
-      const { error: gaErr } = await supabase
-        .from("provider_group_assignments")
-        .update({ is_primary: false })
-        .eq("org_id", orgId)
-        .eq("provider_id", id)
-        .in("id", assignmentPlan.demoteIds);
-      if (gaErr) throw translateDbError(gaErr);
-    }
-    if (assignmentPlan.deleteIds.length > 0) {
-      const { error: gaErr } = await supabase
-        .from("provider_group_assignments")
-        .delete()
-        .eq("org_id", orgId)
-        .eq("provider_id", id)
-        .in("id", assignmentPlan.deleteIds);
-      if (gaErr) throw translateDbError(gaErr);
-    }
-    if (assignmentPlan.promoteId) {
-      const { error: gaErr } = await supabase
-        .from("provider_group_assignments")
-        .update({ is_primary: true })
-        .eq("org_id", orgId)
-        .eq("provider_id", id)
-        .eq("id", assignmentPlan.promoteId);
-      if (gaErr) throw translateDbError(gaErr);
-    }
-    if (assignmentPlan.inserts.length > 0) {
-      const { error: gaErr } = await supabase.from("provider_group_assignments").insert(
-        assignmentPlan.inserts.map((a) => ({
-          org_id: orgId,
-          provider_id: id,
-          group_id: a.groupId,
-          is_primary: a.isPrimary,
-        })),
-      );
-      if (gaErr) throw translateDbError(gaErr);
-    }
-  }
-
-  await writeAudit({
-    actionType: "UPDATE",
-    entityType: "provider",
-    entityId: id,
-    before: {
-      provider: before,
-      licenses: existing,
-      groupAssignments: input.groupAssignments ? storedAssignments : undefined,
-    },
-    after: {
-      provider: after,
-      licenses: cleanLicenses,
-      groupAssignments: input.groupAssignments,
-      diff: {
-        updated: toUpdate.length,
-        inserted: toInsert.length,
-        deleted: toDeleteIds.length,
-      },
-    },
-    description: `Updated provider ${after.firstName} ${after.lastName}`,
-  });
-
   return after;
 }
 
