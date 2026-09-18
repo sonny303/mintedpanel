@@ -5,11 +5,34 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  release-guardrails:
+    name: Release guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # The release checks use node:test and built-in modules only.
+      # No hosted credentials, deployment or environment approval is needed.
+      - name: Check release contract and source controls
+        run: npm run test:release
+
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -62,6 +85,8 @@ jobs:
       PGDATABASE: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install postgres client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -113,6 +138,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Node 22 (not 20): the SSR dev server constructs the Supabase client at
       # module load, and @supabase/realtime-js needs a global WebSocket, which

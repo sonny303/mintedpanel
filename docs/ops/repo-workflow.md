@@ -66,10 +66,14 @@ Summary:
 
 ### CI surfaces (panel)
 
-| Workflow                                     | What                                                          |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| `.github/workflows/ci.yml`                   | format, typecheck, lint, unit tests, build, migration dry-run |
-| `.github/workflows/verify-org-isolation.yml` | org-isolation gate for `/api`                                 |
+| Workflow                   | What                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `.github/workflows/ci.yml` | format, typecheck, lint, unit tests, build, migration dry-run and release guardrails |
+
+The previous hosted `verify-org-isolation.yml` workflow is retired. Production
+isolation must run inside the single approved production job described in
+[`release-controls.md`](release-controls.md); retirement does not establish a
+passing isolation check or an active replacement workflow.
 
 Extension: `.github/workflows/ci.yml` — typecheck, lint, vitest.
 
