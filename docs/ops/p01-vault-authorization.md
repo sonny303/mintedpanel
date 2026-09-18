@@ -63,5 +63,7 @@ Existing issued bearer tokens keep their current lifecycle. P01 does not inspect
 or revoke customer tokens. Token concurrency, sensitive UI state lifetime, source
 history reconciliation and hosted environment qualification remain separate work.
 
-The companion PR review handoff records final commands, results, patch review,
-limitations and the exact revision to review.
+The companion [PR review and future promotion handoff](./p01-pr-review-handoff.md)
+records commands, results, review feedback, the exact reviewed revisions, and the
+operator sequence for a separately authorized deployment. Preparation does not
+authorize promotion, merge, or hosted application.
