@@ -21,6 +21,16 @@ const API = `https://api.github.com/repos/${REPOSITORY}`;
 const MAX_ARCHIVE = 2 * 1024 * 1024;
 const MAX_JSON = 1024 * 1024;
 
+/** GitHub Actions artifact zip redirects land on these signed download hosts only. */
+function allowedArtifactHost(hostname) {
+  return (
+    typeof hostname === "string" &&
+    (hostname === "objects.githubusercontent.com" ||
+      hostname.endsWith(".githubusercontent.com") ||
+      hostname.endsWith(".blob.core.windows.net"))
+  );
+}
+
 async function boundedBytes(response, limit) {
   const chunks = [];
   let length = 0;
@@ -71,9 +81,18 @@ export function createGitHub({ token, fetcher = fetch }) {
         signal: AbortSignal.timeout(30000),
       });
       requireCondition(redirect.status === 302, "ARTIFACT_DOWNLOAD_REJECTED");
-      const destination = new URL(redirect.headers.get("location"));
+      let destination;
+      try {
+        destination = new URL(redirect.headers.get("location") ?? "");
+      } catch {
+        throw new DeliveryError("ARTIFACT_REDIRECT");
+      }
+      // Digest pins content; host allowlist still blocks runner SSRF to arbitrary HTTPS.
       requireCondition(
-        destination.protocol === "https:" && !destination.username && !destination.password,
+        destination.protocol === "https:" &&
+          !destination.username &&
+          !destination.password &&
+          allowedArtifactHost(destination.hostname),
         "ARTIFACT_REDIRECT",
       );
       // The signed provider redirect receives no GitHub authorization header.

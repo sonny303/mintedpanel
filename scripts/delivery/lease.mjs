@@ -28,9 +28,10 @@ export async function acquireLease({
   );
   requireCondition(/^[a-f0-9]{64}$/.test(releaseDigest), "LEASE_DIGEST");
   const ref = `refs/tags/minted-delivery-lock-${target}`;
+  const message = JSON.stringify({ version: 1, owner, target, releaseDigest });
   const object = await github.request("POST", "/git/tags", {
     tag: `minted-delivery-owner-${randomUUID()}`,
-    message: JSON.stringify({ version: 1, owner, target, releaseDigest }),
+    message,
     object: workflowSha,
     type: "commit",
   });
@@ -45,6 +46,14 @@ export async function acquireLease({
       requireCondition(!released, "LEASE_RELEASED");
       const current = await github.request("GET", `/git/ref/${ref.slice(5)}`);
       requireCondition(current.ref === ref && current.object?.sha === sha, "LEASE_OWNERSHIP_LOST");
+      // Ref→object alone is not enough: the tag message seals owner/target/digest.
+      const tag = await github.request("GET", `/git/tags/${sha}`);
+      requireCondition(
+        tag?.sha === sha &&
+          tag.message === message &&
+          (tag.object === workflowSha || tag.object?.sha === workflowSha),
+        "LEASE_BINDING",
+      );
     },
     async release() {
       requireCondition(!released, "LEASE_RELEASED");

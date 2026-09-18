@@ -401,7 +401,7 @@ test("HTTP transport never forwards GitHub authorization to the artifact downloa
       if (calls.length === 1)
         return new Response(null, {
           status: 302,
-          headers: { location: "https://artifact.example.invalid/signed-download" },
+          headers: { location: "https://objects.githubusercontent.com/signed-download" },
         });
       return new Response("simulated archive");
     },
@@ -410,6 +410,26 @@ test("HTTP transport never forwards GitHub authorization to the artifact downloa
   assert.equal(calls[0].options.headers.Authorization, "Bearer simulated-token");
   assert.equal(calls[1].options.headers, undefined);
   assert.equal(calls[1].options.redirect, "error");
+});
+
+test("artifact redirect rejects a missing Location and an untrusted HTTPS host", async () => {
+  const missing = createGitHub({
+    token: "simulated-token",
+    fetcher: async () => new Response(null, { status: 302, headers: {} }),
+  });
+  await assert.rejects(missing.archive("7"), { code: "ARTIFACT_REDIRECT" });
+  const evil = createGitHub({
+    token: "simulated-token",
+    fetcher: async (url) => {
+      if (String(url).includes("/zip"))
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://evil.example/signed-download" },
+        });
+      return new Response("simulated archive");
+    },
+  });
+  await assert.rejects(evil.archive("7"), { code: "ARTIFACT_REDIRECT" });
 });
 
 function phaseArtifactSimulator(phase) {

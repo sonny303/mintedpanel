@@ -5,13 +5,17 @@ import { acquireLease, fastForwardStaging, gitCompareDelete } from "./lease.mjs"
 
 function refSimulator() {
   const refs = new Map();
+  const tags = new Map();
   const calls = [];
   let count = 0;
   const github = {
     async request(method, path, body) {
       calls.push({ method, path, body });
-      if (method === "POST" && path === "/git/tags")
-        return { sha: (++count).toString(16).padStart(40, "0") };
+      if (method === "POST" && path === "/git/tags") {
+        const sha = (++count).toString(16).padStart(40, "0");
+        tags.set(sha, { sha, ...body });
+        return { sha };
+      }
       if (method === "POST" && path === "/git/refs") {
         if (refs.has(body.ref)) throw new Error("simulated create conflict");
         refs.set(body.ref, body.sha);
@@ -20,6 +24,12 @@ function refSimulator() {
       if (method === "GET" && path.startsWith("/git/ref/")) {
         const ref = `refs/${path.slice("/git/ref/".length)}`;
         return { ref, object: { sha: refs.get(ref) } };
+      }
+      if (method === "GET" && path.startsWith("/git/tags/")) {
+        const sha = path.slice("/git/tags/".length);
+        const tag = tags.get(sha);
+        if (!tag) throw new Error("simulated missing tag");
+        return tag;
       }
       throw new Error("unexpected simulated operation");
     },
@@ -37,7 +47,7 @@ function refSimulator() {
       releaseDigest: "b".repeat(64),
       compareDelete,
     });
-  return { refs, calls, github, acquire, compareDelete };
+  return { refs, tags, calls, github, acquire, compareDelete };
 }
 
 test("simulator: concurrent CI/local owners yield one lease; no force acquire or takeover", async () => {
@@ -100,6 +110,22 @@ test("simulator: repeated release cannot delete a subsequent owner's lease", asy
   const second = await s.acquire("staging", "ci:2:1");
   await assert.rejects(first.release, { code: "LEASE_RELEASED" });
   await second.assertOwned();
+});
+
+test("simulator: assertOwned rejects a tag whose sealed releaseDigest was rewritten", async () => {
+  const s = refSimulator();
+  const lease = await s.acquire("production", "ci:42:1");
+  const tag = s.tags.get(lease.sha);
+  s.tags.set(lease.sha, {
+    ...tag,
+    message: JSON.stringify({
+      version: 1,
+      owner: "ci:42:1",
+      target: "production",
+      releaseDigest: "c".repeat(64),
+    }),
+  });
+  await assert.rejects(lease.assertOwned, { code: "LEASE_BINDING" });
 });
 
 test("git transport constructs an exact expected-object delete and suppresses secret-bearing errors", async () => {
