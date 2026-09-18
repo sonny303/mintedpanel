@@ -42,13 +42,22 @@ API_CORS_ORIGINS=...   # comma-separated exact origins, e.g. chrome-extension://
 
 ## Deploy
 
+Environment inventory, Vercel/Supabase project IDs, code promotion, and runtime
+data-flow diagrams:
+[`docs/ops/environment-architecture.md`](docs/ops/environment-architecture.md).
+
 1. Connect this repo to Vercel. Vercel auto-detects the build; the TanStack Start
    nitro plugin emits the Vercel Build Output when it detects Vercel CI.
+   Production and staging are **separate** Vercel projects; `vercel.json` sets
+   `git.deploymentEnabled: false` so pushes do not auto-publish.
 2. Set the environment variables above in the Vercel project (both the `VITE_`
-   pair and the server-only pair, on Production and Preview).
-3. Deploy. `vercel.json` holds no rewrites — the nitro output routes `/api/*` to
-   the server handler and everything else to SSR; a static-SPA catch-all rewrite
-   would break `/api`.
+   pair and the server-only pair). Staging uses all-Preview vars pointed at the
+   staging Supabase project; production uses the Production target.
+3. Deploy via the reviewed delivery path (see environment-architecture +
+   `docs/ops/staging-delivery.md`). `vercel.json` holds no SPA catch-all
+   rewrites — the nitro output routes `/api/*` to the server handler and
+   everything else to SSR; a static-SPA rewrite would break `/api`.
 4. One-time, before Lovable is disconnected: the five images under `src/assets/*.asset.json` are still served from Lovable's CDN (`/__l5e/assets-v1/...`). Vendor them into the repo with `node scripts/fetch-lovable-assets.mjs https://<your-lovable-site-domain>` and commit the resulting files under `public/__l5e/` — otherwise logos and landing images 404 outside Lovable hosting.
 
-Supabase migrations run separately via the Supabase CLI.
+Supabase migrations run separately (manual apply to hosted today; no automated
+`dev → staging → prod` pipeline yet).

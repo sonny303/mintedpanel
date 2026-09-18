@@ -7,6 +7,8 @@ owns session + active org. Supabase (Postgres + GoTrue + RLS) is the backend.
 
 Write/merge process: [`docs/ops/repo-workflow.md`](docs/ops/repo-workflow.md).
 Binding coding rules: [`AGENTS.md`](AGENTS.md). Tables: [`SCHEMA.md`](SCHEMA.md).
+Environments, Vercel/Supabase inventory, and code promotion:
+[`docs/ops/environment-architecture.md`](docs/ops/environment-architecture.md).
 
 ## Directory structure
 

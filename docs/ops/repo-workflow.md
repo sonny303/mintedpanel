@@ -134,6 +134,7 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 | Doc                                                                | Role                                                |
 | ------------------------------------------------------------------ | --------------------------------------------------- |
 | [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents                     |
+| [`environment-architecture.md`](./environment-architecture.md)     | Repos, Vercel/Supabase envs, promotion & data flows |
 | [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                         |
 | [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                   |
 | [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                               |
