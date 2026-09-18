@@ -91,7 +91,7 @@ function simulator(additive = true, productionWorkflowSha = "c".repeat(40)) {
       {
         id,
         path: id === 12345 ? WORKFLOWS.staging : id === 50 ? WORKFLOWS.ci : WORKFLOWS.production,
-        event: id === 12345 ? "workflow_run" : id === 50 ? "push" : "workflow_dispatch",
+        event: id === 50 ? "push" : "workflow_dispatch",
         head_sha: id === 42 ? productionWorkflowSha : (id === 50 ? "a" : "c").repeat(40),
         head_branch: "main",
         run_attempt: 1,
