@@ -27,6 +27,12 @@ jobs:
       - name: Check release contract and source controls
         run: npm run test:release
 
+      - name: Install encryption test dependency
+        run: sudo apt-get update && sudo apt-get install -y age
+
+      - name: Check encrypted recovery and evidence boundaries
+        run: npm run test:recovery
+
       - name: Check delivery controls and provider adapters with simulated data
         run: npm run test:delivery
 
