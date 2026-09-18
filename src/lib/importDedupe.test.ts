@@ -427,6 +427,80 @@ describe("P02 — provider identity separation (audit Session #69)", () => {
     expect(plan.updates[0]).toMatchObject({ provider_id: JANE.id, add_group_ids: [GROUP2.id] });
   });
 
+  it("blocks multiple NPI-less same-name targets even when a same-name NPI neighbor exists", () => {
+    const inputs = baseInputs([janeRow(2, { npi: "1111111111" })]);
+    inputs.providers = [
+      { ...JANE, id: "prov-npiless-1", npi: null },
+      { ...JANE, id: "prov-npiless-2", npi: null },
+      { ...JANE, id: "prov-with-npi", npi: "9999999999" },
+    ];
+    expectIdentityBlocked(inputs);
+  });
+
+  it("dedupes identical provider list entries by id before treating an NPI as ambiguous", () => {
+    const inputs = baseInputs([janeRow(2, { group_name: GROUP2.name, group_tin: GROUP2.tin })]);
+    inputs.providers = [JANE, { ...JANE }];
+    const plan = buildCommitPlan(dedupeImportRows(inputs), {});
+    expect(plan.blocked_entries).toEqual([]);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0]).toMatchObject({ provider_id: JANE.id, add_group_ids: [GROUP2.id] });
+  });
+
+  it.each(directions)(
+    "preserves a create when a distinct-NPI neighbor rules out the only legacy target (%s rows)",
+    (direction) => {
+      const rows = [janeRow(2, { npi: "1111111111" }), newProviderRow(3, { npi: "1111111111" })];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [
+        { ...JANE, npi: null },
+        { ...JANE, id: "prov-with-npi", npi: "9999999999" },
+      ];
+      const dispositions = dedupeImportRows(inputs);
+      const plan = buildCommitPlan(dispositions, {});
+      expect(plan.blocked_entries).toEqual([]);
+      expect(plan.updates).toEqual([]);
+      expect(plan.creates).toHaveLength(1);
+      expect(plan.creates[0].provider.npi).toBe("1111111111");
+      expect(only(dispositions, "create")[0].lines.slice().sort()).toEqual([2, 3]);
+    },
+  );
+
+  it.each(directions)(
+    "blocks an eligible legacy match mixed with a distinct-NPI create (%s rows)",
+    (direction) => {
+      const rows = [janeRow(2, { npi: "1111111111" }), newProviderRow(3, { npi: "1111111111" })];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [
+        { ...JANE, npi: null },
+        {
+          ...JANE,
+          id: "prov-with-npi",
+          firstName: "Nora",
+          lastName: "Newton",
+          npi: "9999999999",
+        },
+      ];
+      expectIdentityBlocked(inputs);
+    },
+  );
+
+  it("still blocks a unique name-fallback that shares a legacy target with a create-vs-match dispute", () => {
+    const inputs = baseInputs([
+      row(2, {
+        provider_first_name: "Nora",
+        provider_last_name: "Newton",
+        npi: "1111111111",
+        group_name: GROUP1.name,
+        group_tin: GROUP1.tin,
+        facility_name: FAC1.name,
+      }),
+      janeRow(3, { npi: "1111111111" }),
+      janeRow(4, { npi: "2222222222" }),
+    ]);
+    inputs.providers = [{ ...JANE, npi: null }];
+    expectIdentityBlocked(inputs);
+  });
+
   it.each(["new", "exact-NPI", "name-fallback"] as const)(
     "preserves one %s identity across three groups, facilities, states, and licenses",
     (match) => {

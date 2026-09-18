@@ -263,7 +263,8 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
     const npi = p.npi?.trim();
     if (!npi) continue;
     const list = byNpi.get(npi) ?? [];
-    list.push(p);
+    // Count distinct provider ids — a duplicated list entry is not two people.
+    if (!list.some((existing) => existing.id === p.id)) list.push(p);
     byNpi.set(npi, list);
   }
   const byName = new Map<string, DedupeProviderRecord[]>();
@@ -306,16 +307,22 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
 
     const candidates = new Map<string, DedupeProviderRecord>();
     let hasUnmatchedName = false;
+    let hasEligibleFallback = false;
+    let distinctNpiBlocksFallback = false;
     for (const name of names) {
       const neighbors = byName.get(name) ?? [];
+      const npiless = neighbors.filter((p) => !p.npi?.trim());
       // Preserve the existing distinct-NPI rule: a same-name neighbor with
       // an NPI does not authorize a name-only update of another identity.
-      const fallbacks = neighbors.some((p) => p.npi?.trim())
-        ? []
-        : neighbors.filter((p) => !p.npi?.trim());
-      if (fallbacks.length === 0) hasUnmatchedName = true;
-      for (const candidate of fallbacks) {
+      // Still collect every NPI-less neighbor so multiple legacy targets
+      // remain an explicit block (FR2), not a silent create.
+      const hasNpiNeighbor = neighbors.some((p) => p.npi?.trim());
+      if (npiless.length === 0) hasUnmatchedName = true;
+      if (hasNpiNeighbor) distinctNpiBlocksFallback = true;
+      for (const candidate of npiless) {
         candidates.set(candidate.id, candidate);
+        if (hasNpiNeighbor) continue;
+        hasEligibleFallback = true;
         const claims = fallbackClaims.get(candidate.id) ?? new Set<string>();
         claims.add(npi);
         fallbackClaims.set(candidate.id, claims);
@@ -326,13 +333,19 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
         npi,
         `NPI ${npi} matches multiple existing providers by name — ${recovery}`,
       );
+      for (const candidate of candidates.values()) {
+        const claims = fallbackClaims.get(candidate.id) ?? new Set<string>();
+        claims.add(npi);
+        fallbackClaims.set(candidate.id, claims);
+      }
     } else if (candidates.size === 1) {
-      if (hasUnmatchedName) {
+      // An ambiguity-only candidate cannot turn two create rows into a dispute.
+      if (hasUnmatchedName && hasEligibleFallback) {
         identityBlocks.set(
           npi,
           `Rows for NPI ${npi} disagree on creating or matching an existing provider — ${recovery}`,
         );
-      } else {
+      } else if (!distinctNpiBlocksFallback) {
         for (const candidate of candidates.values()) providerByIncomingNpi.set(npi, candidate);
       }
     }

@@ -1,70 +1,63 @@
 # P02 — PR review handoff
 
-Review [draft PR #373](https://github.com/sonny303/mintedpanel/pull/373) against
-[P02 requirements FR1–FR7](./p02-import-identity.md), audit Session #69 / IMP-01.
-The requested next action is independent PR review. PM owns merge and release.
+[Draft PR #373](https://github.com/sonny303/mintedpanel/pull/373) implements
+[P02 FR1–FR7](./p02-import-identity.md), audit Session #69 / IMP-01.
+Review corrections are prepared on the existing staging-targeted branch.
+**Promotion is held. PM owns merge, hosted acceptance, and release.**
 
-| Item                        | Value                                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Target                      | `staging`                                                                                                                                    |
-| Branch                      | `cursor/3m-p02-import-identity-staging-6f36`                                                                                                 |
-| Implementation commit       | `e1c0f41305ff3642934e2686892c09a1b2671b83`                                                                                                   |
-| Staging baseline            | `dffc60a322da8f233fce2ab097629abbcf9ef4b9`                                                                                                   |
-| Main compatibility baseline | `eadf661de114b64a607cebf952ae702a8545ab72`                                                                                                   |
-| Handoff commit              | Documentation only, after the implementation commit above; read the current PR head before review.                                           |
-| Local checkout              | `/Users/ar/Codex-Minted/mintedpanel-p02`                                                                                                     |
-| Checks                      | Read the current [PR checks](https://github.com/sonny303/mintedpanel/pull/373/checks); remote CI was running when this handoff was prepared. |
+| Item                           | Value                                                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target / baseline              | `staging` / `dffc60a322da8f233fce2ab097629abbcf9ef4b9`                                                                                                              |
+| Branch                         | `cursor/3m-p02-import-identity-staging-6f36`                                                                                                                        |
+| Original implementation        | `e1c0f41305ff3642934e2686892c09a1b2671b83`                                                                                                                          |
+| Reviewed original head         | `cd95c529bf0ec182d350ca99906cfa1463d46581`                                                                                                                          |
+| Follow-up source               | [#377](https://github.com/sonny303/mintedpanel/pull/377), `3380b46a16f71a49b7c6f78e437fa70656dc4a6e`; changes applied directly with the additional correction below |
+| Current head / remote evidence | Read the [PR description and checks](https://github.com/sonny303/mintedpanel/pull/373/checks) for the final verified commit and CI run.                             |
+| Local checkout                 | `/Users/ar/Codex-Minted/mintedpanel-p02`                                                                                                                            |
 
-Staging is 62 commits behind the verified main baseline. The touched import
-source files match in both baselines. The PR contains only P02; it does not
-promote the intervening main changes. Main compatibility was checked in a
-separate checkout, without editing the staging/recovery or P01 checkout.
+## Behavior and review resolution
 
-## Before and after
+Before P02, an NPI-less provider could absorb two different incoming NPIs and mix
+their groups and licenses. Identity now resolves across the whole batch before
+accumulation. Every disputed source row blocks with a reason; unrelated safe
+identities still commit. One provider can retain three groups, facilities, and
+state licenses. Group NPI2 remains group data; group matching remains TIN/name.
 
-Before: one NPI-less Alex Rivera plus two incoming Alex Rivera rows with different
-NPIs produced one update containing both identities' groups and licenses. Accepting
-or keeping the first NPI did not remove the second identity's affiliations.
+| Finding                                                             | Final behavior                                                                  | Evidence                                                                                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Multiple NPI-less targets hidden by a different-NPI name neighbor   | Block ambiguity; do not silently create.                                        | Failed on original #373; now passes.                                                            |
+| Same provider ID repeated in the input list                         | Count one exact-NPI target.                                                     | Failed on original #373; now passes.                                                            |
+| #377 false create-versus-match dispute when no fallback is eligible | Distinguish ambiguity candidates from eligible matches. Preserve valid creates. | Forward/reverse tests failed on #377; now pass. Mirror eligible-match/create case still blocks. |
+| Target claim spillover                                              | Block every competitor for a disputed legacy target.                            | Approved policy, retained regression.                                                           |
+| #377 build failure                                                  | Correct new-test formatting.                                                    | Original CI failed at Prettier; final local formatting passes.                                  |
 
-After: all competing rows are blocked before accumulation, with each source line
-and reason visible. Duplicate exact-NPI targets, multiple name-fallback targets,
-and inconsistent targets for one incoming NPI also block. The operator corrects
-the identity data and re-imports; unrelated clean identities can commit.
+## Requirement evidence
 
-One provider NPI still supports three groups with separate NPI2s, three facilities,
-and three state licenses under one organization. Group memberships and provider
-state licenses remain separate collections. Group matching remains TIN/name.
+| Requirement                                   | Code and decisive evidence                                                                                                                                                                                |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR2: resolve identity and ambiguity first | `src/lib/importDedupe.ts`; competing NPIs, exact/name ambiguity, mixed legacy/NPI neighbors, duplicate IDs, and reversed row/candidate controls.                                                          |
+| FR3: protect accumulated data                 | Matcher blocks before relationships/licenses accumulate. `src/services/importRuns.ts` excludes blocked source lines from post-commit relationships; transport-boundary tests exercise the actual service. |
+| FR4: retain every source row                  | Blocked dispositions and unresolved folded updates retain every source line in `blocked_entries`; row reconciliation is asserted.                                                                         |
+| FR5: preserve valid matching/multiplicity     | Exact NPI takes precedence; same-NPI folding, unique fallback, distinct-NPI creates, and three-group/state/license cases pass. Missing incoming NPI remains blocked.                                      |
+| FR6: preview and commit agree                 | Six synthetic import-preview tests cover visible reasons, all-blocked disabling, mixed safe/blocked commit, and exclusion after warning collapse.                                                         |
+| FR7: no automatic cleanup                     | No migration, auth, customer cleanup, or P01/P03 changes. Review correction touches matcher/tests and these two P02 documents only.                                                                       |
 
-## Review map
+## Verification — review correction
 
-| Requirement                                | Code and decisive evidence                                                                                                                                                                                                           |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1–FR2: identity separation and ambiguity | `src/lib/importDedupe.ts`: whole-batch candidate checks before folding. Matcher tests reverse incoming rows and candidate lists, and cover competing NPIs and duplicate exact-NPI/name targets.                                      |
-| FR3: protect accumulated data              | Matcher blocks before relationship/license handling. `src/services/importRuns.ts` excludes blocked source lines before post-commit facility/group/enrollment writes; 2 transport-boundary regressions prove the exclusion.           |
-| FR4: every source row retained             | Blocked dispositions retain individual lines; unresolved folded updates emit every line in `blocked_entries`. Tests assert exact row coverage.                                                                                       |
-| FR5: valid multiplicity and matching       | New, exact-NPI, and reviewed fallback fixtures retain 3 groups/facilities/state licenses in one provider plan. Existing missing-NPI and distinct-NPI behavior stays covered.                                                         |
-| FR6: preview and commit agree              | `ImportPreviewContent.tsx` shows source row/provider/field/reason. Two new tests in `e2e/import-preview.spec.ts` exercise all-blocked commit disabling and a safe commit after collapsing warnings, inspecting the actual wire plan. |
-| FR7: no automatic cleanup                  | Diff contains matcher, preview, commit-row filter, tests, and documentation only. No migrations, auth changes, cleanup, or P01 files.                                                                                                |
+| Check                                    | Result                                                                                                                                                          |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reported #373 defects before fixes       | 2 failed / 52 passed; spillover control already passed.                                                                                                         |
+| Additional #377 regression before fix    | 2 failed / 56 passed; both failures are row orders of the ineligible-fallback case.                                                                             |
+| Focused matcher + commit service         | 58 passed.                                                                                                                                                      |
+| Full unit suite                          | 152 files / 2,029 tests passed.                                                                                                                                 |
+| Import-preview browser suite             | 6 passed, one worker, retries disabled, synthetic intercepted transport.                                                                                        |
+| TypeScript / ESLint / formatting / build | Passed. ESLint retains 14 warnings outside changed files. Build retains dependency/chunk warnings.                                                              |
+| Epic hygiene                             | Two unchanged failures: `E6.11-handoff.md` frontmatter and missing `payer_forms` table-register row. They reproduced on clean staging during original delivery. |
+| Independent review                       | Found and reproduced #377's false block; final correction reviewed with no unresolved actionable finding.                                                       |
+| Remote CI                                | Must be green on the final #373 head: build, migration dry-run, and Playwright smoke. The final PR description records the checked SHA/run.                     |
+| Historical main compatibility            | Original P02 only: patch application, 51 focused tests, and TypeScript passed at `eadf661d`. Review correction was not retested on main.                        |
 
-Review specifically for lost rows, hidden incoming NPIs, accumulation before
-identity selection, arbitrary candidate selection, newly blocked valid imports,
-and warning controls that could authorize writes. Report actionable findings by
-severity with file/line and reproduction; keep corrections on this branch.
-
-## Verification
-
-| Check                                   | Result                                                                                                                                                    |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Red baseline                            | Existing 31 matcher tests passed. New tests produced 16 expected matcher/service failures and 2 rendered-preview failures before the corresponding fixes. |
-| Focused matcher + actual commit service | 51 passed.                                                                                                                                                |
-| Full unit suite                         | 152 files / 2,022 tests passed.                                                                                                                           |
-| Full import-preview browser suite       | 6 passed, retries disabled, synthetic intercepted transport.                                                                                              |
-| TypeScript, formatting, ESLint, build   | Passed. ESLint retains 14 warnings outside touched files; build emits dependency/chunk warnings.                                                          |
-| Main compatibility                      | Patch applies cleanly; 51 focused tests and TypeScript passed at the listed main SHA.                                                                     |
-| Epic hygiene                            | Failed identically on clean staging: `E6.11-handoff.md` lacks frontmatter; `payer_forms` lacks a table-register row. These files are unchanged.           |
-| Independent local review                | No actionable introduced P02 defect found.                                                                                                                |
-
-Reproduce the focused checks after installing locked dependencies:
+Reproduce with Node 22 and locked dependencies:
 
 ```sh
 npm ci
@@ -73,25 +66,30 @@ npx tsc --noEmit
 npm run lint
 npx prettier --check .
 npm test
+npm run lint:epics
 VITE_SUPABASE_URL=https://example.supabase.co VITE_SUPABASE_ANON_KEY=dummy-anon-key-for-ci npm run build
-```
-
-For the browser check, use the pinned Playwright Chromium and a free local port.
-The checked-in configuration defaults to 8080; the implementation run used a
-temporary config derived from it on port 18082. Never reuse a server connected to
-customer data. The harness intercepts Supabase transport with synthetic fixtures.
-
-```sh
 npx playwright install chromium
 CI=1 VITE_SUPABASE_URL=https://example.supabase.co VITE_SUPABASE_ANON_KEY=dummy-anon-key-for-ci npm run test:e2e -- e2e/import-preview.spec.ts --workers=1 --retries=0
 ```
 
-## Remaining checks and boundaries
+Local browser execution used a temporary copy of the checked-in configuration on
+port 18082, with server reuse disabled and pinned Chromium 149.0.7827.55. The first
+attempt could not launch the server inside the sandbox; a subsequent attempt found
+the pinned browser absent. After installing it in temporary storage, the suite ran.
+These setup failures are not application-test failures.
 
-- Check the latest GitHub CI result before merge. Local green checks are not a remote CI pass.
-- Hosted import/RPC persistence, migration dry-run locally, the full unrelated browser suite, and PM visual acceptance were not executed locally. Follow the existing staging readiness gates for hosted proof.
-- Existing group/facility ambiguity, first-row scalar conflict selection, same-state license policy, and post-RPC relationship retry limitations remain separate work.
-- No merge, deployment, customer-data mutation, score change, schema/auth change, or new work order is authorized by this handoff.
+## Assumptions and remaining checkpoint
 
-Next action: review PR #373 and the current checks against FR1–FR7; return concrete
-findings for fixes on this branch. PM decides merge only after review and applicable gates.
+| Boundary              | Status / required acceptance                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan trust            | Existing authenticated writers trust the matcher-produced plan. No server-side identity revalidation added.                                                     |
+| Input identity        | Organization provider snapshot; consistent records per ID; exact NPI outranks name. NPI strings are trimmed, not digit-normalized.                              |
+| Concurrency and retry | Concurrent-import arbitration and post-RPC relationship retry remain separate work.                                                                             |
+| Adjacent policy       | Group/facility ambiguity, first-row scalar picks, and license renewal/replacement policy are unchanged.                                                         |
+| Hosted persistence    | Pending: controlled staging import must prove blocked rows write no provider or relationship data, while a safe row persists correctly.                         |
+| PM visual acceptance  | Pending: visible blocked source lines/reasons, all-blocked disabled Commit, and mixed safe/blocked preview/commit.                                              |
+| Promotion             | Held by the user's instruction. Neither staging/main merge nor deployment is performed. #377 remains a separate unmerged PR; its changes are incorporated here. |
+
+Next checkpoint: PM reviews the final combined PR, current CI, hosted persistence,
+and visual acceptance before separately authorizing promotion. Local and CI checks
+establish code evidence, not hosted readiness or release authorization.
