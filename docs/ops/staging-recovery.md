@@ -109,6 +109,50 @@ five seconds before conservative credential expiry for local shutdown. Client
 termination cannot establish server role revocation or guarantee shutdown during
 OS suspension/failure; these remain explicit operational prerequisites.
 
+`captureStagingSnapshot` adds an owned source snapshot using the same in-memory
+credential, fixed connection, CA, process owner and deadline. It pins native
+`psql` 17.10, verifies the actual database/session role/version/read-only
+transaction, holds a repeatable-read exported snapshot, and passes its token
+internally to `pg_dump --snapshot`. It accepts no caller-supplied snapshot, SQL,
+table list or connection override. Identifiers come from the collected catalog
+and must fit the supported identifier grammar; an unsupported name fails instead
+of silently omitting its table.
+
+The owned collector establishes the actual catalog and database-ledger digests.
+The caller's earlier observation is retained only as
+`declaredInputObservationDigest`; no match to an older expected schema is claimed.
+The temporary login's presence and digest are recorded separately, with its
+dependency/reconstruction review still pending. Creating that login changes the
+global catalog, so a pre-login fingerprint is not assumed equal to this capture.
+
+The collector gathers catalog definitions/configuration, Auth/Storage/application
+ledger records or explicit absence, and sorted SHA-256 row hashes for every
+physical table under the shared snapshot. Counts are checked independently;
+physical tables use `ONLY` to avoid duplicating inherited/partition rows. Type
+output settings are fixed. Per-table results, sequence observations, function
+bodies, role settings and both catalog reads are encrypted into `schema`,
+`integrity` and `migration-lineage` artifacts. Raw rows or settings are never
+written to plaintext files or returned in public capture records. The after
+catalog uses a new transaction; any observed catalog/global drift rejects the
+capture. Reader death, malformed/truncated output, permission failure, missing
+rows, inconsistent ledgers or a deadline abort stop and reap every owned process.
+
+Sequence values are explicitly `NON_MVCC_OBSERVATION`: an exported snapshot does
+not freeze them. Their comparison to actual archive sequence items and recovered
+data remains required. The catalog currently includes source OIDs; a reviewed
+source/local normalization and archive/extension coverage comparison is still
+needed. Materialized-view/large-object handling, platform settings, repository
+migration hashes, temporary-role mapping and full restoration qualification are
+not supplied by this reader. Its `source.lineageDigest` covers observed database
+ledgers only, not the repository's migration inventory.
+
+This entry point still returns `CAPTURED_ONLY`. Synthetic real-process/age tests
+exercise its protocol and failure boundaries; they do not execute its SQL or
+prove snapshot import through the hosted pooler. Those SQL/concurrent-snapshot
+checks must run on the reviewed local fixture and then the authorized source
+before live evidence can qualify. No credential acquisition or local restore
+command is added by the snapshot API.
+
 The official contract does not establish that `read_only:true` can export every
 required Auth, Vault and role/grant scope without `SET ROLE postgres`. Do not
 request a role merely to probe this assumption. The pinned CLI scripts use
