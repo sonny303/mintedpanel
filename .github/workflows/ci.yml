@@ -6,6 +6,24 @@ on:
     branches: [main]
 
 jobs:
+  vault-authorization:
+    name: P01 vault authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Prepare disposable PostgreSQL image
+        run: docker pull postgres:16
+      - name: Reproduce DB-01 and verify repaired role boundaries
+        run: node scripts/security/verify-ssn-vault.mjs
+
   build:
     runs-on: ubuntu-latest
     steps:
