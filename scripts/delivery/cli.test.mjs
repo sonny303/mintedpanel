@@ -52,14 +52,15 @@ test("even a trusted-looking environment with secrets and PASS flags cannot acti
   }
 });
 
-test("shared staging/production Vercel project keeps hosted activation blocked", async () => {
+test("dedicated staging project is allowlisted while hosted execution remains blocked", async () => {
   const { releaseTarget } = await import("../release/contract.mjs");
   const { ACTIVATION_BLOCKERS } = await import("./boundary.mjs");
-  assert.equal(
+  assert.notEqual(
     releaseTarget("staging").vercelProjectId,
     releaseTarget("production").vercelProjectId,
   );
-  assert.ok(ACTIVATION_BLOCKERS.includes("SEPARATE_STAGING_PROJECT_AND_G0_ALLOWLIST_PENDING"));
+  assert.equal(releaseTarget("staging").vercelProjectId, "prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch");
+  assert.ok(ACTIVATION_BLOCKERS.includes("FIXED_STAGING_PROVIDER_HOSTED_EXECUTION_PENDING"));
 });
 
 test("workflow source has one Production job, no production secrets before its gate, and no mid-mutation concurrency cancellation", async () => {

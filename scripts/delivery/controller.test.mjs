@@ -183,6 +183,20 @@ test("simulator: staging checks precede both fixed aliases and require ancestry 
   assert.equal(steps.includes("promote"), false);
 });
 
+test("simulator: uncertain staging candidate creation retains the shared lease", async () => {
+  const s = simulator("staging", false);
+  s.services.build = async () => {
+    s.state.operations.push("build");
+    throw new Error("simulated provider response loss");
+  };
+  await assert.rejects(s.run, {
+    code: "DELIVERY_STOPPED_LEASE_RETAINED",
+    reason: "PROVIDER_OPERATION_UNCERTAIN",
+  });
+  assert.equal(s.state.held, true);
+  assert.equal(s.state.operations.includes("alias:mintedpanel-staging.vercel.app"), false);
+});
+
 test("simulator: denied approval causes no build, lease or mutation", async () => {
   const s = simulator();
   s.state.approved = false;

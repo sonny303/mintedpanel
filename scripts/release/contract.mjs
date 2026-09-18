@@ -4,7 +4,7 @@ const targets = {
   staging: {
     environment: "staging",
     vercelTeamId: "team_230fpJ9MgCj9ssW3LiIckfyA",
-    vercelProjectId: "prj_ILhPJbkyaiptdVA8DtsmNyw3tiub",
+    vercelProjectId: "prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch",
     supabaseRef: "vmznysvietfaddakkegt",
     vercelEnvironment: "preview",
     gitBranch: "staging",
