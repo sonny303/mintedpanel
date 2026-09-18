@@ -19,6 +19,13 @@ const targets = {
   },
 };
 
+/** Return a copy so delivery collectors share the fixed allowlist without mutating it. */
+export function releaseTarget(environment) {
+  if (environment !== "staging" && environment !== "production")
+    throw new TypeError("EXPLICIT_TARGET_REQUIRED");
+  return structuredClone(targets[environment]);
+}
+
 const match = (pattern) => (value) => typeof value === "string" && pattern.test(value);
 const oneOf =
   (...values) =>
