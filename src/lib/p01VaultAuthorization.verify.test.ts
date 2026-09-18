@@ -71,7 +71,10 @@ describe("P01 risk2: only auth predicates change vs originals", () => {
           "ROLE_CHECK_WRITER",
         )
         .replace(/public\.user_role\(v_org\) IS DISTINCT FROM 'admin'/g, "ROLE_CHECK_ADMIN")
-        .replace(/public\.user_role\(v_org\) NOT IN \('admin', 'specialist'\)/g, "ROLE_CHECK_WRITER")
+        .replace(
+          /public\.user_role\(v_org\) NOT IN \('admin', 'specialist'\)/g,
+          "ROLE_CHECK_WRITER",
+        )
         .replace(/public\.user_role\(v_org\) <> 'admin'/g, "ROLE_CHECK_ADMIN");
     expect(norm(extract(repair, "store_ssn"))).toBe(norm(extract(origStore, "store_ssn")));
     expect(norm(extract(repair, "reveal_ssn"))).toBe(norm(extract(origStore, "reveal_ssn")));
