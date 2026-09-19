@@ -18,6 +18,7 @@ import {
   type ProviderInput,
   type TerminateProviderInput,
   type UpdateProviderWithLicensesInput,
+  ProviderSaveError,
 } from "@/services/providers";
 import { FIVE_MINUTES } from "@/hooks/queryKeys";
 import {
@@ -77,14 +78,44 @@ export function useUpdateProviderWithLicenses(id: string) {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: (input: UpdateProviderWithLicensesInput) => updateProviderWithLicenses(id, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
-      qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
-      qc.invalidateQueries({ queryKey: ["state-licenses", orgId, id] });
-      qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
-      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    retry: false,
+    mutationFn: async (input: UpdateProviderWithLicensesInput) => {
+      let result;
+      let failure: unknown;
+      let failed = false;
+      try {
+        result = await updateProviderWithLicenses(id, input);
+      } catch (error) {
+        failed = true;
+        failure = error;
+      }
+      // A failed multi-step save may already have persisted changes. Reconcile
+      // before the caller can close the dialog or show a success message.
+      const queryKeysToRefresh = [
+        ["providers", orgId],
+        queryKeys.provider(orgId, id),
+        queryKeys.stateLicenses(orgId, id),
+        queryKeys.orgStateLicenses(orgId),
+        queryKeys.providerGroupAssignments(orgId),
+        ["audit-log", orgId],
+      ];
+      // Invalidation can reuse an unresolved initial fetch with no cached data.
+      // Cancel that query's retryer so reconciliation starts a fresh read.
+      await Promise.all(queryKeysToRefresh.map((queryKey) => qc.cancelQueries({ queryKey })));
+      const refreshed = await Promise.allSettled(
+        queryKeysToRefresh.map((queryKey) =>
+          qc.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true }),
+        ),
+      );
+      if (refreshed.some((refresh) => refresh.status === "rejected")) {
+        throw new ProviderSaveError(
+          `${failure instanceof Error ? `${failure.message} ` : ""}Saved data could not be refreshed. Reload and review before trying again.`,
+          true,
+          failure instanceof ProviderSaveError ? failure.outcome : null,
+        );
+      }
+      if (failed) throw failure;
+      return result!;
     },
   });
 }

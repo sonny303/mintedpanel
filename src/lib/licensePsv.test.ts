@@ -1,5 +1,5 @@
 // E1.3 TE-10 — PSV rule truth table: optional board URL, server-side
-// stamping, renewal reset, and stored-trail preservation.
+// stamping, renewal reset, stamp preservation, and later URL annotation.
 import { describe, expect, it } from "vitest";
 import { resolvePsvColumns, type PsvStored } from "./licensePsv";
 
@@ -104,7 +104,7 @@ describe("resolvePsvColumns", () => {
     expect(cols.verified_by).toBeNull();
   });
 
-  it("keeps the stored trail verbatim when nothing PSV-relevant changed", () => {
+  it("keeps verification stamps when only non-status fields are unchanged", () => {
     const cols = resolvePsvColumns(
       {
         verifiedStatus: "verified",
@@ -120,6 +120,25 @@ describe("resolvePsvColumns", () => {
       verified_at: storedVerified.verifiedAt,
       verified_by: storedVerified.verifiedBy,
       verification_source_url: storedVerified.verificationSourceUrl,
+    });
+  });
+
+  it("annotates a board URL on an already-verified license without re-stamping", () => {
+    const cols = resolvePsvColumns(
+      {
+        verifiedStatus: "verified",
+        verificationSourceUrl: "https://www.ncbpte.org/license-verification",
+        expirationDate: storedVerified.expirationDate,
+      },
+      storedVerified,
+      NOW,
+      P1,
+    );
+    expect(cols).toEqual({
+      verified_status: "verified",
+      verified_at: storedVerified.verifiedAt,
+      verified_by: storedVerified.verifiedBy,
+      verification_source_url: "https://www.ncbpte.org/license-verification",
     });
   });
 
