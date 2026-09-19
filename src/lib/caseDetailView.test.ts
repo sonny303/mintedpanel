@@ -4,6 +4,7 @@ import {
   evidencedTransitionsByTouch,
   facilityAddressLine,
   orderedSteps,
+  resolveOpenTaskDrawer,
   summarizeTasks,
 } from "./caseDetailView";
 import type { CaseStatusHistoryEntry, SOPStep, Task } from "@/types";
@@ -84,6 +85,27 @@ describe("currentStepPointer", () => {
     expect(currentStepPointer([])).toBeNull();
     expect(currentStepPointer([task({ id: "t1", status: "completed" })])).toBeNull();
     expect(currentStepPointer([task({ id: "t1", sopContent: [] })])).toBeNull();
+  });
+});
+
+describe("resolveOpenTaskDrawer", () => {
+  it("re-derives the open task lock when an earlier task is reopened after the drawer opened", () => {
+    const selected = task({ id: "t2", status: "in_progress", sortOrder: 2 });
+    const initiallyCurrent = [task({ id: "t1", status: "completed", sortOrder: 1 }), selected];
+    expect(resolveOpenTaskDrawer(initiallyCurrent, selected.id)).toEqual({
+      task: selected,
+      locked: false,
+    });
+
+    const afterRefetch = [task({ id: "t1", status: "in_progress", sortOrder: 1 }), selected];
+    expect(resolveOpenTaskDrawer(afterRefetch, selected.id)).toEqual({
+      task: selected,
+      locked: true,
+    });
+  });
+
+  it("returns null when the open task is no longer in the filtered task set", () => {
+    expect(resolveOpenTaskDrawer([], "t2")).toBeNull();
   });
 });
 

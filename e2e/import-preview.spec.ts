@@ -32,8 +32,10 @@ const JANE_ID = "aaaaaaa1-0000-4000-8000-000000000001";
 const BROOKE_ID = "aaaaaaa1-0000-4000-8000-000000000002";
 const G1 = "bbbbbbb1-0000-4000-8000-000000000001";
 const G2 = "bbbbbbb1-0000-4000-8000-000000000002";
+const G3 = "bbbbbbb1-0000-4000-8000-000000000003";
 const F1 = "ccccccc1-0000-4000-8000-000000000001";
 const F2 = "ccccccc1-0000-4000-8000-000000000002";
+const F3 = "ccccccc1-0000-4000-8000-000000000003";
 const JANE_LIC = "ddddddd1-0000-4000-8000-000000000001";
 const BROOKE_LIC = "ddddddd1-0000-4000-8000-000000000002";
 const PAYER = "eeeeeee1-0000-4000-8000-000000000001";
@@ -470,6 +472,171 @@ function seedAuth(context: {
     [AUTH_KEY, SESSION, ORG_ID] as const,
   );
 }
+
+function competingIdentityFixtures(): Record<string, Record<string, unknown>[]> {
+  const fixtures = baseFixtures();
+  fixtures.providers = [
+    provider({ id: JANE_ID, first_name: "Alex", last_name: "Rivera", npi: null }),
+  ];
+  fixtures.provider_groups = [
+    { ...group(G1, "North Group", "111111111"), npi_type2: "9000000001" },
+    { ...group(G2, "South Group", "222222222"), npi_type2: "9000000002" },
+    { ...group(G3, "Virginia Group", "333333333"), npi_type2: "9000000003" },
+  ];
+  fixtures.facilities = [
+    facility(F1, "Clinic North", G1),
+    { ...facility(F2, "Clinic South", G2), state: "SC" },
+    { ...facility(F3, "Clinic Virginia", G3), state: "VA" },
+  ];
+  fixtures.import_runs = [readyRun()];
+  fixtures.import_rows = [
+    stagedRow(2, {
+      provider_first_name: "Alex",
+      provider_last_name: "Rivera",
+      npi: "1111111111",
+      group_tin: "111111111",
+      facility_name: "Clinic North",
+      license_state: "NC",
+      license_number: "NC-BLOCKED",
+    }),
+    stagedRow(3, {
+      provider_first_name: "Alex",
+      provider_last_name: "Rivera",
+      npi: "1111111111",
+      group_tin: "222222222",
+      facility_name: "Clinic South",
+      license_state: "SC",
+      license_number: "SC-BLOCKED",
+    }),
+    stagedRow(4, {
+      provider_first_name: "Alex",
+      provider_last_name: "Rivera",
+      npi: "2222222222",
+      group_tin: "333333333",
+      facility_name: "Clinic Virginia",
+      license_state: "VA",
+      license_number: "VA-BLOCKED",
+    }),
+  ];
+  return fixtures;
+}
+
+test("P02: competing identities show every blocked source row and disable an all-blocked commit", async ({
+  context,
+  page,
+}) => {
+  const fixtures = competingIdentityFixtures();
+  const wire: WireLog = { writes: [], commitCalls: [] };
+  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, wire));
+  await seedAuth(context);
+
+  await page.goto(`/import/${RUN_ID}`);
+  await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText("Counts reconcile with the 3 staged rows.")).toBeVisible();
+  await page.getByRole("button", { name: "Blocked rows (3)", exact: true }).click();
+  for (const line of [2, 3, 4]) {
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("cell", { name: String(line), exact: true }),
+    });
+    await expect(row.getByRole("cell", { name: "Alex Rivera", exact: true })).toBeVisible();
+    await expect(
+      row.getByRole("cell", { name: /Multiple incoming NPIs.*same.*provider/i }),
+    ).toBeVisible();
+  }
+  await expect(page.getByRole("button", { name: /Updates & conflict review/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Commit Changes", exact: true })).toBeDisabled();
+  expect(wire.commitCalls).toHaveLength(0);
+  expect(wire.writes.filter((w) => LIVE_TABLES.includes(w.table))).toHaveLength(0);
+});
+
+test("P02: collapsing blocked rows preserves the wire exclusion and commits one NPI across three groups and states", async ({
+  context,
+  page,
+}) => {
+  const fixtures = competingIdentityFixtures();
+  fixtures.import_runs = [readyRun({ total_rows: 6, staged_rows: 6 })];
+  fixtures.import_rows.push(
+    ...[
+      { line: 5, tin: "111111111", facility: "Clinic North", state: "NC" },
+      { line: 6, tin: "222222222", facility: "Clinic South", state: "SC" },
+      { line: 7, tin: "333333333", facility: "Clinic Virginia", state: "VA" },
+    ].map(({ line, tin, facility: facilityName, state }) =>
+      stagedRow(line, {
+        provider_first_name: "Nora",
+        provider_last_name: "Newton",
+        npi: "3333333333",
+        group_tin: tin,
+        facility_name: facilityName,
+        license_state: state,
+        license_number: `${state}-SAFE`,
+      }),
+    ),
+  );
+  const wire: WireLog = { writes: [], commitCalls: [] };
+  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, wire));
+  await seedAuth(context);
+
+  await page.goto(`/import/${RUN_ID}`);
+  await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText("Counts reconcile with the 6 staged rows.")).toBeVisible();
+  const blockedButton = page.getByRole("button", { name: "Blocked rows (3)", exact: true });
+  await blockedButton.click();
+  await expect(
+    page.getByRole("cell", { name: /Multiple incoming NPIs.*same.*provider/i }),
+  ).toHaveCount(3);
+  await blockedButton.click();
+  await expect(blockedButton).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "New providers (1)", exact: true }).click();
+  const safeRow = page.getByRole("row").filter({ hasText: "Nora Newton" });
+  await expect(safeRow.getByRole("cell", { name: "3333333333", exact: true })).toBeVisible();
+  await expect(safeRow.getByRole("cell", { name: "3", exact: true })).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Commit Changes", exact: true }).click();
+  await page.getByRole("button", { name: "Yes, commit changes", exact: true }).click();
+  await expect(page.getByText("1 provider created · 0 updated", { exact: true })).toBeVisible({
+    timeout: 20000,
+  });
+
+  expect(wire.commitCalls).toHaveLength(1);
+  const plan = wire.commitCalls[0].p_plan as {
+    creates: Array<{
+      provider: { npi: string };
+      group_ids: string[];
+      facility_ids: string[];
+      licenses: Array<{ state: string; license_number: string }>;
+    }>;
+    updates: unknown[];
+    blocked_entries: Array<{ line: number; column: string; reason: string }>;
+  };
+  expect(plan.updates).toEqual([]);
+  expect(plan.creates).toHaveLength(1);
+  expect(plan.creates[0].provider.npi).toBe("3333333333");
+  expect(plan.creates[0].group_ids).toEqual([G1, G2, G3]);
+  expect(plan.creates[0].facility_ids).toEqual([F1, F2, F3]);
+  expect(plan.creates[0].licenses).toEqual([
+    expect.objectContaining({ state: "NC", license_number: "NC-SAFE" }),
+    expect.objectContaining({ state: "SC", license_number: "SC-SAFE" }),
+    expect.objectContaining({ state: "VA", license_number: "VA-SAFE" }),
+  ]);
+  expect(plan.blocked_entries.map((entry) => entry.line)).toEqual([2, 3, 4]);
+  for (const entry of plan.blocked_entries) {
+    expect(entry.column).toBe("npi");
+    expect(entry.reason).toMatch(/Multiple incoming NPIs.*same.*provider/i);
+  }
+  const safeProvider = fixtures.providers.find((p) => p.npi === "3333333333");
+  expect(safeProvider).toBeDefined();
+  expect(fixtures.providers.find((p) => p.id === JANE_ID)?.npi).toBeNull();
+  expect(fixtures.provider_group_assignments.filter((a) => a.provider_id === JANE_ID)).toEqual([]);
+  expect(fixtures.provider_facility_assignments.filter((a) => a.provider_id === JANE_ID)).toEqual(
+    [],
+  );
+  expect(fixtures.state_licenses.filter((l) => l.provider_id === JANE_ID)).toEqual([]);
+  expect(fixtures.state_licenses.filter((l) => l.provider_id === safeProvider?.id)).toHaveLength(3);
+});
 
 /* --------------------------------- TS-61 --------------------------------- */
 
