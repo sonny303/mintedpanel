@@ -5,11 +5,10 @@
 // the unified Status timeline).
 //
 // Deliberately NOT here (handoff §2.7 — do not re-add): the required-documents
-// card (documents are not a product capability), the Work-in-portal launcher
-// (extension surfaces deferred), the duplicate tracking-ID warning, and the
-// two legacy pre-unification history ledgers — the unified timeline is the one
-// history surface. Every retired component still exists; only this screen
-// stopped rendering them.
+// card (documents are not a product capability), the duplicate tracking-ID
+// warning, and the two legacy pre-unification history ledgers — the unified
+// timeline is the one history surface. The narrow Work-in-portal launcher
+// lives only inside an eligible case TaskDrawer online-form step.
 import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { parseISO } from "date-fns";
@@ -45,6 +44,7 @@ import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
+import { handoffFacilityOptions } from "@/lib/casePortals";
 
 export const Route = createFileRoute("/cases/$id")({
   component: CaseDetailPage,
@@ -196,6 +196,28 @@ function CaseDetailPage() {
                 c?.provider ? `${c.provider.firstName} ${c.provider.lastName}` : "this provider"
               }
               groupName={c?.group?.name ?? null}
+              portalHandoff={{
+                caseId: c.id,
+                providerId: c.providerId,
+                orgId: c.orgId,
+                caseFacilityId: c.facilityId,
+                facilityLoadState: caseFacilitiesQ.isError
+                  ? "error"
+                  : caseFacilitiesQ.isLoading
+                    ? "loading"
+                    : "ready",
+                // The whole case-location set is required: reducing this to
+                // credential_cases.facility_id would erase a selected
+                // secondary and make safe choice impossible.
+                facilities: handoffFacilityOptions(
+                  (caseFacilitiesQ.data ?? []).map((row) => ({
+                    id: row.facilityId,
+                    name: row.facility.name,
+                  })),
+                  c.facilityId,
+                  c.facility ? { id: c.facility.id, name: c.facility.name } : null,
+                ),
+              }}
             />
             <CaseTouchesPanel
               touches={touches}

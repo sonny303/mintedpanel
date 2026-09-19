@@ -7,10 +7,22 @@
 // full address · identifiers incl. the payer-issued IDs · provenance), the
 // unified status timeline with its evidence link, and the §2.7 removals.
 import { expect, test, type Route } from "@playwright/test";
+import {
+  HANDOFF_CASE_ID_FIXTURE,
+  HANDOFF_EXTENSION_ID_FIXTURE,
+  HANDOFF_FACILITY_ID_FIXTURE,
+  HANDOFF_ORG_ID_FIXTURE,
+  HANDOFF_PROVIDER_ID_FIXTURE,
+} from "../src/testFixtures/extensionHandoff";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
-const ORG_ID = "44444444-4444-4444-8444-444444444444";
+const ORG_ID = HANDOFF_ORG_ID_FIXTURE;
+const PROVIDER_ID = HANDOFF_PROVIDER_ID_FIXTURE;
+const CASE_ID = HANDOFF_CASE_ID_FIXTURE;
+const PRIMARY_FACILITY_ID = HANDOFF_FACILITY_ID_FIXTURE;
+const SECONDARY_FACILITY_ID = "11111111-2222-4333-8444-555555555555";
+const EXTENSION_ID = HANDOFF_EXTENSION_ID_FIXTURE;
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -61,7 +73,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
     ],
     providers: [
       {
-        id: "pr-jim",
+        id: PROVIDER_ID,
         org_id: ORG_ID,
         first_name: "Jim",
         last_name: "Apple",
@@ -90,7 +102,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
     ],
     facilities: [
       {
-        id: "f-boulder",
+        id: PRIMARY_FACILITY_ID,
         org_id: ORG_ID,
         group_id: "g-yc",
         name: "Boulder Main St Clinic",
@@ -107,7 +119,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
         created_at: "2026-07-01T00:00:00Z",
       },
       {
-        id: "f-denver",
+        id: SECONDARY_FACILITY_ID,
         org_id: ORG_ID,
         group_id: "g-yc",
         name: "Denver Uptown Clinic",
@@ -130,8 +142,8 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "pfa-1",
         org_id: ORG_ID,
-        provider_id: "pr-jim",
-        facility_id: "f-boulder",
+        provider_id: PROVIDER_ID,
+        facility_id: PRIMARY_FACILITY_ID,
         is_primary: true,
         start_date: "2026-07-01",
         created_at: "2026-07-01T00:00:00Z",
@@ -139,8 +151,8 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "pfa-2",
         org_id: ORG_ID,
-        provider_id: "pr-jim",
-        facility_id: "f-denver",
+        provider_id: PROVIDER_ID,
+        facility_id: SECONDARY_FACILITY_ID,
         is_primary: false,
         start_date: "2026-07-01",
         created_at: "2026-07-01T00:00:00Z",
@@ -165,13 +177,13 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
     ],
     credential_cases: [
       {
-        id: "case-1046",
+        id: CASE_ID,
         case_number: 1046,
         org_id: ORG_ID,
-        provider_id: "pr-jim",
+        provider_id: PROVIDER_ID,
         payer_id: "pay-banner",
         group_id: "g-yc",
-        facility_id: "f-boulder",
+        facility_id: PRIMARY_FACILITY_ID,
         state: "CO",
         specialty: "Physical Therapy",
         mso_id: null,
@@ -208,8 +220,8 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
         // sharing one id makes a later `.eq("id", ...)` PATCH match both.
         id: "cf-boulder-seed",
         org_id: ORG_ID,
-        case_id: "case-1046",
-        facility_id: "f-boulder",
+        case_id: CASE_ID,
+        facility_id: PRIMARY_FACILITY_ID,
         is_primary: true,
         created_at: "2026-07-20T00:00:00Z",
         created_by: USER_ID,
@@ -219,8 +231,8 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "task-1",
         org_id: ORG_ID,
-        case_id: "case-1046",
-        provider_id: "pr-jim",
+        case_id: CASE_ID,
+        provider_id: PROVIDER_ID,
         title: "Confirm the provider is enrollment-ready",
         description: null,
         sop_content: [{ id: "s1", order: 1, label: "Check the roster record", isCompleted: true }],
@@ -239,8 +251,8 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "task-2",
         org_id: ORG_ID,
-        case_id: "case-1046",
-        provider_id: "pr-jim",
+        case_id: CASE_ID,
+        provider_id: PROVIDER_ID,
         title: "Complete the enrollment form in the portal",
         description: null,
         sop_content: [
@@ -270,7 +282,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "t-portal",
         org_id: ORG_ID,
-        case_id: "case-1046",
+        case_id: CASE_ID,
         entry_type: "touchpoint",
         touch_type: "portal",
         outcome: "successful",
@@ -291,7 +303,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "csh-1",
         org_id: ORG_ID,
-        case_id: "case-1046",
+        case_id: CASE_ID,
         from_status: "submitted",
         to_status: caseStatus,
         actor_kind: "user",
@@ -308,7 +320,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "pph-legacy",
         org_id: ORG_ID,
-        case_id: "case-1046",
+        case_id: CASE_ID,
         from_state: "drafting",
         to_state: "submitted",
         reason_code_id: null,
@@ -322,7 +334,7 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
       {
         id: "sh-legacy",
         org_id: ORG_ID,
-        case_id: "case-1046",
+        case_id: CASE_ID,
         track: "credentialing",
         from_status_id: null,
         to_status_id: null,
@@ -519,7 +531,7 @@ test("Slice E: the case screen is header + two columns — identity, the ONE sta
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/cases/case-1046");
+  await page.goto(`/cases/${CASE_ID}`);
 
   // HEADER: provider identity (links to the record), payer (links to its
   // catalog detail) · state · specialty · owning group, tracking ID, and the
@@ -529,7 +541,7 @@ test("Slice E: the case screen is header + two columns — identity, the ONE sta
   await expect(page.getByRole("link", { name: "Jim Apple, PT" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("link", { name: "Jim Apple, PT" })).toHaveAttribute(
     "href",
-    "/providers/pr-jim",
+    `/providers/${PROVIDER_ID}`,
   );
   await expect(page.getByRole("link", { name: "Banner Health Plans" })).toHaveAttribute(
     "href",
@@ -619,6 +631,237 @@ test("Slice E: the case screen is header + two columns — identity, the ONE sta
   await expect(page.getByText("Legacy status history")).toHaveCount(0);
 });
 
+test("P05: mounted task click sends the explicit secondary to the addressed extension and requests one portal tab", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  (fixtures.case_facilities as unknown as Record<string, unknown>[]).push({
+    id: "22222222-3333-4444-8555-666666666666",
+    org_id: ORG_ID,
+    case_id: CASE_ID,
+    facility_id: SECONDARY_FACILITY_ID,
+    is_primary: false,
+    created_at: "2026-07-20T00:00:00Z",
+    created_by: USER_ID,
+  });
+  (fixtures.portals as Record<string, unknown>[]).push({
+    id: "77777777-8888-4999-8aaa-bbbbbbbbbbbb",
+    org_id: ORG_ID,
+    portal_key: "regional_enrollment",
+    name: "Regional Enrollment",
+    payer_id: "pay-banner",
+    form_url: "https://portal.example/enroll",
+    is_verified: true,
+    last_verified_at: "2026-09-18T00:00:00Z",
+    proven_at: "2026-09-18T00:00:00Z",
+    url_changed_at: null,
+    created_at: "2026-09-18T00:00:00Z",
+    updated_at: "2026-09-18T00:00:00Z",
+  });
+  const onlineStep = fixtures.tasks[1].sop_content[0] as Record<string, unknown>;
+  onlineStep.portalKey = "regional_enrollment";
+
+  await context.addInitScript((expectedExtensionId) => {
+    type HandoffEvent =
+      | { kind: "send"; extensionId: string; message: unknown; argumentCount: number }
+      | { kind: "open"; url: string; target: string | null; features: string | null }
+      | { kind: "receipt" };
+    const root = globalThis as typeof globalThis & {
+      __p05HandoffEvents?: HandoffEvent[];
+      __resolveP05Receipt?: () => void;
+      chrome?: Record<string, unknown>;
+    };
+    const events: HandoffEvent[] = [];
+    root.__p05HandoffEvents = events;
+    const chromeObject = root.chrome ?? {};
+    Object.defineProperty(chromeObject, "runtime", {
+      configurable: true,
+      value: {
+        sendMessage: function (
+          extensionId: string,
+          message: unknown,
+          callback: (response: { ok: true }) => void,
+        ) {
+          events.push({ kind: "send", extensionId, message, argumentCount: arguments.length });
+          root.__resolveP05Receipt = () => {
+            events.push({ kind: "receipt" });
+            callback({ ok: true });
+          };
+        },
+      },
+    });
+    Object.defineProperty(root, "chrome", { configurable: true, value: chromeObject });
+    window.open = ((url?: string | URL, target?: string, features?: string) => {
+      events.push({
+        kind: "open",
+        url: String(url),
+        target: target ?? null,
+        features: features ?? null,
+      });
+      return null;
+    }) as typeof window.open;
+    if (typeof expectedExtensionId !== "string" || expectedExtensionId.length !== 32) {
+      throw new Error("Invalid fixture extension ID");
+    }
+  }, EXTENSION_ID);
+
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+  await page.goto(`/cases/${CASE_ID}`);
+
+  await page.getByRole("button", { name: "Open step" }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByText("Regional Enrollment")).toBeVisible({ timeout: 30000 });
+  await drawer.getByRole("combobox", { name: "Location for this work" }).click();
+  await page.getByRole("option", { name: "Denver Uptown Clinic" }).click();
+  await expect(drawer.getByRole("link", { name: "Open portal directly" })).toHaveAttribute(
+    "href",
+    "https://portal.example/enroll",
+  );
+
+  await drawer.getByRole("button", { name: "Work in portal" }).click();
+  await expect(drawer.getByText("Waiting for the extension receipt…")).toBeVisible();
+  await page.evaluate(() => {
+    const root = globalThis as typeof globalThis & { __resolveP05Receipt?: () => void };
+    const resolve = root.__resolveP05Receipt;
+    root.__resolveP05Receipt = undefined;
+    resolve?.();
+  });
+  await expect(
+    drawer.getByText("Extension received the case. Sign-in and access are checked there."),
+  ).toBeVisible();
+  await expect(drawer.getByText(/Portal tab requested/)).toBeVisible();
+
+  const events = await page.evaluate(() => {
+    return (
+      globalThis as typeof globalThis & {
+        __p05HandoffEvents?: Array<Record<string, unknown>>;
+      }
+    ).__p05HandoffEvents;
+  });
+  expect(events?.map((event) => event.kind)).toEqual(["send", "open", "receipt"]);
+  expect(events?.filter((event) => event.kind === "open")).toHaveLength(1);
+  expect(events?.[0]).toEqual({
+    kind: "send",
+    extensionId: EXTENSION_ID,
+    argumentCount: 3,
+    message: {
+      type: "SET_ACTIVE_CASE",
+      caseId: CASE_ID,
+      providerId: PROVIDER_ID,
+      orgId: ORG_ID,
+      portalUrl: "https://portal.example/enroll",
+      portalKey: "regional_enrollment",
+      facilityId: SECONDARY_FACILITY_ID,
+    },
+  });
+  expect(events?.[1]).toEqual({
+    kind: "open",
+    url: "https://portal.example/enroll",
+    target: "_blank",
+    features: "noopener,noreferrer",
+  });
+
+  // A receipt belongs to the exact authenticated context at click time. Switch
+  // accounts while a second receipt is pending, then deliver that old receipt:
+  // the mounted button must not render it in the new account's context.
+  await drawer.getByRole("button", { name: "Work in portal" }).click();
+  await expect(drawer.getByText("Waiting for the extension receipt…")).toBeVisible();
+  await page.evaluate(async () => {
+    const modulePath = "/src/lib/auth-store.ts";
+    const authModule = (await import(/* @vite-ignore */ modulePath)) as {
+      useAuthStore: {
+        getState: () => {
+          session: {
+            expires_at?: number;
+            user: { id: string; [key: string]: unknown };
+            [key: string]: unknown;
+          } | null;
+        };
+        setState: (state: Record<string, unknown>) => void;
+      };
+    };
+    const current = authModule.useAuthStore.getState();
+    if (current.session == null) throw new Error("Expected an authenticated test session");
+    const user = {
+      ...current.session.user,
+      id: "22222222-2222-4222-8222-222222222222",
+    };
+    authModule.useAuthStore.setState({
+      session: {
+        ...current.session,
+        user,
+        expires_at: (current.session.expires_at ?? 0) + 1,
+      },
+      user,
+    });
+  });
+  await expect(
+    drawer.getByText("Extension received the case. Sign-in and access are checked there."),
+  ).toHaveCount(0);
+  await page.evaluate(() => {
+    const root = globalThis as typeof globalThis & { __resolveP05Receipt?: () => void };
+    const resolve = root.__resolveP05Receipt;
+    root.__resolveP05Receipt = undefined;
+    resolve?.();
+  });
+  await expect
+    .poll(async () => {
+      return page.evaluate(
+        () =>
+          (
+            globalThis as typeof globalThis & {
+              __p05HandoffEvents?: Array<{ kind: string }>;
+            }
+          ).__p05HandoffEvents?.filter((event) => event.kind === "receipt").length ?? 0,
+      );
+    })
+    .toBe(2);
+  await expect(
+    drawer.getByText("Extension received the case. Sign-in and access are checked there."),
+  ).toHaveCount(0);
+});
+
+test("P05: a task-level lock keeps the ordinary portal link but does not mount Work in portal", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.tasks[0].status = "in_progress";
+  fixtures.tasks[0].completed_date = null;
+  fixtures.tasks[0].sop_content[0].isCompleted = false;
+  (fixtures.portals as Record<string, unknown>[]).push({
+    id: "77777777-8888-4999-8aaa-bbbbbbbbbbbb",
+    org_id: ORG_ID,
+    portal_key: "regional_enrollment",
+    name: "Regional Enrollment",
+    payer_id: "pay-banner",
+    form_url: "https://portal.example/enroll",
+    is_verified: true,
+    last_verified_at: "2026-09-18T00:00:00Z",
+    proven_at: "2026-09-18T00:00:00Z",
+    url_changed_at: null,
+    created_at: "2026-09-18T00:00:00Z",
+    updated_at: "2026-09-18T00:00:00Z",
+  });
+  (fixtures.tasks[1].sop_content[0] as Record<string, unknown>).portalKey = "regional_enrollment";
+
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+  await page.goto(`/cases/${CASE_ID}`);
+
+  await page.getByText("Complete the enrollment form in the portal", { exact: true }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByRole("link", { name: "Open portal" })).toHaveAttribute(
+    "href",
+    "https://portal.example/enroll",
+  );
+  await expect(drawer.getByRole("button", { name: "Work in portal" })).toHaveCount(0);
+});
+
 test("Slice E: an approved case shows the payer-issued IDs under the payer's own wording — a captured value and the Slice D Awaiting-ID wait", async ({
   context,
   page,
@@ -628,7 +871,7 @@ test("Slice E: an approved case shows the payer-issued IDs under the payer's own
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/cases/case-1046");
+  await page.goto(`/cases/${CASE_ID}`);
   const details = page.getByRole("region", { name: "Details" });
   await expect(details.getByText("Provider Number")).toBeVisible({ timeout: 30000 });
   await expect(details.getByText("A1234567")).toBeVisible();
@@ -649,7 +892,7 @@ test("E1.3: Locations section — add a second location, make it primary, remove
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/cases/case-1046");
+  await page.goto(`/cases/${CASE_ID}`);
   const details = page.getByRole("region", { name: "Details" });
 
   // Starting state: the case's one location (Boulder), badged primary.
@@ -703,14 +946,14 @@ test("E1.3: Locations section — add a second location, make it primary, remove
   );
   expect(caseFacilityInserts).toHaveLength(1);
   expect(caseFacilityInserts[0].body).toMatchObject({
-    case_id: "case-1046",
-    facility_id: "f-denver",
+    case_id: CASE_ID,
+    facility_id: SECONDARY_FACILITY_ID,
     is_primary: false,
   });
   const mirrorUpdates = writes.filter(
     (w) => w.table === "credential_cases" && w.method === "PATCH",
   );
-  expect(mirrorUpdates.some((w) => w.body?.facility_id === "f-denver")).toBe(true);
+  expect(mirrorUpdates.some((w) => w.body?.facility_id === SECONDARY_FACILITY_ID)).toBe(true);
 
   // RELOAD: the reordered set persists — this proves the flow actually wrote
   // through (add + set-primary + remove), not just updated client cache.

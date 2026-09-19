@@ -1,39 +1,15 @@
-// E4.3 F4.3.1 / TE-1 — the platform→extension case handoff. When the user
-// launches "Work in portal" from a case, the app hands the exact case context
-// to the Minted Panel Workbench extension so its side panel opens on that same
-// case, then opens the portal tab regardless of whether the extension is there.
-//
-// The message carries IDENTIFIERS + URL ONLY — never any profile or token
-// value (those flow through the audited /api/providers/:id/profile endpoint,
-// never through a Chrome message). This is the locked TE-1 shape; keep it in
-// lockstep with the extension's `externally_connectable` handler (the message
-// contract is panel-first, mirrored in sonny303/minted-extension).
-//
-// Feature detection is defensive: `chrome.runtime.sendMessage` exists only when
-// the extension is installed AND the page's origin is in its
-// externally_connectable allowlist. When it is absent, the portal tab still
-// opens and the caller shows a one-line non-blocking notice — the degraded
-// path is first-class UX, never an error (F4.3.1).
+// Platform → extension case handoff. The web app addresses one configured
+// installation, sends identifiers + an HTTPS portal URL only, and treats the
+// extension's reply as a receipt. Authentication, authorization, application,
+// side-panel visibility, and portal navigation are separate outcomes.
 
-/** The SET_ACTIVE_CASE message. Identifiers + portal URL only.
- *
- * S3.5 widened it ADDITIVELY with `portalKey` and `facilityId` (doc 06 C1's
- * {org, provider, location, case, portal_key}). Both are optional: the
- * extension strict-parses and drops unknowns, so an older extension ignores
- * them and a newer one degrades when a case carries neither. Still
- * identifiers + URL ONLY — no profile or token value has ever ridden this
- * channel and none does now. */
 export interface SetActiveCaseMessage {
   type: "SET_ACTIVE_CASE";
   caseId: string;
   providerId: string;
   orgId: string;
   portalUrl: string;
-  // The registry key of the portal being launched — lets the panel bind the
-  // right portal without re-deriving it from the URL.
   portalKey?: string;
-  // The case's location, when it has one: the facility.* / assignment.*
-  // tokens resolve from it, so passing it here saves the user a picker.
   facilityId?: string;
 }
 
@@ -46,11 +22,46 @@ export interface SetActiveCaseInput {
   facilityId?: string | null;
 }
 
-/** Build the message from the case context. Pure — no side effects, so it is
- * unit-testable without a Chrome environment. Optional fields are OMITTED when
- * absent rather than sent as null, so the wire shape stays minimal and the
- * extension's strict parser sees exactly what it can use. */
-export function buildSetActiveCaseMessage(input: SetActiveCaseInput): SetActiveCaseMessage {
+export type ExtensionHandoffResult =
+  | { status: "received" }
+  | {
+      status: "unavailable";
+      reason: "missing_configuration" | "invalid_configuration" | "messaging_unavailable";
+    }
+  | { status: "rejected" }
+  | { status: "invalid"; reason: "invalid_context" | "malformed_response" }
+  | { status: "failed" }
+  | { status: "timeout" };
+
+export const HANDOFF_RECEIPT_TIMEOUT_MS = 2_000;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CHROME_EXTENSION_ID_RE = /^[a-p]{32}$/;
+
+/** Strict URL boundary shared by the sender and mounted registry target. */
+export function isValidHandoffUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.length > 0 &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Build the locked wire shape. Invalid required context rejects the launch;
+ * malformed optional fields are omitted so the base-case receipt remains
+ * compatible with older senders and receivers. */
+export function buildSetActiveCaseMessage(input: SetActiveCaseInput): SetActiveCaseMessage | null {
+  if (!UUID_RE.test(input.caseId)) return null;
+  if (!UUID_RE.test(input.providerId)) return null;
+  if (!UUID_RE.test(input.orgId)) return null;
+  if (!isValidHandoffUrl(input.portalUrl)) return null;
+
   const message: SetActiveCaseMessage = {
     type: "SET_ACTIVE_CASE",
     caseId: input.caseId,
@@ -58,37 +69,97 @@ export function buildSetActiveCaseMessage(input: SetActiveCaseInput): SetActiveC
     orgId: input.orgId,
     portalUrl: input.portalUrl,
   };
-  if (input.portalKey) message.portalKey = input.portalKey;
-  if (input.facilityId) message.facilityId = input.facilityId;
+  const portalKey = input.portalKey?.trim().toLowerCase();
+  if (portalKey) message.portalKey = portalKey;
+  if (input.facilityId && UUID_RE.test(input.facilityId)) {
+    message.facilityId = input.facilityId;
+  }
   return message;
 }
 
-// The minimal shape of `chrome.runtime.sendMessage` we depend on, so this file
-// needs no @types/chrome dependency and stays a no-op off-extension.
 interface ChromeRuntimeLike {
-  runtime?: { sendMessage?: (message: unknown) => unknown };
+  runtime?: {
+    lastError?: { message?: string };
+    sendMessage?: (
+      extensionId: string,
+      message: unknown,
+      callback: (response: unknown) => void,
+    ) => void;
+  };
 }
 
-/** Is the extension's external messaging surface present on this page? True
- * only when the extension is installed and this origin is allowlisted. */
+function chromeRuntime(): ChromeRuntimeLike["runtime"] {
+  if (typeof globalThis === "undefined") return undefined;
+  return (globalThis as { chrome?: ChromeRuntimeLike }).chrome?.runtime;
+}
+
 export function isExtensionMessagingAvailable(): boolean {
-  if (typeof globalThis === "undefined") return false;
-  const chrome = (globalThis as { chrome?: ChromeRuntimeLike }).chrome;
-  return typeof chrome?.runtime?.sendMessage === "function";
+  return typeof chromeRuntime()?.sendMessage === "function";
 }
 
-/** Best-effort hand the case context to the extension. Returns whether the
- * message was attempted (i.e. the extension surface was present). NEVER throws
- * — a messaging failure must not block opening the portal tab. */
-export function sendSetActiveCase(input: SetActiveCaseInput): boolean {
-  if (!isExtensionMessagingAvailable()) return false;
-  try {
-    const chrome = (globalThis as { chrome?: ChromeRuntimeLike }).chrome;
-    chrome?.runtime?.sendMessage?.(buildSetActiveCaseMessage(input));
-    return true;
-  } catch {
-    // A disconnected port / uninstalled-mid-session error must not surface —
-    // the portal still opens and the notice covers the extension-absent path.
-    return false;
+function extensionConfiguration():
+  { status: "valid"; extensionId: string } | { status: "missing" } | { status: "invalid" } {
+  const raw = import.meta.env.VITE_MINTED_EXTENSION_ID;
+  if (typeof raw !== "string" || raw === "") return { status: "missing" };
+  if (!CHROME_EXTENSION_ID_RE.test(raw)) return { status: "invalid" };
+  return { status: "valid", extensionId: raw };
+}
+
+function receiptResult(response: unknown): ExtensionHandoffResult {
+  if (response == null || typeof response !== "object") {
+    return { status: "invalid", reason: "malformed_response" };
   }
+  const ok = (response as Record<string, unknown>).ok;
+  if (ok === true) return { status: "received" };
+  if (ok === false) return { status: "rejected" };
+  return { status: "invalid", reason: "malformed_response" };
+}
+
+/** Start the addressed send synchronously and settle with one bounded receipt.
+ * Callback runtime errors and synchronous exceptions stay generic because
+ * transport errors do not prove whether an extension is installed. */
+export function sendSetActiveCase(input: SetActiveCaseInput): Promise<ExtensionHandoffResult> {
+  const message = buildSetActiveCaseMessage(input);
+  if (message == null) {
+    return Promise.resolve({ status: "invalid", reason: "invalid_context" });
+  }
+
+  const config = extensionConfiguration();
+  if (config.status === "missing") {
+    return Promise.resolve({ status: "unavailable", reason: "missing_configuration" });
+  }
+  if (config.status === "invalid") {
+    return Promise.resolve({ status: "unavailable", reason: "invalid_configuration" });
+  }
+
+  const runtime = chromeRuntime();
+  const sendMessage = runtime?.sendMessage;
+  if (typeof sendMessage !== "function") {
+    return Promise.resolve({ status: "unavailable", reason: "messaging_unavailable" });
+  }
+
+  return new Promise<ExtensionHandoffResult>((resolve) => {
+    let settled = false;
+    const finish = (result: ExtensionHandoffResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish({ status: "timeout" }), HANDOFF_RECEIPT_TIMEOUT_MS);
+
+    try {
+      // Callback form works before Chrome 118 and still starts synchronously.
+      // Reading lastError inside this callback is required by the Chrome API.
+      sendMessage.call(runtime, config.extensionId, message, (response) => {
+        if (runtime?.lastError) {
+          finish({ status: "failed" });
+          return;
+        }
+        finish(receiptResult(response));
+      });
+    } catch {
+      finish({ status: "failed" });
+    }
+  });
 }

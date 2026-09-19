@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Check, Copy, Download, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PortalStepLink } from "@/components/portals/PortalStepLink";
+import { PortalStepLink, type PortalHandoffContext } from "@/components/portals/PortalStepLink";
 import { StepArtifactsPanel } from "@/components/cases/StepArtifactsPanel";
 import { planGmailHandoff } from "@/lib/gmailCompose";
 import { splitOnUnresolvedTokens, findUnresolvedTokens } from "@/lib/caseWizard";
@@ -90,14 +90,18 @@ function HighlightedText({ text }: { text: string }) {
 function OnlineFormStep({
   step,
   artifactCtx,
+  portalHandoff,
 }: {
   step: SOPStep;
   artifactCtx: StepArtifactContext;
+  portalHandoff?: PortalHandoffContext;
 }) {
   const fields = step.dataFields ?? [];
   return (
     <div className="space-y-3">
-      {step.portalKey ? <PortalStepLink portalKey={step.portalKey} /> : null}
+      {step.portalKey ? (
+        <PortalStepLink portalKey={step.portalKey} handoff={portalHandoff} />
+      ) : null}
       {step.detail ? <p className="text-[13px] text-muted-foreground">{step.detail}</p> : null}
       <StepCadenceMeta step={step} artifactCtx={artifactCtx} />
       {fields.length > 0 ? (
@@ -504,6 +508,7 @@ export function StepBody({
   caseId = null,
   providerId = null,
   groupId = null,
+  portalHandoff,
 }: {
   step: SOPStep;
   tokenValues?: Record<string, string>;
@@ -511,6 +516,7 @@ export function StepBody({
   caseId?: string | null;
   providerId?: string | null;
   groupId?: string | null;
+  portalHandoff?: PortalHandoffContext;
 }) {
   const stepType = step.stepType ?? "online_form";
   const artifactCtx: StepArtifactContext = { taskId, caseId, providerId, groupId };
@@ -519,5 +525,5 @@ export function StepBody({
   if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
     return <PlainChannelStep step={step} artifactCtx={artifactCtx} />;
   }
-  return <OnlineFormStep step={step} artifactCtx={artifactCtx} />;
+  return <OnlineFormStep step={step} artifactCtx={artifactCtx} portalHandoff={portalHandoff} />;
 }
