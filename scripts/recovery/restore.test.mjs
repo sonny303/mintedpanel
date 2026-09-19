@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { canonicalDigest } from "../release/contract.mjs";
 import { PROFILE, POSTGRES_IMAGE, RecoveryError } from "./contract.mjs";
 import { inspectSealedBackup, prepareIsolatedTarget, rehearseStagingRestore } from "./restore.mjs";
@@ -9,7 +11,7 @@ import { LOCAL_SOCKET } from "./local-target.mjs";
 const runId = "0123456789abcdef";
 
 test("sealed backup inspection authenticates every artifact before returning a candidate", async () => {
-  const workspace = await mkdtemp("/private/tmp/minted-restore-");
+  const workspace = await mkdtemp(join(await realpath(tmpdir()), "minted-restore-"));
   const names = ["backup", "roles", "schema", "integrity", "migration-lineage"];
   const artifacts = names.map((name, index) => ({
     name,
