@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { casePortalTargets, resolvePortalTargets } from "./casePortals";
+import {
+  casePortalTargets,
+  handoffFacilityOptions,
+  isPortalHandoffStepEligible,
+  resolveHandoffFacility,
+  resolvePortalTargets,
+} from "./casePortals";
 import type { Portal, Task } from "@/types";
 
 function portal(over: Partial<Portal>): Portal {
@@ -88,5 +94,142 @@ describe("casePortalTargets", () => {
 
   it("returns nothing when no open task has a resolvable portal", () => {
     expect(casePortalTargets([task({ sopContent: [step(undefined)] })], [])).toEqual([]);
+  });
+});
+
+describe("resolveHandoffFacility", () => {
+  const primary = { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", name: "Main" };
+  const secondary = { id: "11111111-2222-4333-8444-555555555555", name: "Uptown" };
+
+  it("blocks while locations load or when the location read fails", () => {
+    expect(resolveHandoffFacility("loading", [], null, undefined)).toEqual({
+      status: "blocked",
+      reason: "loading",
+    });
+    expect(resolveHandoffFacility("error", [], null, undefined)).toEqual({
+      status: "blocked",
+      reason: "load_failed",
+    });
+  });
+
+  it("keeps facility optional when the loaded case has no locations", () => {
+    expect(resolveHandoffFacility("ready", [], null, undefined)).toEqual({
+      status: "ready",
+      facilityId: undefined,
+    });
+  });
+
+  it("uses the sole loaded location when no prior selection exists", () => {
+    expect(resolveHandoffFacility("ready", [primary], null, undefined)).toEqual({
+      status: "ready",
+      facilityId: primary.id,
+    });
+  });
+
+  it("requires a choice for multiple unresolved locations", () => {
+    expect(resolveHandoffFacility("ready", [primary, secondary], null, undefined)).toEqual({
+      status: "blocked",
+      reason: "selection_required",
+    });
+  });
+
+  it("preserves a valid case selection, including a secondary", () => {
+    expect(resolveHandoffFacility("ready", [primary, secondary], secondary.id, undefined)).toEqual({
+      status: "ready",
+      facilityId: secondary.id,
+    });
+  });
+
+  it("preserves the user's explicit secondary selection over a different primary", () => {
+    expect(resolveHandoffFacility("ready", [primary, secondary], primary.id, secondary.id)).toEqual(
+      {
+        status: "ready",
+        facilityId: secondary.id,
+      },
+    );
+  });
+
+  it("blocks a stale explicit or case selection instead of substituting the primary", () => {
+    const stale = "99999999-8888-4777-8666-555555555555";
+    expect(resolveHandoffFacility("ready", [primary, secondary], primary.id, stale)).toEqual({
+      status: "blocked",
+      reason: "selection_invalid",
+    });
+    expect(resolveHandoffFacility("ready", [primary], stale, undefined)).toEqual({
+      status: "blocked",
+      reason: "selection_invalid",
+    });
+  });
+});
+
+describe("handoffFacilityOptions", () => {
+  const selected = { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", name: "Main" };
+
+  it("preserves the exact joined case facility when the optional child table returns no rows", () => {
+    expect(handoffFacilityOptions([], selected.id, selected)).toEqual([selected]);
+  });
+
+  it("does not duplicate or accept a mismatched joined facility", () => {
+    expect(handoffFacilityOptions([selected], selected.id, selected)).toEqual([selected]);
+    expect(
+      handoffFacilityOptions([], selected.id, {
+        id: "11111111-2222-4333-8444-555555555555",
+        name: "Other",
+      }),
+    ).toEqual([]);
+  });
+
+  it("still blocks when the child-table read failed even if the joined selection is known", () => {
+    const options = handoffFacilityOptions([], selected.id, selected);
+    expect(resolveHandoffFacility("error", options, selected.id, undefined)).toEqual({
+      status: "blocked",
+      reason: "load_failed",
+    });
+  });
+});
+
+describe("isPortalHandoffStepEligible", () => {
+  const onlineStep = {
+    id: "s1",
+    order: 1,
+    label: "Complete enrollment",
+    isCompleted: false,
+    stepType: "online_form" as const,
+    portalKey: "regional_enrollment",
+  };
+
+  it("allows only the active incomplete online-form step of an unlocked task", () => {
+    expect(isPortalHandoffStepEligible(onlineStep, 0, 0, false, "in_progress")).toBe(true);
+    expect(isPortalHandoffStepEligible(onlineStep, 1, 0, false, "in_progress")).toBe(false);
+    expect(isPortalHandoffStepEligible(onlineStep, 0, 0, true, "in_progress")).toBe(false);
+    expect(isPortalHandoffStepEligible(onlineStep, 0, 0, false, "completed")).toBe(false);
+    expect(
+      isPortalHandoffStepEligible(
+        { ...onlineStep, isCompleted: true },
+        0,
+        -1,
+        false,
+        "in_progress",
+      ),
+    ).toBe(false);
+    expect(
+      isPortalHandoffStepEligible(
+        { ...onlineStep, stepType: "draft_email" },
+        0,
+        0,
+        false,
+        "in_progress",
+      ),
+    ).toBe(false);
+  });
+
+  it("resolves multiple portal steps independently as each becomes active", () => {
+    const second = { ...onlineStep, id: "s2", order: 2, portalKey: "second_portal" };
+    expect(isPortalHandoffStepEligible(onlineStep, 0, 0, false, "in_progress")).toBe(true);
+    expect(isPortalHandoffStepEligible(second, 1, 0, false, "in_progress")).toBe(false);
+    expect(
+      isPortalHandoffStepEligible({ ...onlineStep, isCompleted: true }, 0, 1, false, "in_progress"),
+    ).toBe(false);
+    expect(isPortalHandoffStepEligible(second, 1, 1, false, "in_progress")).toBe(true);
   });
 });
