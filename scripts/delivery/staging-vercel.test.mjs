@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { canonicalDigest, releaseTarget } from "../release/contract.mjs";
 import { REPOSITORY, STAGING_ALIASES, PRODUCTION_ALIASES, WORKFLOWS } from "./boundary.mjs";
-import { createStagingVercel } from "./staging-vercel.mjs";
+import { createStagingVercel, createStagingVercelServices } from "./staging-vercel.mjs";
 
 const execute = promisify(execFile);
 const TARGET = releaseTarget("staging");
@@ -17,6 +17,8 @@ const TEAM = TARGET.vercelTeamId;
 const TIME = 1788900000000;
 const RELEASE = "d".repeat(64);
 const SECRET = "SIMULATED_PRIVATE_PROVIDER_BODY";
+const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+const EXTENSION_ORIGIN = `chrome-extension://${EXTENSION_ID}`;
 
 const git = async (cwd, ...args) =>
   (
@@ -85,6 +87,7 @@ async function fixture(t) {
     calls: [],
     uploads: new Map(),
     createBodies: [],
+    environmentWrites: [],
     candidate: null,
     aliasReads: {},
     githubCalls: [],
@@ -96,6 +99,7 @@ async function fixture(t) {
       autoAssignCustomDomains: false,
       sharedEnvVariableIds: [],
       ssoProtection: { deploymentType: "all_except_custom_domains" },
+      protectionBypass: {},
       rootDirectory: null,
       framework: "tanstack-start",
       nodeVersion: "24.x",
@@ -129,7 +133,8 @@ async function fixture(t) {
     SUPABASE_URL: `https://${TARGET.supabaseRef}.supabase.co`,
     SUPABASE_PUBLISHABLE_KEY: anon,
     SUPABASE_ANON_KEY: anon,
-    API_CORS_ORIGINS: "https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app",
+    API_CORS_ORIGINS: `https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app,${EXTENSION_ORIGIN}`,
+    VITE_MINTED_EXTENSION_ID: EXTENSION_ID,
   };
   state.environment = {
     envs: [
@@ -191,6 +196,24 @@ async function fixture(t) {
     if (method === "GET" && url.pathname === `/v10/projects/${PROJECT}/env`) {
       assert.equal(url.searchParams.get("decrypt"), "false");
       return structuredClone(state.environment);
+    }
+    if (method === "POST" && url.pathname === `/v10/projects/${PROJECT}/env`) {
+      assert.equal(url.searchParams.get("upsert"), "true");
+      state.environmentWrites.push(structuredClone(body));
+      for (const update of body) {
+        const current = state.environment.envs.find((entry) => entry.key === update.key);
+        const entry = {
+          id: current?.id ?? `env_plain_${state.environment.envs.length}`,
+          ...update,
+          gitBranch: null,
+          customEnvironmentIds: [],
+          createdAt: current?.createdAt ?? TIME,
+          updatedAt: TIME + 1,
+        };
+        if (current) Object.assign(current, entry);
+        else state.environment.envs.push(entry);
+      }
+      return { created: structuredClone(body) };
     }
     if (method === "GET" && url.pathname === "/v1/env") {
       assert.equal(url.searchParams.get("projectId"), PROJECT);
@@ -272,6 +295,7 @@ async function fixture(t) {
       github: state.github,
       checkoutRoot,
       ciRunId: "23",
+      extensionId: EXTENSION_ID,
     });
   state.build = (extra = {}) =>
     state.provider().build({
@@ -292,13 +316,81 @@ test("fixed readiness collector proves the dedicated project and strips every va
   assert.equal(result.target.vercelProjectId, PROJECT);
   assert.equal(result.target.supabaseRef, TARGET.supabaseRef);
   assert.equal(result.project.gitDisconnected, true);
-  assert.equal(result.environment.length, 7);
+  assert.equal(result.project.automationBypassConfigured, false);
+  assert.equal(result.environment.length, 8);
   assert.equal(result.shared.length, 0);
   assert.deepEqual(result.activeDeployments, []);
   assert.equal(result.runtimeDatabaseBinding, "UNVERIFIED");
   assert.match(result.configurationDigest, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(result).includes(SECRET), false);
   assert.equal(JSON.stringify(result).includes(anonKey()), false);
+});
+
+test("one validated Chrome ID atomically configures the web sender and matching CORS origin", async (t) => {
+  const s = await fixture(t);
+  s.environment.envs = s.environment.envs.filter(
+    (entry) => entry.key !== "VITE_MINTED_EXTENSION_ID",
+  );
+  s.environment.envs.find((entry) => entry.key === "API_CORS_ORIGINS").value =
+    "https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app";
+
+  const result = await s.provider().configureExtensionIdentity();
+
+  assert.equal(s.environmentWrites.length, 1);
+  assert.deepEqual(s.environmentWrites[0], [
+    {
+      key: "API_CORS_ORIGINS",
+      value: `https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app,${EXTENSION_ORIGIN}`,
+      type: "plain",
+      target: ["preview"],
+    },
+    {
+      key: "VITE_MINTED_EXTENSION_ID",
+      value: EXTENSION_ID,
+      type: "plain",
+      target: ["preview"],
+    },
+  ]);
+  assert.equal(result.extensionId, EXTENSION_ID);
+  assert.equal(result.extensionOrigin, EXTENSION_ORIGIN);
+  assert.deepEqual(result.before.extensionIdentity, { configured: false });
+  assert.equal(result.after.extensionIdentity.extensionId, EXTENSION_ID);
+  assert.match(result.before.configurationDigest, /^[a-f0-9]{64}$/);
+  assert.match(result.after.configurationDigest, /^[a-f0-9]{64}$/);
+  assert.notEqual(result.after.configurationDigest, result.before.configurationDigest);
+  assert.equal((await s.provider().collectReadiness()).environment.length, 8);
+});
+
+test("already configured extension identity is idempotent and performs no write", async (t) => {
+  const s = await fixture(t);
+  const result = await s.provider().configureExtensionIdentity();
+  assert.equal(result.changed, false);
+  assert.equal(s.environmentWrites.length, 0);
+  assert.equal(result.before.configurationDigest, result.after.configurationDigest);
+  assert.equal(result.after.extensionIdentity.extensionId, EXTENSION_ID);
+});
+
+test("invalid or split Chrome identity is rejected before a provider write", async (t) => {
+  const s = await fixture(t);
+  for (const extensionId of ["a".repeat(31), "q".repeat(32), EXTENSION_ID.toUpperCase()]) {
+    assert.throws(
+      () =>
+        createStagingVercel({
+          transport: s.transport,
+          github: s.github,
+          checkoutRoot: s.checkoutRoot,
+          ciRunId: "23",
+          extensionId,
+        }),
+      { code: "STAGING_EXTENSION_ID_INVALID" },
+    );
+  }
+  s.environment.envs.find((entry) => entry.key === "API_CORS_ORIGINS").value =
+    "https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app,chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  await assert.rejects(s.provider().configureExtensionIdentity(), {
+    code: "STAGING_VERCEL_EXTENSION_IDENTITY_DRIFT",
+  });
+  assert.equal(s.environmentWrites.length, 0);
 });
 
 test("readiness accepts provider responses that omit empty optional inheritance arrays", async (t) => {
@@ -331,6 +423,71 @@ test("fixed Preview build uploads only the twice-admitted source and verifies pr
   assert.ok(s.githubCalls.filter((path) => path === "/actions/runs/23").length >= 4);
 });
 
+test("trusted staging service seam configures identity before build and exposes real readbacks", async (t) => {
+  const s = await fixture(t);
+  s.environment.envs = s.environment.envs.filter(
+    (entry) => entry.key !== "VITE_MINTED_EXTENSION_ID",
+  );
+  s.environment.envs.find((entry) => entry.key === "API_CORS_ORIGINS").value =
+    "https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app";
+  const services = createStagingVercelServices({
+    transport: s.transport,
+    github: s.github,
+    checkoutRoot: s.checkoutRoot,
+    ciRunId: "23",
+    extensionId: EXTENSION_ID,
+  });
+  const before = await services.snapshotVercel();
+  assert.deepEqual(before.extensionIdentity, { configured: false });
+  assert.equal(s.environmentWrites.length, 0);
+  await assert.rejects(
+    services.build({
+      target: TARGET,
+      sourceSha: s.sha,
+      releaseDigest: RELEASE,
+      withholdDomains: true,
+      gitBranch: "staging",
+      vercelEnvironment: "preview",
+    }),
+    { code: "STAGING_VERCEL_EXTENSION_IDENTITY_DRIFT" },
+  );
+  assert.equal(s.environmentWrites.length, 0);
+  assert.equal(s.uploads.size, 0);
+  const transition = await services.configureExtensionIdentity();
+  assert.deepEqual(transition.before.extensionIdentity, { configured: false });
+  assert.equal(transition.after.extensionIdentity.extensionId, EXTENSION_ID);
+  assert.notEqual(transition.before.configurationDigest, transition.after.configurationDigest);
+  const candidate = await services.build({
+    target: TARGET,
+    sourceSha: s.sha,
+    releaseDigest: RELEASE,
+    withholdDomains: true,
+    gitBranch: "staging",
+    vercelEnvironment: "preview",
+  });
+  const firstWrite = s.calls.findIndex((call) => call.method === "POST");
+  const firstUpload = s.calls.findIndex(
+    (call) => call.method === "POST" && call.path.startsWith("/v2/files?"),
+  );
+  assert.ok(firstWrite >= 0 && firstWrite < firstUpload);
+  assert.equal(s.environmentWrites.length, 1);
+  const checked = await services.checkCandidate({
+    deploymentId: candidate.deploymentId,
+    releaseDigest: RELEASE,
+  });
+  assert.equal(checked.candidate.deploymentId, candidate.deploymentId);
+  assert.equal(checked.extensionIdentity.extensionId, EXTENSION_ID);
+  assert.equal(checked.previewProtection, "VERCEL_AUTHENTICATION_EXCEPT_CUSTOM_DOMAINS");
+  assert.deepEqual(Object.keys(services).sort(), [
+    "assertReady",
+    "assignAlias",
+    "build",
+    "checkCandidate",
+    "configureExtensionIdentity",
+    "snapshotVercel",
+  ]);
+});
+
 test("wrong project, scope and arbitrary adapter options reject before a provider write", async (t) => {
   const s = await fixture(t);
   await assert.rejects(s.build({ target: { ...TARGET, vercelProjectId: "prj_other" } }), {
@@ -346,6 +503,7 @@ test("wrong project, scope and arbitrary adapter options reject before a provide
         github: s.github,
         checkoutRoot: s.checkoutRoot,
         ciRunId: "23",
+        extensionId: EXTENSION_ID,
         baseUrl: "https://other.invalid",
       }),
     { code: "STAGING_VERCEL_OPTIONS_REJECTED" },
@@ -357,6 +515,18 @@ test("wrong project, scope and arbitrary adapter options reject before a provide
 });
 
 for (const [name, mutate, code] of [
+  [
+    "automation protection bypass",
+    (s) => {
+      s.project.protectionBypass = {
+        "synthetic-secret-id": {
+          createdAt: TIME,
+          scope: "automation-bypass",
+        },
+      };
+    },
+    "STAGING_VERCEL_PROTECTION_BYPASS_PRESENT",
+  ],
   [
     "connected Git repository",
     (s) => {
@@ -538,6 +708,7 @@ test("unknown provider failures are reduced to static read/write codes", async (
     github: s.github,
     checkoutRoot: s.checkoutRoot,
     ciRunId: "23",
+    extensionId: EXTENSION_ID,
   });
   await assert.rejects(provider.collectReadiness(), {
     code: "STAGING_VERCEL_READ_FAILED",
@@ -549,6 +720,7 @@ test("unknown provider failures are reduced to static read/write codes", async (
         github: s.github,
         checkoutRoot: s.checkoutRoot,
         ciRunId: "23",
+        extensionId: EXTENSION_ID,
       }),
     { code: "STAGING_VERCEL_CREDENTIAL_MISSING" },
   );
@@ -566,6 +738,7 @@ test("readiness timeout aborts a trusted transport that never resolves", async (
     github: s.github,
     checkoutRoot: s.checkoutRoot,
     ciRunId: "23",
+    extensionId: EXTENSION_ID,
   });
   const rejected = assert.rejects(provider.collectReadiness(), {
     code: "STAGING_VERCEL_COLLECTION_TIMEOUT",
@@ -598,4 +771,22 @@ test("configuration identity changes when project or environment metadata change
   const after = await s.provider().collectReadiness();
   assert.notEqual(after.configurationDigest, before.configurationDigest);
   assert.notEqual(canonicalDigest(after.environment), canonicalDigest(before.environment));
+});
+
+test("configuration digest binds the actual Chrome identity even when metadata is unchanged", async (t) => {
+  const s = await fixture(t);
+  const before = await s.provider().collectReadiness();
+  const otherId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  s.environment.envs.find((entry) => entry.key === "VITE_MINTED_EXTENSION_ID").value = otherId;
+  s.environment.envs.find((entry) => entry.key === "API_CORS_ORIGINS").value =
+    `https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app,chrome-extension://${otherId}`;
+  const after = await createStagingVercel({
+    transport: s.transport,
+    github: s.github,
+    checkoutRoot: s.checkoutRoot,
+    ciRunId: "23",
+    extensionId: otherId,
+  }).collectReadiness();
+  assert.notEqual(after.configurationDigest, before.configurationDigest);
+  assert.equal(after.extensionIdentity.extensionId, otherId);
 });

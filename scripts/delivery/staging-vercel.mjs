@@ -17,16 +17,11 @@ const TARGET = Object.freeze(releaseTarget("staging"));
 const PROJECT_NAME = "mintedpanel-staging-web";
 const GENERATED_DOMAIN = "mintedpanel-staging-web.vercel.app";
 const SUPABASE_URL = `https://${TARGET.supabaseRef}.supabase.co`;
-const CORS = "https://staging.mintedpanel.com,https://mintedpanel-staging.vercel.app";
-const ENVIRONMENT = Object.freeze({
-  VITE_SUPABASE_URL: { type: "plain", value: SUPABASE_URL },
-  VITE_SUPABASE_ANON_KEY: { type: "plain", family: "anon" },
-  SUPABASE_URL: { type: "plain", value: SUPABASE_URL },
-  SUPABASE_PUBLISHABLE_KEY: { type: "plain", family: "anon" },
-  SUPABASE_ANON_KEY: { type: "plain", family: "anon" },
-  API_CORS_ORIGINS: { type: "plain", value: CORS },
-  SUPABASE_SERVICE_ROLE_KEY: { type: "sensitive" },
-});
+const WEB_ORIGINS = Object.freeze([
+  "https://staging.mintedpanel.com",
+  "https://mintedpanel-staging.vercel.app",
+]);
+const BASE_CORS = WEB_ORIGINS.join(",");
 const API = "https://api.vercel.com";
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
@@ -47,6 +42,30 @@ const text = (value, max = 512) =>
   value.length <= max &&
   !/[\u0000-\u001f]/.test(value);
 const timestamp = (value) => Number.isSafeInteger(value) && value > 0;
+const extensionId = (value) => typeof value === "string" && /^[a-p]{32}$/.test(value);
+
+function environmentFor(actualExtensionId = null) {
+  return Object.freeze({
+    VITE_SUPABASE_URL: { type: "plain", value: SUPABASE_URL },
+    VITE_SUPABASE_ANON_KEY: { type: "plain", family: "anon" },
+    SUPABASE_URL: { type: "plain", value: SUPABASE_URL },
+    SUPABASE_PUBLISHABLE_KEY: { type: "plain", family: "anon" },
+    SUPABASE_ANON_KEY: { type: "plain", family: "anon" },
+    API_CORS_ORIGINS: {
+      type: "plain",
+      value:
+        actualExtensionId === null
+          ? BASE_CORS
+          : `${BASE_CORS},chrome-extension://${actualExtensionId}`,
+    },
+    ...(actualExtensionId === null
+      ? {}
+      : {
+          VITE_MINTED_EXTENSION_ID: { type: "plain", value: actualExtensionId },
+        }),
+    SUPABASE_SERVICE_ROLE_KEY: { type: "sensitive" },
+  });
+}
 
 function optionsOnly(value, keys, code = "STAGING_VERCEL_OPTIONS_REJECTED") {
   requireCondition(
@@ -102,6 +121,10 @@ function normalizeProject(project) {
     "STAGING_VERCEL_PROTECTION_DRIFT",
   );
   requireCondition(
+    object(project.protectionBypass) && Object.keys(project.protectionBypass).length === 0,
+    "STAGING_VERCEL_PROTECTION_BYPASS_PRESENT",
+  );
+  requireCondition(
     project.rootDirectory == null &&
       project.framework === "tanstack-start" &&
       typeof project.nodeVersion === "string" &&
@@ -123,6 +146,7 @@ function normalizeProject(project) {
     "serverlessFunctionRegion",
     "resourceConfig",
     "ssoProtection",
+    "protectionBypass",
     "autoAssignCustomDomains",
   ])
     settings[key] = project[key] ?? null;
@@ -132,15 +156,37 @@ function normalizeProject(project) {
     accountId: TARGET.vercelTeamId,
     gitDisconnected: true,
     autoAssignCustomDomains: false,
+    automationBypassConfigured: false,
     settingsDigest: canonicalDigest(settings),
   };
 }
 
-function normalizeEnvironment(response) {
+function environmentIdentity(response) {
+  requireCondition(
+    object(response) && Array.isArray(response.envs),
+    "STAGING_VERCEL_ENV_INVENTORY",
+  );
+  const entries = response.envs.filter((entry) => entry?.key === "VITE_MINTED_EXTENSION_ID");
+  requireCondition(entries.length <= 1, "STAGING_VERCEL_ENV_INVENTORY");
+  const actualExtensionId = entries.length === 0 ? null : entries[0].value;
+  requireCondition(
+    actualExtensionId === null || extensionId(actualExtensionId),
+    "STAGING_VERCEL_EXTENSION_IDENTITY_DRIFT",
+  );
+  const cors = response.envs.filter((entry) => entry?.key === "API_CORS_ORIGINS");
+  requireCondition(
+    cors.length === 1 && cors[0].value === environmentFor(actualExtensionId).API_CORS_ORIGINS.value,
+    "STAGING_VERCEL_EXTENSION_IDENTITY_DRIFT",
+  );
+  return actualExtensionId;
+}
+
+function normalizeEnvironment(response, actualExtensionId) {
+  const environment = environmentFor(actualExtensionId);
   requireCondition(
     object(response) &&
       Array.isArray(response.envs) &&
-      response.envs.length === Object.keys(ENVIRONMENT).length,
+      response.envs.length === Object.keys(environment).length,
     "STAGING_VERCEL_ENV_INVENTORY",
   );
   requireCondition(
@@ -151,7 +197,7 @@ function normalizeEnvironment(response) {
   const anon = [];
   const result = response.envs.map((entry) => {
     requireCondition(object(entry), "STAGING_VERCEL_ENV_METADATA");
-    const expected = ENVIRONMENT[entry.key];
+    const expected = environment[entry.key];
     const customEnvironmentIds = entry.customEnvironmentIds ?? [];
     requireCondition(
       expected &&
@@ -192,7 +238,7 @@ function normalizeEnvironment(response) {
     };
   });
   requireCondition(
-    seen.size === Object.keys(ENVIRONMENT).length && anon.length === 3 && new Set(anon).size === 1,
+    seen.size === Object.keys(environment).length && anon.length === 3 && new Set(anon).size === 1,
     "STAGING_VERCEL_ENV_INVENTORY",
   );
   decodeAnon(anon[0]);
@@ -486,7 +532,7 @@ export function createStagingVercel(options) {
   requireCondition(object(options), "STAGING_VERCEL_OPTIONS_REJECTED");
   requireCondition(
     Object.keys(options).every((key) =>
-      ["credential", "transport", "github", "checkoutRoot", "ciRunId"].includes(key),
+      ["credential", "transport", "github", "checkoutRoot", "ciRunId", "extensionId"].includes(key),
     ),
     "STAGING_VERCEL_OPTIONS_REJECTED",
   );
@@ -499,6 +545,9 @@ export function createStagingVercel(options) {
     "STAGING_VERCEL_OPTIONS_REJECTED",
   );
   requireId(options.ciRunId);
+  requireCondition(extensionId(options.extensionId), "STAGING_EXTENSION_ID_INVALID");
+  const requiredExtensionId = options.extensionId;
+  const requiredExtensionOrigin = `chrome-extension://${requiredExtensionId}`;
   const transport = options.transport ?? defaultTransport(options.credential);
   const request = async ({ method, path, body, raw = false, deadline }) => {
     const controller = new AbortController();
@@ -575,7 +624,7 @@ export function createStagingVercel(options) {
     throw new DeliveryError("STAGING_VERCEL_DEPLOYMENT_PAGINATION");
   };
 
-  const collectReadiness = async () => {
+  const collectReadiness = async ({ allowCurrentExtensionIdentity = false } = {}) => {
     const deadline = Date.now() + COLLECTION_MS;
     const read = (input) => request({ ...input, deadline });
     const collect = async () => {
@@ -585,12 +634,16 @@ export function createStagingVercel(options) {
           path: pathFor(`/v9/projects/${TARGET.vercelProjectId}`),
         }),
       );
-      const environment = normalizeEnvironment(
-        await read({
-          method: "GET",
-          path: pathFor(`/v10/projects/${TARGET.vercelProjectId}/env`, { decrypt: "false" }),
-        }),
+      const environmentResponse = await read({
+        method: "GET",
+        path: pathFor(`/v10/projects/${TARGET.vercelProjectId}/env`, { decrypt: "false" }),
+      });
+      const actualExtensionId = environmentIdentity(environmentResponse);
+      requireCondition(
+        allowCurrentExtensionIdentity || actualExtensionId === requiredExtensionId,
+        "STAGING_VERCEL_EXTENSION_IDENTITY_DRIFT",
       );
+      const environment = normalizeEnvironment(environmentResponse, actualExtensionId);
       const shared = normalizeShared(
         await read({
           method: "GET",
@@ -603,7 +656,7 @@ export function createStagingVercel(options) {
           path: pathFor(`/v9/projects/${TARGET.vercelProjectId}/domains`),
         }),
       );
-      return { project, environment, shared, domains };
+      return { project, environment, shared, domains, actualExtensionId };
     };
     const first = await collect();
     const deploymentCount = await noActiveDeployments(deadline);
@@ -613,10 +666,21 @@ export function createStagingVercel(options) {
       canonicalDigest(first) === canonicalDigest(final),
       "STAGING_VERCEL_COLLECTION_DRIFT",
     );
+    const extensionIdentity =
+      final.actualExtensionId === null
+        ? { configured: false }
+        : {
+            configured: true,
+            extensionId: final.actualExtensionId,
+            extensionOrigin: `chrome-extension://${final.actualExtensionId}`,
+          };
     return {
       version: 1,
       target: { ...TARGET },
-      ...final,
+      project: final.project,
+      environment: final.environment,
+      shared: final.shared,
+      domains: final.domains,
       deploymentCount,
       activeDeployments: [],
       configurationDigest: canonicalDigest({
@@ -624,8 +688,11 @@ export function createStagingVercel(options) {
         project: final.project,
         environment: final.environment,
         shared: final.shared,
+        extensionIdentity,
       }),
       configurationIdentityKind: "fixed-project-settings-and-exact-preview-env-metadata",
+      extensionIdentity,
+      previewProtection: "VERCEL_AUTHENTICATION_EXCEPT_CUSTOM_DOMAINS",
       runtimeDatabaseBinding: "UNVERIFIED",
     };
   };
@@ -648,10 +715,49 @@ export function createStagingVercel(options) {
 
   const built = new Map();
   return Object.freeze({
+    async configureExtensionIdentity() {
+      const before = await collectReadiness({ allowCurrentExtensionIdentity: true });
+      if (before.extensionIdentity.extensionId === requiredExtensionId) {
+        const after = await collectReadiness();
+        return {
+          changed: false,
+          extensionId: requiredExtensionId,
+          extensionOrigin: requiredExtensionOrigin,
+          before,
+          after,
+        };
+      }
+      await request({
+        method: "POST",
+        path: pathFor(`/v10/projects/${TARGET.vercelProjectId}/env`, { upsert: "true" }),
+        body: [
+          {
+            key: "API_CORS_ORIGINS",
+            value: `${BASE_CORS},${requiredExtensionOrigin}`,
+            type: "plain",
+            target: ["preview"],
+          },
+          {
+            key: "VITE_MINTED_EXTENSION_ID",
+            value: requiredExtensionId,
+            type: "plain",
+            target: ["preview"],
+          },
+        ],
+      });
+      const after = await collectReadiness();
+      return {
+        changed: true,
+        extensionId: requiredExtensionId,
+        extensionOrigin: requiredExtensionOrigin,
+        before,
+        after,
+      };
+    },
     async assertReady(input) {
       optionsOnly(input, ["target"]);
       requireCondition(input.target === "staging", "EXPLICIT_TARGET_REQUIRED");
-      return collectReadiness();
+      return collectReadiness({ allowCurrentExtensionIdentity: true });
     },
     async collectReadiness() {
       return collectReadiness();
@@ -765,6 +871,34 @@ export function createStagingVercel(options) {
       });
       return candidate;
     },
+    async checkCandidate(input) {
+      optionsOnly(input, ["deploymentId", "releaseDigest"]);
+      requireCondition(
+        deploymentId(input.deploymentId) && /^[a-f0-9]{64}$/.test(input.releaseDigest),
+        "STAGING_VERCEL_CANDIDATE_BINDING",
+      );
+      const expected = built.get(input.deploymentId);
+      requireCondition(
+        expected?.releaseDigest === input.releaseDigest,
+        "STAGING_VERCEL_CANDIDATE_BINDING",
+      );
+      const candidate = normalizeCandidate(
+        await readDeployment(input.deploymentId),
+        { ...expected, deploymentId: input.deploymentId },
+        { allowedStagingAliases: [...expected.assignedAliases] },
+      );
+      const readiness = await collectReadiness();
+      requireCondition(
+        readiness.configurationDigest === expected.configurationDigest,
+        "STAGING_VERCEL_CONFIGURATION_DRIFT",
+      );
+      return {
+        candidate,
+        configurationDigest: readiness.configurationDigest,
+        extensionIdentity: readiness.extensionIdentity,
+        previewProtection: readiness.previewProtection,
+      };
+    },
     async assignAlias(input) {
       optionsOnly(input, ["alias", "deploymentId", "releaseDigest"]);
       requireCondition(
@@ -819,5 +953,25 @@ export function createStagingVercel(options) {
         oldDeploymentId: assigned.oldDeploymentId ?? null,
       };
     },
+  });
+}
+
+/**
+ * Fixed Vercel half of the future hosted staging composition. The final
+ * integration must provide authenticated recovery snapshot/check services;
+ * these provider-only readbacks are deliberately not controller G0 evidence.
+ */
+export function createStagingVercelServices(options) {
+  const provider = createStagingVercel(options);
+  return Object.freeze({
+    assertReady: (input) => provider.assertReady(input),
+    // Pre-mutation snapshots must preserve the aligned current identity (or
+    // its legacy absence) so the later integration can bind rollback evidence
+    // before its explicit configuration transition under the shared lease.
+    snapshotVercel: () => provider.assertReady({ target: "staging" }),
+    configureExtensionIdentity: () => provider.configureExtensionIdentity(),
+    build: (input) => provider.build(input),
+    checkCandidate: (input) => provider.checkCandidate(input),
+    assignAlias: (input) => provider.assignAlias(input),
   });
 }
