@@ -222,6 +222,7 @@ describe("commitImportRun — P02 reviewed source-row boundary", () => {
     plan.updates[0].license_inserts = ["CO", "UT", "AZ"].map((state) => ({
       state,
       license_number: `${state}-100`,
+      license_type: null,
       issue_date: null,
       expiration_date: null,
     }));
