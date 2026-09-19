@@ -152,6 +152,23 @@ describe("PortalStepLink mounted variants", () => {
     expect(noUrl).not.toContain("Work in portal");
   });
 
+  it("does not mount a location picker when every location disappeared, so handoff stays blocked", () => {
+    const html = renderToStaticMarkup(
+      <PortalStepLink
+        portalKey="regional_enrollment"
+        handoff={handoff({
+          caseFacilityId: PRIMARY_ID,
+          facilities: [],
+          selectedFacilityId: undefined,
+        })}
+      />,
+    );
+    expect(html).not.toContain('aria-label="Location for this work"');
+    expect(html).toContain("The selected location is no longer available");
+    expect(html).toContain('<button type="button" disabled=""');
+    expect(html).toContain("Open portal directly");
+  });
+
   it.each([
     "http://portal.example/enroll",
     "not a URL",

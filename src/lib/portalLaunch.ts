@@ -1,4 +1,5 @@
 import {
+  isValidHandoffUrl,
   sendSetActiveCase,
   type ExtensionHandoffResult,
   type SetActiveCaseInput,
@@ -28,6 +29,12 @@ export function beginPortalLaunch(
     ((url: string, target: string, features: string) => window.open(url, target, features));
 
   const receipt = send({ ...input });
+  // Keep navigation on the same HTTPS boundary as the wire message. Invalid
+  // identifiers may still open a valid portal for manual recovery; unsafe URLs
+  // must not.
+  if (!isValidHandoffUrl(input.portalUrl)) {
+    return { portalStatus: "failed", receipt };
+  }
   try {
     open(input.portalUrl, "_blank", "noopener,noreferrer");
     return { portalStatus: "requested", receipt };

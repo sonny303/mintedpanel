@@ -1,11 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
-import type { ExtensionHandoffResult, SetActiveCaseInput } from "./extensionHandoff";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ExtensionHandoffResult } from "./extensionHandoff";
+import { sendSetActiveCase } from "./extensionHandoff";
 import {
   beginPortalLaunch,
   createPortalLaunchContextKey,
   createPortalLaunchGuard,
 } from "./portalLaunch";
 import { SET_ACTIVE_CASE_INPUT_FIXTURE } from "@/testFixtures/extensionHandoff";
+
+afterEach(() => {
+  delete (globalThis as { chrome?: unknown }).chrome;
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 const INPUT: SetActiveCaseInput = SET_ACTIVE_CASE_INPUT_FIXTURE;
 
@@ -65,6 +72,44 @@ describe("beginPortalLaunch", () => {
     });
     expect(launch.portalStatus).toBe("failed");
     await expect(launch.receipt).resolves.toEqual({ status: "received" });
+  });
+
+  it("does not request a portal tab when the handoff URL is unsafe", async () => {
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", "abcdefghijklmnopabcdefghijklmnop");
+    const open = vi.fn(() => null);
+    for (const portalUrl of [
+      "http://portal.example/enroll",
+      "https://user:secret@portal.example/enroll",
+      "not a URL",
+    ]) {
+      open.mockClear();
+      const launch = beginPortalLaunch(
+        { ...INPUT, portalUrl },
+        { send: sendSetActiveCase, open },
+      );
+      expect(open).not.toHaveBeenCalled();
+      expect(launch.portalStatus).toBe("failed");
+      await expect(launch.receipt).resolves.toEqual({
+        status: "invalid",
+        reason: "invalid_context",
+      });
+    }
+  });
+
+  it("still requests a valid HTTPS portal when only identifiers are invalid", async () => {
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", "abcdefghijklmnopabcdefghijklmnop");
+    const open = vi.fn(() => null);
+    const launch = beginPortalLaunch(
+      { ...INPUT, caseId: "not-a-uuid" },
+      { send: sendSetActiveCase, open },
+    );
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(INPUT.portalUrl, "_blank", "noopener,noreferrer");
+    expect(launch.portalStatus).toBe("requested");
+    await expect(launch.receipt).resolves.toEqual({
+      status: "invalid",
+      reason: "invalid_context",
+    });
   });
 });
 
