@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route, type Page, type BrowserContext } from "@playwright/test";
 
 // E1.3 TE-10 — Provider Roster coverage over the mock harness:
 //   TS-33 Tree Hill first provider: CAQH baseline + required group
@@ -239,7 +239,12 @@ function makeFixtures(over: FixtureOverrides) {
 // providers, state_licenses, and provider_group_assignments.
 function makeHandler(fixtures: Record<string, unknown[]>) {
   let seq = 500;
-  const STATEFUL = new Set(["providers", "state_licenses", "provider_group_assignments"]);
+  const STATEFUL = new Set([
+    "providers",
+    "state_licenses",
+    "provider_group_assignments",
+    "audit_log",
+  ]);
   return async (route: Route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -261,6 +266,8 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
         if (!(key in row)) continue;
         if (raw.startsWith("eq.")) {
           if (String(row[key]) !== raw.slice(3)) return false;
+        } else if (raw === "is.null") {
+          if (row[key] !== null) return false;
         } else if (raw.startsWith("in.(")) {
           const ids = raw
             .slice(4, -1)
@@ -277,6 +284,15 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
         Record<string, unknown> | Record<string, unknown>[];
       const rows = Array.isArray(body) ? body : [body];
       const created = rows.map((r) => ({
+        ...(table === "state_licenses"
+          ? {
+              status: "active",
+              verified_status: "unverified",
+              verified_at: null,
+              verified_by: null,
+              verification_source_url: null,
+            }
+          : {}),
         id: `${table}-${seq++}`,
         created_at: "2026-07-12T00:00:00Z",
         ...r,
@@ -293,7 +309,9 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
         return wantsObject ? json({ code: "PGRST116", message: "no rows" }, 406) : json([]);
       const targets = (fixtures[table] as Record<string, unknown>[]).filter(matchFilters);
       for (const t of targets) Object.assign(t, body);
-      return json(wantsObject ? (targets[0] ?? {}) : targets);
+      if (wantsObject && targets.length !== 1)
+        return json({ code: "PGRST116", message: "no rows" }, 406);
+      return json(wantsObject ? targets[0] : targets);
     }
     if (STATEFUL.has(table) && req.method() === "DELETE") {
       const rows = fixtures[table] as Record<string, unknown>[];
@@ -562,4 +580,527 @@ test("TS-35: per-row license editing — PSV verify with board URL, renewal rese
 
   // The regression pin: not one PATCH ever hit the providers table.
   expect(providerPatches).toEqual([]);
+});
+
+for (const initialRead of ["failed", "loading"] as const) {
+  test(`P03: ${initialRead} initial license lookup preserves two stored licenses when adding a third`, async ({
+    context,
+    page,
+  }) => {
+    const originals = [
+      licenseRow(ORG_OUTER_BANKS, "lic-nc", "prov-ob"),
+      licenseRow(ORG_OUTER_BANKS, "lic-sc", "prov-ob", {
+        state: "SC",
+        license_number: "SC-200",
+      }),
+    ];
+    const fixtures = makeFixtures({
+      providers: [
+        providerRow(ORG_OUTER_BANKS, "prov-ob", {
+          first_name: "Brooke",
+          last_name: "Ostrander",
+          npi: "1093817465",
+        }),
+      ],
+      state_licenses: structuredClone(originals),
+    });
+    const handler = makeHandler(fixtures);
+    const pendingReads: Route[] = [];
+    let initialLookupRecovered = false;
+    await context.route(/\/(rest|auth)\/v1\//, async (route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      if (req.method() === "POST" && url.pathname.endsWith("/state_licenses")) {
+        await handler(route);
+        initialLookupRecovered = true;
+        return;
+      }
+      if (
+        !initialLookupRecovered &&
+        req.method() === "GET" &&
+        url.pathname.endsWith("/state_licenses") &&
+        url.searchParams.has("provider_id") &&
+        url.searchParams.has("order")
+      ) {
+        if (initialRead === "loading") {
+          pendingReads.push(route);
+          return;
+        }
+        return route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Synthetic license lookup unavailable" }),
+        });
+      }
+      return handler(route);
+    });
+    await seedAuth(context, ORG_OUTER_BANKS);
+    await page.goto("/providers/prov-ob#licenses");
+    // Let the baseline reach the destructive save: its false-empty display is
+    // recorded here, then rejected only after checking persisted rows below.
+    const expectedStatus =
+      initialRead === "loading" ? "Loading licenses…" : "Could not load licenses.";
+    await expect(page.locator("#licenses")).toContainText(
+      initialRead === "loading"
+        ? /Loading licenses…|No state licenses recorded\./
+        : /Could not load licenses\.|No state licenses recorded\./,
+      { timeout: 15000 },
+    );
+    const initialReadDisplay = await page.locator("#licenses").innerText();
+    await page.getByRole("button", { name: "+ Add license" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add license" });
+    await dialog.locator("#license-state").click();
+    await page.getByRole("option", { name: "AZ", exact: true }).click();
+    await dialog.locator("#license-number").fill("AZ-300");
+    await dialog.getByRole("button", { name: "Add license", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(fixtures.state_licenses).toHaveLength(3);
+    expect(fixtures.state_licenses).toEqual(expect.arrayContaining(originals));
+    expect(initialReadDisplay).toContain(expectedStatus);
+    expect(initialReadDisplay).not.toContain("No state licenses recorded.");
+    for (const route of pendingReads) await route.abort();
+  });
+}
+
+function p03Fixtures() {
+  const groups = ["NC", "SC", "AZ"].map((state, index) => ({
+    ...groupRow(ORG_OUTER_BANKS, `g-${state}`, `Synthetic ${state} Group`),
+    npi_type2: `200000000${index}`,
+    states: [state],
+  }));
+  return makeFixtures({
+    provider_groups: groups,
+    providers: [
+      providerRow(ORG_OUTER_BANKS, "prov-ob", {
+        group_id: "g-NC",
+        first_name: "Brooke",
+        last_name: "Ostrander",
+        npi: "1093817465",
+      }),
+    ],
+    provider_group_assignments: groups.map((group, index) => ({
+      id: `ga-${index}`,
+      org_id: ORG_OUTER_BANKS,
+      provider_id: "prov-ob",
+      group_id: group.id,
+      is_primary: index === 0,
+      created_at: "2026-07-10T00:00:00Z",
+    })),
+    state_licenses: ["NC", "SC", "AZ"].map((state, index) =>
+      licenseRow(ORG_OUTER_BANKS, `lic-${state.toLowerCase()}`, "prov-ob", {
+        state,
+        license_number: `${state}-${index + 1}00`,
+      }),
+    ),
+  });
+}
+
+function licenseFixture(fixtures: Record<string, unknown[]>, id: string) {
+  const row = (fixtures.state_licenses as Record<string, unknown>[]).find((r) => r.id === id);
+  if (!row) throw new Error(`Missing synthetic license ${id}`);
+  return row;
+}
+
+async function openP03Record(context: BrowserContext, page: Page) {
+  await seedAuth(context, ORG_OUTER_BANKS);
+  await page.goto("/providers/prov-ob#licenses");
+  await expect(page.getByRole("button", { name: "Edit NC license" })).toBeVisible();
+}
+
+async function openP03Roster(context: BrowserContext, page: Page) {
+  await seedAuth(context, ORG_OUTER_BANKS);
+  await page.route("**/__p03-roster", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><body><div id="p03-roster"></div>
+        <script type="module">
+          import RefreshRuntime from '/@react-refresh';
+          RefreshRuntime.injectIntoGlobalHook(window);
+          window.$RefreshReg$ = () => {};
+          window.$RefreshSig$ = () => (type) => type;
+          window.__vite_plugin_react_preamble_installed__ = true;
+        </script>
+        <script type="module" src="/e2e/fixtures/p03-roster.tsx"></script>
+      </body></html>`,
+    }),
+  );
+  await page.goto("/__p03-roster");
+  return page.getByRole("dialog", { name: "Edit provider", exact: true });
+}
+
+test("P03: loaded empty is distinct and adding the first license persists its values", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  fixtures.state_licenses = [];
+  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
+  await seedAuth(context, ORG_OUTER_BANKS);
+  await page.goto("/providers/prov-ob#licenses");
+  await expect(page.getByText("No state licenses recorded.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "+ Add license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add license" });
+  await dialog.locator("#license-state").click();
+  await page.getByRole("option", { name: "NC", exact: true }).click();
+  await dialog.locator("#license-number").fill("NC-FIRST");
+  await dialog.getByRole("button", { name: "Add license", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(fixtures.state_licenses).toHaveLength(1);
+  expect(fixtures.state_licenses[0]).toMatchObject({ state: "NC", license_number: "NC-FIRST" });
+  await expect(page.getByText("No state licenses recorded.", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /NC-FIRST/ })).toBeVisible();
+});
+
+test("P03: one provider in three groups preserves unrelated concurrent licenses during edit and explicit removal", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  const providerBefore = structuredClone(fixtures.providers);
+  const groupsBefore = structuredClone(fixtures.provider_groups);
+  const assignmentsBefore = structuredClone(fixtures.provider_group_assignments);
+  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
+  await openP03Record(context, page);
+  await page.getByRole("button", { name: "Edit NC license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit license" });
+  licenseFixture(fixtures, "lic-sc").license_number = "SC-CONCURRENT";
+  const concurrent = licenseRow(ORG_OUTER_BANKS, "lic-co", "prov-ob", {
+    state: "CO",
+    license_number: "CO-CONCURRENT",
+  });
+  fixtures.state_licenses.push(concurrent);
+  const unrelatedBefore = structuredClone(fixtures.state_licenses.slice(1));
+  await dialog.locator("#license-number").fill("NC-EDITED");
+  await dialog.getByRole("button", { name: "Save license" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(licenseFixture(fixtures, "lic-nc").license_number).toBe("NC-EDITED");
+  expect(fixtures.state_licenses.slice(1)).toEqual(unrelatedBefore);
+  await page.getByRole("button", { name: "Remove AZ license" }).click();
+  await page.getByRole("button", { name: "Remove license", exact: true }).click();
+  await expect.poll(() => fixtures.state_licenses.length).toBe(3);
+  expect(fixtures.state_licenses.map((r) => (r as Record<string, unknown>).id)).toEqual([
+    "lic-nc",
+    "lic-sc",
+    "lic-co",
+  ]);
+  await page.getByRole("button", { name: "+ Add license" }).click();
+  const addDialog = page.getByRole("dialog", { name: "Add license" });
+  await addDialog.locator("#license-state").click();
+  await page.getByRole("option", { name: "AZ", exact: true }).click();
+  await addDialog.locator("#license-number").fill("AZ-300");
+  await addDialog.getByRole("button", { name: "Add license", exact: true }).click();
+  await expect(addDialog).toHaveCount(0);
+  expect(fixtures.state_licenses).toHaveLength(4);
+  expect(licenseFixture(fixtures, "lic-sc").license_number).toBe("SC-CONCURRENT");
+  expect(licenseFixture(fixtures, "lic-co")).toEqual(concurrent);
+  expect(fixtures.providers).toEqual(providerBefore);
+  expect(fixtures.provider_groups).toEqual(groupsBefore);
+  expect(fixtures.provider_group_assignments).toEqual(assignmentsBefore);
+  expect(fixtures.audit_log).toHaveLength(3);
+});
+
+for (const race of ["changed", "deleted"] as const) {
+  test(`P03: ${race} target rejects stale edit without replacing other licenses`, async ({
+    context,
+    page,
+  }) => {
+    const fixtures = p03Fixtures();
+    await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
+    await openP03Record(context, page);
+    await page.getByRole("button", { name: "Edit NC license" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit license" });
+    await dialog.locator("#license-number").fill("NC-STALE");
+    if (race === "changed") licenseFixture(fixtures, "lic-nc").license_number = "NC-CURRENT";
+    else
+      fixtures.state_licenses = fixtures.state_licenses.filter(
+        (r) => (r as { id: string }).id !== "lic-nc",
+      );
+    const storedBefore = structuredClone(fixtures.state_licenses);
+    await dialog.getByRole("button", { name: "Save license" }).click();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    expect(fixtures.state_licenses).toEqual(storedBefore);
+    expect(fixtures.audit_log).toEqual([]);
+    await expect(page.getByText("License saved.", { exact: true })).toHaveCount(0);
+  });
+}
+
+test("P03: service read failure performs no writes and reports an error", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  const storedBefore = structuredClone(fixtures);
+  const handler = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, (route) => {
+    const url = new URL(route.request().url());
+    if (
+      route.request().method() === "GET" &&
+      url.pathname.endsWith("/state_licenses") &&
+      url.searchParams.has("provider_id") &&
+      !url.searchParams.has("order")
+    )
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Synthetic required read failed" }),
+      });
+    return handler(route);
+  });
+  await openP03Record(context, page);
+  await page.getByRole("button", { name: "Edit NC license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit license" });
+  await dialog.locator("#license-number").fill("NC-UNSAVED");
+  await dialog.getByRole("button", { name: "Save license" }).click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  expect(fixtures).toEqual(storedBefore);
+  await expect(page.getByText("License saved.", { exact: true })).toHaveCount(0);
+});
+
+test("P03: failed write blocks blind retry until persisted data reloads", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  const storedBefore = structuredClone(fixtures.state_licenses);
+  const handler = makeHandler(fixtures);
+  let attempts = 0;
+  await context.route(/\/(rest|auth)\/v1\//, (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "PATCH" && url.pathname.endsWith("/state_licenses")) {
+      attempts += 1;
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Synthetic write failed" }),
+      });
+    }
+    return handler(route);
+  });
+  await openP03Record(context, page);
+  await page.getByRole("button", { name: "Edit NC license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit license" });
+  await dialog.locator("#license-number").fill("NC-UNSAVED");
+  await dialog.getByRole("button", { name: "Save license" }).click();
+  await expect(dialog.getByRole("button", { name: "Save license" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Reload saved data" })).toBeVisible();
+  expect(fixtures.state_licenses).toEqual(storedBefore);
+  expect(attempts).toBe(1);
+  await expect(page.getByText("License saved.", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Reload saved data" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /NC-100/ })).toBeVisible();
+});
+
+test("P03: roster editor keeps its original target snapshot across a background refresh", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  const handler = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  const dialog = await openP03Roster(context, page);
+  await expect(dialog.locator("#lic-0-number")).toHaveValue("NC-100");
+  await dialog.locator("#lic-0-number").fill("NC-STALE");
+  licenseFixture(fixtures, "lic-nc").license_number = "NC-CURRENT";
+  const refreshed = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith("/state_licenses") && url.searchParams.has("order");
+  });
+  await page
+    .locator("button")
+    .filter({ hasText: "Refresh fixture queries" })
+    .evaluate((element: HTMLButtonElement) => element.click());
+  await refreshed;
+  await expect(dialog.locator("#lic-0-number")).toHaveValue("NC-STALE");
+  const storedBefore = structuredClone(fixtures);
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog.getByRole("button", { name: "Reload saved data" })).toBeVisible();
+  expect(fixtures).toEqual(storedBefore);
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
+});
+
+test("P03: roster edit writes only dirty targets and explicit removals", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  licenseFixture(fixtures, "lic-sc").license_type = null;
+  const handler = makeHandler(fixtures);
+  const licenseWrites: string[] = [];
+  await context.route(/\/(rest|auth)\/v1\//, (route) => {
+    const req = route.request();
+    if (
+      ["PATCH", "DELETE"].includes(req.method()) &&
+      new URL(req.url()).pathname.endsWith("/state_licenses")
+    )
+      licenseWrites.push(req.url());
+    return handler(route);
+  });
+  const dialog = await openP03Roster(context, page);
+  await expect(dialog.locator("#lic-0-number")).toHaveValue("NC-100");
+  await dialog.locator("#lic-0-number").fill("NC-EDITED");
+  await dialog.getByRole("button", { name: "Remove license 3", exact: true }).click();
+  licenseFixture(fixtures, "lic-sc").license_number = "SC-CONCURRENT";
+  const scBefore = structuredClone(licenseFixture(fixtures, "lic-sc"));
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(fixtures.state_licenses).toHaveLength(2);
+  expect(licenseFixture(fixtures, "lic-nc").license_number).toBe("NC-EDITED");
+  expect(licenseFixture(fixtures, "lic-sc")).toEqual(scBefore);
+  expect(licenseWrites).toHaveLength(2);
+  expect(licenseWrites.every((url) => !url.includes("id=eq.lic-sc"))).toBe(true);
+  expect(fixtures.provider_group_assignments).toHaveLength(3);
+});
+
+test("P03: partial roster save reloads stored values before any retry", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  const handler = makeHandler(fixtures);
+  let attempts = 0;
+  let failedWrite = false;
+  let failRefresh = true;
+  await context.route(/\/(rest|auth)\/v1\//, (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "PATCH" && url.pathname.endsWith("/state_licenses")) {
+      attempts += 1;
+      if (url.searchParams.get("id") === "eq.lic-sc") {
+        failedWrite = true;
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Synthetic second write failed" }),
+        });
+      }
+    }
+    if (
+      failedWrite &&
+      failRefresh &&
+      route.request().method() === "GET" &&
+      url.pathname.endsWith("/state_licenses") &&
+      url.searchParams.has("order")
+    ) {
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Synthetic partial-save refresh failed" }),
+      });
+    }
+    return handler(route);
+  });
+  const dialog = await openP03Roster(context, page);
+  await expect(dialog.locator("#lic-0-number")).toHaveValue("NC-100");
+  await dialog.locator("#lic-0-number").fill("NC-SAVED");
+  await dialog.locator("#lic-1-number").fill("SC-UNSAVED");
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog.getByRole("button", { name: "Reload saved data" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  expect(licenseFixture(fixtures, "lic-nc").license_number).toBe("NC-SAVED");
+  expect(licenseFixture(fixtures, "lic-sc").license_number).toBe("SC-200");
+  expect(attempts).toBe(2);
+  await expect(page.getByText("Provider updated", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Reload saved data" }).click();
+  await expect(dialog).toContainText("Could not reload saved data. Try again.");
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  expect(attempts).toBe(2);
+  failRefresh = false;
+  await dialog.getByRole("button", { name: "Reload saved data" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "Open roster editor" }).click();
+  await expect(dialog.locator("#lic-0-number")).toHaveValue("NC-SAVED");
+  await expect(dialog.locator("#lic-1-number")).toHaveValue("SC-200");
+  expect(attempts).toBe(2);
+});
+
+test("P03: roster initial lookup failure shows error and successful empty retry opens the editor", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  fixtures.state_licenses = [];
+  const handler = makeHandler(fixtures);
+  let failLookup = true;
+  await context.route(/\/(rest|auth)\/v1\//, (route) => {
+    const url = new URL(route.request().url());
+    if (
+      failLookup &&
+      route.request().method() === "GET" &&
+      url.pathname.endsWith("/state_licenses") &&
+      url.searchParams.has("order")
+    )
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Synthetic initial lookup failed" }),
+      });
+    return handler(route);
+  });
+  const dialog = await openP03Roster(context, page);
+  await expect(dialog.getByText("Could not load provider data.", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+  failLookup = false;
+  await dialog.getByRole("button", { name: "Retry provider data" }).click();
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeVisible();
+  await expect(dialog.locator("#lic-0-number")).toHaveCount(0);
+  expect(fixtures.state_licenses).toEqual([]);
+});
+
+test("P03: a saved add with failed cache refresh requires reload and never repeats the insert", async ({
+  context,
+  page,
+}) => {
+  const fixtures = p03Fixtures();
+  const originals = structuredClone(fixtures.state_licenses);
+  const handler = makeHandler(fixtures);
+  let added = false;
+  let failRefresh = true;
+  let insertAttempts = 0;
+  await context.route(/\/(rest|auth)\/v1\//, async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "POST" && url.pathname.endsWith("/state_licenses")) {
+      insertAttempts += 1;
+      added = true;
+    }
+    if (
+      added &&
+      failRefresh &&
+      req.method() === "GET" &&
+      url.pathname.endsWith("/state_licenses") &&
+      url.searchParams.has("order")
+    ) {
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Synthetic refresh failed after persistence" }),
+      });
+    }
+    return handler(route);
+  });
+  await openP03Record(context, page);
+  await page.getByRole("button", { name: "+ Add license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add license" });
+  await dialog.locator("#license-state").click();
+  await page.getByRole("option", { name: "CO", exact: true }).click();
+  await dialog.locator("#license-number").fill("CO-SAVED");
+  await dialog.getByRole("button", { name: "Add license", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Reload saved data" })).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(dialog.getByRole("button", { name: "Add license", exact: true })).toBeDisabled();
+  await expect(page.locator("#licenses")).toContainText("Could not load licenses.");
+  await expect(page.locator("#licenses")).not.toContainText("No state licenses recorded.");
+  expect(fixtures.state_licenses).toHaveLength(4);
+  expect(fixtures.state_licenses).toEqual(expect.arrayContaining(originals));
+  expect(insertAttempts).toBe(1);
+  await expect(page.getByText("License added.", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Reload saved data" }).click();
+  await expect(dialog).toContainText("Could not reload saved data. Try again.", { timeout: 15000 });
+  await expect(dialog.getByRole("button", { name: "Add license", exact: true })).toBeDisabled();
+  failRefresh = false;
+  await dialog.getByRole("button", { name: "Reload saved data" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /CO-SAVED/ })).toBeVisible();
+  expect(insertAttempts).toBe(1);
 });

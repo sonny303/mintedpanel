@@ -28,7 +28,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { GroupAssignmentPicker } from "@/components/onboarding/GroupAssignmentPicker";
 import { LicenseListEditor } from "@/components/onboarding/LicenseListEditor";
-import { EMPTY_LICENSE_DRAFT, type LicenseDraft } from "@/components/onboarding/licenseDraft";
+import {
+  EMPTY_LICENSE_DRAFT,
+  licenseDraftToValues,
+  licenseDraftsEqual,
+  type LicenseDraft,
+} from "@/components/onboarding/licenseDraft";
 import { useProvider, useProviderGroupAssignments } from "@/hooks/useProviders";
 import { useStateLicensesByProvider } from "@/hooks/useLookups";
 import { useCreateProviderWithDetails, useUpdateProviderWithLicenses } from "@/hooks/useProviders";
@@ -39,7 +44,13 @@ import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
 import { isValidNpi } from "@/lib/providerGroup";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
-import type { LicenseInput, ProviderInput } from "@/services/providers";
+import {
+  ProviderSaveError,
+  type LicenseCommand,
+  type LicenseInput,
+  type ProviderInput,
+} from "@/services/providers";
+import type { StateLicense } from "@/services/lookups";
 import type { Provider, ProviderGroup } from "@/types";
 
 interface RosterFormErrors {
@@ -134,13 +145,7 @@ function licenseDraftsToInputs(drafts: LicenseDraft[]): LicenseInput[] {
     .filter((d) => d.state.trim())
     .map((d) => ({
       id: d.id ?? null,
-      state: d.state,
-      licenseNumber: t(d.licenseNumber),
-      licenseType: t(d.licenseType),
-      issueDate: t(d.issueDate),
-      expirationDate: t(d.expirationDate),
-      verifiedStatus: d.verifiedStatus,
-      verificationSourceUrl: t(d.verificationSourceUrl),
+      ...licenseDraftToValues(d),
     }));
 }
 
@@ -149,21 +154,36 @@ function FormBody({
   groups,
   initialForm,
   initialLicenses,
+  initialLicenseRows,
   initialAssignments,
+  readError,
+  onReload,
   onClose,
 }: {
   provider: Provider | null;
   groups: ProviderGroup[];
   initialForm: RosterFormState;
   initialLicenses: LicenseDraft[];
+  initialLicenseRows: StateLicense[];
   initialAssignments: GroupAssignmentInput[];
+  readError?: string | null;
+  onReload?: () => Promise<void>;
   onClose: () => void;
 }) {
   const [form, setForm] = useState<RosterFormState>(initialForm);
   const [licenses, setLicenses] = useState<LicenseDraft[]>(initialLicenses);
+  // One immutable baseline per open form, independent of background query refreshes.
+  const [licenseBaseline] = useState(() => ({
+    rows: initialLicenseRows.map((row) => ({ ...row })),
+    drafts: initialLicenses.map((draft) => ({ ...draft })),
+  }));
+  const [removedLicenseIds, setRemovedLicenseIds] = useState<string[]>([]);
   const [assignments, setAssignments] = useState<GroupAssignmentInput[]>(initialAssignments);
   const [errors, setErrors] = useState<RosterFormErrors>({});
   const [licenseErrors, setLicenseErrors] = useState<Record<number, string>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [requiresReload, setRequiresReload] = useState(false);
+  const [reloading, setReloading] = useState(false);
   // E6.4 F6.4.4 — create-mode capture of migration enrollment FACTS (under
   // the PRIMARY group's contract; never a case). Edit mode manages facts on
   // the record's Enrollments panel instead.
@@ -179,7 +199,21 @@ function FormBody({
 
   const set = (patch: Partial<RosterFormState>) => setForm((f) => ({ ...f, ...patch }));
 
+  const reload = async () => {
+    if (!onReload) return;
+    setReloading(true);
+    try {
+      await onReload();
+    } catch {
+      setSaveError("Could not reload saved data. Try again.");
+    } finally {
+      setReloading(false);
+    }
+  };
+
   const handleSave = () => {
+    if (pending || requiresReload || reloading) return;
+    setSaveError(null);
     const next: RosterFormErrors = {};
     if (!form.firstName.trim()) next.firstName = "First name is required";
     if (!form.lastName.trim()) next.lastName = "Last name is required";
@@ -192,7 +226,7 @@ function FormBody({
 
     const licErrs: Record<number, string> = {};
     licenses.forEach((l, i) => {
-      if (!l.state.trim() && (l.licenseNumber.trim() || l.expirationDate.trim())) {
+      if (!l.state.trim() && (l.id || l.licenseNumber.trim() || l.expirationDate.trim())) {
         licErrs[i] = "Select the license state";
       }
     });
@@ -201,13 +235,45 @@ function FormBody({
     setLicenseErrors(licErrs);
     if (Object.keys(next).length > 0 || Object.keys(licErrs).length > 0) return;
 
-    const onError = (e: unknown) =>
-      toast.error(e instanceof Error ? e.message : "Couldn't save the provider");
+    const onError = (e: unknown) => {
+      const message = e instanceof Error ? e.message : "Couldn't save the provider";
+      setSaveError(message);
+      setRequiresReload(e instanceof ProviderSaveError && e.requiresReload);
+      toast.error(message);
+    };
     if (provider) {
+      const licenseCommands: LicenseCommand[] = [];
+      for (const draft of licenses) {
+        if (!draft.state.trim()) continue;
+        const values = licenseDraftToValues(draft);
+        if (!draft.id) {
+          licenseCommands.push({ type: "add", values });
+          continue;
+        }
+        const original = licenseBaseline.drafts.find((row) => row.id === draft.id);
+        const expected = licenseBaseline.rows.find((row) => row.id === draft.id);
+        if (!original || !expected) {
+          setSaveError("License data is unavailable. Reload saved data before saving.");
+          setRequiresReload(true);
+          return;
+        }
+        if (!licenseDraftsEqual(draft, original)) {
+          licenseCommands.push({ type: "update", id: draft.id, expected, values });
+        }
+      }
+      for (const id of removedLicenseIds) {
+        const expected = licenseBaseline.rows.find((row) => row.id === id);
+        if (!expected) {
+          setSaveError("License data is unavailable. Reload saved data before saving.");
+          setRequiresReload(true);
+          return;
+        }
+        licenseCommands.push({ type: "remove", id, expected });
+      }
       updateMut.mutate(
         {
           patch: toProviderInput(form),
-          licenses: licenseDraftsToInputs(licenses),
+          licenseCommands,
           groupAssignments: assignments,
         },
         {
@@ -265,6 +331,11 @@ function FormBody({
   return (
     <>
       <div className="space-y-4 py-2">
+        {readError ? (
+          <p role="alert" className="text-[13px] text-[#B91C1C]">
+            {readError}
+          </p>
+        ) : null}
         {/* Step one: the group leg of the case key (F1.3.2). */}
         <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
           <h3 className="text-[13px] font-semibold text-foreground">Group assignment</h3>
@@ -515,7 +586,15 @@ function FormBody({
 
         <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
           <h3 className="text-[13px] font-semibold text-foreground">State licenses</h3>
-          <LicenseListEditor value={licenses} onChange={setLicenses} errors={licenseErrors} />
+          <LicenseListEditor
+            value={licenses}
+            onChange={setLicenses}
+            onRemove={(row) => {
+              const id = row.id;
+              if (id) setRemovedLicenseIds((ids) => [...ids, id]);
+            }}
+            errors={licenseErrors}
+          />
         </div>
 
         {/* E6.4 F6.4.4 — migration enrollment capture (create only): facts
@@ -594,13 +673,28 @@ function FormBody({
           </div>
         ) : null}
       </div>
+      {saveError ? (
+        <p role="alert" className="text-[13px] text-[#B91C1C]">
+          {saveError}
+        </p>
+      ) : null}
+      {requiresReload ? (
+        <p className="text-[12px] text-muted-foreground">
+          Reload saved data and review before trying again.
+        </p>
+      ) : null}
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={pending}>
           Cancel
         </Button>
+        {(requiresReload || readError) && onReload ? (
+          <Button variant="outline" disabled={pending || reloading} onClick={() => void reload()}>
+            Reload saved data
+          </Button>
+        ) : null}
         <Button
           onClick={handleSave}
-          disabled={pending}
+          disabled={pending || requiresReload || reloading}
           className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
         >
           {pending ? "Saving…" : provider ? "Save changes" : "Save provider"}
@@ -625,6 +719,14 @@ function EditLoader({
   const providerQ = useProvider(providerId);
   const licensesQ = useStateLicensesByProvider(providerId);
   const assignmentsQ = useProviderGroupAssignments();
+  const readFailed = providerQ.isError || licensesQ.isError || assignmentsQ.isError;
+  const refetch = async () => {
+    await Promise.all([
+      providerQ.refetch({ throwOnError: true }),
+      licensesQ.refetch({ throwOnError: true }),
+      assignmentsQ.refetch({ throwOnError: true }),
+    ]);
+  };
 
   const ready = providerQ.data && licensesQ.data && assignmentsQ.data;
   const initial = useMemo(() => {
@@ -668,6 +770,23 @@ function EditLoader({
   }, [ready, providerQ.data, licensesQ.data, assignmentsQ.data, providerId]);
 
   if (!initial) {
+    if (readFailed || (providerQ.isSuccess && !providerQ.data)) {
+      return (
+        <div className="space-y-3 py-2">
+          <p role="alert" className="text-[13px] text-[#B91C1C]">
+            Could not load provider data.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void Promise.all([providerQ.refetch(), licensesQ.refetch(), assignmentsQ.refetch()]);
+            }}
+          >
+            Retry provider data
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="space-y-3 py-2">
         <Skeleton className="h-16 rounded-md" />
@@ -682,7 +801,17 @@ function EditLoader({
       groups={groups}
       initialForm={initial.form}
       initialLicenses={initial.licenses}
+      initialLicenseRows={licensesQ.data!}
       initialAssignments={initial.assignments}
+      readError={
+        readFailed
+          ? "Could not refresh provider data. Reload to review the latest saved values."
+          : null
+      }
+      onReload={async () => {
+        await refetch();
+        onClose();
+      }}
       onClose={onClose}
     />
   );
@@ -712,6 +841,7 @@ export function ProviderRosterForm({
             groups={groups}
             initialForm={EMPTY_FORM}
             initialLicenses={[{ ...EMPTY_LICENSE_DRAFT }]}
+            initialLicenseRows={[]}
             initialAssignments={[]}
             onClose={onClose}
           />
