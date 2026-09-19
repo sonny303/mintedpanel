@@ -81,6 +81,9 @@ export function WorkInPortalButton({
     portalUrl: target.url,
     facilityId,
   });
+  const activeContextKeyRef = useRef(contextKey);
+  const previousContextKeyRef = useRef(contextKey);
+  activeContextKeyRef.current = contextKey;
 
   // State is tagged with the click's exact auth/org/case context. A React
   // render can observe an account or session change before passive effects
@@ -93,6 +96,13 @@ export function WorkInPortalButton({
     const guard = guardRef.current;
     return () => guard.invalidate();
   }, []);
+
+  useEffect(() => {
+    if (previousContextKeyRef.current === contextKey) return;
+    previousContextKeyRef.current = contextKey;
+    guardRef.current.invalidate();
+    setLaunchState(null);
+  }, [contextKey]);
 
   const activeOrgMatches = authUserId !== null && activeOrgId === orgId;
   const launchDisabled = disabled || !activeOrgMatches;
@@ -132,7 +142,11 @@ export function WorkInPortalButton({
         : current,
     );
     void started.receipt.then((result) => {
-      if (!guardRef.current.isCurrent(generation)) return;
+      if (
+        !guardRef.current.isCurrent(generation) ||
+        activeContextKeyRef.current !== launchContextKey
+      )
+        return;
       setLaunchState((current) =>
         current?.contextKey === launchContextKey ? { ...current, receipt: result } : current,
       );

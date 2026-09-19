@@ -822,6 +822,41 @@ test("P05: mounted task click sends the explicit secondary to the addressed exte
   await expect(
     drawer.getByText("Extension received the case. Sign-in and access are checked there."),
   ).toHaveCount(0);
+
+  // Returning to the original account must not revive the completion that
+  // arrived while another authenticated context was active.
+  await page.evaluate(async () => {
+    const modulePath = "/src/lib/auth-store.ts";
+    const authModule = (await import(/* @vite-ignore */ modulePath)) as {
+      useAuthStore: {
+        getState: () => {
+          session: {
+            expires_at?: number;
+            user: { id: string; [key: string]: unknown };
+            [key: string]: unknown;
+          } | null;
+        };
+        setState: (state: Record<string, unknown>) => void;
+      };
+    };
+    const current = authModule.useAuthStore.getState();
+    if (current.session == null) throw new Error("Expected an authenticated test session");
+    const user = {
+      ...current.session.user,
+      id: "11111111-1111-4111-8111-111111111111",
+    };
+    authModule.useAuthStore.setState({
+      session: {
+        ...current.session,
+        user,
+        expires_at: Math.max(0, (current.session.expires_at ?? 1) - 1),
+      },
+      user,
+    });
+  });
+  await expect(
+    drawer.getByText("Extension received the case. Sign-in and access are checked there."),
+  ).toHaveCount(0);
 });
 
 test("P05: a task-level lock keeps the ordinary portal link but does not mount Work in portal", async ({
