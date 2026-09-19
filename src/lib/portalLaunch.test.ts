@@ -83,10 +83,7 @@ describe("beginPortalLaunch", () => {
       "not a URL",
     ]) {
       open.mockClear();
-      const launch = beginPortalLaunch(
-        { ...INPUT, portalUrl },
-        { send: sendSetActiveCase, open },
-      );
+      const launch = beginPortalLaunch({ ...INPUT, portalUrl }, { send: sendSetActiveCase, open });
       expect(open).not.toHaveBeenCalled();
       expect(launch.portalStatus).toBe("failed");
       await expect(launch.receipt).resolves.toEqual({
