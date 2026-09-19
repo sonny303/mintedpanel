@@ -145,7 +145,17 @@ test("bounded login lifecycle seals empty prestate, removes the exact role, and 
   const calls = [];
   const steps = lifecycleSteps();
   const result = await withStagingLoginRole(
-    { token, operation: async (credentials) => credentials.response.role },
+    {
+      token,
+      operation: async (credentials) => {
+        assert.deepEqual(Object.keys(credentials).sort(), [
+          "receivedAt",
+          "requestedAt",
+          "response",
+        ]);
+        return credentials.response.role;
+      },
+    },
     { fetchImpl: fetchSequence(steps, calls), clock: () => now },
   );
   assert.equal(result.output, loginResponse.role);

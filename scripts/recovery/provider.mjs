@@ -362,7 +362,13 @@ export async function withStagingLoginRole(
           Date.parse(credentials.requestedAt) >= Date.parse(prestate.receivedAt) &&
           Date.parse(credentials.requestedAt) - Date.parse(prestate.receivedAt) <= 5000,
       );
-      output = await operation(credentials);
+      output = await operation(
+        Object.freeze({
+          requestedAt: credentials.requestedAt,
+          receivedAt: credentials.receivedAt,
+          response: credentials.response,
+        }),
+      );
     } finally {
       if (postAttempted && createdRole) {
         cleanupEvidence = await cleanup({
