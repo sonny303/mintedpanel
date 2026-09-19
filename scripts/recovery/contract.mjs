@@ -140,7 +140,7 @@ export function stagingExportEnvironment({
     role: (v) => typeof v === "string" && /^cli_login_[a-zA-Z0-9_]{1,80}$/.test(v),
     password: (v) =>
       typeof v === "string" && v.length >= 16 && v.length <= 1024 && !/[\0\r\n]/.test(v),
-    ttl_seconds: (v) => integer(v) && v > 0,
+    ttl_seconds: (v) => integer(v) && v > 0 && v <= 3_600,
   });
   const time = clock(now);
   closed(sourceObserved, {

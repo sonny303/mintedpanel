@@ -21,15 +21,15 @@ const DATABASE = "minted_recovery";
 const PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const MAX_JSON = 256 * 1024 * 1024;
 const VERIFIED_BACKUP = Symbol("verified-backup");
-const QUALIFIED_RECOVERY_SCOPES = Object.freeze([
-  "application-schema-data",
-  "roles-memberships-grants-rls",
-  "extensions-functions-triggers",
-]);
+// The current verifier proves bounded public/application and role/catalog
+// facets, but not every category promised by the complete recovery scopes.
+// Emit no qualified scope until the follow-on qualifier reconciles all of it.
+const QUALIFIED_RECOVERY_SCOPES = Object.freeze([]);
 const QUALIFIER_PREREQUISITES = Object.freeze([
   "RELEASE_CONTEXT_BINDING",
   "REPOSITORY_MIGRATION_INVENTORY_RECONCILIATION",
   "AUTH_REST_INSTALLED_VERIFICATION",
+  "COMPLETE_RECOVERY_SCOPE_VERIFICATION",
 ]);
 const fail = () => new RecoveryError("RECOVERY_RESTORE_REJECTED");
 const check = (condition) => {
@@ -85,14 +85,100 @@ async function context(execute) {
   );
 }
 
+const ownership = (labels, runId) => labels && labels[OWNER] === PROFILE && labels[RUN] === runId;
+
+function jsonOne(value) {
+  const parsed = JSON.parse(value);
+  check(Array.isArray(parsed) && parsed.length === 1);
+  return parsed[0];
+}
+
+function listed(value) {
+  const rows = value
+    .trim()
+    .split("\n")
+    .map((row) => row.trim())
+    .filter(Boolean);
+  check(rows.length <= 1 && rows.every((row) => /^[a-f0-9]{12,64}$/.test(row)));
+  return rows[0] ?? null;
+}
+
+// Discover every owned resource independently. Exact-name listing distinguishes
+// absence from an inspect failure; labels are checked before any removal.
+export async function discoverOwnedRecoveryResources(runId, { execute = docker } = {}) {
+  try {
+    check(/^[a-f0-9]{16}$/.test(runId));
+    await context(execute);
+    const name = `${PROFILE}-${runId}`;
+    const containerId = listed(
+      await execute(
+        dockerArgs(
+          "container",
+          "ls",
+          "--all",
+          "--no-trunc",
+          "--filter",
+          `name=^/${name}$`,
+          "--format",
+          "{{.ID}}",
+        ),
+      ),
+    );
+    const networkId = listed(
+      await execute(
+        dockerArgs(
+          "network",
+          "ls",
+          "--no-trunc",
+          "--filter",
+          `name=^${name}$`,
+          "--format",
+          "{{.ID}}",
+        ),
+      ),
+    );
+    const volumeName = (
+      await execute(
+        dockerArgs("volume", "ls", "--filter", `name=^${name}$`, "--format", "{{.Name}}"),
+      )
+    ).trim();
+    check(volumeName === "" || volumeName === name);
+    const resources = { container: null, network: null, volume: null };
+    if (containerId) {
+      const item = jsonOne(await execute(dockerArgs("container", "inspect", containerId)));
+      check(
+        item.Id === containerId &&
+          item.Name === `/${name}` &&
+          ownership(item.Config?.Labels, runId),
+      );
+      resources.container = { ref: containerId };
+    }
+    if (networkId) {
+      const item = jsonOne(await execute(dockerArgs("network", "inspect", networkId)));
+      check(item.Id === networkId && item.Name === name && ownership(item.Labels, runId));
+      resources.network = { ref: networkId };
+    }
+    if (volumeName) {
+      const item = jsonOne(await execute(dockerArgs("volume", "inspect", volumeName)));
+      check(item.Name === name && ownership(item.Labels, runId));
+      resources.volume = { ref: volumeName };
+    }
+    return resources;
+  } catch {
+    throw fail();
+  }
+}
+
 export async function prepareIsolatedTarget(
   runId,
   {
     execute = docker,
     inspect = collectLocalTarget,
     password = randomBytes(32).toString("base64url"),
+    cleanup = destroyIsolatedTarget,
   } = {},
 ) {
+  let mutationStarted = false;
   try {
     check(/^[a-f0-9]{16}$/.test(runId));
     check(typeof password === "string" && password.length >= 32 && !/[\0\r\n]/.test(password));
@@ -104,6 +190,9 @@ export async function prepareIsolatedTarget(
     } catch {
       await execute(dockerArgs("image", "pull", POSTGRES_IMAGE), undefined, 10 * 60 * 1000);
     }
+    // Cleanup is eligible before the first named-resource mutation attempt.
+    // A transport error does not prove Docker rejected the create.
+    mutationStarted = true;
     await execute(
       dockerArgs("network", "create", "--internal", "--driver", "bridge", ...labels, name),
     );
@@ -161,6 +250,14 @@ export async function prepareIsolatedTarget(
     check(ready);
     return await inspect(runId);
   } catch {
+    if (mutationStarted) {
+      try {
+        await cleanup(runId);
+      } catch {
+        // The outer coordinator journals the run ID and performs an idempotent
+        // second cleanup attempt with a sanitized receipt.
+      }
+    }
     throw fail();
   }
 }
@@ -332,24 +429,28 @@ export async function inspectSealedBackup(
     check(
       lifecycle &&
         Object.keys(lifecycle).sort().join(",") ===
-          "deleteReceivedAt,deleteRequestedAt,loginReceivedAt,loginRequestedAt,poststateInventoryDigest,prestateInventoryDigest,prestateReceivedAt,prestateRequestedAt,roleDigest,verifiedAt" &&
+          "cleanupReceivedAt,cleanupRequestedAt,exactRoleAbsent,loginReceivedAt,loginRequestedAt,poststateInventoryDigest,poststateRoleCount,prestateInventoryDigest,prestateReceivedAt,prestateRequestedAt,roleDigest,verifiedAt" &&
         [
           lifecycle.prestateRequestedAt,
           lifecycle.prestateReceivedAt,
           lifecycle.loginRequestedAt,
           lifecycle.loginReceivedAt,
-          lifecycle.deleteRequestedAt,
-          lifecycle.deleteReceivedAt,
+          lifecycle.cleanupRequestedAt,
+          lifecycle.cleanupReceivedAt,
           lifecycle.verifiedAt,
         ].every(timestamp) &&
         Date.parse(lifecycle.prestateReceivedAt) >= Date.parse(lifecycle.prestateRequestedAt) &&
         Date.parse(lifecycle.loginRequestedAt) >= Date.parse(lifecycle.prestateReceivedAt) &&
         Date.parse(lifecycle.loginReceivedAt) >= Date.parse(lifecycle.loginRequestedAt) &&
-        Date.parse(lifecycle.deleteRequestedAt) >= Date.parse(lifecycle.loginReceivedAt) &&
-        Date.parse(lifecycle.deleteReceivedAt) >= Date.parse(lifecycle.deleteRequestedAt) &&
-        Date.parse(lifecycle.verifiedAt) >= Date.parse(lifecycle.deleteReceivedAt) &&
+        Date.parse(lifecycle.cleanupRequestedAt) >= Date.parse(lifecycle.loginReceivedAt) &&
+        Date.parse(lifecycle.cleanupReceivedAt) >= Date.parse(lifecycle.cleanupRequestedAt) &&
+        Date.parse(lifecycle.verifiedAt) >= Date.parse(lifecycle.cleanupReceivedAt) &&
         lifecycle.prestateInventoryDigest === canonicalDigest([]) &&
-        lifecycle.poststateInventoryDigest === canonicalDigest([]) &&
+        hash(lifecycle.poststateInventoryDigest) &&
+        Number.isSafeInteger(lifecycle.poststateRoleCount) &&
+        lifecycle.poststateRoleCount >= 0 &&
+        lifecycle.poststateRoleCount <= 32 &&
+        lifecycle.exactRoleAbsent === true &&
         hash(lifecycle.roleDigest),
     );
     const source = capture.captured.source;
@@ -362,7 +463,7 @@ export async function inspectSealedBackup(
         hash(source.schemaDigest) &&
         hash(source.lineageDigest) &&
         timestamp(capture.captured.capturedAt) &&
-        Date.parse(lifecycle.deleteRequestedAt) >= Date.parse(capture.captured.capturedAt),
+        Date.parse(lifecycle.cleanupRequestedAt) >= Date.parse(capture.captured.capturedAt),
     );
     check(
       capture.captured.snapshot?.method === "single-data-snapshot-catalog-bracketed" &&
@@ -773,6 +874,8 @@ export async function verifyRestoredBackup(
 }
 
 export async function rehearseStagingRestore({ workspace, identityPath } = {}, dependencies = {}) {
+  let runId;
+  let journaled = false;
   try {
     const clock = dependencies.clock ?? (() => new Date().toISOString());
     const monotonic = dependencies.monotonic ?? (() => performance.now());
@@ -785,12 +888,26 @@ export async function rehearseStagingRestore({ workspace, identityPath } = {}, d
         Date.parse(startedAt) >= Date.parse(detectedAt) &&
         Number.isFinite(began),
     );
-    const runId = (dependencies.randomBytes ?? randomBytes)(8).toString("hex");
+    runId = (dependencies.randomBytes ?? randomBytes)(8).toString("hex");
     check(/^[a-f0-9]{16}$/.test(runId));
     const verifiedBackup = await (dependencies.inspect ?? inspectSealedBackup)({
       workspace,
       identityPath,
     });
+    const journal = {
+      version: 1,
+      status: "CLEANUP_REQUIRED",
+      runId,
+      resourceName: `${PROFILE}-${runId}`,
+      recordedAt: clock(),
+    };
+    check(timestamp(journal.recordedAt));
+    await (dependencies.saveJournal ?? writeFile)(
+      join(workspace, `restore-${runId}-journal.json`),
+      `${JSON.stringify(journal, null, 2)}\n`,
+      { encoding: "utf8", flag: "wx", mode: 0o600 },
+    );
+    journaled = true;
     const target = await (dependencies.prepare ?? prepareIsolatedTarget)(runId);
     const restored = await (dependencies.restore ?? restoreEncryptedBackup)({
       target,
@@ -834,22 +951,88 @@ export async function rehearseStagingRestore({ workspace, identityPath } = {}, d
     );
     return result;
   } catch {
+    if (journaled && runId) {
+      let receipt;
+      try {
+        receipt = await (dependencies.cleanup ?? destroyIsolatedTarget)(runId);
+      } catch {
+        receipt = {
+          version: 1,
+          runId,
+          status: "CLEANUP_BLOCKED",
+          attempted: [],
+          removed: [],
+          remaining: ["unknown"],
+          failureKinds: ["inspection"],
+          verifiedAt: (dependencies.clock ?? (() => new Date().toISOString()))(),
+        };
+      }
+      try {
+        check(
+          receipt?.runId === runId &&
+            ["DESTROYED", "CLEANUP_BLOCKED"].includes(receipt.status) &&
+            timestamp(receipt.verifiedAt),
+        );
+        await (dependencies.saveCleanup ?? writeFile)(
+          join(workspace, `restore-${runId}-cleanup.json`),
+          `${JSON.stringify(receipt, null, 2)}\n`,
+          { encoding: "utf8", flag: "wx", mode: 0o600 },
+        );
+      } catch {
+        // The stable run ID remains in the pre-mutation journal for the
+        // operator's idempotent destroy command.
+      }
+    }
     throw fail();
   }
 }
 
 export async function destroyIsolatedTarget(
   runId,
-  { execute = docker, inspect = collectLocalTarget } = {},
+  {
+    execute = docker,
+    discover = discoverOwnedRecoveryResources,
+    clock = () => new Date().toISOString(),
+  } = {},
 ) {
   try {
-    const target = await inspect(runId);
-    const name = `${PROFILE}-${runId}`;
-    check(target.name === name);
-    await execute(dockerArgs("container", "rm", "--force", target.containerId));
-    await execute(dockerArgs("network", "rm", name));
-    await execute(dockerArgs("volume", "rm", name));
-    return { runId, status: "DESTROYED" };
+    check(/^[a-f0-9]{16}$/.test(runId));
+    const before = await discover(runId, { execute });
+    const attempted = [];
+    const failureKinds = [];
+    for (const [kind, args] of [
+      [
+        "container",
+        before.container ? dockerArgs("container", "rm", "--force", before.container.ref) : null,
+      ],
+      ["network", before.network ? dockerArgs("network", "rm", before.network.ref) : null],
+      ["volume", before.volume ? dockerArgs("volume", "rm", before.volume.ref) : null],
+    ]) {
+      if (!args) continue;
+      attempted.push(kind);
+      try {
+        await execute(args);
+      } catch {
+        failureKinds.push(kind);
+      }
+    }
+    const after = await discover(runId, { execute });
+    const remaining = ["container", "network", "volume"].filter((kind) => after[kind]);
+    const removed = ["container", "network", "volume"].filter(
+      (kind) => before[kind] && !after[kind],
+    );
+    const verifiedAt = clock();
+    check(timestamp(verifiedAt));
+    return {
+      version: 1,
+      runId,
+      status: remaining.length === 0 ? "DESTROYED" : "CLEANUP_BLOCKED",
+      attempted,
+      removed,
+      remaining,
+      failureKinds,
+      verifiedAt,
+    };
   } catch {
     throw fail();
   }
@@ -868,7 +1051,9 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
         `${JSON.stringify(await rehearseStagingRestore({ workspace: first, identityPath: second }))}\n`,
       );
     } else if (operation === "destroy" && firstFlag === "--run-id" && secondFlag === undefined) {
-      process.stdout.write(`${JSON.stringify(await destroyIsolatedTarget(first))}\n`);
+      const receipt = await destroyIsolatedTarget(first);
+      process.stdout.write(`${JSON.stringify(receipt)}\n`);
+      if (receipt.status !== "DESTROYED") process.exitCode = 2;
     } else throw fail();
   } catch {
     process.stdout.write('{"ok":false,"code":"RECOVERY_RESTORE_REJECTED"}\n');

@@ -9,6 +9,8 @@ import { RecoveryError, STAGING } from "./contract.mjs";
 const executeFile = promisify(execFile);
 const API = "https://api.supabase.com";
 const TOKEN = /^sbp_(?:oauth_)?[a-f0-9]{40}$/;
+const CLI_ROLE = /^cli_login_[A-Za-z0-9_]{1,80}$/;
+const MAX_PROVIDER_TTL_SECONDS = 3_600;
 const CLI_ROLE_QUERY =
   "SELECT r.rolname FROM pg_catalog.pg_roles AS r WHERE r.rolname LIKE 'cli\\_login\\_%' ESCAPE '\\' ORDER BY r.rolname";
 const fail = () => new RecoveryError("RECOVERY_PROVIDER_REJECTED");
@@ -197,10 +199,7 @@ export async function readStagingCliRoleInventory({
         Array.isArray(rows) &&
         rows.length <= 32 &&
         rows.every(
-          (row) =>
-            plainObject(row) &&
-            Object.keys(row).length === 1 &&
-            /^cli_login_[A-Za-z0-9_]{1,80}$/.test(row.rolname),
+          (row) => plainObject(row) && Object.keys(row).length === 1 && CLI_ROLE.test(row.rolname),
         ),
     );
     const roleNames = rows.map(({ rolname }) => rolname);
@@ -225,59 +224,80 @@ async function createStagingLoginRole({
   fetchImpl = fetch,
   clock = () => new Date().toISOString(),
 } = {}) {
+  let requestedAt;
   try {
     check(TOKEN.test(token));
-    const requestedAt = exactTimestamp(clock());
-    const response = await jsonRequest(
-      fetchImpl,
-      token,
-      `/v1/projects/${STAGING.ref}/cli/login-role`,
-      { method: "POST", body: JSON.stringify({ read_only: false }) },
-    );
-    const receivedAt = exactTimestamp(clock());
-    check(
-      Date.parse(receivedAt) >= Date.parse(requestedAt) &&
-        Object.keys(response).sort().join(",") === "password,role,ttl_seconds" &&
-        /^cli_login_[A-Za-z0-9_]{1,80}$/.test(response.role) &&
-        typeof response.password === "string" &&
-        response.password.length >= 16 &&
-        response.password.length <= 1024 &&
-        !/[\0\r\n]/.test(response.password) &&
-        Number.isSafeInteger(response.ttl_seconds) &&
-        response.ttl_seconds > 0,
-    );
-    return { requestedAt, receivedAt, response };
+    requestedAt = exactTimestamp(clock());
   } catch {
     throw fail();
   }
+  const response = await request(fetchImpl, token, `/v1/projects/${STAGING.ref}/cli/login-role`, {
+    method: "POST",
+    body: JSON.stringify({ read_only: false }),
+  });
+  let receivedAt;
+  try {
+    receivedAt = exactTimestamp(clock());
+  } catch {
+    receivedAt = null;
+  }
+  const cleanupRole = plainObject(response) && CLI_ROLE.test(response.role) ? response.role : null;
+  const ttlAccepted =
+    plainObject(response) &&
+    Number.isSafeInteger(response.ttl_seconds) &&
+    response.ttl_seconds > 0 &&
+    response.ttl_seconds <= MAX_PROVIDER_TTL_SECONDS;
+  const responseAccepted =
+    receivedAt !== null &&
+    Date.parse(receivedAt) >= Date.parse(requestedAt) &&
+    plainObject(response) &&
+    Object.keys(response).sort().join(",") === "password,role,ttl_seconds" &&
+    cleanupRole !== null &&
+    typeof response.password === "string" &&
+    response.password.length >= 16 &&
+    response.password.length <= 1024 &&
+    !/[\0\r\n]/.test(response.password) &&
+    ttlAccepted;
+  Object.freeze(response);
+  return Object.freeze({
+    requestedAt,
+    receivedAt,
+    response,
+    cleanupRole,
+    ttlAccepted,
+    responseAccepted,
+  });
 }
 
-async function deleteAndVerifyStagingLoginRoles({
+function exactRoleCleanupSql(role) {
+  check(CLI_ROLE.test(role));
+  return `SELECT pg_catalog.pg_terminate_backend(pid) FROM pg_catalog.pg_stat_activity WHERE usename = '${role}' AND pid <> pg_catalog.pg_backend_pid();\nALTER ROLE "${role}" NOLOGIN VALID UNTIL 'epoch';\nDROP ROLE "${role}";`;
+}
+
+async function removeAndVerifyStagingLoginRole({
   token,
   role,
   fetchImpl = fetch,
   clock = () => new Date().toISOString(),
 } = {}) {
-  let deletionFailed = false;
-  let deleteRequestedAt;
-  let deleteReceivedAt;
+  let cleanupFailed = false;
+  let cleanupRequestedAt;
+  let cleanupReceivedAt;
   try {
-    check(TOKEN.test(token) && /^cli_login_[A-Za-z0-9_]{1,80}$/.test(role));
-    deleteRequestedAt = exactTimestamp(clock());
-    const response = await jsonRequest(
-      fetchImpl,
-      token,
-      `/v1/projects/${STAGING.ref}/cli/login-role`,
-      { method: "DELETE" },
-    );
-    deleteReceivedAt = exactTimestamp(clock());
+    check(TOKEN.test(token) && CLI_ROLE.test(role));
+    cleanupRequestedAt = exactTimestamp(clock());
+    const response = await request(fetchImpl, token, `/v1/projects/${STAGING.ref}/database/query`, {
+      method: "POST",
+      body: JSON.stringify({ query: exactRoleCleanupSql(role) }),
+    });
+    cleanupReceivedAt = exactTimestamp(clock());
     check(
-      Date.parse(deleteReceivedAt) >= Date.parse(deleteRequestedAt) &&
-        Object.keys(response).length === 1 &&
-        response.message === "ok",
+      Date.parse(cleanupReceivedAt) >= Date.parse(cleanupRequestedAt) &&
+        Array.isArray(response) &&
+        response.length <= 32,
     );
   } catch {
-    deletionFailed = true;
+    cleanupFailed = true;
   }
   let verified;
   try {
@@ -285,19 +305,23 @@ async function deleteAndVerifyStagingLoginRoles({
   } catch {
     throw fail();
   }
-  check(!deletionFailed && verified.roleCount === 0);
+  const exactRoleAbsent = !verified.roleNames.includes(role);
+  check(!cleanupFailed && exactRoleAbsent);
   return {
-    deleteRequestedAt,
-    deleteReceivedAt,
+    cleanupRequestedAt,
+    cleanupReceivedAt,
     verifiedAt: verified.receivedAt,
     roleDigest: canonicalDigest(role),
     poststateInventoryDigest: verified.inventoryDigest,
+    poststateRoleCount: verified.roleCount,
+    exactRoleAbsent,
   };
 }
 
-// The bulk-delete endpoint is admissible only because the immediately preceding
-// authenticated inventory must be empty. Cleanup and a second inventory check
-// run after every POST attempt, including exporter failure.
+// A successful POST is cleaned up by its exact validated role name. The
+// project-wide DELETE endpoint is never used: another actor's CLI role may
+// appear after the empty prestate. An uncertain POST with no validated role is
+// observed once and then left to the provider's bounded TTL; it cannot qualify.
 export async function withStagingLoginRole(
   { token, operation } = {},
   {
@@ -305,7 +329,7 @@ export async function withStagingLoginRole(
     clock = () => new Date().toISOString(),
     readInventory = readStagingCliRoleInventory,
     create = createStagingLoginRole,
-    cleanup = deleteAndVerifyStagingLoginRoles,
+    cleanup = removeAndVerifyStagingLoginRole,
   } = {},
 ) {
   try {
@@ -320,24 +344,35 @@ export async function withStagingLoginRole(
     );
     let credentials;
     let output;
-    let posted = false;
+    let postAttempted = false;
     let cleanupEvidence;
+    let createdRole;
+    let createFailed = false;
     try {
-      posted = true;
-      credentials = await create({ token, fetchImpl, clock });
+      postAttempted = true;
+      try {
+        credentials = await create({ token, fetchImpl, clock });
+      } catch {
+        createFailed = true;
+      }
+      if (createFailed) throw fail();
+      createdRole = credentials.cleanupRole;
       check(
-        Date.parse(credentials.requestedAt) >= Date.parse(prestate.receivedAt) &&
+        credentials.responseAccepted === true &&
+          Date.parse(credentials.requestedAt) >= Date.parse(prestate.receivedAt) &&
           Date.parse(credentials.requestedAt) - Date.parse(prestate.receivedAt) <= 5000,
       );
       output = await operation(credentials);
     } finally {
-      if (posted) {
+      if (postAttempted && createdRole) {
         cleanupEvidence = await cleanup({
           token,
-          role: credentials?.response?.role ?? "cli_login_unknown",
+          role: createdRole,
           fetchImpl,
           clock,
         });
+      } else if (postAttempted) {
+        await readInventory({ token, fetchImpl, clock });
       }
     }
     check(cleanupEvidence);
@@ -349,11 +384,13 @@ export async function withStagingLoginRole(
         prestateInventoryDigest: prestate.inventoryDigest,
         loginRequestedAt: credentials.requestedAt,
         loginReceivedAt: credentials.receivedAt,
-        deleteRequestedAt: cleanupEvidence.deleteRequestedAt,
-        deleteReceivedAt: cleanupEvidence.deleteReceivedAt,
+        cleanupRequestedAt: cleanupEvidence.cleanupRequestedAt,
+        cleanupReceivedAt: cleanupEvidence.cleanupReceivedAt,
         verifiedAt: cleanupEvidence.verifiedAt,
         roleDigest: cleanupEvidence.roleDigest,
         poststateInventoryDigest: cleanupEvidence.poststateInventoryDigest,
+        poststateRoleCount: cleanupEvidence.poststateRoleCount,
+        exactRoleAbsent: cleanupEvidence.exactRoleAbsent,
       },
     };
   } catch {

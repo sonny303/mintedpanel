@@ -49,21 +49,31 @@ The coordinator must have explicit authorization for one bounded login-role
 lifecycle. Immediately before the POST, it runs the fixed read-only Management
 API query and requires an exact empty `cli_login_%` inventory. It then calls
 `/v1/projects/vmznysvietfaddakkegt/cli/login-role` once with
-`{"read_only":false}`. The response contains a role, password and positive
-`ttl_seconds`; the request does not let the caller choose a TTL. Local use is
-conservatively capped at 15 minutes from request start even when the provider
-returns a longer TTL.
+`{"read_only":false}`. The response must contain one strictly validated role,
+password and integer `ttl_seconds` from 1 through 3600. The request does not let
+the caller choose a TTL. The 3600-second server-response ceiling matches the
+reviewed provider integration contract; local use is capped at 900 seconds from
+request start.
 
-After every POST attempt, including capture failure, a `finally` path calls
-`DELETE /v1/projects/vmznysvietfaddakkegt/cli/login-role` once and repeats the
-authenticated inventory query. Success requires the final inventory to be empty.
-The bulk delete is permitted only because the fresh prestate proved there were no
-pre-existing CLI roles. `capture.json` records the prestate, request, receipt,
-delete and verification times plus inventory/role digests; it never records the
-password or token. Do not use IP unbanning or an authentication retry.
-[Create role](https://supabase.com/docs/reference/api/v1-create-login-role),
-[delete roles](https://supabase.com/docs/reference/api/v1-delete-login-roles),
-and [read-only query](https://supabase.com/docs/reference/api/v1-read-only-query).
+After a POST returns a validated role name, a `finally` path uses the Management
+API database write-query endpoint to terminate only that role's sessions, set
+that exact role to `NOLOGIN` with an epoch expiry, and drop that exact role. The
+identifier is accepted only by the fixed `cli_login_[A-Za-z0-9_]{1,80}` grammar
+and is quoted by the fixed query. A fresh read-only inventory must prove the
+created role absent. A different concurrently created CLI role is preserved.
+The project-wide login-role DELETE endpoint is never used.
+
+If the POST outcome is uncertain and no validated role name was received, the
+coordinator does not retry or guess a role and does not call a bulk cleanup. It
+re-reads inventory once, leaves the run blocked, and relies on the provider's
+bounded role expiry. Do not start another lifecycle until the exact inventory is
+again empty and at least the 3600-second provider ceiling has elapsed. A response
+above the ceiling is rejected after exact-role cleanup. `capture.json` records
+prestate, request, receipt, cleanup and verification times plus sanitized
+inventory/role digests and counts; it never records the password, token or SQL
+response. Do not use IP unbanning or an authentication retry.
+[Create role](https://supabase.com/docs/reference/api/v1-create-login-role) and
+[read-only query](https://supabase.com/docs/reference/api/v1-read-only-query).
 
 `scripts/recovery/provider.mjs` reads the token using the Supabase CLI's official
 precedence: `SUPABASE_ACCESS_TOKEN`, the macOS `Supabase CLI` / `supabase`
@@ -71,7 +81,7 @@ keychain item, then the protected legacy token file. The token is never accepted
 as a command-line argument or included in output. The provider verifies the
 exact project ref, name, region, healthy status, database engine/build and fixed
 session-pooler recovery endpoint before the bounded role lifecycle. It never
-retries the POST or DELETE. `scripts/recovery/live-backup.mjs` passes the response
+retries the login-role POST or exact-role cleanup. `scripts/recovery/live-backup.mjs` passes the response
 directly to the in-memory snapshot exporter and writes only `capture.json` plus
 encrypted age artifacts in the private workspace:
 
@@ -131,10 +141,10 @@ Its `CAPTURED_ONLY` record binds the supplied observation digest, executable and
 command identities, and ciphertext digests. It does not authenticate a supplied
 catalog observation or prove consistent cross-export snapshots, scope
 completeness, restore success or Auth/REST integrity. The outer coordinator adds
-fresh pre/post role inventories and the provider DELETE lifecycle; the exporter
+fresh pre/post role inventories and the exact-role cleanup lifecycle; the exporter
 alone cannot claim cleanup. It reserves five seconds before conservative
 credential expiry for local shutdown. OS suspension/failure can still interrupt
-the remote cleanup request, so a missing empty poststate is a failed run.
+the remote cleanup request, so missing exact-role absence is a failed run.
 
 `captureStagingSnapshot` adds an owned source snapshot using the same in-memory
 credential, fixed connection, CA, process owner and deadline. It pins native
@@ -341,7 +351,9 @@ target identity evidence only; it does not export, restore or claim recovery PAS
 5. Start the recovery clock at detection, before preparation. Re-authenticate
    every age stream and compare its bytes and SHA-256 with `capture.json`.
    `restore.mjs` fixes the Docker context/socket, image, local database, role and
-   executable paths. It accepts no host, connection URL, SQL or image override:
+   executable paths. Before the first named-resource creation attempt, it writes
+   a private `restore-<runId>-journal.json` containing the stable run ID and exact
+   resource name. It accepts no host, connection URL, SQL or image override:
 
    ```sh
    node scripts/recovery/restore.mjs restore \
@@ -357,18 +369,25 @@ target identity evidence only; it does not export, restore or claim recovery PAS
    written as `restore.json`; a failure publishes no PASS. The direct executor
    emits `REHEARSED_ONLY` with a nested `RESTORE_VERIFIED_ONLY`, a null release
    context digest and the unresolved capture/qualifier prerequisites. These
-   records are deliberately not a release G0 backup or recovery PASS.
+   records are deliberately not a release G0 backup or recovery PASS. They emit
+   an empty `qualifiedRecoveryScopes` array and
+   `COMPLETE_RECOVERY_SCOPE_VERIFICATION` until every category in the complete
+   inventory is collected and canonically compared.
 7. Auth rows, Storage metadata and Vault metadata are included in the table
    integrity comparison. Storage object bytes and Vault key recovery must be
    proved separately when either source inventory is nonempty. An operational
    Auth login and cross-tenant denial test still require the separately reviewed
    local Auth/REST service boundary; the DB-only executor does not claim them.
-8. Stop the clock only after these checks pass. Save sanitized proof metadata,
-   retain required encrypted backup/evidence and re-inspect ownership before
-   stopping/removing only this run's local resources with
-   `node scripts/recovery/restore.mjs destroy --run-id <runId>`. Never drop/reset
-   the source. The provider's reviewed empty-prestate login-role lifecycle is the
-   only hosted cleanup path. Failed/partial restorations remain failed.
+8. On every failure after the journal, cleanup discovers container, network and
+   volume independently by exact name and both ownership labels. It refuses a
+   foreign resource, attempts all owned removals even when one fails, rechecks
+   final absence and writes a private sanitized cleanup receipt. The receipt or
+   retained journal makes cleanup resumable by run ID. Re-run
+   `node scripts/recovery/restore.mjs destroy --run-id <runId>` until its receipt
+   is `DESTROYED`; already absent members are accepted. Successful rehearsals
+   retain the isolated target for reviewed follow-on work and require the same
+   explicit destroy command afterward. Never drop/reset the source. Failed or
+   partial restorations remain failed and never qualify a recovery scope.
 
 ## Evidence contract and freshness
 
