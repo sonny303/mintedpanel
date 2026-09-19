@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ExtensionHandoffResult } from "./extensionHandoff";
+import type { ExtensionHandoffResult, SetActiveCaseInput } from "./extensionHandoff";
 import { sendSetActiveCase } from "./extensionHandoff";
 import {
   beginPortalLaunch,
