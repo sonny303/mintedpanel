@@ -399,7 +399,12 @@ test("credential boundary pins staging TLS and read-only sessions", () => {
   assert.match(result.environment.PGOPTIONS, /default_transaction_read_only=on/);
   assert.equal(result.expiresAt, "2026-09-08T20:04:00.000Z");
 });
-for (const ttl of [0, -1, 900.1, 901, "300"])
+test("provider-valid long TTL is accepted but conservatively capped at fifteen minutes", () => {
+  const input = credential();
+  input.response.ttl_seconds = 86_400;
+  assert.equal(stagingExportEnvironment(input).expiresAt, "2026-09-08T20:14:00.000Z");
+});
+for (const ttl of [0, -1, 900.1, "300"])
   test(`rejects unsupported TTL ${ttl}`, () => {
     const input = credential();
     input.response.ttl_seconds = ttl;

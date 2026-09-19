@@ -140,7 +140,7 @@ export function stagingExportEnvironment({
     role: (v) => typeof v === "string" && /^cli_login_[a-zA-Z0-9_]{1,80}$/.test(v),
     password: (v) =>
       typeof v === "string" && v.length >= 16 && v.length <= 1024 && !/[\0\r\n]/.test(v),
-    ttl_seconds: (v) => integer(v) && v > 0 && v <= 900,
+    ttl_seconds: (v) => integer(v) && v > 0,
   });
   const time = clock(now);
   closed(sourceObserved, {
@@ -155,7 +155,7 @@ export function stagingExportEnvironment({
   fresh(receivedAt, time, 900_000);
   requireCondition(Date.parse(receivedAt) >= Date.parse(requestedAt), "INVALID_TIME");
   // Use request start, not response receipt, to avoid overstating expiry.
-  const expiresAt = Date.parse(requestedAt) + response.ttl_seconds * 1000;
+  const expiresAt = Date.parse(requestedAt) + Math.min(response.ttl_seconds, 900) * 1000;
   requireCondition(time < expiresAt, "CREDENTIAL_EXPIRED");
   return {
     expiresAt: new Date(expiresAt).toISOString(),

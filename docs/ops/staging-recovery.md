@@ -1,11 +1,12 @@
 # Staging recovery — G2 boundary and runbook
 
-This slice supplies local encryption, a capture-only export API, and evidence
-guards. It does not acquire a credential, create a container, import SQL, or
-demonstrate a successful recovery. The coordinator may invoke the fixed staging
-export API only after its prerequisites are satisfied. A database import alone
-is insufficient: Auth, access controls,
-Storage and Vault recovery must also be proved. Product/schema repairs are outside
+This slice supplies local encryption, a fixed staging credential provider, an
+owned backup coordinator, an isolated database restore executor and evidence
+guards. A live run remains evidence, not an effect of merging this code. The
+coordinator requires an authenticated Supabase CLI token source and a separately
+protected age identity. A database restore proves the database boundary; an
+operational local Auth/REST service still requires separately reviewed service
+containers and replacement local keys. Product/schema repairs remain outside
 this task. Production backup and recovery evidence is separate and unverified.
 
 ## Fixed source and runtime
@@ -44,16 +45,41 @@ dump load into 17.
 
 ## Credential prerequisite
 
-The coordinator must obtain explicit approval before the single POST to
-`/v1/projects/vmznysvietfaddakkegt/cli/login-role` with `{"read_only":false}`.
-The response contains a role, password and `ttl_seconds`; no password reset is
-needed. The endpoint's published request does not let the caller choose a TTL.
-**A guaranteed server-side lifetime of at most 15 minutes is not established.**
-Reject a returned TTL above 900 seconds and do not use that credential. Rejection
-does not revoke a role already created by the server. Resolve any approval that
-requires a hard server-side maximum before calling this endpoint. Do not invoke
-global role deletion or IP unbanning as cleanup or as an authentication retry.
-[Management API contract](https://supabase.com/docs/reference/api/v1-create-login-role).
+The coordinator must have explicit authorization for one bounded login-role
+lifecycle. Immediately before the POST, it runs the fixed read-only Management
+API query and requires an exact empty `cli_login_%` inventory. It then calls
+`/v1/projects/vmznysvietfaddakkegt/cli/login-role` once with
+`{"read_only":false}`. The response contains a role, password and positive
+`ttl_seconds`; the request does not let the caller choose a TTL. Local use is
+conservatively capped at 15 minutes from request start even when the provider
+returns a longer TTL.
+
+After every POST attempt, including capture failure, a `finally` path calls
+`DELETE /v1/projects/vmznysvietfaddakkegt/cli/login-role` once and repeats the
+authenticated inventory query. Success requires the final inventory to be empty.
+The bulk delete is permitted only because the fresh prestate proved there were no
+pre-existing CLI roles. `capture.json` records the prestate, request, receipt,
+delete and verification times plus inventory/role digests; it never records the
+password or token. Do not use IP unbanning or an authentication retry.
+[Create role](https://supabase.com/docs/reference/api/v1-create-login-role),
+[delete roles](https://supabase.com/docs/reference/api/v1-delete-login-roles),
+and [read-only query](https://supabase.com/docs/reference/api/v1-read-only-query).
+
+`scripts/recovery/provider.mjs` reads the token using the Supabase CLI's official
+precedence: `SUPABASE_ACCESS_TOKEN`, the macOS `Supabase CLI` / `supabase`
+keychain item, then the protected legacy token file. The token is never accepted
+as a command-line argument or included in output. The provider verifies the
+exact project ref, name, region, healthy status, database engine/build and fixed
+session-pooler recovery endpoint before the bounded role lifecycle. It never
+retries the POST or DELETE. `scripts/recovery/live-backup.mjs` passes the response
+directly to the in-memory snapshot exporter and writes only `capture.json` plus
+encrypted age artifacts in the private workspace:
+
+```sh
+node scripts/recovery/live-backup.mjs capture \
+  --workspace /absolute/private/recovery-run \
+  --recipient AGE_PUBLIC_RECIPIENT
+```
 
 `stagingExportEnvironment` in `scripts/recovery/contract.mjs` accepts the response
 in memory with `requestedAt`, `receivedAt`, `now`, and fresh `sourceObserved`
@@ -104,10 +130,11 @@ and encryption processes and settle their pipelines before cleanup completes.
 Its `CAPTURED_ONLY` record binds the supplied observation digest, executable and
 command identities, and ciphertext digests. It does not authenticate a supplied
 catalog observation or prove consistent cross-export snapshots, scope
-completeness, role revocation, restore success or Auth/REST integrity. It reserves
-five seconds before conservative credential expiry for local shutdown. Client
-termination cannot establish server role revocation or guarantee shutdown during
-OS suspension/failure; these remain explicit operational prerequisites.
+completeness, restore success or Auth/REST integrity. The outer coordinator adds
+fresh pre/post role inventories and the provider DELETE lifecycle; the exporter
+alone cannot claim cleanup. It reserves five seconds before conservative
+credential expiry for local shutdown. OS suspension/failure can still interrupt
+the remote cleanup request, so a missing empty poststate is a failed run.
 
 `captureStagingSnapshot` adds an owned source snapshot using the same in-memory
 credential, fixed connection, CA, process owner and deadline. It pins native
@@ -265,8 +292,11 @@ Do not describe separate role/schema/data invocations as one atomic system
 snapshot. The current contract permits one consistent data snapshot with catalog
 fingerprints bracketing the whole export. Reject schema drift. Source metadata
 and full scope must be rechecked after export; inaccessible scope is BLOCKED.
-No complete source export recipe or managed-schema remapping is implemented here
-until these prerequisites are established from actual access.
+The full custom archive retains the source database objects and rows. The role
+dump is retained and authenticated separately. Restoration does not replay
+hosted reserved-role DDL into the local cluster; the executor instead requires
+the pinned Supabase image's non-temporary role and membership catalog to match
+the encrypted source catalog exactly. A mismatch fails before qualification.
 
 ## Local restore procedure and ownership proof
 
@@ -300,36 +330,45 @@ target identity evidence only; it does not export, restore or claim recovery PAS
    Docker socket with `docker exec --interactive`, avoiding a host TCP listener. Verify every observed count; do not
    copy expected safe values into the observation. Inspect immediately before
    any import and again afterward; observations expire after five minutes.
-4. Initialize the pinned local platform baseline while empty. Obtain the reviewed
-   compatible managed schemas, role map and supplements before import. Do not
+4. Initialize the pinned local platform baseline while empty. The executor
+   creates a separate `minted_recovery` database from `template0`, then streams
+   the authenticated custom archive into `pg_restore --single-transaction
+--exit-on-error`. Do not
    reuse hosted passwords, JWTs or server keys locally. Do not attach unreviewed
    Auth/REST peers: their pinned images, task ownership and outbound isolation
    need a collector extension and independent review. The current DB-only guard
    cannot itself prove an operational Auth service.
-5. Start the recovery clock at detection, before preparation. Use the selected
-   encrypted backup; re-authenticate decryption and compare actual ciphertext
-   digests. Restore by an explicitly reviewed local-only coordinator. No generic
-   executable restore command is provided, so a path or connection override
-   cannot direct this helper at staging or production.
-6. The reviewed coordinator must force the verified Docker context, container ID,
-   local database and reviewed local role, use `docker exec --interactive` stdin
-   with no host/connection override, and disable `.psqlrc`. Supply roles,
-   compatible schema/supplements, then data through protected streams under
-   `psql --single-transaction --set ON_ERROR_STOP=1`; capture all subprocess exit
-   statuses without logging SQL/errors. A reviewed `session_replication_role`
-   change during import may be needed to avoid duplicate encryption, but must
-   be local-only and returned to normal before validation. Do not ignore errors,
-   remove constraints, omit Auth rows or repair product triggers.
-7. Verify all required `CHECKS` and `SCOPES`. Compare schema and lineage, row
-   counts plus private content integrity, sequences, keys/references, role and
-   RLS behavior, Auth access, objects, Vault and extensions. Disabled-trigger
-   imports require explicit orphan/FK checks; `convalidated` alone does not prove
-   imported rows satisfy constraints. Perform disposable identity/login and
-   cross-tenant denial checks locally only, and preserve source records.
+5. Start the recovery clock at detection, before preparation. Re-authenticate
+   every age stream and compare its bytes and SHA-256 with `capture.json`.
+   `restore.mjs` fixes the Docker context/socket, image, local database, role and
+   executable paths. It accepts no host, connection URL, SQL or image override:
+
+   ```sh
+   node scripts/recovery/restore.mjs restore \
+     --workspace /absolute/private/recovery-run \
+     --identity /absolute/private/keys/recovery-identity.txt
+   ```
+
+6. The executor compares every physical table's row count and private content
+   digest, reconciles non-MVCC sequence observations, and compares public
+   ownership, ACLs, column ACLs, RLS policies, constraints, indexes, functions,
+   triggers, extension versions, roles and memberships. It also checks outbound
+   subscriptions/foreign objects and large objects. The sanitized result is
+   written as `restore.json`; a failure publishes no PASS. The direct executor
+   emits `REHEARSED_ONLY` with a nested `RESTORE_VERIFIED_ONLY`, a null release
+   context digest and the unresolved capture/qualifier prerequisites. These
+   records are deliberately not a release G0 backup or recovery PASS.
+7. Auth rows, Storage metadata and Vault metadata are included in the table
+   integrity comparison. Storage object bytes and Vault key recovery must be
+   proved separately when either source inventory is nonempty. An operational
+   Auth login and cross-tenant denial test still require the separately reviewed
+   local Auth/REST service boundary; the DB-only executor does not claim them.
 8. Stop the clock only after these checks pass. Save sanitized proof metadata,
    retain required encrypted backup/evidence and re-inspect ownership before
-   stopping/removing only this run's local resources. Never drop/reset the source
-   or delete all Supabase login roles. Failed/partial restorations remain failed.
+   stopping/removing only this run's local resources with
+   `node scripts/recovery/restore.mjs destroy --run-id <runId>`. Never drop/reset
+   the source. The provider's reviewed empty-prestate login-role lifecycle is the
+   only hosted cleanup path. Failed/partial restorations remain failed.
 
 ## Evidence contract and freshness
 
