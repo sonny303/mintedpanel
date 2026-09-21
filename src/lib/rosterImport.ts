@@ -88,7 +88,11 @@ export interface HeaderGateResult {
 // blank headers (Excel's trailing-comma artifact) are ignored; a blank header
 // among real ones is reported as an unnamed extra column; a duplicated template
 // header is an extra occurrence, not a match.
-export function checkHeaders(headers: string[], template: readonly string[]): HeaderGateResult {
+export function checkHeaders(
+  headers: string[],
+  template: readonly string[],
+  optional: readonly string[] = [],
+): HeaderGateResult {
   const trimmed = [...headers];
   while (trimmed.length > 0 && trimmed[trimmed.length - 1] === "") trimmed.pop();
 
@@ -106,7 +110,7 @@ export function checkHeaders(headers: string[], template: readonly string[]): He
       seen.add(h);
     }
   }
-  const missing = template.filter((h) => !seen.has(h));
+  const missing = template.filter((h) => !seen.has(h) && !optional.includes(h));
   return { ok: missing.length === 0 && extra.length === 0, missing, extra };
 }
 
