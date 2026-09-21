@@ -54,7 +54,10 @@ export function useGlobalProviderSearch(rawTerm: string): GlobalProviderSearchRe
   });
 
   return {
-    hits: query.data ?? [],
+    // A disabled query (under 2 characters) still holds the previous term's
+    // rows via placeholderData. Those rows are not on screen. Returning them
+    // would let Enter open a provider the user can no longer see.
+    hits: isSearchable ? (query.data ?? []) : [],
     isFetching: query.isFetching,
     isError: query.isError,
     term,

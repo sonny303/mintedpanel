@@ -58,7 +58,7 @@ export function GlobalProviderSearchDialog({
   );
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (hits.length === 0) return;
+    if (!isSearchable || hits.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setCursor((c) => (c + 1) % hits.length);

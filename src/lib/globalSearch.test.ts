@@ -51,6 +51,10 @@ describe("sanitizeSearchTerm", () => {
     expect(sanitizeSearchTerm("Ortiz-Vega")).toBe("ortiz-vega");
   });
 
+  it("preserves apostrophes in surnames so names like O'Connor can be matched", () => {
+    expect(sanitizeSearchTerm("O'Connor")).toBe("o'connor");
+  });
+
   it("caps runaway input", () => {
     expect(sanitizeSearchTerm("a".repeat(500))).toHaveLength(60);
   });
@@ -93,6 +97,12 @@ describe("buildProviderSearchFilter", () => {
     const filter = buildProviderSearchFilter("jane smith");
     expect(filter).toContain("and(first_name.ilike.%jane%,last_name.ilike.%smith%)");
     expect(filter).toContain("and(first_name.ilike.%smith%,last_name.ilike.%jane%)");
+  });
+
+  it("generates clauses for a three-token name so it does not drop the surname", () => {
+    const filter = buildProviderSearchFilter("mary ann watson");
+    expect(filter).toContain("watson");
+    expect(filter).toContain("and(first_name.ilike.%mary ann%,last_name.ilike.%watson%)");
   });
 
   it("never emits an org filter — RLS owns that, and naming an org here would narrow the search", () => {
@@ -189,6 +199,14 @@ describe("restrictToAuthorizedOrgs", () => {
 });
 
 describe("rankProviderHits", () => {
+  it("ranks an exact full-name match above other providers who merely share the first name", () => {
+    const hits = [
+      hit({ providerId: "adams", name: "Jane Adams", firstName: "Jane", lastName: "Adams" }),
+      hit({ providerId: "smith", name: "Jane Smith", firstName: "Jane", lastName: "Smith" }),
+    ];
+    expect(rankProviderHits(hits, "jane smith")[0].providerId).toBe("smith");
+  });
+
   it("puts a last-name prefix above a first-name prefix above a bare substring", () => {
     const hits = [
       hit({ providerId: "sub", firstName: "Ola", lastName: "Wasmith" }),

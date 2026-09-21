@@ -54,10 +54,9 @@ export interface GlobalProviderHit {
 // PostgREST parses `or=(...)` on commas, parentheses and dots, treats `"` as a
 // value quote and `\` as its escape, and passes `%`/`_`/`*` through to ILIKE as
 // wildcards. A raw term carrying any of those either breaks the filter or
-// silently widens it, so they are stripped rather than escaped — a credentialing
-// name has no legitimate use for them, and stripping cannot produce a filter
-// that matches more than the user typed.
-const STRUCTURAL_CHARS = /[,().:"'\\%_*[\]{}<>=!]/g;
+// silently widens it, so they are stripped rather than escaped. An apostrophe
+// is none of those — it stays, or "O'Connor" can never match.
+const STRUCTURAL_CHARS = /[,().:"\\%_*[\]{}<>=!]/g;
 const MAX_TERM_LENGTH = 60;
 
 export function sanitizeSearchTerm(raw: string): string {
@@ -83,9 +82,10 @@ export function searchTokens(sanitized: string): string[] {
 }
 
 /** The PostgREST `or` filter for a sanitized term, or null when the term is
- *  too short to search. Name terms match either name column; a two-token term
- *  ("jane smith") additionally matches in both orders, because coordinators
- *  type "last first" about as often as "first last". */
+ *  too short to search. Name terms match either name column. A multi-word term
+ *  also splits at the first token and at the last token, in both name orders,
+ *  so "mary ann watson" matches a first name of "Mary Ann" and a last name of
+ *  "Watson", and "smith jane" matches the other way around. */
 export function buildProviderSearchFilter(sanitized: string): string | null {
   if (sanitized.length < MIN_SEARCH_LENGTH) return null;
 
@@ -99,11 +99,22 @@ export function buildProviderSearchFilter(sanitized: string): string | null {
     `npi.ilike.%${sanitized}%`,
   ];
   if (tokens.length >= 2) {
-    const [a, b] = tokens;
+    const first = tokens[0];
+    const rest = tokens.slice(1).join(" ");
+    const last = tokens[tokens.length - 1];
+    const leading = tokens.slice(0, -1).join(" ");
     clauses.push(
-      `and(first_name.ilike.%${a}%,last_name.ilike.%${b}%)`,
-      `and(first_name.ilike.%${b}%,last_name.ilike.%${a}%)`,
+      `and(first_name.ilike.%${first}%,last_name.ilike.%${rest}%)`,
+      `and(first_name.ilike.%${rest}%,last_name.ilike.%${first}%)`,
     );
+    // Two tokens make leading/last the same split as first/rest. A longer
+    // name needs the other cut, or the surname is the token that gets dropped.
+    if (leading !== first) {
+      clauses.push(
+        `and(first_name.ilike.%${leading}%,last_name.ilike.%${last}%)`,
+        `and(first_name.ilike.%${last}%,last_name.ilike.%${leading}%)`,
+      );
+    }
   }
   return clauses.join(",");
 }
@@ -164,13 +175,23 @@ export function restrictToAuthorizedOrgs(
   return kept;
 }
 
-// Lower is better. An exact NPI beats everything; after that a name the term
-// starts is worth more than a name the term merely appears inside.
+// Lower is better. An exact NPI beats everything. A name the whole term
+// accounts for beats a name the first word merely starts.
 const SCORE_NPI_EXACT = 0;
-const SCORE_LAST_NAME_PREFIX = 1;
-const SCORE_FIRST_NAME_PREFIX = 2;
-const SCORE_NPI_PREFIX = 3;
-const SCORE_SUBSTRING = 4;
+const SCORE_NAME_MATCH = 1;
+const SCORE_LAST_NAME_PREFIX = 2;
+const SCORE_FIRST_NAME_PREFIX = 3;
+const SCORE_NPI_PREFIX = 4;
+const SCORE_SUBSTRING = 5;
+
+function tokensMatchName(
+  firstName: string,
+  lastName: string,
+  given: string,
+  surname: string,
+): boolean {
+  return firstName.startsWith(given) && lastName.startsWith(surname);
+}
 
 function scoreHit(hit: GlobalProviderHit, sanitized: string): number {
   const digits = npiQueryDigits(sanitized);
@@ -179,10 +200,29 @@ function scoreHit(hit: GlobalProviderHit, sanitized: string): number {
     if (npi === digits) return SCORE_NPI_EXACT;
     return npi.startsWith(digits) ? SCORE_NPI_PREFIX : SCORE_SUBSTRING;
   }
-  const [first] = searchTokens(sanitized);
-  const head = first ?? sanitized;
+  const tokens = searchTokens(sanitized);
+  const fullName = hit.name.toLowerCase();
   const lastName = hit.lastName.toLowerCase();
   const firstName = hit.firstName.toLowerCase();
+
+  if (fullName === sanitized) return SCORE_NAME_MATCH;
+
+  if (tokens.length >= 2) {
+    const first = tokens[0];
+    const rest = tokens.slice(1).join(" ");
+    const last = tokens[tokens.length - 1];
+    const leading = tokens.slice(0, -1).join(" ");
+    if (
+      tokensMatchName(firstName, lastName, first, rest) ||
+      tokensMatchName(firstName, lastName, rest, first) ||
+      tokensMatchName(firstName, lastName, leading, last) ||
+      tokensMatchName(firstName, lastName, last, leading)
+    ) {
+      return SCORE_NAME_MATCH;
+    }
+  }
+
+  const head = tokens[0] ?? sanitized;
   if (lastName.startsWith(head)) return SCORE_LAST_NAME_PREFIX;
   if (firstName.startsWith(head)) return SCORE_FIRST_NAME_PREFIX;
   return SCORE_SUBSTRING;
