@@ -1,6 +1,6 @@
 # Spike: cross-org provider dossier
 
-**Status:** Prototype on `/dev/global-search`. The shell palette is unchanged.
+**Status:** Prototype on `/dev/global-search`. The shell palette is unchanged. Conflict rule accepted 2026-09-21: list every org's value.
 **Branch:** `cursor/provider-dossier-spike-0495` (stacked on the global-search spike, PR 388).
 **Hosted check:** project `fkvuhfsqcmujywzgczmc`, read-only `EXPLAIN ANALYZE`, 2026-09-21.
 
@@ -10,7 +10,7 @@ The shallow lookup (name, NPI, org) stays the typeahead. This document is the de
 
 ## Recommendation
 
-Ship the expansion as **one embedded PostgREST read under the caller's existing RLS**, fired only when the inspector opens. Aggregate licenses in the browser. Do not add `get_provider_dossier`. Do not put the inspector on the shell palette until this is accepted.
+Ship the expansion as **one embedded PostgREST read under the caller's existing RLS**, fired only when the inspector opens. Aggregate licenses in the browser. Do not add `get_provider_dossier`. The inspector stays off the shell palette until the remaining items in "From spike to production" are accepted.
 
 That is what the prototype does. A SQL function is the upgrade if compliance wants the open audited in a place the browser cannot skip, or if a measured payload gets too large. Neither is true at today's size.
 
@@ -64,14 +64,14 @@ No NPI index in this change. The search spike already records the btree to add w
 
 The anchor is a 10-digit NPI. Anything else does not open a footprint, and the service does not issue a query.
 
-| Grain                             | Rule                                                                                                                                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Affiliation (the `providers` row) | Never merged. One row per org, so "where do I manage this" stays a list.                                                                                                           |
-| License                           | Collapse on state + number + type when a number is present. A blank number does not collapse: two empty numbers are not one license.                                               |
-| Conflict                          | Expiration, status, or verified status disagree across copies. The grid shows the latest expiration, the status only when every copy agrees, and each org's own values underneath. |
-| Group                             | One row per assignment. A TIN that matches another group in the footprint is badged "Shared TIN" and still listed twice.                                                           |
-| Facility                          | One row per assignment. Name, city, state. No street, phone, or email.                                                                                                             |
-| Name                              | The header is the row that was inspected. Any other name on the same NPI is shown as "also recorded as."                                                                           |
+| Grain                             | Rule                                                                                                                                                                                                                                                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Affiliation (the `providers` row) | Never merged. One row per org, so "where do I manage this" stays a list.                                                                                                                                                                                                                        |
+| License                           | Collapse on state + number + type when a number is present. A blank number does not collapse: two empty numbers are not one license.                                                                                                                                                            |
+| Conflict                          | Accepted 2026-09-21. Expiration, status, or verified status can disagree across copies. The inspector lists every org's value. A summary line may show the latest expiration; the per-org lines are the record. No copy is dropped. Status is shown on the summary only when every copy agrees. |
+| Group                             | One row per assignment. A TIN that matches another group in the footprint is badged "Shared TIN" and still listed twice.                                                                                                                                                                        |
+| Facility                          | One row per assignment. Name, city, state. No street, phone, or email.                                                                                                                                                                                                                          |
+| Name                              | The header is the row that was inspected. Any other name on the same NPI is shown as "also recorded as."                                                                                                                                                                                        |
 
 A row whose `org_id` is not in the caller's membership list is dropped, children included. That is the same defense-in-depth narrowing as the palette. RLS is the wall; the map is the caller's own membership list and cannot widen the read.
 
@@ -116,8 +116,8 @@ The inspector is logged in `DESIGN-DEBT.md`. It is a pane inside the existing st
 
 ## From spike to production
 
-1. **PM ack** of the conflict rule (show the latest expiration, list every org's value, never drop a copy), of "no per-inspect audit," and of "TIN is in, DEA and SSN are out."
-2. **Leave the shell palette shallow** until that ack. Turning the inspector on in the shell is passing `enableDossier` from `AppShell`. No second query shape.
+1. **Conflict rule — accepted 2026-09-21.** List every org's value. The summary may show the latest expiration; the per-org lines are the record, and no copy is dropped.
+2. **Still open:** no audit row per inspect; group TIN is copied and DEA, SSN, and home address stay out of the select; the inspector stays off the shell palette. Turning it on is passing `enableDossier` from `AppShell`. No second query shape.
 3. **Do not add a `/providers/npi/$npi` route in the same change.** The inspector answers the question without a new navigation model. A route is worth it only if the footprint needs a URL to hand to someone.
 4. **No migration.** Revisit Approach 3 when an inspect must be audited server-side, or when the embedded payload is measured slow. Revisit an NPI index on the same day the search spike's trigram indexes become worth adding.
 5. **Isolation gate.** No change while there is no `/api` route. A route that runs this select on the service-role client without `.in("org_id", memberOrgIds)`, and without new assertions in `scripts/verify-org-isolation.mjs`, is stop-ship.
