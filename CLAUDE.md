@@ -617,6 +617,13 @@ control silently dates a break to a fill that never touched it.**
   onto the service-role client without an explicit membership filter; the
   service key bypasses RLS, which is the wall. Analysis:
   `docs/ops/global-provider-search-spike.md`.
+- The provider footprint (`loadProviderDossier`,
+  `src/services/providerDossier.ts`) is the same kind of read, one embedded
+  select, issued only when the inspector opens on `/dev/global-search`. It
+  is not on the shell palette and it is not an RPC. Licenses collapse in
+  `src/lib/providerDossier.ts`; a conflicting expiration is shown, not
+  dropped. DEA, SSN, and home address are not in the select. Analysis:
+  `docs/ops/provider-dossier-spike.md`.
 - `PROVIDER_LIST_COLUMNS` is a **partial projection**; list rows are typed
   `Provider` but omit unlisted columns. `getProvider` selects `*`.
 - `provider_facility_assignments.practice_frequency` is never written.

@@ -112,6 +112,10 @@ export const queryKeys = {
   // (the identity the result set actually depends on) and the sanitized term.
   globalProviderSearch: (userId: string, term: string) =>
     ["global-provider-search", userId, term] as const,
+  // Cross-org provider dossier (spike). USER-scoped like the lookup: the
+  // footprint spans every org the caller belongs to, keyed by Type-1 NPI.
+  // Loaded only when the inspector opens, never from the typeahead.
+  providerDossier: (userId: string, npi: string) => ["provider-dossier", userId, npi] as const,
   // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
   orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
   // Full Party model (redesign E0.3): all parties in an org + the global,
