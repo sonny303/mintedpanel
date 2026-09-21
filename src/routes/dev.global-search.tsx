@@ -33,7 +33,7 @@ function GlobalSearchDemoPage() {
     <div className="space-y-4">
       <PageHeader
         title="Global provider search"
-        description="Spike prototype: find a provider by name or NPI across every organization you belong to, without switching org first."
+        description="Spike prototype: find a provider by name or NPI across every organization you belong to. Shift+Space, or the footprint icon, loads that NPI's groups, facilities, and licenses without switching org."
       />
 
       <section className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-4">
@@ -46,15 +46,15 @@ function GlobalSearchDemoPage() {
           <div className="space-y-3">
             <p className="text-[13px] text-[color:var(--mp-ink-faint)]">
               Active organization is <span className="text-foreground">{activeOrgName}</span>. The
-              lookup spans all {memberships.length} of your memberships; opening a result is what
-              switches organization.
+              lookup spans all {memberships.length} of your memberships. Opening a result switches
+              organization. The footprint inspector does not.
             </p>
             <Button onClick={() => setOpen(true)}>Open lookup</Button>
           </div>
         )}
       </section>
 
-      <GlobalProviderSearchDialog open={open} onOpenChange={setOpen} />
+      <GlobalProviderSearchDialog open={open} onOpenChange={setOpen} enableDossier />
     </div>
   );
 }

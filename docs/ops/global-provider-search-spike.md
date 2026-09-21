@@ -6,6 +6,8 @@
 
 The review document is this file. The lookup it describes is the shell palette: **Find a provider**, or Ctrl+K / ⌘K, from any signed-in page. `/dev/global-search` still opens the same dialog directly.
 
+The on-demand footprint (groups, facilities, and licenses for one NPI) is a separate prototype on that same harness. The shell palette does not load it. See [`docs/ops/provider-dossier-spike.md`](provider-dossier-spike.md).
+
 ---
 
 ## Recommendation

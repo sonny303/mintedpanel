@@ -8,28 +8,39 @@
 // switches org.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Building2, Search, User } from "lucide-react";
+import { Building2, PanelRight, Search, User } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusPill } from "@/components/StatusPill";
+import { ProviderDossierPanel } from "@/components/search/ProviderDossierPanel";
 import { useAuthStore } from "@/lib/auth-store";
 import { MIN_SEARCH_LENGTH } from "@/lib/globalSearch";
+import { isType1Npi } from "@/lib/providerDossier";
 import { useGlobalProviderSearch, type GlobalProviderHit } from "@/hooks/useGlobalProviderSearch";
 
 interface GlobalProviderSearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Dev harness only. The shell palette stays the shallow lookup. */
+  enableDossier?: boolean;
+}
+
+interface InspectedProvider {
+  npi: string;
+  providerId: string;
 }
 
 export function GlobalProviderSearchDialog({
   open,
   onOpenChange,
+  enableDossier = false,
 }: GlobalProviderSearchDialogProps) {
   const navigate = useNavigate();
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const setActiveOrg = useAuthStore((s) => s.setActiveOrg);
   const [rawTerm, setRawTerm] = useState("");
   const [cursor, setCursor] = useState(0);
+  const [inspected, setInspected] = useState<InspectedProvider | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const { hits, isFetching, isError, isSearchable, orgCount } = useGlobalProviderSearch(rawTerm);
@@ -38,6 +49,7 @@ export function GlobalProviderSearchDialog({
     if (!open) {
       setRawTerm("");
       setCursor(0);
+      setInspected(null);
     }
   }, [open]);
 
@@ -57,7 +69,20 @@ export function GlobalProviderSearchDialog({
     [activeOrgId, navigate, onOpenChange, setActiveOrg],
   );
 
+  // Space stays in the input so "first last" still searches. Shift+Space is
+  // the inspect chord: it does not insert a character and it does not switch org.
+  const inspectHit = useCallback((hit: GlobalProviderHit) => {
+    if (!isType1Npi(hit.npi)) return;
+    setInspected({ npi: hit.npi, providerId: hit.providerId });
+  }, []);
+
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (enableDossier && event.key === " " && event.shiftKey) {
+      event.preventDefault();
+      const hit = hits[cursor];
+      if (hit) inspectHit(hit);
+      return;
+    }
     if (hits.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -74,49 +99,85 @@ export function GlobalProviderSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="top-[16%] translate-y-0 max-w-xl gap-0 overflow-hidden p-0">
+      <DialogContent
+        className={`translate-y-0 gap-0 overflow-hidden p-0 ${
+          inspected ? "top-[10%] max-w-5xl" : "top-[16%] max-w-xl"
+        }`}
+      >
         <DialogTitle className="sr-only">Find a provider across your organizations</DialogTitle>
-        <div className="flex items-center gap-2 border-b border-border px-4">
-          <Search className="h-4 w-4 text-[color:var(--mp-ink-faint)]" />
-          <input
-            autoFocus
-            value={rawTerm}
-            onChange={(e) => setRawTerm(e.target.value)}
-            onKeyDown={onKeyDown}
-            aria-label="Provider name or NPI"
-            placeholder="Provider name or NPI…"
-            className="h-12 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-[color:var(--mp-ink-faint)]"
-          />
-          {isFetching ? (
-            <span className="text-[12px] text-[color:var(--mp-ink-faint)]">Searching…</span>
-          ) : null}
-        </div>
-
-        <div ref={listRef} className="max-h-96 overflow-y-auto p-2">
-          {!isSearchable ? (
-            <EmptyRow>
-              {`Type at least ${MIN_SEARCH_LENGTH} characters. Searches ${orgCount} organization${orgCount === 1 ? "" : "s"} you belong to.`}
-            </EmptyRow>
-          ) : isError ? (
-            <EmptyRow>Could not reach Minted Panel. Try again.</EmptyRow>
-          ) : hits.length === 0 ? (
-            <EmptyRow>{isFetching ? "Searching…" : "No matching providers."}</EmptyRow>
-          ) : (
-            hits.map((hit, index) => (
-              <ResultRow
-                key={`${hit.orgId}-${hit.providerId}`}
-                hit={hit}
-                highlighted={index === cursor}
-                onOpen={() => openHit(hit)}
-                onHover={() => setCursor(index)}
+        <div className={inspected ? "grid md:grid-cols-2" : undefined}>
+          <div>
+            <div className="flex items-center gap-2 border-b border-border px-4">
+              <Search className="h-4 w-4 text-[color:var(--mp-ink-faint)]" />
+              <input
+                autoFocus
+                value={rawTerm}
+                onChange={(e) => setRawTerm(e.target.value)}
+                onKeyDown={onKeyDown}
+                aria-label="Provider name or NPI"
+                placeholder="Provider name or NPI…"
+                className="h-12 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-[color:var(--mp-ink-faint)]"
               />
-            ))
-          )}
-        </div>
+              {isFetching ? (
+                <span className="text-[12px] text-[color:var(--mp-ink-faint)]">Searching…</span>
+              ) : null}
+            </div>
 
-        <div className="flex items-center justify-between border-t border-border px-4 py-2 text-[12px] text-[color:var(--mp-ink-faint)]">
-          <span>Enter opens the record in its organization</span>
-          <span>Name, NPI and organization only</span>
+            <div ref={listRef} className="max-h-96 overflow-y-auto p-2">
+              {!isSearchable ? (
+                <EmptyRow>
+                  {`Type at least ${MIN_SEARCH_LENGTH} characters. Searches ${orgCount} organization${orgCount === 1 ? "" : "s"} you belong to.`}
+                </EmptyRow>
+              ) : isError ? (
+                <EmptyRow>Could not reach Minted Panel. Try again.</EmptyRow>
+              ) : hits.length === 0 ? (
+                <EmptyRow>{isFetching ? "Searching…" : "No matching providers."}</EmptyRow>
+              ) : (
+                hits.map((hit, index) => (
+                  <ResultRow
+                    key={`${hit.orgId}-${hit.providerId}`}
+                    hit={hit}
+                    highlighted={index === cursor}
+                    showInspect={enableDossier}
+                    onOpen={() => openHit(hit)}
+                    onInspect={() => inspectHit(hit)}
+                    onHover={() => setCursor(index)}
+                  />
+                ))
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border px-4 py-2 text-[12px] text-[color:var(--mp-ink-faint)]">
+              <span>
+                {enableDossier
+                  ? "Shift+Space opens the footprint · Enter opens the record"
+                  : "Enter opens the record in its organization"}
+              </span>
+              <span>
+                {enableDossier ? "Footprint loads on inspect" : "Name, NPI and organization only"}
+              </span>
+            </div>
+          </div>
+          {inspected ? (
+            <ProviderDossierPanel
+              npi={inspected.npi}
+              anchorProviderId={inspected.providerId}
+              onOpenInOrg={(affiliation) =>
+                openHit({
+                  providerId: affiliation.providerId,
+                  orgId: affiliation.orgId,
+                  orgName: affiliation.orgName,
+                  name: affiliation.name,
+                  firstName: affiliation.firstName,
+                  lastName: affiliation.lastName,
+                  credentials: affiliation.credentials,
+                  npi: inspected.npi,
+                  status: affiliation.status,
+                })
+              }
+              onClose={() => setInspected(null)}
+            />
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
@@ -134,11 +195,13 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
 interface ResultRowProps {
   hit: GlobalProviderHit;
   highlighted: boolean;
+  showInspect: boolean;
   onOpen: () => void;
+  onInspect: () => void;
   onHover: () => void;
 }
 
-function ResultRow({ hit, highlighted, onOpen, onHover }: ResultRowProps) {
+function ResultRow({ hit, highlighted, showInspect, onOpen, onInspect, onHover }: ResultRowProps) {
   return (
     <div
       onMouseEnter={onHover}
@@ -166,6 +229,18 @@ function ResultRow({ hit, highlighted, onOpen, onHover }: ResultRowProps) {
           <span className="truncate">{hit.orgName || "Unknown organization"}</span>
         </span>
       </button>
+      {showInspect ? (
+        <button
+          type="button"
+          onClick={onInspect}
+          disabled={!isType1Npi(hit.npi)}
+          aria-label={`Inspect footprint for ${hit.name} in ${hit.orgName || "this organization"}`}
+          title={isType1Npi(hit.npi) ? "Inspect footprint" : "A 10-digit NPI is required"}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-[color:var(--mp-ink-faint)] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <PanelRight className="h-4 w-4" />
+        </button>
+      ) : null}
       {hit.npi ? (
         <div className="flex shrink-0 items-center gap-2">
           <span className="font-mono text-[12px] text-foreground">{hit.npi}</span>
