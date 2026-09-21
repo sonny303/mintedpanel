@@ -609,8 +609,8 @@ control silently dates a break to a fill that never touched it.**
 
 ## Known warts — don't rediscover these
 
-- Cross-org provider name/NPI lookup is a spike prototype, mounted only at
-  `/dev/global-search`. `searchProvidersAcrossOrgs`
+- Cross-org provider name/NPI lookup is the shell palette (Find a provider /
+  Ctrl+K or ⌘K). `searchProvidersAcrossOrgs`
   (`src/services/globalProviderSearch.ts`) is the second service that skips
   `requireActiveOrg()` — the browser read sends no org filter because
   `providers_select` is `org_id IN user_org_ids()`. Do not move that query

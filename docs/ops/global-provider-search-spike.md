@@ -1,10 +1,10 @@
 # Spike: global provider search and NPI lookup
 
-**Status:** spike complete (2026-09-21) — recommendation below is ready for PM review. The prototype is not wired into the shell.
+**Status:** Approach A is the shell lookup (Find a provider, Ctrl+K / ⌘K). The analysis below is unchanged.
 **Branch:** `cursor/global-provider-search-spike-31a4`
 **Hosted check:** project `fkvuhfsqcmujywzgczmc`, read-only, 2026-09-21.
 
-The review document is this file. The prototype it describes is mounted at `/dev/global-search` (dev builds, or a preview with `VITE_DEV_GLOBAL_SEARCH=1`).
+The review document is this file. The lookup it describes is the shell palette: **Find a provider**, or Ctrl+K / ⌘K, from any signed-in page. `/dev/global-search` still opens the same dialog directly.
 
 ---
 
@@ -143,7 +143,7 @@ A btree on `(org_id, last_name)` would help the existing per-org roster sort. It
 | The one read                                                       | `src/services/globalProviderSearch.ts`, query-shape tests in `src/services/globalProviderSearch.di.test.ts`             |
 | Typeahead hook                                                     | `src/hooks/useGlobalProviderSearch.ts` (debounced, user-scoped cache key, previous rows kept while the next term loads) |
 | Palette                                                            | `src/components/search/GlobalProviderSearchDialog.tsx`                                                                  |
-| Mount                                                              | `/dev/global-search`                                                                                                    |
+| Mount                                                              | App shell (Find a provider, Ctrl+K / ⌘K). `/dev/global-search` opens the same dialog.                                   |
 
 Behavior worth reviewing in the UI:
 
@@ -153,7 +153,7 @@ Behavior worth reviewing in the UI:
 - Arrow keys move the highlight. A terminated provider stays in the list and sorts last.
 - The same person in two member orgs is two rows. "Which org" is half the answer.
 
-`src/components/layout/SearchDialog.tsx` is the earlier in-org search. It filters providers and cases already loaded for the **active** org, it has no NPI, and nothing mounts it. This prototype does not replace it; the shell is a protected directory and the spike's job was the lookup, not a new shell affordance. The palette is logged in `DESIGN-DEBT.md` (stock `Dialog`, no `cmdk`).
+`src/components/layout/SearchDialog.tsx` is the earlier in-org search. It filters providers and cases already loaded for the **active** org, it has no NPI, and nothing mounts it. The shell palette does not replace that file; v1 is the provider lookup alone. The palette is logged in `DESIGN-DEBT.md` (stock `Dialog`, no `cmdk`). The rail control is a button, so the six primary nav links are unchanged.
 
 ---
 
@@ -162,10 +162,10 @@ Behavior worth reviewing in the UI:
 The prototype is the production read. What is left is product wiring, not a new design.
 
 1. **PM ack** of Approach A, of "membership is the only grant," and of "no per-keystroke audit."
-2. **Mount the palette in the shell.** `src/components/layout/*` is protected, so this needs an explicit go-ahead. The natural place is the header control that `SearchDialog` was written for and never connected. Shortcut already works on the demo page (`⌘K` / `Ctrl+K`).
+2. **Mount the palette in the shell.** Done: Find a provider on the rail, a search button on the mobile header, and Ctrl+K / ⌘K. The six-item nav is unchanged.
 3. **Decide the in-org case search.** `SearchDialog` also finds cases in the active org. The global lookup does not, on purpose: a case is org work, an NPI answer is a lookup. Shipping both means the palette grows a second section; shipping only the lookup means case search stays where it is (the cases list). Recommend the lookup alone for v1.
 4. **Watch the 60-row cap.** No code change at 23 rows. The day a common surname can match more than 60 providers, move ranking into Approach B instead of raising the cap.
-5. **Browser test.** An e2e against the mock harness: a user in two orgs types a name that exists only in the other org, sees that org's name and NPI, copies it, and on open lands in the provider's org. Cloud sandboxes cannot reach hosted Supabase, so this is a harness spec, not a live click-through.
+5. **Browser test.** `e2e/global-provider-search.spec.ts`: a user in two orgs types a name that exists only in the other org, sees that org's name and NPI, copies it without switching org, and on open lands in the provider's org. A provider row the mock returns from a non-member org stays off the list.
 6. **Isolation gate.** No change for v1, because there is no new `/api` route. Adding a route without the assertions in `scripts/verify-org-isolation.mjs` is stop-ship: non-member org absent from results, both member orgs present, response body free of the forbidden columns.
 
 No schema change, no new dependency, no extension contract, no `types.ts` regen for v1.

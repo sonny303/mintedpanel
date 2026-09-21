@@ -5,7 +5,7 @@
 // affordance. Behind the same env flag idiom as /dev/primitives — visible in
 // dev, or when VITE_DEV_GLOBAL_SEARCH=1 is set on a preview.
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { GlobalProviderSearchDialog } from "@/components/search/GlobalProviderSearchDialog";
@@ -25,17 +25,6 @@ function GlobalSearchDemoPage() {
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const session = useAuthStore((s) => s.session);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        setOpen((o) => !o);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const activeOrgName =
     memberships.find((m) => m.orgId === activeOrgId)?.orgName ?? "no active organization";
@@ -60,7 +49,7 @@ function GlobalSearchDemoPage() {
               lookup spans all {memberships.length} of your memberships; opening a result is what
               switches organization.
             </p>
-            <Button onClick={() => setOpen(true)}>Open lookup (⌘K)</Button>
+            <Button onClick={() => setOpen(true)}>Open lookup</Button>
           </div>
         )}
       </section>

@@ -1,11 +1,11 @@
-// Command-palette prototype for the cross-org provider lookup (spike PoC).
+// Command palette for the cross-org provider lookup (Approach A).
 //
 // Stock shadcn Dialog + a bare input; no new dependency. Logged in
 // DESIGN-DEBT.md — the design system has no spec for a command palette yet.
 //
-// The interaction this exists to prove: type a name, read the NPI and the org
-// it belongs to without leaving the current org, and only switch org when you
-// actually want to open the record.
+// Mounted from the app shell. Typing searches every org the caller belongs
+// to; copying an NPI stays in the current org; opening a record is what
+// switches org.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Building2, Search, User } from "lucide-react";

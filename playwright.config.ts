@@ -3,11 +3,14 @@ import { existsSync } from "fs";
 
 const SANDBOX_CHROMIUM = "/opt/pw-browsers/chromium";
 const LOCAL_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const LINUX_CHROME = "/opt/google/chrome/chrome";
 const CHROME_EXECUTABLE = existsSync(SANDBOX_CHROMIUM)
   ? SANDBOX_CHROMIUM
   : existsSync(LOCAL_CHROME)
     ? LOCAL_CHROME
-    : undefined;
+    : existsSync(LINUX_CHROME)
+      ? LINUX_CHROME
+      : undefined;
 
 // Smoke skeleton (Gate 0). See docs/minted-panel-phase-gates.md.
 // Serves the app via the Vite dev server with dummy Supabase env vars: the app
