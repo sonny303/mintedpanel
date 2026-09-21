@@ -292,15 +292,20 @@ export function aggregateProviderDossier(
     }
   }
 
-  const tinCounts = new Map<string, number>();
+  const tinGroups = new Map<string, Set<string>>();
   for (const group of groups) {
     const digits = tinDigits(group.tin);
     if (!digits) continue;
-    tinCounts.set(digits, (tinCounts.get(digits) ?? 0) + 1);
+    let set = tinGroups.get(digits);
+    if (!set) {
+      set = new Set();
+      tinGroups.set(digits, set);
+    }
+    set.add(group.groupId);
   }
   for (const group of groups) {
     const digits = tinDigits(group.tin);
-    group.sharedTin = Boolean(digits) && (tinCounts.get(digits) ?? 0) > 1;
+    group.sharedTin = Boolean(digits) && (tinGroups.get(digits)?.size ?? 0) > 1;
   }
 
   const licenses = [...licenseDrafts.values()].map(finishLicense);

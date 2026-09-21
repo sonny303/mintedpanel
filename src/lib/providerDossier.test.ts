@@ -211,6 +211,67 @@ describe("aggregateProviderDossier", () => {
     expect(dossier.groups.every((row) => row.sharedTin)).toBe(true);
   });
 
+  it("does not flag sharedTin when multiple assignments point to the same group", () => {
+    const dossier = aggregateProviderDossier(
+      [
+        provider({
+          provider_group_assignments: [
+            {
+              id: "as-a1",
+              org_id: "org-a",
+              is_primary: true,
+              provider_groups: {
+                id: "g-a",
+                name: "Kansas Group",
+                npi_type2: null,
+                tin: "11-1111111",
+              },
+            },
+            {
+              id: "as-a2",
+              org_id: "org-a",
+              is_primary: false,
+              provider_groups: {
+                id: "g-a",
+                name: "Kansas Group",
+                npi_type2: null,
+                tin: "11-1111111",
+              },
+            },
+          ],
+        }),
+      ],
+      ORGS,
+      "1234567890",
+    );
+
+    expect(dossier.groups).toHaveLength(2);
+    expect(dossier.groups.every((row) => row.sharedTin)).toBe(false);
+  });
+
+  it("treats an ISO timestamp and a date-only expiration as the same day", () => {
+    const dossier = aggregateProviderDossier(
+      [
+        provider({
+          state_licenses: [license({ expiration_date: "2027-01-02T00:00:00Z" })],
+        }),
+        provider({
+          id: "p-b",
+          org_id: "org-b",
+          state_licenses: [
+            license({ id: "lic-2", org_id: "org-b", expiration_date: "2027-01-02" }),
+          ],
+        }),
+      ],
+      ORGS,
+      "1234567890",
+    );
+
+    const kansas = dossier.licenses.find((row) => row.state === "KS");
+    expect(kansas?.conflictFields).toEqual([]);
+    expect(kansas?.expirationDate).toBe("2027-01-02");
+  });
+
   it("drops a non-member org and every child hanging off it", () => {
     const dossier = aggregateProviderDossier(
       [
@@ -289,6 +350,25 @@ describe("dossierHeader", () => {
       name: "Marcus Ng",
       credentials: "DPT",
       otherNames: ["Marc Ng"],
+    });
+  });
+
+  it("handles empty affiliations safely without throwing", () => {
+    expect(
+      dossierHeader(
+        {
+          npi: "1234567890",
+          affiliations: [],
+          licenses: [],
+          groups: [],
+          facilities: [],
+        },
+        null,
+      ),
+    ).toEqual({
+      name: "Provider",
+      credentials: null,
+      otherNames: [],
     });
   });
 });
