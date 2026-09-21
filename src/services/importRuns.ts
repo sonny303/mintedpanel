@@ -304,8 +304,18 @@ async function applyProviderRelationships(
     tin: (group.tin as string | null) ?? null,
     npiType2: (group.npi_type2 as string | null) ?? null,
   }));
+  const liveGroupIds = new Set(groups.map((group) => group.id));
+  // Scan stamps facility_id / group_id at upload time. If a coordinator
+  // deletes that row before commit, prune the relationship instead of
+  // failing the whole post-commit pass on a foreign key.
+  const { data: facilityRows, error: fErr } = await supabase
+    .from("facilities")
+    .select("id")
+    .eq("org_id", orgId);
+  if (fErr) throw fErr;
+  const liveFacilityIds = new Set((facilityRows ?? []).map((row) => row.id as string));
   const resolveGroup = (m: Record<string, string | null>): string | null => {
-    if (m.group_id) return m.group_id;
+    if (m.group_id && liveGroupIds.has(m.group_id)) return m.group_id;
     const result = matchGroupLocator(
       { name: m.group_name, tin: m.group_tin, npiType2: m.group_npi },
       groups,
@@ -328,7 +338,7 @@ async function applyProviderRelationships(
     const npi = m.npi ? String(m.npi) : null;
     const providerId = npi ? providerByNpi.get(npi) : undefined;
     if (!providerId) continue;
-    if (m.facility_id) {
+    if (m.facility_id && liveFacilityIds.has(m.facility_id)) {
       const key = `${providerId}|${m.facility_id}`;
       if (!seenFacility.has(key)) {
         seenFacility.add(key);

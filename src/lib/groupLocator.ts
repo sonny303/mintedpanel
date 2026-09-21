@@ -64,7 +64,15 @@ function narrow(
   tin: string,
 ): GroupMatchResult {
   if (pool.length === 0) return noneResult(input, tin);
-  if (pool.length === 1) return { status: "matched", group: pool[0], note: null };
+  if (pool.length === 1) {
+    const only = pool[0];
+    // A unique TIN still rejects a contradictory group_npi — never silently
+    // accept a Type 2 NPI that belongs to a different group.
+    if (npi && digits(only.npiType2) && digits(only.npiType2) !== npi) {
+      return noneResult(input, tin);
+    }
+    return { status: "matched", group: only, note: null };
+  }
   if (!npi) return { status: "ambiguous", column: "group_npi", reason: GROUP_AMBIGUOUS_TIN_REASON };
   const byNpi = pool.filter((group) => digits(group.npiType2) === npi);
   if (byNpi.length === 1) return { status: "matched", group: byNpi[0], note: null };
