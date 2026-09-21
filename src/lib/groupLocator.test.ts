@@ -77,6 +77,15 @@ describe("matchGroupLocator", () => {
     if (miss.status === "none") expect(miss.column).toBe("group_npi");
   });
 
+  it("rejects a contradictory group_npi on an otherwise unique TIN", () => {
+    const result = matchGroupLocator(
+      { name: "B.E.S.T. Physical Therapy", tin: "42-3077659", npiType2: "1427674019" },
+      GROUPS,
+    );
+    expect(result.status).toBe("none");
+    if (result.status === "none") expect(result.column).toBe("group_npi");
+  });
+
   it("keeps the not-found note when nothing matches", () => {
     const result = matchGroupLocator(
       { name: "No Such Group", tin: "000000000", npiType2: null },

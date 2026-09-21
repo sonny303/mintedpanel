@@ -66,6 +66,13 @@ function zip5(value: string | null | undefined): string | null {
   return match ? match[0] : null;
 }
 
+/** Trailing ZIP5 in a free-text address cell (ZIP+4 counts). First-match
+ * would treat a 5-digit street number as the ZIP and corrupt suite gaps. */
+function trailingZip5(value: string): string | null {
+  const matches = [...value.matchAll(/\b(\d{5})(?:-\d{4})?\b/g)];
+  return matches.length > 0 ? matches[matches.length - 1][1] : null;
+}
+
 function suiteUnit(suite: string | null | undefined): string | null {
   if (!suite) return null;
   const parts = tokens(suite).filter((token) => !SUITE_WORDS.has(token));
@@ -136,8 +143,7 @@ interface StreetHit {
 }
 
 function streetHits(cell: string, facilities: readonly FacilityLocatorRecord[]): StreetHit[] {
-  const matches = [...cell.matchAll(/\b(\d{5})(?:-\d{4})?\b/g)];
-  const zip = matches.length > 0 ? matches[matches.length - 1][1] : null;
+  const zip = trailingZip5(cell);
   if (!zip) return [];
   const hay = tokens(cell);
   const hits: StreetHit[] = [];
@@ -169,7 +175,7 @@ export function matchFacilityLocator(
   const hits = streetHits(text, facilities);
   if (hits.length === 1) return { status: "matched", facilityId: hits[0].facility.id };
   if (hits.length > 1) {
-    const zip = zip5(text);
+    const zip = trailingZip5(text);
     const narrowed =
       zip === null
         ? []

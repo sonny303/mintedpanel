@@ -289,6 +289,21 @@ describe("matchFacilityLocator", () => {
     expect(matchFacilityLocator("100 Main St, Raleigh, NC 27616", pair).status).toBe("ambiguous");
   });
 
+  it("uses the trailing ZIP when the street number is also five digits", () => {
+    const pair = [
+      facility("a", "A", "11694 Main St", "Clayton", "NC", "27520", "Suite A"),
+      facility("b", "B", "11694 Main St", "Clayton", "NC", "27520", "Suite B"),
+    ];
+    expect(matchFacilityLocator("11694 Main St, Suite A, Clayton, NC 27520", pair)).toEqual({
+      status: "matched",
+      facilityId: "a",
+    });
+    expect(matchFacilityLocator("11694 Main Street #B, Clayton NC 27520", pair)).toEqual({
+      status: "matched",
+      facilityId: "b",
+    });
+  });
+
   it("returns empty for a blank cell and ambiguous when two names collide", () => {
     expect(matchFacilityLocator("  ", BEST)).toEqual({ status: "empty" });
     const twins = [
