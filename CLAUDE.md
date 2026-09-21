@@ -609,6 +609,14 @@ control silently dates a break to a fill that never touched it.**
 
 ## Known warts — don't rediscover these
 
+- Cross-org provider name/NPI lookup is a spike prototype, mounted only at
+  `/dev/global-search`. `searchProvidersAcrossOrgs`
+  (`src/services/globalProviderSearch.ts`) is the second service that skips
+  `requireActiveOrg()` — the browser read sends no org filter because
+  `providers_select` is `org_id IN user_org_ids()`. Do not move that query
+  onto the service-role client without an explicit membership filter; the
+  service key bypasses RLS, which is the wall. Analysis:
+  `docs/ops/global-provider-search-spike.md`.
 - `PROVIDER_LIST_COLUMNS` is a **partial projection**; list rows are typed
   `Provider` but omit unlisted columns. `getProvider` selects `*`.
 - `provider_facility_assignments.practice_frequency` is never written.
