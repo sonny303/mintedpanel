@@ -106,6 +106,12 @@ export const queryKeys = {
   // E1.6 — cross-org global catalog keys (deliberately un-scoped, like
   // portfolio()/orgStates(): the catalog is platform-level data).
   payerCatalog: () => ["payer-catalog"] as const,
+  // Global provider lookup (spike PoC). CROSS-org and USER-scoped: the result
+  // set spans every org the caller belongs to, so scoping it to the active org
+  // would cache the same answer once per org. Keyed by the caller's user id
+  // (the identity the result set actually depends on) and the sanitized term.
+  globalProviderSearch: (userId: string, term: string) =>
+    ["global-provider-search", userId, term] as const,
   // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
   orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
   // Full Party model (redesign E0.3): all parties in an org + the global,
