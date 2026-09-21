@@ -29,6 +29,7 @@ import {
   type ExpansionReviewRow,
   type ExpansionRow,
 } from "@/lib/payerExpansion";
+import { matchGroupLocator } from "@/lib/groupLocator";
 import type { Facility, Payer, PayerNetworkTarget, ProviderGroup } from "@/types";
 
 /** States both the payer and the group operate in, sorted A→Z. */
@@ -224,6 +225,7 @@ export interface AttachContextGroup {
   name: string;
   tin: string | null;
   states: string[] | null;
+  npiType2?: string | null;
 }
 
 export interface AttachContextPayer {
@@ -244,26 +246,16 @@ export interface PayerAttachScanContext {
   payers: readonly AttachContextPayer[];
 }
 
-const bareTin = (tin: string): string => tin.replace(/-/g, "").trim();
-
-/** Group resolution mirrors the facility import rule: TIN first, then a
- * case-insensitive name match. */
+/** Group resolution: exact name, then TIN, then Type 2 NPI when the TIN is shared. */
 export function resolveAttachGroup(
   groups: readonly AttachContextGroup[],
   groupName: string | null,
   groupTin: string | null,
+  groupNpi: string | null = null,
 ): AttachContextGroup | null {
-  if (groupTin) {
-    const wanted = bareTin(groupTin);
-    const byTin = groups.find((g) => g.tin !== null && bareTin(g.tin) === wanted);
-    if (byTin) return byTin;
-  }
-  if (groupName) {
-    const wanted = groupName.trim().toLowerCase();
-    const byName = groups.find((g) => g.name.trim().toLowerCase() === wanted);
-    if (byName) return byName;
-  }
-  return null;
+  const result = matchGroupLocator({ name: groupName, tin: groupTin, npiType2: groupNpi }, groups);
+  if (result.status !== "matched") return null;
+  return groups.find((group) => group.id === result.group.id) ?? null;
 }
 
 /** Payer resolution: canonical slug first, then name, then aliases — all
@@ -294,10 +286,31 @@ export type PayerAttachRowResult =
  * the specific rule, per row.
  */
 export function validatePayerAttachRow(
-  row: { groupName: string | null; groupTin: string | null; payer: string; states: string[] },
+  row: {
+    groupName: string | null;
+    groupTin: string | null;
+    groupNpi?: string | null;
+    payer: string;
+    states: string[];
+  },
   context: PayerAttachScanContext,
 ): PayerAttachRowResult {
-  const group = resolveAttachGroup(context.groups, row.groupName, row.groupTin);
+  const matched = matchGroupLocator(
+    { name: row.groupName, tin: row.groupTin, npiType2: row.groupNpi ?? null },
+    context.groups,
+  );
+  if (matched.status !== "matched") {
+    return {
+      error: {
+        column: matched.column,
+        reason:
+          matched.status === "ambiguous"
+            ? matched.reason
+            : `No provider group matches ${row.groupTin ? `TIN "${row.groupTin}"` : `"${row.groupName ?? ""}"`}`,
+      },
+    };
+  }
+  const group = context.groups.find((candidate) => candidate.id === matched.group.id);
   if (!group) {
     return {
       error: {

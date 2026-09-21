@@ -187,12 +187,26 @@ function ProvidersRoster() {
   const payersQ = usePayers();
   const uploadScanContext: SectionScanContext = {
     provider: {
-      facilities: (facilitiesQ.data ?? []).map((f) => ({ id: f.id, name: f.name })),
+      facilities: (facilitiesQ.data ?? []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        street: f.street,
+        suite: f.suite ?? null,
+        city: f.city,
+        state: f.state,
+        zip: f.zip,
+      })),
       payers: (payersQ.data ?? []).map((py) => ({ id: py.id, name: py.name })),
+      groups: (groupsQ.data ?? []).map((g) => ({
+        id: g.id,
+        name: g.name,
+        tin: g.tin,
+        npiType2: g.npiType2,
+      })),
     },
   };
   const uploadReference = providerImportReference(
-    (groupsQ.data ?? []).map((g) => ({ name: g.name, tin: g.tin })),
+    (groupsQ.data ?? []).map((g) => ({ name: g.name, tin: g.tin, npiType2: g.npiType2 })),
     facilitiesQ.data ?? [],
     payersQ.data ?? [],
   );

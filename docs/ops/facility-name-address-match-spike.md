@@ -1,6 +1,6 @@
 # Spike — `facility_name` accepts a facility name or a street address
 
-**Status:** decision-ready. This spike changes no product code and no schema.
+**Status:** built. Provider import matches `facility_name` by exact name or a unique street address, and matches the parent group by name, then TIN, then Type 2 NPI (`group_npi`) when the TIN is shared.
 **Date:** 2026-09-21
 **Triggered by:** BEST Physical Therapy provider roster upload. Every data row
 was rejected on `facility_name` because the sheet carries street addresses and
@@ -64,30 +64,30 @@ Org facilities: 28 active rows. The roster uses 22 of them. Group TIN
 `851502637` is on two groups; Hargrove is the only roster location on the dba
 group. Every other roster location is on `BEST Physical Therapy, LLC`.
 
-| Roster cell | Resolved facility |
-| --- | --- |
-| 4801 Hargrove Road, Suite 100, Raleigh, NC 27616 | BEST Physical Therapy - Hargrove (dba group) |
-| 100 Connemara Drive, Suite 110, Cary, NC 27519 | BEST Physical Therapy - Connemara |
-| 280 Towerview Court, Cary, NC 27513 | BEST Physical Therapy - Towerview |
-| 1008 Big Oak Court, Suite A, Knightdale, NC 27545 | BEST Physical Therapy - Knightdale |
-| 9101 Leesville Rd STE 129, Raleigh, NC 27613 | BEST Physical Therapy - Leesville Rd |
-| 11694 US-70 Business W, Clayton NC, 27520 | BEST Physical Therapy - Clayton |
-| 4550 Fayetteville Road, Raeford, NC 28376 | BEST Physical Therapy - Raeford |
-| 2307 N College Road, Wilmington, NC 28405 | BEST Physical Therapy - Wilmington |
-| 275 Convention Dr, Cary, NC 27511 | BEST Physical Therapy - Convention |
-| 1400 Timber Drive East, Garner NC 27529 | BEST Physical Therapy - Garner |
-| 210 Owen Dr, Fayetteville, NC 28304 | BEST Physical Therapy - Fayetteville |
-| 607 Mills Park Dr, Cary, NC 27519 | BEST Physical Therapy - Cary |
-| 105 W North Carolina 54 #271, Durham, NC 27713 | BEST Physical Therapy - Durham |
-| 19 Gladys Drive, Greenville, SC 29607 | BEST Physical Therapy - Greenville |
-| 1726 Eagan Rd, Suite 101, Madison, WI 53704 | BEST Physical Therapy - Madison |
-| 2920 Hardrock Rd, Fitchburg, WI 53719 | BEST Physical Therapy - Fitchburg |
-| 1240 Hover St #200, Longmont, CO 80501 | BEST Physical Therapy - Longmont |
-| 5904 Prairie Schooner Dr, Colorado Springs, CO 80923 | BEST Physical Therapy - Colorado Springs |
-| 12951 Barker Cypress Rd, Cypress, TX 77429 | BEST Physical Therapy - Cypress |
-| 9930 Gaston Rd, Katy, TX 77494 | BEST Physical Therapy - Katy |
-| 13900 SW Meridian St, Beaverton, OR 97005 | BEST Physical Therapy - Beaverton |
-| 4623 Enterprise Way, Caldwell, ID 83605 | BEST Physical Therapy - VS Caldwell |
+| Roster cell                                          | Resolved facility                            |
+| ---------------------------------------------------- | -------------------------------------------- |
+| 4801 Hargrove Road, Suite 100, Raleigh, NC 27616     | BEST Physical Therapy - Hargrove (dba group) |
+| 100 Connemara Drive, Suite 110, Cary, NC 27519       | BEST Physical Therapy - Connemara            |
+| 280 Towerview Court, Cary, NC 27513                  | BEST Physical Therapy - Towerview            |
+| 1008 Big Oak Court, Suite A, Knightdale, NC 27545    | BEST Physical Therapy - Knightdale           |
+| 9101 Leesville Rd STE 129, Raleigh, NC 27613         | BEST Physical Therapy - Leesville Rd         |
+| 11694 US-70 Business W, Clayton NC, 27520            | BEST Physical Therapy - Clayton              |
+| 4550 Fayetteville Road, Raeford, NC 28376            | BEST Physical Therapy - Raeford              |
+| 2307 N College Road, Wilmington, NC 28405            | BEST Physical Therapy - Wilmington           |
+| 275 Convention Dr, Cary, NC 27511                    | BEST Physical Therapy - Convention           |
+| 1400 Timber Drive East, Garner NC 27529              | BEST Physical Therapy - Garner               |
+| 210 Owen Dr, Fayetteville, NC 28304                  | BEST Physical Therapy - Fayetteville         |
+| 607 Mills Park Dr, Cary, NC 27519                    | BEST Physical Therapy - Cary                 |
+| 105 W North Carolina 54 #271, Durham, NC 27713       | BEST Physical Therapy - Durham               |
+| 19 Gladys Drive, Greenville, SC 29607                | BEST Physical Therapy - Greenville           |
+| 1726 Eagan Rd, Suite 101, Madison, WI 53704          | BEST Physical Therapy - Madison              |
+| 2920 Hardrock Rd, Fitchburg, WI 53719                | BEST Physical Therapy - Fitchburg            |
+| 1240 Hover St #200, Longmont, CO 80501               | BEST Physical Therapy - Longmont             |
+| 5904 Prairie Schooner Dr, Colorado Springs, CO 80923 | BEST Physical Therapy - Colorado Springs     |
+| 12951 Barker Cypress Rd, Cypress, TX 77429           | BEST Physical Therapy - Cypress              |
+| 9930 Gaston Rd, Katy, TX 77494                       | BEST Physical Therapy - Katy                 |
+| 13900 SW Meridian St, Beaverton, OR 97005            | BEST Physical Therapy - Beaverton            |
+| 4623 Enterprise Way, Caldwell, ID 83605              | BEST Physical Therapy - VS Caldwell          |
 
 Shapes in this file that a strict "same string as street, city, state zip"
 compare would drop, and the rule below still takes:
@@ -155,9 +155,9 @@ boxes, and fuzzy names.
 
 ## Both resolvers
 
-| Path | Today | After |
-| --- | --- | --- |
-| `contextScan` in `src/lib/importSections.ts` | Name equality. Miss blocks the row. Stamps `facility_id`. | Calls the locator. Still the only hard gate. |
+| Path                                           | Today                                                                                 | After                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `contextScan` in `src/lib/importSections.ts`   | Name equality. Miss blocks the row. Stamps `facility_id`.                             | Calls the locator. Still the only hard gate.                            |
 | `resolveFacility` in `src/lib/importDedupe.ts` | Name equality again. Miss is a soft note and **no** `facilityIds` on the commit plan. | If `mapped.facility_id` is set, use that row. The scan already decided. |
 
 `applyProviderRelationships` (`src/services/importRuns.ts`) already attaches

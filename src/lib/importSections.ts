@@ -29,6 +29,8 @@
 import type { CsvRecord } from "@/lib/csvImport";
 import { coerceBool, coerceDate } from "@/lib/csvImport";
 import { toCsv } from "@/lib/csv";
+import { matchFacilityLocator, type FacilityLocatorRecord } from "@/lib/facilityLocator";
+import { matchGroupLocator, type GroupMatchCandidate } from "@/lib/groupLocator";
 import { validatePayerAttachRow, type PayerAttachScanContext } from "@/lib/groupPayerAttach";
 import type { ImportEntityKind } from "@/types";
 import {
@@ -119,8 +121,10 @@ export interface SectionScanContext {
 }
 
 export interface ProviderRelationshipScanContext {
-  facilities: { id: string; name: string }[];
+  facilities: FacilityLocatorRecord[];
   payers: { id: string; name: string }[];
+  /** Present on the provider upload. Name, then TIN, then Type 2 NPI. */
+  groups?: GroupMatchCandidate[];
 }
 
 export interface SectionDescriptor {
@@ -132,6 +136,8 @@ export interface SectionDescriptor {
   templateFilename: string;
   /** helper line under the drop zone */
   helperText: string;
+  /** Template columns a file may omit. Present on the download; old files still pass. */
+  optionalHeaders?: readonly string[];
   spec: SectionScanSpec;
   buildMapped(ctx: MapCtx): Record<string, string | null>;
   /** E6.2 — optional org-context validation AFTER the format scan: return an
@@ -191,6 +197,7 @@ export const FACILITY_TEMPLATE_HEADERS = [
   "facility_name",
   "group_name",
   "group_tin",
+  "group_npi",
   "street",
   "suite",
   "city",
@@ -215,6 +222,7 @@ export const FACILITY_TEMPLATE_HEADERS = [
 export const PROVIDER_TEMPLATE_HEADERS = [
   "group_name",
   "group_tin",
+  "group_npi",
   "provider_first_name",
   "provider_middle_initial",
   "provider_last_name",
@@ -444,12 +452,13 @@ export const FACILITY_DESCRIPTOR: SectionDescriptor = {
   headers: FACILITY_TEMPLATE_HEADERS,
   templateFilename: "facility-import-template.csv",
   helperText:
-    "One row per location. The parent group is matched by group_tin then group_name — each facility belongs to exactly ONE group, so a street address shared by two groups is entered once per group (payers see per-TIN service locations). Languages use ';'. Hours are set in the facility form after import.",
+    "One row per location. The parent group is matched by group_name, then group_tin, then group_npi (the group's Type 2 NPI) when that TIN is on more than one group. Each facility belongs to exactly ONE group, so a street address shared by two groups is entered once per group. Languages use ';'. Hours are set in the facility form after import.",
+  optionalHeaders: ["group_npi"],
   spec: {
     required: ["facility_name", "street", "city", "state", "zip"],
     requireGroupKey: true,
     tinColumns: ["group_tin"],
-    npiColumns: [],
+    npiColumns: ["group_npi"],
     stateColumns: ["state"],
     dateColumns: [],
     ssn4Columns: [],
@@ -464,6 +473,7 @@ export const FACILITY_DESCRIPTOR: SectionDescriptor = {
       facility_name: ctx.nullable("facility_name"),
       group_name: ctx.nullable("group_name"),
       group_tin: ctx.cell("group_tin") ? ctx.cell("group_tin").replace("-", "") : null,
+      group_npi: ctx.nullable("group_npi"),
       street: ctx.nullable("street"),
       suite: ctx.nullable("suite"),
       city: ctx.nullable("city"),
@@ -490,12 +500,13 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
   headers: PROVIDER_TEMPLATE_HEADERS,
   templateFilename: "provider-import-template.csv",
   helperText:
-    "One row per provider × license (repeat identity columns for extra licenses, facilities, groups, or enrollments). Copy facility_name from the reference sheet to assign an existing location — the first facility on the file is the primary. Only the last 4 SSN digits in ssn_last4. The parent group is matched by group_tin then group_name.",
+    "One row per provider × license (repeat identity columns for extra licenses, facilities, groups, or enrollments). facility_name accepts the exact facility name or the location's street address — the first facility on the file is the primary. The parent group is matched by group_name, then group_tin, then group_npi (the group's Type 2 NPI) when that TIN is on more than one group. Only the last 4 SSN digits in ssn_last4.",
+  optionalHeaders: ["group_npi"],
   spec: {
     required: ["provider_first_name", "provider_last_name", "npi"],
     requireGroupKey: true,
     tinColumns: ["group_tin"],
-    npiColumns: ["npi"],
+    npiColumns: ["npi", "group_npi"],
     stateColumns: ["license_state", "enrollment_state"],
     dateColumns: [
       "license_issue_date",
@@ -515,6 +526,7 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
     return {
       group_name: ctx.nullable("group_name"),
       group_tin: ctx.cell("group_tin") ? ctx.cell("group_tin").replace("-", "") : null,
+      group_npi: ctx.nullable("group_npi"),
       provider_first_name: ctx.nullable("provider_first_name"),
       provider_middle_initial: NULLABLE(middle ? middle.replace(".", "").toUpperCase() : ""),
       provider_last_name: ctx.nullable("provider_last_name"),
@@ -542,25 +554,36 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
     const patch: Record<string, string | null> = {};
     const wantsFacility = Boolean(mapped.facility_name);
     const wantsEnrollment = Boolean(mapped.enrollment_payer || mapped.enrollment_state);
-    if (!wantsFacility && !wantsEnrollment) return { patch };
     const ctx = context?.provider;
-    if (!ctx) {
+    if (!wantsFacility && !wantsEnrollment && !ctx?.groups) return { patch };
+    if ((wantsFacility || wantsEnrollment) && !ctx) {
       return { error: { column: null, reason: "Reference data unavailable — retry the upload" } };
     }
-    if (wantsFacility) {
-      const name = (mapped.facility_name ?? "").trim().toLowerCase();
-      const hit = ctx.facilities.find((f) => f.name.trim().toLowerCase() === name);
-      if (!hit) {
-        return {
-          error: {
-            column: "facility_name",
-            reason: "Unknown facility — copy the exact name from the reference sheet",
-          },
-        };
+    if (wantsFacility && ctx) {
+      const hit = matchFacilityLocator(mapped.facility_name, ctx.facilities);
+      if (hit.status === "none" || hit.status === "ambiguous") {
+        return { error: { column: "facility_name", reason: hit.reason } };
       }
-      patch.facility_id = hit.id;
+      if (hit.status === "matched") patch.facility_id = hit.facilityId;
+    }
+    if (ctx?.groups) {
+      const group = matchGroupLocator(
+        {
+          name: mapped.group_name,
+          tin: mapped.group_tin,
+          npiType2: mapped.group_npi,
+        },
+        ctx.groups,
+      );
+      if (group.status === "ambiguous") {
+        return { error: { column: group.column, reason: group.reason } };
+      }
+      if (group.status === "matched") patch.group_id = group.group.id;
     }
     if (wantsEnrollment) {
+      if (!ctx) {
+        return { error: { column: null, reason: "Reference data unavailable — retry the upload" } };
+      }
       if (!mapped.enrollment_payer || !mapped.enrollment_state) {
         return {
           error: {
@@ -594,6 +617,7 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
 export const PAYER_ATTACH_TEMPLATE_HEADERS = [
   "group_name",
   "group_tin",
+  "group_npi",
   "payer",
   "states",
 ] as const;
@@ -604,12 +628,13 @@ export const PAYER_ATTACH_DESCRIPTOR: SectionDescriptor = {
   headers: PAYER_ATTACH_TEMPLATE_HEADERS,
   templateFilename: "payer-attach-import-template.csv",
   helperText:
-    "One row per group × payer. States use ';' (e.g. NC;SC) and must sit inside both the payer's coverage and the group's operating states. The payer column takes the catalog name, slug, or an alias. The group is matched by group_tin then group_name.",
+    "One row per group × payer. States use ';' (e.g. NC;SC) and must sit inside both the payer's coverage and the group's operating states. The payer column takes the catalog name, slug, or an alias. The group is matched by group_name, then group_tin, then group_npi (the group's Type 2 NPI) when that TIN is on more than one group.",
+  optionalHeaders: ["group_npi"],
   spec: {
     required: ["payer"],
     requireGroupKey: true,
     tinColumns: ["group_tin"],
-    npiColumns: [],
+    npiColumns: ["group_npi"],
     stateColumns: [],
     dateColumns: [],
     ssn4Columns: [],
@@ -623,6 +648,7 @@ export const PAYER_ATTACH_DESCRIPTOR: SectionDescriptor = {
     return {
       group_name: ctx.nullable("group_name"),
       group_tin: ctx.cell("group_tin") ? ctx.cell("group_tin").replace("-", "") : null,
+      group_npi: ctx.nullable("group_npi"),
       payer: ctx.nullable("payer"),
       states: encodeDelimited(ctx.multi("states")),
     };
@@ -636,6 +662,7 @@ export const PAYER_ATTACH_DESCRIPTOR: SectionDescriptor = {
       {
         groupName: mapped.group_name,
         groupTin: mapped.group_tin,
+        groupNpi: mapped.group_npi,
         payer: mapped.payer ?? "",
         states: decodeDelimited(mapped.states ?? ""),
       },
@@ -659,20 +686,40 @@ export const SECTION_DESCRIPTORS: Record<SectionEntityKind, SectionDescriptor> =
 /** E6.4 F6.4.6 — the prefilled real-names reference sheet offered beside the
  * provider template: the org's ACTUAL group names/TINs, facility names, and
  * payer names, so relationship columns are copied, never guessed. Pure. */
+function referenceAddress(facility: {
+  street?: string | null;
+  suite?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}): string {
+  const street = [facility.street, facility.suite].filter(Boolean).join(" ");
+  const city = facility.city?.trim() ?? "";
+  const stateZip = [facility.state, facility.zip].filter(Boolean).join(" ");
+  return [street, city, stateZip].filter(Boolean).join(", ");
+}
+
 export function providerImportReference(
-  groups: { name: string; tin?: string | null }[],
-  facilities: { name: string }[],
+  groups: { name: string; tin?: string | null; npiType2?: string | null }[],
+  facilities: {
+    name: string;
+    street?: string | null;
+    suite?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+  }[],
   payers: { name: string }[],
 ): { filename: string; text: string } {
-  const rows: string[][] = [["kind", "name", "tin"]];
+  const rows: string[][] = [["kind", "name", "tin", "npi_type2", "address"]];
   for (const g of [...groups].sort((a, b) => a.name.localeCompare(b.name))) {
-    rows.push(["group", g.name, g.tin ?? ""]);
+    rows.push(["group", g.name, g.tin ?? "", g.npiType2 ?? "", ""]);
   }
   for (const f of [...facilities].sort((a, b) => a.name.localeCompare(b.name))) {
-    rows.push(["facility", f.name, ""]);
+    rows.push(["facility", f.name, "", "", referenceAddress(f)]);
   }
   for (const py of [...payers].sort((a, b) => a.name.localeCompare(b.name))) {
-    rows.push(["payer", py.name, ""]);
+    rows.push(["payer", py.name, "", "", ""]);
   }
   return { filename: "provider-import-reference.csv", text: toCsv(rows) };
 }
