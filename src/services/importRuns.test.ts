@@ -44,7 +44,10 @@ interface CapturedWrite {
 
 // Mock only the transport and neighboring write services. The real commit
 // service snapshots staged rows, calls the RPC, and chooses relationship writes.
-function installTransport(stagedRows: StagedImportRow[]) {
+function installTransport(
+  stagedRows: StagedImportRow[],
+  facilityIds = ["facility-2", "facility-3", "facility-4", "facility-5"],
+) {
   const writes: CapturedWrite[] = [];
   mocks.from.mockImplementation((table: string) => {
     let ids: string[] | undefined;
@@ -68,6 +71,7 @@ function installTransport(stagedRows: StagedImportRow[]) {
             { id: "provider-2", npi: OTHER_NPI },
           ].filter((p) => !ids || ids.includes(p.id)),
           provider_groups: GROUPS,
+          facilities: facilityIds.map((id) => ({ id })),
         };
         if (!(table in tables)) throw new Error(`Unexpected table read: ${table}`);
         return Promise.resolve({ data: tables[table], error: null }).then(resolve);
@@ -253,6 +257,21 @@ describe("commitImportRun — P02 reviewed source-row boundary", () => {
       "UT",
       "AZ",
     ]);
+  });
+
+  it("prunes a deleted facility while preserving live assignments and enrollment facts", async () => {
+    installTransport([relationshipRow(2, 0, "CO"), relationshipRow(3, 1, "UT")], ["facility-2"]);
+
+    const result = await commitImportRun("run-1", updatePlan());
+
+    expect(mocks.insertAssignmentRows).toHaveBeenCalledWith([
+      { providerId: "provider-1", facilityId: "facility-2", startDate: expect.any(String) },
+    ]);
+    expect(result.relationships).toEqual({
+      facilityAssignments: 1,
+      groupAssignments: 2,
+      enrollmentFacts: 2,
+    });
   });
 
   it("retains the existing replay behavior without another relationship pass", async () => {
