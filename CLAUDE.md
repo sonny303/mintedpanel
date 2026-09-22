@@ -47,7 +47,8 @@ Internal nickname "openpanel" still refers to the production Supabase project.
 
 The E0–E6 redesign program is **finished**. Work now arrives as user-feedback
 waves, design handoffs, and bug fixes — not epics. Branch off `main`, PR targets
-`main`, never self-merge.
+`main`. No autonomous self-merge; agents may execute a merge to `main` only when
+explicitly authorized by the PM after required CI checks pass.
 
 `docs/redesign/` is historical reference (plus `BUILD-PROMPT.md` /
 `README.md` if a genuinely new feature area ever warrants an epic again).
