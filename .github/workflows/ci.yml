@@ -9,6 +9,47 @@ permissions:
   contents: read
 
 jobs:
+  staging-uat-seed:
+    name: Deterministic staging UAT seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: npm ci
+      - name: Start and reset local Supabase
+        run: |
+          supabase start
+          supabase db reset
+      - name: Seed twice, verify invariants, and reset deletion pool
+        shell: bash
+        run: |
+          set -euo pipefail
+          status_json="$(supabase status -o json)"
+          export SUPABASE_URL="$(jq -r '.API_URL' <<<"$status_json")"
+          export SUPABASE_SERVICE_ROLE_KEY="$(jq -r '.SERVICE_ROLE_KEY' <<<"$status_json")"
+          export UAT_SUPABASE_ANON_KEY="$(jq -r '.ANON_KEY' <<<"$status_json")"
+          export UAT_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          export UAT_SHARED_PASSWORD="$(openssl rand -base64 24)Aa1!"
+          npm run seed:staging-uat
+          npm run seed:staging-uat
+          npm run verify:staging-uat
+          deletion_ids="$(jq -r '.ownership.deletionCases | join(",")' scripts/uat/uat-fixture-manifest.json)"
+          before="$(psql "$UAT_DATABASE_URL" -Atc "select md5(string_agg(row_to_json(c)::text,',' order by c.id)) from credential_cases c where c.id::text <> all(string_to_array('$deletion_ids',','))")"
+          npm run verify:staging-uat:deletion
+          npm run seed:staging-uat -- --reset deletion-pool
+          npm run verify:staging-uat
+          after="$(psql "$UAT_DATABASE_URL" -Atc "select md5(string_agg(row_to_json(c)::text,',' order by c.id)) from credential_cases c where c.id::text <> all(string_to_array('$deletion_ids',','))")"
+          test "$before" = "$after"
+
   release-guardrails:
     name: Release guardrails
     runs-on: ubuntu-latest
