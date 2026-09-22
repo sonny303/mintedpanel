@@ -66,6 +66,7 @@ export async function main() {
     WITH owned_orgs AS (SELECT unnest(ARRAY[${ids.organizations.map((id) => `'${id}'::uuid`).join(",")}]) id)
     SELECT json_build_object(
       'organizations',(SELECT count(*) FROM organizations WHERE id IN (SELECT id FROM owned_orgs)),
+      'personas',(SELECT count(*) FROM profiles WHERE email IN (${personas.map((persona) => `'${persona.email}'`).join(",")})),
       'groups',(SELECT count(*) FROM provider_groups WHERE org_id IN (SELECT id FROM owned_orgs)),
       'facilities',(SELECT count(*) FROM facilities WHERE org_id IN (SELECT id FROM owned_orgs)),
       'payers',(SELECT count(*) FROM payers WHERE id IN (${uuidList(ids.payers)})),
