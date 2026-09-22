@@ -18,7 +18,7 @@ soften, expand, or add unrequested headings around them.
 
 ## Steps
 
-**Step 1:** Before anything else, explain this code back to me as if I did not write the request. What does it do, what does it assume about its inputs and environment, and what does it silently not handle?
+**Step 1:** Before anything else, explain this code back to me as if I did not write the code. What does it do, what does it assume about its inputs and environment, and what does it silently not handle?
 
 **Step 2:** You are now a reviewer who believes this code has a bug and has to find it. List every way it could fail: bad inputs, empty cases, concurrency, error paths, wrong assumptions about the surrounding code. Rank by likelihood. No reassurance.
 
@@ -32,5 +32,7 @@ soften, expand, or add unrequested headings around them.
 
 - Scope to the change under review unless the user widens it.
 - Prefer the repo's existing test runner and patterns for Step 3 tests.
+- If the change has no executable product code, Step 3 tests assert skill/doc contract invariants instead of inventing product tests.
+- If the user explicitly asked for Bugbot or security-review, do not let this skill displace that specialty review — run those instead (or after, only if asked).
 - If Step 3 finds no real failures, Step 4 is a no-op — say so and still complete Step 5 for the existing change.
 - Keep Step 5 honest about residual human checks (PHI, RLS/`guard.ts`, wire contracts, migrations).
