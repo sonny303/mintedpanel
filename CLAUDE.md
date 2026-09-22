@@ -231,11 +231,13 @@ before any schema work.
 
 - `20260810120000_purge_unreferenced_catalog_payers.sql` — **needs a second PM
   sign-off. Never agent-apply.**
-- `20260903210000_delete_case_rpc.sql` — admin `delete_case` hard-delete RPC;
-  apply via Supabase MCP when authenticated (object-verify
-  `pg_proc.proname = 'delete_case'`).
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
+
+Object-verified applied and dropped from this list (2026-09-22):
+`20260903210000_delete_case_rpc.sql` (`pg_proc.proname = 'delete_case'`),
+`20260921220000_fix_case_generation_run_rows_created_case_check.sql`
+(CHECK dropped; `trg_case_generation_run_rows_created_case_check` present).
 
 Because some are unapplied, a `types.ts` regen may **delete** types for columns
 the repo just added. Check before regenerating.
@@ -259,8 +261,11 @@ All are repo migrations unless noted.
   payer_pipeline_history / fill_sessions). Voids matching active generation
   exclusions; when status was `approved`, expires the live enrollment fact at
   the same 4-part key. Writes one `audit_log` DELETE row. Does not delete
-  `audit_log` or batch `communication_event` parents. Migration
-  `20260903210000` (repo; hosted apply when Supabase MCP is authenticated).
+  `audit_log` or batch `communication_event` parents. `case_generation_run_rows.case_id`
+  and `provider_documents.case_id` SET NULL (ledger retained). Migration
+  `20260903210000` (hosted). Companion `20260921220000` moves the
+  `created ⇒ case_id NOT NULL` rule from a table CHECK to a BEFORE INSERT
+  trigger so the SET NULL cascade is not blocked.
 - **`create_organization(...)`** — SECURITY DEFINER bootstrap (the org's first
   member can't satisfy RLS). Inserts org + admin membership + the 22 canonical
   `status_configs` + audit row. Sales rep is **optional** — omitting it creates
