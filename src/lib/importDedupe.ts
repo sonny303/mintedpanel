@@ -223,6 +223,7 @@ const CREATE_SCALAR_LABELS = [
   ["credentials", "credentials"],
   ["email", "email"],
   ["phone", "phone"],
+  ["specialty", "specialty"],
   ["startDate", "start date"],
   ["degree", "degree"],
   ["schoolName", "school"],
@@ -578,8 +579,14 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
               },
             });
           }
+        } else if (license.licenseType) {
+          // same state + same number → nothing to change; license_type is
+          // insert-only, so surface the ignored value instead of a quiet skip.
+          pushNote(
+            entry.notes,
+            `Row ${row.line} lists a license type for ${license.state} ${license.licenseNumber} — license type is only applied on new licenses`,
+          );
         }
-        // same state + same number → nothing to change
       }
       continue;
     }
@@ -600,15 +607,20 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
       pushNote(existingCreate.notes, licenseNote);
       if (group) pushUnique(existingCreate.groupIds, group.id);
       if (facility) pushUnique(existingCreate.facilityIds, facility.id);
-      if (
-        license &&
-        !existingCreate.licenses.some(
+      if (license) {
+        const prior = existingCreate.licenses.find(
           (l) =>
             norm(l.state) === norm(license.state) &&
             norm(l.licenseNumber) === norm(license.licenseNumber),
-        )
-      ) {
-        existingCreate.licenses.push(license);
+        );
+        if (!prior) {
+          existingCreate.licenses.push(license);
+        } else if (prior.licenseType !== license.licenseType) {
+          pushNote(
+            existingCreate.notes,
+            `Row ${row.line} lists a different license type for ${license.state} ${license.licenseNumber} — the first row's values are used`,
+          );
+        }
       }
       continue;
     }

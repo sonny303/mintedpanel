@@ -235,6 +235,71 @@ describe("dedupeImportRows — five-part matching", () => {
     ]);
   });
 
+  // verify-pr risk 1: same license identity on a create fold must not silently
+  // drop a later license_type disagreement (first-row-wins needs a note).
+  it("notes license_type disagreement when create rows share state+number", () => {
+    const create = only(
+      dedupeImportRows(
+        baseInputs([
+          newProviderRow(2, { license_type: "full" }),
+          newProviderRow(3, {
+            license_state: "NC",
+            license_number: "NC-200",
+            license_type: "compact",
+            license_expiration_date: "2028-06-01",
+          }),
+        ]),
+      ),
+      "create",
+    )[0];
+
+    expect(create.licenses).toEqual([
+      expect.objectContaining({
+        state: "NC",
+        licenseNumber: "NC-200",
+        licenseType: "full",
+      }),
+    ]);
+    expect(create.notes.some((n) => /license type/i.test(n) && /Row 3/.test(n))).toBe(true);
+  });
+
+  // verify-pr risk 2: license_type on an existing same-number license is
+  // insert-only and currently becomes a quiet skip with no note.
+  it("notes when an update supplies license_type for an existing same-number license", () => {
+    const out = dedupeImportRows(
+      baseInputs([
+        janeRow(2, {
+          license_state: "NC",
+          license_number: "NC-100",
+          license_type: "compact",
+        }),
+      ]),
+    );
+    expect(only(out, "skip")).toHaveLength(1);
+    expect(only(out, "skip")[0].notes.some((n) => /license type/i.test(n))).toBe(true);
+  });
+
+  // verify-pr risk 3: create-fold specialty disagreement is still silent even
+  // though new parity scalars now emit first-row-wins notes.
+  it("notes specialty disagreement on create folds", () => {
+    const create = only(
+      dedupeImportRows(
+        baseInputs([
+          newProviderRow(2, { specialty: "Physical Therapy" }),
+          newProviderRow(3, {
+            specialty: "Occupational Therapy",
+            license_state: "SC",
+            license_number: "SC-300",
+          }),
+        ]),
+      ),
+      "create",
+    )[0];
+
+    expect(create.provider.specialty).toBe("Physical Therapy");
+    expect(create.notes.some((n) => /specialty/i.test(n) && /Row 3/.test(n))).toBe(true);
+  });
+
   it("folds multiple lines of one EXISTING provider into ONE update", () => {
     const out = dedupeImportRows(
       baseInputs([
