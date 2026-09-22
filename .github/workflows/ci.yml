@@ -39,7 +39,9 @@ jobs:
              "$uat_workdir/supabase/migrations/20260903210001_delete_org_sop_template.sql"
           echo "UAT_SUPABASE_WORKDIR=$uat_workdir" >> "$GITHUB_ENV"
           supabase --workdir "$uat_workdir" start
-          supabase --workdir "$uat_workdir" db reset
+          # Legacy seed.sql predates the current assignment date constraint;
+          # this job owns and applies the dedicated UAT seed immediately after.
+          supabase --workdir "$uat_workdir" db reset --no-seed
       - name: Seed twice, verify invariants, and reset deletion pool
         shell: bash
         run: |
