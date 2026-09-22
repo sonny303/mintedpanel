@@ -12,7 +12,48 @@ Process references: [`repo-workflow.md`](repo-workflow.md),
 This document records a review outcome and a test plan. It authorizes no merge,
 no hosted migration, and no deployment.
 
-## 1. PR inventory and merge readiness
+## 2026-09-22 execution update
+
+The owner approved the attachment's three-phase execution plan in the deployment
+session. The sections below retain the September 20 historical review; their
+branch counts and merge-readiness labels are not current release evidence.
+
+| Item                              | Fresh observation / required action                                                                                                                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Phase 1 source                    | `main` starts at `cce36e0794f3b4b34527e95a3df807d898fc634b`; `staging` starts at `db02badce5197200c0d51c04a663059108898c14`, 14 commits ahead.                                                                                                                           |
+| Import test repair                | PR #393 seeds live facility IDs and checks that a deleted facility is pruned without losing valid relationships. Reproduced two failures before repair; 168 files / 2,263 unit tests pass afterward.                                                                     |
+| Case-delete database prerequisite | Read back the INSERT-only trigger, matching trigger function, absent old CHECK, and `ON DELETE SET NULL` FK on both hosted projects. Production history already records `fix_case_generation_run_rows_created_case_check` at `20260922035947`; do not replay it blindly. |
+| Exact Phase 1 staging candidate   | Vercel deployment `dpl_89LqVGKhNmvsnZrGqjZ9daw5Qgkp`, source `db02bad`, is READY at `https://mintedpanel-staging-m5qxg3b4e-mintedpanel.vercel.app`. It has no stable alias.                                                                                              |
+| Human acceptance                  | Pending: cross-org search/ranking/switching, footprint conflicts/shared TIN, facility-address import, and generated-case deletion. Owner received the exact candidate URL and checklist.                                                                                 |
+| Stable staging aliases            | The production project's Preview deployment `dpl_CyfHfkmoY5V7mfasLfiJXR159NDR` serves the stable aliases and is at `e841427`; do not substitute it for the candidate above.                                                                                              |
+| Current production                | Vercel production target `dpl_G9vSoLgSuQrdfAqzj8vPgmKSEcrP` reports source `f903930`, older than current main. Check the entire served-source-to-candidate gap, including P05 handoff configuration.                                                                     |
+| Production handoff configuration  | Environment metadata has no `VITE_MINTED_EXTENSION_ID`. Obtain and verify the actual installed production extension ID/version before building. Server `SUPABASE_URL` was read individually and matches `fkvuhfsqcmujywzgczmc`.                                          |
+| Tooling stack                     | #376 merged into #365 as `ac67546`; parent refreshed against main for current required CI.                                                                                                                                                                               |
+| CSV stack                         | #386 merged into #382 as `28dfa5b`; conflict resolution preserves field parity, facility/group locators, strict Type 2 NPI validation, and optional `group_npi`. Integrated local suite: 169 files / 2,284 tests pass.                                                   |
+| Vault conflict                    | #374 preserves both the P01 authorization job and release guardrails. Its refreshed dedicated authorization CI passes.                                                                                                                                                   |
+| Staging vault prerequisite        | Staging lacks `provider_ssn_vault`, `provider_ssn_intake_links`, all three P01 RPCs, and encryption helpers. P01 alone is insufficient. Additional prerequisite setup and a staging-only key require the explicitly requested scope decision.                            |
+| CSV database prerequisite         | Staging has the required columns; its current RPC lacks parity create fields. Normalize and compare the hosted function before applying `20260919033009_provider_csv_add_provider_parity.sql`, then prove persistence before app delivery.                               |
+| Delivery                          | Git deployment is disabled by source. Hosted workflow collectors/adapters remain blocked. A main merge is not a deployment or proof of production eligibility.                                                                                                           |
+| Held work                         | #351 remains outside this release pending its separate product decisions.                                                                                                                                                                                                |
+
+### Phase 1 human acceptance checklist
+
+Use synthetic records on the exact `db02bad` candidate above.
+
+1. Open the command palette. Search across member organizations; NPI copy leaves
+   the active organization unchanged, while opening a record switches correctly.
+2. Open `/dev/global-search`. Conflicting licenses show each organization's value;
+   the shared-TIN badge counts distinct groups, not repeated assignments.
+3. Import a provider CSV with an existing facility street address. Verify the
+   intended location in preview and saved assignments; ambiguous matches require
+   resolution.
+4. Generate and delete a synthetic case. Deletion succeeds and the generation
+   ledger retains the row with `case deleted`.
+
+Record actual pass/fail before production promotion. R1–R6 remain required for
+the later vault/CSV staging batch; installed extension evidence remains separate.
+
+## 1. Historical PR inventory and merge readiness (September 20)
 
 | PR                                                       | Title                                                           | Base                                 | Product impact                                              | Merge-ready?                                           |
 | -------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------ |
