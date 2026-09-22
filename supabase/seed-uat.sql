@@ -216,7 +216,7 @@ UPDATE public.credential_cases SET case_status='approved', payer_pipeline_state=
 WHERE id=pg_temp.uat_uuid('case',46);
 INSERT INTO public.enrollment_facts (id, org_id, provider_id, group_id, payer_id, state, effective_date, source, created_by)
 SELECT pg_temp.uat_uuid('enrollment',i), c.org_id, c.provider_id, c.group_id, c.payer_id, c.state, CURRENT_DATE-90, 'migration', :'user_admin_alpha'
-FROM generate_series(1,20) i JOIN public.credential_cases c ON c.id=pg_temp.uat_uuid('case',CASE WHEN i=20 THEN 46 ELSE i)
+FROM generate_series(1,20) i JOIN public.credential_cases c ON c.id=pg_temp.uat_uuid('case',CASE WHEN i=20 THEN 46 ELSE i END)
 WHERE pg_temp.uat_full_seed() OR i=20
 ON CONFLICT (id) DO UPDATE SET expired_at=NULL, expired_by=NULL, effective_date=EXCLUDED.effective_date;
 
