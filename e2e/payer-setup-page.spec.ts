@@ -322,6 +322,7 @@ interface RecordedCall {
 
 let scenario: Scenario = "network";
 let db: Record<string, Row[]> | null = null;
+let failedTable: string | null = null;
 const calls: RecordedCall[] = [];
 
 async function fulfillSupabase(route: Route) {
@@ -351,6 +352,9 @@ async function fulfillSupabase(route: Route) {
   }
 
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
+  if (req.method() === "GET" && table === failedTable) {
+    return json({ code: "XX000", message: "Synthetic supporting-query failure" }, 500);
+  }
   const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
 
   const matchFilters = (row: Row): boolean => {
@@ -406,6 +410,7 @@ async function fulfillSupabase(route: Route) {
 test.beforeEach(async ({ context }) => {
   scenario = "network";
   db = null;
+  failedTable = null;
   calls.length = 0;
   await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
   await context.addInitScript(
@@ -478,6 +483,21 @@ test("populated list — table columns, live count, KPI cards filter and toggle"
   await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${AETNA_ID}$`), {
     timeout: 15000,
   });
+});
+
+test("supporting readiness failure keeps the payer catalog usable and labels unavailable facts", async ({
+  page,
+}) => {
+  failedTable = "portal_field_maps";
+  await page.goto("/admin/payer-admin/setup");
+
+  await expect(page.getByText("6 payers in the catalog")).toBeVisible({ timeout: 30000 });
+  await expect(
+    page.getByText(/Payers loaded, but readiness details couldn't load \(field maps/),
+  ).toBeVisible();
+  await expect(page.getByText("Couldn't load payers.")).toHaveCount(0);
+  await expect(page.locator("tbody tr")).toHaveCount(5);
+  await expect(page.locator("tbody tr").first().getByText("Unavailable")).toHaveCount(2);
 });
 
 test("search + State + Kind filters; filtered-to-none offers Clear filters, never add", async ({
