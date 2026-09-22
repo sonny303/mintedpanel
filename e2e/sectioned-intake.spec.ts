@@ -471,7 +471,7 @@ test("TS-66: facilities upload blocked without a group, proceeds + commits after
   ).toBeVisible();
 
   // Upload one facility referencing the group by TIN → stage → ready_for_review.
-  const facilityRow = "Riverside Clinic,,123456789,10 Dockside Dr,,Wilmington,NC,28401,,,,,,,,,,,";
+  const facilityRow = "Riverside Clinic,,123456789,,10 Dockside Dr,,Wilmington,NC,28401,,,,,,,,,,,";
   await facilityCard
     .locator('input[type="file"]')
     .setInputFiles(csvFile("facilities.csv", [FACILITY_HEADER_LINE, facilityRow].join("\n")));
