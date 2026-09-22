@@ -101,6 +101,15 @@ const CHECK_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]
   ],
   ["state_licenses_provider_id_not_null", "A license requires a provider."],
   ["sop_templates_states_shape_check", "Pick either “All states” or specific states — not both."],
+  // Residual table CHECK (pre-20260921220000) OR the INSERT-only trigger that
+  // replaced it. Both share the check_violation SQLSTATE; the fragment is the
+  // wire identity. Post-fix, delete_case SET NULL no longer hits this path —
+  // the table-CHECK name mapping covers unpatched hosts only.
+  [
+    "case_generation_run_rows_created_case_check",
+    "This case cannot be deleted while linked to generation run records.",
+  ],
+  ["case_id is required when disposition is created", "A created generation row must link a case."],
 ];
 
 /** The multi-state overlap trigger's named error (migration 20260812140000).
