@@ -14,6 +14,17 @@ in `scripts/delivery/boundary.mjs`). Identity below is from the reviewed G0
 allowlist and live Supabase inventory — not proof that every alias/cutover has
 already run through the new controller.
 
+**Hosted readback, September 22, 2026:** the dedicated staging project's READY
+candidate `dpl_89LqVGKhNmvsnZrGqjZ9daw5Qgkp` carries source `db02bad` and has no
+stable aliases. `staging.mintedpanel.com` and `mintedpanel-staging.vercel.app`
+still belong to the production project's Preview deployment
+`dpl_CyfHfkmoY5V7mfasLfiJXR159NDR` at `e841427`. The staging alias placement in
+the diagrams below is the intended destination, not completed cutover evidence.
+The production project's Git link is connected, while the reviewed source still
+sets `git.deploymentEnabled: false`; do not equate source configuration with a
+verified hosted Git disconnection. Production's served target reports `f903930`,
+older than main. Refresh these readbacks for each release.
+
 ---
 
 ## 1. System at a glance

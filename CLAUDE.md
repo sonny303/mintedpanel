@@ -38,7 +38,7 @@ staging `vmznysvietfaddakkegt` (`mintedpanel-staging`, ca-central-1). Vercel tea
 `minted` / `mintedpanel` — production project
 `prj_ILhPJbkyaiptdVA8DtsmNyw3tiub` (aliases `mintedpanel.com`,
 `www.mintedpanel.com`, `mintedpanel.vercel.app`) and dedicated staging project
-`prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch` (aliases `staging.mintedpanel.com`,
+`prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch` (intended aliases `staging.mintedpanel.com`,
 `mintedpanel-staging.vercel.app`). Full environment / promotion diagram:
 [`docs/ops/environment-architecture.md`](docs/ops/environment-architecture.md).
 Internal nickname "openpanel" still refers to the production Supabase project.
