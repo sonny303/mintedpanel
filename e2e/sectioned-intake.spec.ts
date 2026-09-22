@@ -82,6 +82,7 @@ const FACILITY_HEADER_LINE = [
   "facility_name",
   "group_name",
   "group_tin",
+  "group_npi",
   "street",
   "suite",
   "city",
@@ -103,6 +104,7 @@ const FACILITY_HEADER_LINE = [
 const PROVIDER_HEADER_LINE = [
   "group_name",
   "group_tin",
+  "group_npi",
   "provider_first_name",
   "provider_middle_initial",
   "provider_last_name",
@@ -459,7 +461,7 @@ test("TS-66: facilities upload blocked without a group, proceeds + commits after
   ).toBeVisible();
 
   // Upload one facility referencing the group by TIN → stage → ready_for_review.
-  const facilityRow = "Riverside Clinic,,123456789,10 Dockside Dr,,Wilmington,NC,28401,,,,,,,,,,,";
+  const facilityRow = "Riverside Clinic,,123456789,,10 Dockside Dr,,Wilmington,NC,28401,,,,,,,,,,,";
   await facilityCard
     .locator('input[type="file"]')
     .setInputFiles(csvFile("facilities.csv", [FACILITY_HEADER_LINE, facilityRow].join("\n")));

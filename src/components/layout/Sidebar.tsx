@@ -21,7 +21,7 @@
 //
 // Focus on the dark rail uses a white-alpha ring — the app's soft green ring
 // is invisible on forest. Renders in both the desktop rail and mobile drawer.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   DropdownMenu,
@@ -134,9 +134,10 @@ function groupMemberships(memberships: MembershipEntry[], query: string) {
 
 interface SidebarProps {
   onNavigate?: () => void;
+  onOpenSearch: () => void;
 }
 
-export function Sidebar({ onNavigate }: SidebarProps) {
+export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const memberships = useAuthStore((s) => s.memberships);
@@ -153,6 +154,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const drift = useFormDrift();
   const needsAttention = drift.isLoading || drift.isError ? null : drift.totalCount;
   const [orgQuery, setOrgQuery] = useState("");
+  // SSR and the first client render must agree. Mac updates the hint after mount.
+  const [shortcut, setShortcut] = useState("Ctrl K");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) setShortcut("⌘K");
+  }, []);
 
   const isActive = (to: string) =>
     to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(to + "/");
@@ -195,6 +201,21 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       <div className="px-5 pt-4 pb-2.5 flex items-center gap-2">
         <img src={logoWhite} alt="Minted Panel" className="w-6 h-6 object-contain" />
         <span className="text-[14px] font-semibold text-white">Minted Panel</span>
+      </div>
+
+      {/* Cross-org provider lookup. A button, not a nav link — the six primary
+          items stay exactly the Workspace and org-zone links. */}
+      <div className="px-3 pb-2">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          aria-label="Find a provider"
+          className={`flex h-9 w-full items-center gap-2 rounded-[var(--mp-radius-control)] border border-white/10 bg-white/[0.06] px-3 text-[13px] text-white/70 hover:bg-white/10 hover:text-white ${navFocus}`}
+        >
+          <Search className="h-4 w-4 flex-none" />
+          <span className="flex-1 text-left">Find a provider</span>
+          <kbd className="text-[11px] text-white/40">{shortcut}</kbd>
+        </button>
       </div>
 
       {/* Workspace — the three cross-org journey entries (F6.1.1) */}

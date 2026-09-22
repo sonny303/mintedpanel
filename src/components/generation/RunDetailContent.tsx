@@ -59,6 +59,11 @@ function RowLink({ row }: { row: CaseGenerationRunRow }) {
       </Link>
     );
   }
+  // Created rows keep their ledger entry after admin delete_case nulls
+  // case_id (ON DELETE SET NULL). Say so instead of an empty cell.
+  if (row.disposition === "created") {
+    return <span className="text-[12px] text-muted-foreground">case deleted</span>;
+  }
   if (row.disposition === "excluded") {
     const exclusion = row.exclusionId
       ? (exclusionsQ.data ?? []).find((x) => x.id === row.exclusionId)

@@ -1138,6 +1138,7 @@ export async function deleteCase(caseId: string): Promise<void> {
     if (raw.includes("Case not found")) {
       throw new Error("Case not found.");
     }
-    throw error instanceof Error ? error : new Error(raw || "Case delete failed");
+    const translated = translateDbError(error);
+    throw translated instanceof Error ? translated : new Error(raw || "Case delete failed");
   }
 }
