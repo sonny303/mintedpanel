@@ -1,3 +1,5 @@
+import { matchGroupLocator } from "@/lib/groupLocator";
+
 // E3.1 — the pure five-part dedupe / conflict-review / commit-plan core
 // (TE-3/TE-4). NO I/O: the service layer batch-reads the org's existing data
 // and the run's staged rows; everything here is a deterministic derivation the
@@ -6,7 +8,7 @@
 //
 // The [r5] decision-5 grain is name + NPI + TIN + group + facility. TIN and
 // group identify the SAME entity (a group has one TIN — the reviewer's nit),
-// so a staged row resolves its group by TIN first, then by name, and the
+// so a staged row resolves its group by name, then TIN, then Type 2 NPI, and the
 // effective match is provider(name, NPI) × group × facility:
 //   - full five-part match with nothing new and no conflicts → SKIP
 //     ("already exists");
@@ -50,6 +52,7 @@ export interface DedupeGroupRecord {
   id: string;
   name: string;
   tin: string | null;
+  npiType2?: string | null;
 }
 
 export interface DedupeFacilityRecord {
@@ -245,34 +248,45 @@ function noteCreateScalarDisagreements(create: CreateDisposition, row: StagedImp
   );
 }
 
-/** Group resolution: TIN first (bare digits), then normalized name. */
+/** Group resolution: exact name, then TIN, then Type 2 NPI when the TIN is shared.
+ * A scan-stamped `group_id` wins so preview cannot disagree with the upload scan. */
 export function resolveGroup(
   row: StagedImportRow,
   groups: DedupeGroupRecord[],
 ): { group: DedupeGroupRecord | null; note: string | null } {
-  const tin = digits(field(row, "group_tin"));
-  const name = norm(field(row, "group_name"));
-  const byTin = tin ? (groups.find((g) => digits(g.tin) === tin) ?? null) : null;
-  if (byTin) return { group: byTin, note: null };
-  const byName = name ? (groups.find((g) => norm(g.name) === name) ?? null) : null;
-  if (byName) {
-    const note =
-      tin && digits(byName.tin) && digits(byName.tin) !== tin
-        ? `Group "${byName.name}" matched by name but the TIN in the file differs from the group on record`
-        : null;
-    return { group: byName, note };
+  const result = matchGroupLocator(
+    {
+      name: field(row, "group_name"),
+      tin: field(row, "group_tin"),
+      npiType2: field(row, "group_npi"),
+    },
+    groups,
+  );
+  const stampedId = field(row, "group_id");
+  if (stampedId) {
+    const stamped = groups.find((group) => group.id === stampedId) ?? null;
+    if (stamped) {
+      const note =
+        result.status === "matched" && result.group.id === stamped.id ? result.note : null;
+      return { group: stamped, note };
+    }
   }
-  const label = field(row, "group_name") ?? field(row, "group_tin") ?? "unknown";
-  return {
-    group: null,
-    note: `Group "${label}" not found — no group assignment will be created (use batch assignment after commit)`,
-  };
+  if (result.status === "matched") {
+    const group = groups.find((candidate) => candidate.id === result.group.id) ?? null;
+    return { group, note: result.note };
+  }
+  return { group: null, note: result.reason };
 }
 
 export function resolveFacility(
   row: StagedImportRow,
   facilities: DedupeFacilityRecord[],
 ): { facility: DedupeFacilityRecord | null; note: string | null } {
+  const stampedId = field(row, "facility_id");
+  if (stampedId) {
+    const stamped = facilities.find((facility) => facility.id === stampedId) ?? null;
+    if (stamped) return { facility: stamped, note: null };
+  }
   const name = norm(field(row, "facility_name"));
   if (!name) return { facility: null, note: null };
   const match = facilities.find((f) => norm(f.name) === name) ?? null;
@@ -1114,13 +1128,28 @@ export function dedupeFacilityRows(
     }
     const name = row.mapped.facility_name?.trim() || "";
     const displayName = name || "—";
-    // Resolve parent group by TIN first, then normalized name.
-    const tin = digits(row.mapped.group_tin);
-    const gName = norm(row.mapped.group_name);
-    const group =
-      (tin ? groups.find((g) => digits(g.tin) === tin) : undefined) ??
-      (gName ? groups.find((g) => norm(g.name) === gName) : undefined) ??
-      null;
+    const groupMatch = matchGroupLocator(
+      {
+        name: row.mapped.group_name,
+        tin: row.mapped.group_tin,
+        npiType2: row.mapped.group_npi,
+      },
+      groups,
+    );
+    if (groupMatch.status !== "matched") {
+      const label = row.mapped.group_name ?? row.mapped.group_tin ?? "unknown";
+      result.blocked.push({
+        line: row.line,
+        column: groupMatch.status === "ambiguous" ? "group_npi" : "group_name",
+        displayName,
+        reason:
+          groupMatch.status === "ambiguous"
+            ? groupMatch.reason
+            : `Parent group "${label}" not found — add the provider group first`,
+      });
+      continue;
+    }
+    const group = groups.find((candidate) => candidate.id === groupMatch.group.id) ?? null;
     if (!group) {
       const label = row.mapped.group_name ?? row.mapped.group_tin ?? "unknown";
       result.blocked.push({

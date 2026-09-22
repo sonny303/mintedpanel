@@ -19,13 +19,14 @@ vi.mock("@/components/cases/WorkInPortalButton", () => ({
     facilityId?: string;
     disabled?: boolean;
     disabledReason?: string;
-    target: { url: string };
+    target: { name: string; url: string };
   }) => (
     <>
       <button
         type="button"
         disabled={props.disabled}
         data-facility-id={props.facilityId ?? "omitted"}
+        data-portal-name={props.target.name}
       >
         Work in portal
       </button>
@@ -91,6 +92,19 @@ describe("PortalStepLink mounted variants", () => {
     expect(html).toContain("Work in portal");
     expect(html).toContain('data-facility-id="11111111-2222-4333-8444-555555555555"');
     expect(html).toContain("Open portal directly");
+  });
+
+  it("preserves the hidden-portal display convention in the mounted handoff target", () => {
+    queryState.value = {
+      data: [{ ...portal, name: "[hidden] Regional Enrollment" }],
+      isLoading: false,
+      isError: false,
+    };
+    const html = renderToStaticMarkup(
+      <PortalStepLink portalKey="regional_enrollment" handoff={handoff()} />,
+    );
+    expect(html).toContain('data-portal-name="Regional Enrollment"');
+    expect(html).not.toContain("[hidden]");
   });
 
   it("disables handoff on a failed facility read while retaining direct navigation", () => {

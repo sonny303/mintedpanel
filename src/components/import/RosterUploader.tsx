@@ -75,7 +75,7 @@ export function RosterUploader({
     }
     const text = await file.text();
     const parsed = parseCsv(text);
-    const gate = checkHeaders(parsed.headers, descriptor.headers);
+    const gate = checkHeaders(parsed.headers, descriptor.headers, descriptor.optionalHeaders ?? []);
     if (!gate.ok) {
       // TE-7: a retired combined-template upload gets an actionable message
       // naming the per-section templates, not a generic missing/extra list.

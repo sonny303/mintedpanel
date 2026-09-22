@@ -1,0 +1,62 @@
+name: Staging delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful current-main push CI run ID
+        required: true
+        type: string
+      source_sha:
+        description: Exact current-main commit SHA from that CI run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: minted-staging-delivery
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: >-
+      github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify delivery controls (simulation)
+        run: node --test scripts/delivery/*.test.mjs
+
+      - name: Admit exact successful main source
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINTED_CI_RUN_ID: ${{ inputs.ci_run_id }}
+          MINTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          MINTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          export MINTED_CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node scripts/delivery/cli.mjs admit-staging
+
+      # No provider credential is referenced until destination approval, project
+      # isolation and actual evidence collectors are installed and reviewed.
+      - name: Deliver staging (blocked until provider prerequisites exist)
+        env:
+          MINTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          export MINTED_CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node scripts/delivery/cli.mjs staging

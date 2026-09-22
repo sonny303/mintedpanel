@@ -18,6 +18,7 @@ import {
   type FacilityInput,
   type ProviderGroupInput,
 } from "@/services/orgSettings";
+import { matchGroupLocator } from "@/lib/groupLocator";
 import { decodeDelimited } from "@/lib/importSections";
 import { normalizeWebsiteUrl } from "@/lib/providerGroup";
 import { attachGroupPayer, listPayerNetworkTargets } from "@/services/payerNetworkTargets";
@@ -270,7 +271,15 @@ async function applyProviderRelationships(
   const rows = stagedRows
     .map((r) => r.mapped)
     .filter((m): m is Record<string, string | null> => m !== null)
-    .filter((m) => m.facility_id || m.enrollment_payer_id || m.group_name || m.group_tin);
+    .filter(
+      (m) =>
+        m.facility_id ||
+        m.enrollment_payer_id ||
+        m.group_id ||
+        m.group_name ||
+        m.group_tin ||
+        m.group_npi,
+    );
   if (rows.length === 0 || providerIds.length === 0) return summary;
   const orgId = requireActiveOrg();
 
@@ -286,19 +295,33 @@ async function applyProviderRelationships(
 
   const { data: groupRows, error: gErr } = await supabase
     .from("provider_groups")
-    .select("id, name, tin")
+    .select("id, name, tin, npi_type2")
     .eq("org_id", orgId);
   if (gErr) throw gErr;
-  const groupByTin = new Map(
-    (groupRows ?? []).filter((g) => g.tin).map((g) => [String(g.tin), g.id as string]),
-  );
-  const groupByName = new Map(
-    (groupRows ?? []).map((g) => [String(g.name).trim().toLowerCase(), g.id as string]),
-  );
-  const resolveGroup = (m: Record<string, string | null>): string | null =>
-    (m.group_tin ? groupByTin.get(m.group_tin) : undefined) ??
-    (m.group_name ? groupByName.get(m.group_name.trim().toLowerCase()) : undefined) ??
-    null;
+  const groups = (groupRows ?? []).map((group) => ({
+    id: group.id as string,
+    name: group.name as string,
+    tin: (group.tin as string | null) ?? null,
+    npiType2: (group.npi_type2 as string | null) ?? null,
+  }));
+  const liveGroupIds = new Set(groups.map((group) => group.id));
+  // Scan stamps facility_id / group_id at upload time. If a coordinator
+  // deletes that row before commit, prune the relationship instead of
+  // failing the whole post-commit pass on a foreign key.
+  const { data: facilityRows, error: fErr } = await supabase
+    .from("facilities")
+    .select("id")
+    .eq("org_id", orgId);
+  if (fErr) throw fErr;
+  const liveFacilityIds = new Set((facilityRows ?? []).map((row) => row.id as string));
+  const resolveGroup = (m: Record<string, string | null>): string | null => {
+    if (m.group_id && liveGroupIds.has(m.group_id)) return m.group_id;
+    const result = matchGroupLocator(
+      { name: m.group_name, tin: m.group_tin, npiType2: m.group_npi },
+      groups,
+    );
+    return result.status === "matched" ? result.group.id : null;
+  };
 
   const existingFacts = await listEnrollmentFacts();
   const liveFactKeys = new Set(
@@ -315,7 +338,7 @@ async function applyProviderRelationships(
     const npi = m.npi ? String(m.npi) : null;
     const providerId = npi ? providerByNpi.get(npi) : undefined;
     if (!providerId) continue;
-    if (m.facility_id) {
+    if (m.facility_id && liveFacilityIds.has(m.facility_id)) {
       const key = `${providerId}|${m.facility_id}`;
       if (!seenFacility.has(key)) {
         seenFacility.add(key);

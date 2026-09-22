@@ -51,6 +51,7 @@ const SESSION = {
 const TEMPLATE_HEADERS = [
   "group_name",
   "group_tin",
+  "group_npi",
   "provider_first_name",
   "provider_middle_initial",
   "provider_last_name",

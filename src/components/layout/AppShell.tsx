@@ -5,10 +5,11 @@
 // (F0.0.4); the drawer itself still carries the org switcher and Portfolio
 // return, so nothing is lost in the collapse (F0.0.1). Route pages render in the
 // content area.
-import React, { useState } from "react";
-import { Menu, X, BarChart3 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Menu, X, BarChart3, Search } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Sidebar } from "./Sidebar";
+import { GlobalProviderSearchDialog } from "@/components/search/GlobalProviderSearchDialog";
 import { useActiveMembership } from "@/lib/auth-store";
 
 interface AppShellProps {
@@ -17,15 +18,31 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const closeDrawer = () => setDrawerOpen(false);
+  const openSearch = () => {
+    setDrawerOpen(false);
+    setSearchOpen(true);
+  };
   const active = useActiveMembership();
   const activeOrgName = active?.orgName ?? "Minted Panel";
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div className="flex h-dvh w-full bg-background overflow-hidden font-sans text-foreground">
       {/* Desktop sidebar */}
       <div className="hidden md:block h-full">
-        <Sidebar />
+        <Sidebar onOpenSearch={openSearch} />
       </div>
 
       {/* Mobile drawer */}
@@ -44,7 +61,7 @@ export function AppShell({ children }: AppShellProps) {
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <Sidebar onNavigate={closeDrawer} />
+          <Sidebar onNavigate={closeDrawer} onOpenSearch={openSearch} />
           <button
             type="button"
             aria-label="Close navigation"
@@ -71,6 +88,14 @@ export function AppShell({ children }: AppShellProps) {
           <span className="flex-1 truncate font-semibold text-[15px] tracking-tight text-foreground">
             {activeOrgName}
           </span>
+          <button
+            type="button"
+            aria-label="Find a provider"
+            onClick={() => setSearchOpen(true)}
+            className="w-9 h-9 rounded-[var(--mp-radius-sm)] flex items-center justify-center text-foreground hover:bg-muted transition-colors"
+          >
+            <Search className="w-5 h-5" />
+          </button>
           <Link
             to="/reporting"
             aria-label="Open Reporting Center"
@@ -82,6 +107,7 @@ export function AppShell({ children }: AppShellProps) {
 
         <main className="flex-1 overflow-y-auto p-4">{children}</main>
       </div>
+      <GlobalProviderSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }

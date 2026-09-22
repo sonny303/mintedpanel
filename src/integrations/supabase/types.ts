@@ -2047,7 +2047,7 @@ export type Database = {
           retired_by: string | null;
           storage_path: string;
           supersedes_id: string | null;
-          template_id: string;
+          template_id: string | null;
           version: number;
         };
         Insert: {
@@ -2081,7 +2081,7 @@ export type Database = {
           retired_by?: string | null;
           storage_path?: string;
           supersedes_id?: string | null;
-          template_id?: string;
+          template_id?: string | null;
           version?: number;
         };
         Relationships: [
@@ -4098,6 +4098,10 @@ export type Database = {
             };
             Returns: string;
           };
+      delete_org_sop_template: {
+        Args: { p_org_id: string; p_template_id: string };
+        Returns: Json;
+      };
       create_payer: {
         Args: {
           p_aliases?: string[];
@@ -4160,6 +4164,10 @@ export type Database = {
           p_recipient_name?: string;
         };
         Returns: Json;
+      };
+      delete_case: {
+        Args: { p_case_id: string; p_org_id: string };
+        Returns: undefined;
       };
       delete_payer_contact: {
         Args: { p_id: string; p_org_id: string };

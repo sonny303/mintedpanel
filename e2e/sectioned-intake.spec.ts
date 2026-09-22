@@ -82,6 +82,7 @@ const FACILITY_HEADER_LINE = [
   "facility_name",
   "group_name",
   "group_tin",
+  "group_npi",
   "street",
   "suite",
   "city",
@@ -103,6 +104,7 @@ const FACILITY_HEADER_LINE = [
 const PROVIDER_HEADER_LINE = [
   "group_name",
   "group_tin",
+  "group_npi",
   "provider_first_name",
   "provider_middle_initial",
   "provider_last_name",

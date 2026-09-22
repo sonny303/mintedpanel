@@ -15,6 +15,7 @@ import {
 } from "@/lib/casePortals";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { isValidHandoffUrl } from "@/lib/extensionHandoff";
+import { portalDisplayName } from "@/lib/portalRetirement";
 import { PortalVerificationPill } from "./PortalVerificationPill";
 
 export interface PortalHandoffContext {
@@ -81,9 +82,10 @@ export function PortalStepLink({
     : null;
   const currentFacilityId =
     facilityResolution?.status === "ready" ? facilityResolution.facilityId : undefined;
+  const displayName = portalDisplayName(portal);
   const target =
     portal.formUrl && isValidHandoffUrl(portal.formUrl)
-      ? { portalKey: key, name: portal.name, url: portal.formUrl }
+      ? { portalKey: key, name: displayName, url: portal.formUrl }
       : null;
   const invalidPortalUrl = Boolean(portal.formUrl) && target === null;
   const showFacilityPicker =
@@ -95,7 +97,7 @@ export function PortalStepLink({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-2.5 py-1.5 text-[12px]">
-      <span className="font-medium text-foreground">{portal.name}</span>
+      <span className="font-medium text-foreground">{displayName}</span>
       {target && !handoff ? (
         <a
           href={target.url}

@@ -2,8 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   FIELD_NOT_FOUND_REASON,
+  HIDDEN_KIND,
+  HIDDEN_REASON,
+  OTHER_PAGE_KIND,
+  OTHER_PAGE_REASON,
   brokenMapsForFill,
   buildDriftByPortal,
+  isHiddenSkip,
+  isNoEvidenceSkip,
+  isOnPageNotFound,
+  isOtherPageSkip,
   latestRealFillPerPortal,
   parseSkippedEntries,
   reportLabelOf,
@@ -43,6 +51,20 @@ const notFound = (label: string, mapId?: string) => ({
   ...(mapId ? { mapId } : {}),
 });
 
+const otherPage = (label: string, mapId?: string) => ({
+  label,
+  reason: OTHER_PAGE_REASON,
+  kind: OTHER_PAGE_KIND,
+  ...(mapId ? { mapId } : {}),
+});
+
+const hidden = (label: string, mapId?: string) => ({
+  label,
+  reason: HIDDEN_REASON,
+  kind: HIDDEN_KIND,
+  ...(mapId ? { mapId } : {}),
+});
+
 describe("parseSkippedEntries", () => {
   it("returns [] for non-array jsonb", () => {
     expect(parseSkippedEntries(null)).toEqual([]);
@@ -55,12 +77,56 @@ describe("parseSkippedEntries", () => {
       { label: "NPI", reason: FIELD_NOT_FOUND_REASON },
       { label: 42, reason: "nope" },
       { label: "CAQH", reason: "manual", kind: "manual", mapId: 9 },
+      { label: "DOB", reason: OTHER_PAGE_REASON, kind: OTHER_PAGE_KIND, mapId: "m-dob" },
       null,
     ]);
     expect(parsed).toEqual([
       { label: "NPI", reason: FIELD_NOT_FOUND_REASON, kind: "skipped", mapId: null },
       { label: "CAQH", reason: "manual", kind: "manual", mapId: null },
+      {
+        label: "DOB",
+        reason: OTHER_PAGE_REASON,
+        kind: OTHER_PAGE_KIND,
+        mapId: "m-dob",
+      },
     ]);
+  });
+});
+
+describe("isOnPageNotFound / isOtherPageSkip", () => {
+  it("requires both kind and reason for on-page drift", () => {
+    expect(isOnPageNotFound({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(true);
+    expect(isOnPageNotFound({ kind: OTHER_PAGE_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+    expect(isOnPageNotFound({ kind: "skipped", reason: OTHER_PAGE_REASON })).toBe(false);
+  });
+
+  it("treats either other-page half as an off-page skip", () => {
+    expect(isOtherPageSkip({ kind: OTHER_PAGE_KIND, reason: OTHER_PAGE_REASON })).toBe(true);
+    expect(isOtherPageSkip({ kind: "skipped", reason: OTHER_PAGE_REASON })).toBe(true);
+    expect(isOtherPageSkip({ kind: OTHER_PAGE_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(true);
+    expect(isOtherPageSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+  });
+
+  it("treats either hidden half as a hidden skip, and never as drift", () => {
+    expect(isHiddenSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(true);
+    expect(isHiddenSkip({ kind: "skipped", reason: HIDDEN_REASON })).toBe(true);
+    expect(isHiddenSkip({ kind: HIDDEN_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(true);
+    expect(isHiddenSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+    expect(isOnPageNotFound({ kind: HIDDEN_KIND, reason: FIELD_NOT_FOUND_REASON })).toBe(false);
+    expect(isOnPageNotFound({ kind: "skipped", reason: HIDDEN_REASON })).toBe(false);
+  });
+
+  it("keeps the three reasons distinct — no pin collides with another", () => {
+    expect(new Set([FIELD_NOT_FOUND_REASON, OTHER_PAGE_REASON, HIDDEN_REASON]).size).toBe(3);
+    expect(new Set(["skipped", OTHER_PAGE_KIND, HIDDEN_KIND]).size).toBe(3);
+    expect(isHiddenSkip({ kind: OTHER_PAGE_KIND, reason: OTHER_PAGE_REASON })).toBe(false);
+    expect(isOtherPageSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(false);
+  });
+
+  it("folds off-page and hidden into one no-evidence predicate", () => {
+    expect(isNoEvidenceSkip({ kind: OTHER_PAGE_KIND, reason: OTHER_PAGE_REASON })).toBe(true);
+    expect(isNoEvidenceSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(true);
+    expect(isNoEvidenceSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
   });
 });
 
@@ -176,6 +242,63 @@ describe("brokenMapsForFill", () => {
       [m1, other],
     );
     expect(broken.map((m) => m.id)).toEqual(["m4"]);
+  });
+
+  it("an other_page report is not drift, even mixed with a genuine miss", () => {
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [otherPage("NPI", "m1"), notFound("CAQH ID", "m2")],
+      },
+      [m1, m2],
+    );
+    expect(broken.map((m) => m.id)).toEqual(["m2"]);
+  });
+
+  it("a hidden report is not drift, even mixed with a genuine miss", () => {
+    // The selector RESOLVED — it just pointed into an inactive panel. Counting
+    // that as a dead selector would send a trainer to re-map a working field.
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [hidden("NPI", "m1"), notFound("CAQH ID", "m2")],
+      },
+      [m1, m2],
+    );
+    expect(broken.map((m) => m.id)).toEqual(["m2"]);
+  });
+
+  it("a partial hidden producer is not drift (kind or reason alone)", () => {
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [
+          { label: "NPI", reason: HIDDEN_REASON, kind: "skipped", mapId: "m1" },
+          { label: "CAQH ID", reason: FIELD_NOT_FOUND_REASON, kind: HIDDEN_KIND, mapId: "m2" },
+        ],
+      },
+      [m1, m2],
+    );
+    expect(broken).toEqual([]);
+  });
+
+  it("a partial other_page producer is not drift (kind or reason alone)", () => {
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [
+          { label: "NPI", reason: OTHER_PAGE_REASON, kind: "skipped", mapId: "m1" },
+          {
+            label: "CAQH ID",
+            reason: FIELD_NOT_FOUND_REASON,
+            kind: OTHER_PAGE_KIND,
+            mapId: "m2",
+          },
+        ],
+      },
+      [m1, m2],
+    );
+    expect(broken).toEqual([]);
   });
 });
 
@@ -322,6 +445,128 @@ describe("lastWorkingAt (S6.4)", () => {
     ];
     expect(lastWorkingAt(S64_MAP, other)).toBeNull();
   });
+
+  it("walks past an other_page report instead of treating it as last worked", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [otherPage("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 6,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-10T00:00:00Z");
+  });
+
+  it("returns null when every real fill is other_page — no inferred success", () => {
+    const onlyOffPage: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [otherPage("#npi", "m-npi")],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, onlyOffPage)).toBeNull();
+  });
+
+  it("walks past a hidden report instead of treating it as last worked", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [hidden("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-11T00:00:00Z",
+        fieldsFilled: 6,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-11T00:00:00Z");
+  });
+
+  it("returns null when every real fill is hidden — no inferred success", () => {
+    const onlyHidden: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [hidden("#npi", "m-npi")],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, onlyHidden)).toBeNull();
+  });
+
+  it("walks past a partial hidden producer (kind overwritten to skipped)", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [{ kind: "skipped", reason: HIDDEN_REASON, mapId: "m-npi", label: "#npi" }],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-02T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-02T00:00:00Z");
+  });
+
+  it("walks past a mix of off-page and hidden to the last real success", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-22T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [hidden("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-15T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [otherPage("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-03T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-03T00:00:00Z");
+  });
+
+  it("walks past a partial other_page producer (kind overwritten to skipped)", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [
+          { kind: "skipped", reason: OTHER_PAGE_REASON, mapId: "m-npi", label: "#npi" },
+        ],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-01T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-01T00:00:00Z");
+  });
 });
 
 describe("fragileMapIds / buildDriftReport (S6.4)", () => {
@@ -336,6 +581,24 @@ describe("fragileMapIds / buildDriftReport (S6.4)", () => {
   it("marks a mapping fragile once it has broken AND previously worked", () => {
     const fragile = fragileMapIds(S64_HISTORY, [brokenFill], [S64_MAP]);
     expect(fragile.has("m-npi")).toBe(true);
+  });
+
+  it("does NOT treat an other_page fill as prior success for fragility", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [notFound("#npi", "m-npi")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 4,
+        fieldsSkipped: [otherPage("#npi", "m-npi")],
+      },
+    ];
+    expect(fragileMapIds(history, [brokenFill], [S64_MAP]).has("m-npi")).toBe(false);
   });
 
   it("does NOT mark a mapping that never worked — that's a bad map, not decay", () => {

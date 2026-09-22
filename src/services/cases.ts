@@ -1113,3 +1113,32 @@ export async function getContractFor(
   if (error) throw error;
   return data ? camelizeRow<Contract>(data) : null;
 }
+
+/**
+ * Admin hard-delete of a case + its case-scoped children (touches, tasks,
+ * status history, facilities). Runs through the `delete_case` SECURITY
+ * DEFINER RPC — the only path allowed to DELETE append-only ledgers. The RPC
+ * writes its own audit row; do not also writeAudit here.
+ */
+export async function deleteCase(caseId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+  if (currentUserRole() !== "admin") {
+    throw new Error("Only an admin can delete a case.");
+  }
+  const rpc = supabase.rpc.bind(supabase);
+  const { error } = await rpc("delete_case", {
+    p_org_id: orgId,
+    p_case_id: caseId,
+  });
+  if (error) {
+    const raw = error.message ?? "";
+    if (raw.includes("Not authorized")) {
+      throw new Error("Only an admin can delete a case.");
+    }
+    if (raw.includes("Case not found")) {
+      throw new Error("Case not found.");
+    }
+    const translated = translateDbError(error);
+    throw translated instanceof Error ? translated : new Error(raw || "Case delete failed");
+  }
+}

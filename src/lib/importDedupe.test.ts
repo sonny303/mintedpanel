@@ -314,7 +314,7 @@ describe("dedupeImportRows — five-part matching", () => {
     expect(update.addFacilityIds).toEqual([FAC2.id]);
   });
 
-  it("resolves the group by TIN first, then by name with a TIN-mismatch note", () => {
+  it("resolves the group by name, then by TIN, with a TIN-mismatch note", () => {
     const byTin = dedupeImportRows(
       baseInputs([
         newProviderRow(2, { group_name: "Renamed Entity LLC", group_tin: "12-3456789" }),
