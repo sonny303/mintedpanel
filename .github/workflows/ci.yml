@@ -32,6 +32,7 @@ jobs:
           uat_workdir="$RUNNER_TEMP/mintedpanel-uat"
           mkdir -p "$uat_workdir"
           cp -R supabase "$uat_workdir/supabase"
+          printf '\n[db.seed]\nenabled = false\n' >> "$uat_workdir/supabase/config.toml"
           # The repository has two historical migrations at 20260903210000.
           # Supabase's ledger rejects duplicate versions, so the isolated CI
           # copy gives the second file its next timestamp; source stays intact.
