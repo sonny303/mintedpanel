@@ -18,6 +18,11 @@ import {
   isListableSharedPortal,
   type PortalPayerFacts,
 } from "@/lib/portalVisibility";
+import {
+  isPortalHiddenFromPickers,
+  portalDisplayName,
+  withHiddenPortalPrefix,
+} from "@/lib/portalRetirement";
 import type { Portal } from "@/types";
 
 const PORTAL_COLUMNS =
@@ -334,6 +339,57 @@ export async function markPortalVerified(id: string): Promise<Portal> {
     entityId: id,
     after: { isVerified: true },
     description: `Verified portal ${after.name} (training pass)`,
+  });
+  return after;
+}
+
+/** Save a form URL on either tier — org rows use updatePortalUrl; global rows
+ * ride upsert_global_portal (URL change clears verification + proven_at). */
+export async function savePortalFormUrl(portal: Portal, formUrl: string): Promise<Portal> {
+  if (portal.orgId === null) {
+    return upsertGlobalPortal({
+      id: portal.id,
+      name: portal.name,
+      portalKey: portal.portalKey,
+      payerId: portal.payerId,
+      formUrl,
+    });
+  }
+  return updatePortalUrl(portal.id, formUrl);
+}
+
+/** FE-only hide-from-pickers: prefix the display name (see portalRetirement.ts).
+ * Does not delete the row, clear field maps, or drop payer_id — inventory keeps
+ * the portal with a Hidden pill; pickers filter the prefix. */
+export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
+  if (isPortalHiddenFromPickers(portal)) return portal;
+  const nextName = withHiddenPortalPrefix(portalDisplayName(portal));
+  if (portal.orgId === null) {
+    return upsertGlobalPortal({
+      id: portal.id,
+      name: nextName,
+      portalKey: portal.portalKey,
+      payerId: portal.payerId,
+      formUrl: portal.formUrl,
+    });
+  }
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("portals")
+    .update({ name: nextName } as never)
+    .eq("id", portal.id)
+    .eq("org_id", orgId)
+    .select(PORTAL_COLUMNS)
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<Portal>(data);
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal",
+    entityId: portal.id,
+    before: { name: portal.name },
+    after: { name: after.name },
+    description: `Hid portal ${portalDisplayName(portal)} from pickers`,
   });
   return after;
 }

@@ -37,6 +37,7 @@ import { mockValueForToken } from "@/lib/mockFillProfile";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
 import { registryCoverage, sectionRenamePatches, type RegistryRow } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
+import { filterMappingTokens, isPdfFillableToken } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
 
@@ -67,7 +68,12 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
     [mapsQ.data, portalKey],
   );
   const coverage = useMemo(() => registryCoverage(maps as RegistryRow[], new Set()), [maps]);
-  const groupedTokens = useMemo(() => groupTokens(tokensQ.data ?? []), [tokensQ.data]);
+  // DYN-TOKEN-06 — payer.*/contract.*/mso.* are case-scoped with no case in
+  // hand on either fill path, so a field mapped to one could only stay blank.
+  const groupedTokens = useMemo(
+    () => groupTokens(filterMappingTokens(tokensQ.data ?? [])),
+    [tokensQ.data],
+  );
 
   const invalidateMaps = () => {
     void qc.invalidateQueries({ queryKey: ["portal-field-maps", orgId] });
@@ -164,16 +170,43 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
 
   // A sample fill proves the mapping against the REAL blank form before a case
   // ever depends on it, using the synthetic profile — no provider, no case, no
-  // PHI. Values come from the same mock source the online-form runner uses, so
-  // a token that resolves here resolves there.
+  // PHI.
+  //
+  // DYN-TOKEN-01 — mock ONLY what the real payer-PDF fill could resolve.
+  // `mockValueForToken` is documented "always non-empty": it answers any token
+  // via a field-name heuristic. Mocking every mapped token therefore made a
+  // mapping that can never fill (user.name, assignment.* — families
+  // `buildProviderTokenValues` does not pass) demo perfectly, and the sample
+  // is the trainer's only feedback signal.
+  //
+  // Out-of-reach tokens are OMITTED rather than blanked, so they travel the
+  // same path a real case gives them: planPayerFormFill classifies an absent
+  // value as `empty_token` and the existing UI already shows that as a gap.
+  //
+  // DYN-TOKEN-05 — `license.*` and `groupInsurance.*` ARE reachable now
+  // (case page picks each). Keep `isPdfFillableToken` / `PDF_FILL_FAMILIES`
+  // in step with that, or the sample fill will teach the opposite of the
+  // case fill again.
   const sampleValues = useMemo(() => {
     const values: Record<string, string> = {};
     for (const map of maps) {
       const token = map.token?.trim();
-      if (token) values[token] = mockValueForToken(token);
+      if (token && isPdfFillableToken(token)) values[token] = mockValueForToken(token);
     }
     return values;
   }, [maps]);
+
+  // How many approved token mappings this form carries that no real case fill
+  // could ever resolve. Named in the sample-fill toast so the trainer learns
+  // it from the sample instead of from a coordinator months later.
+  const unreachableSampleCount = useMemo(
+    () =>
+      maps.filter((m) => {
+        const token = m.token?.trim();
+        return Boolean(token) && !isPdfFillableToken(token as string);
+      }).length,
+    [maps],
+  );
 
   async function runSampleFill() {
     try {
@@ -189,9 +222,16 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
       });
       // The mutation already planned the fill to run it — reuse that instead
       // of recomputing the same plan from the same inputs a second time.
-      toast.success(
-        `Sample filled ${result.written} of ${result.plan.entries.length} fields — synthetic data, do not send`,
-      );
+      const base = `Sample filled ${result.written} of ${result.plan.entries.length} fields — synthetic data, do not send`;
+      // A real case cannot resolve these either. Saying so on the sample is
+      // the whole point of DYN-TOKEN-01.
+      if (unreachableSampleCount > 0) {
+        toast.warning(
+          `${base}. ${unreachableSampleCount} mapped ${unreachableSampleCount === 1 ? "field is" : "fields are"} outside what a payer-PDF fill can resolve and will be blank on a real case.`,
+        );
+      } else {
+        toast.success(base);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not run the sample fill");
     }

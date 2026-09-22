@@ -602,8 +602,8 @@ test("templates — coverage in the header, the Active-match chip, and the ?inte
   await expect(orgRow.getByText("Active match")).toBeVisible();
   await expect(globalRow.getByText("Active match")).toHaveCount(0);
 
-  // The re-homed ?intent= producer: a published SOP with an online-form step
-  // and no portal → "Register portal" deep-links the editor's register mode.
+  // Detail banner (MP-5) is the one ?intent= producer — Register portal
+  // deep-links Form setup when the checklist is ready but no portal is linked.
   const next = page.getByRole("link", { name: /Register portal/ });
   await expect(next).toBeVisible();
   await expect(next).toHaveAttribute("href", /intent=register/);

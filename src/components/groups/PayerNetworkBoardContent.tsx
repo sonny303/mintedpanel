@@ -96,6 +96,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
           id: g.id,
           name: g.name,
           tin: g.tin,
+          npiType2: g.npiType2,
           states: g.states,
         })),
         payers: (catalogQ.data ?? []).map((p) => ({

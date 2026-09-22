@@ -1,3 +1,5 @@
+import { matchGroupLocator } from "@/lib/groupLocator";
+
 // E3.1 — the pure five-part dedupe / conflict-review / commit-plan core
 // (TE-3/TE-4). NO I/O: the service layer batch-reads the org's existing data
 // and the run's staged rows; everything here is a deterministic derivation the
@@ -6,7 +8,7 @@
 //
 // The [r5] decision-5 grain is name + NPI + TIN + group + facility. TIN and
 // group identify the SAME entity (a group has one TIN — the reviewer's nit),
-// so a staged row resolves its group by TIN first, then by name, and the
+// so a staged row resolves its group by name, then TIN, then Type 2 NPI, and the
 // effective match is provider(name, NPI) × group × facility:
 //   - full five-part match with nothing new and no conflicts → SKIP
 //     ("already exists");
@@ -50,6 +52,7 @@ export interface DedupeGroupRecord {
   id: string;
   name: string;
   tin: string | null;
+  npiType2?: string | null;
 }
 
 export interface DedupeFacilityRecord {
@@ -185,34 +188,45 @@ function personName(first: string | null, last: string | null): string {
   return [first, last].filter(Boolean).join(" ");
 }
 
-/** Group resolution: TIN first (bare digits), then normalized name. */
+/** Group resolution: exact name, then TIN, then Type 2 NPI when the TIN is shared.
+ * A scan-stamped `group_id` wins so preview cannot disagree with the upload scan. */
 export function resolveGroup(
   row: StagedImportRow,
   groups: DedupeGroupRecord[],
 ): { group: DedupeGroupRecord | null; note: string | null } {
-  const tin = digits(field(row, "group_tin"));
-  const name = norm(field(row, "group_name"));
-  const byTin = tin ? (groups.find((g) => digits(g.tin) === tin) ?? null) : null;
-  if (byTin) return { group: byTin, note: null };
-  const byName = name ? (groups.find((g) => norm(g.name) === name) ?? null) : null;
-  if (byName) {
-    const note =
-      tin && digits(byName.tin) && digits(byName.tin) !== tin
-        ? `Group "${byName.name}" matched by name but the TIN in the file differs from the group on record`
-        : null;
-    return { group: byName, note };
+  const result = matchGroupLocator(
+    {
+      name: field(row, "group_name"),
+      tin: field(row, "group_tin"),
+      npiType2: field(row, "group_npi"),
+    },
+    groups,
+  );
+  const stampedId = field(row, "group_id");
+  if (stampedId) {
+    const stamped = groups.find((group) => group.id === stampedId) ?? null;
+    if (stamped) {
+      const note =
+        result.status === "matched" && result.group.id === stamped.id ? result.note : null;
+      return { group: stamped, note };
+    }
   }
-  const label = field(row, "group_name") ?? field(row, "group_tin") ?? "unknown";
-  return {
-    group: null,
-    note: `Group "${label}" not found — no group assignment will be created (use batch assignment after commit)`,
-  };
+  if (result.status === "matched") {
+    const group = groups.find((candidate) => candidate.id === result.group.id) ?? null;
+    return { group, note: result.note };
+  }
+  return { group: null, note: result.reason };
 }
 
 export function resolveFacility(
   row: StagedImportRow,
   facilities: DedupeFacilityRecord[],
 ): { facility: DedupeFacilityRecord | null; note: string | null } {
+  const stampedId = field(row, "facility_id");
+  if (stampedId) {
+    const stamped = facilities.find((facility) => facility.id === stampedId) ?? null;
+    if (stamped) return { facility: stamped, note: null };
+  }
   const name = norm(field(row, "facility_name"));
   if (!name) return { facility: null, note: null };
   const match = facilities.find((f) => norm(f.name) === name) ?? null;
@@ -255,11 +269,17 @@ function pushNote(notes: string[], note: string | null): void {
 }
 
 /** The five-part dedupe pass: staged rows × existing org data → folded,
- * per-provider dispositions. Deterministic — row order decides fold anchors. */
+ * per-provider dispositions. Identity is resolved across the whole batch
+ * before folding; row order decides only the valid fold anchors. */
 export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
-  const byNpi = new Map<string, DedupeProviderRecord>();
+  const byNpi = new Map<string, DedupeProviderRecord[]>();
   for (const p of inputs.providers) {
-    if (p.npi && p.npi.trim() !== "") byNpi.set(p.npi.trim(), p);
+    const npi = p.npi?.trim();
+    if (!npi) continue;
+    const list = byNpi.get(npi) ?? [];
+    // Count distinct provider ids — a duplicated list entry is not two people.
+    if (!list.some((existing) => existing.id === p.id)) list.push(p);
+    byNpi.set(npi, list);
   }
   const byName = new Map<string, DedupeProviderRecord[]>();
   for (const p of inputs.providers) {
@@ -268,6 +288,90 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
     const list = byName.get(key) ?? [];
     list.push(p);
     byName.set(key, list);
+  }
+
+  // Validate all rows of each incoming identity before any relationships or
+  // licenses enter an update. In particular, no first row gets to reserve a
+  // legacy NPI-less provider ahead of a competing NPI later in the file.
+  const namesByIncomingNpi = new Map<string, Set<string>>();
+  for (const row of inputs.rows) {
+    const npi = field(row, "npi");
+    if (!npi) continue;
+    const names = namesByIncomingNpi.get(npi) ?? new Set<string>();
+    names.add(
+      norm(personName(field(row, "provider_first_name"), field(row, "provider_last_name"))),
+    );
+    namesByIncomingNpi.set(npi, names);
+  }
+  const providerByIncomingNpi = new Map<string, DedupeProviderRecord>();
+  const identityBlocks = new Map<string, string>();
+  const fallbackClaims = new Map<string, Set<string>>();
+  const recovery = "correct the identity data and re-import";
+
+  for (const [npi, names] of namesByIncomingNpi) {
+    const exact = byNpi.get(npi) ?? [];
+    if (exact.length > 1) {
+      identityBlocks.set(npi, `NPI ${npi} matches multiple existing providers — ${recovery}`);
+      continue;
+    }
+    if (exact.length === 1) {
+      providerByIncomingNpi.set(npi, exact[0]);
+      continue;
+    }
+
+    const candidates = new Map<string, DedupeProviderRecord>();
+    let hasUnmatchedName = false;
+    let hasEligibleFallback = false;
+    let distinctNpiBlocksFallback = false;
+    for (const name of names) {
+      const neighbors = byName.get(name) ?? [];
+      const npiless = neighbors.filter((p) => !p.npi?.trim());
+      // Preserve the existing distinct-NPI rule: a same-name neighbor with
+      // an NPI does not authorize a name-only update of another identity.
+      // Still collect every NPI-less neighbor so multiple legacy targets
+      // remain an explicit block (FR2), not a silent create.
+      const hasNpiNeighbor = neighbors.some((p) => p.npi?.trim());
+      if (npiless.length === 0) hasUnmatchedName = true;
+      if (hasNpiNeighbor) distinctNpiBlocksFallback = true;
+      for (const candidate of npiless) {
+        candidates.set(candidate.id, candidate);
+        if (hasNpiNeighbor) continue;
+        hasEligibleFallback = true;
+        const claims = fallbackClaims.get(candidate.id) ?? new Set<string>();
+        claims.add(npi);
+        fallbackClaims.set(candidate.id, claims);
+      }
+    }
+    if (candidates.size > 1) {
+      identityBlocks.set(
+        npi,
+        `NPI ${npi} matches multiple existing providers by name — ${recovery}`,
+      );
+      for (const candidate of candidates.values()) {
+        const claims = fallbackClaims.get(candidate.id) ?? new Set<string>();
+        claims.add(npi);
+        fallbackClaims.set(candidate.id, claims);
+      }
+    } else if (candidates.size === 1) {
+      // An ambiguity-only candidate cannot turn two create rows into a dispute.
+      if (hasUnmatchedName && hasEligibleFallback) {
+        identityBlocks.set(
+          npi,
+          `Rows for NPI ${npi} disagree on creating or matching an existing provider — ${recovery}`,
+        );
+      } else if (!distinctNpiBlocksFallback) {
+        for (const candidate of candidates.values()) providerByIncomingNpi.set(npi, candidate);
+      }
+    }
+  }
+  for (const claims of fallbackClaims.values()) {
+    if (claims.size < 2) continue;
+    for (const npi of claims) {
+      identityBlocks.set(
+        npi,
+        `Multiple incoming NPIs match the same existing provider without an NPI (incoming NPI ${npi}) — ${recovery}`,
+      );
+    }
   }
   const groupsOf = new Map<string, Set<string>>();
   for (const a of inputs.groupAssignments) {
@@ -323,12 +427,24 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
       continue;
     }
 
+    const identityBlock = identityBlocks.get(npi);
+    if (identityBlock) {
+      ordered.push({
+        kind: "blocked",
+        line: row.line,
+        column: "npi",
+        displayName,
+        reason: identityBlock,
+      });
+      continue;
+    }
+
     const { group, note: groupNote } = resolveGroup(row, inputs.groups);
     const { facility, note: facilityNote } = resolveFacility(row, inputs.facilities);
     const { draft: license, note: licenseNote } = licenseOf(row);
 
-    const existing = byNpi.get(npi) ?? null;
-    if (existing) {
+    const existing = providerByIncomingNpi.get(npi);
+    if (existing?.npi?.trim()) {
       // ---- Existing provider (matched by NPI): fold into ONE entry. ----
       let entry = matchedByProvider.get(existing.id);
       if (!entry) {
@@ -465,10 +581,8 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
     }
     // Same-name existing provider WITHOUT an NPI on record → the NPI-fill
     // conflict: an update, not a duplicate create.
-    const npilessNameMatch = nameKey
-      ? (byName.get(nameKey) ?? []).find((p) => !p.npi || p.npi.trim() === "")
-      : undefined;
-    if (npilessNameMatch && !sameNameNeighbor) {
+    const npilessNameMatch = providerByIncomingNpi.get(npi);
+    if (npilessNameMatch) {
       let entry = matchedByProvider.get(npilessNameMatch.id);
       if (!entry) {
         entry = {
@@ -730,12 +844,14 @@ export function buildCommitPlan(
     } else if (d.kind === "update") {
       const unresolved = unresolvedConflicts(d, resolutions);
       if (unresolved.length > 0) {
-        for (const c of unresolved) {
-          blocked.push({
-            line: d.line,
-            column: c.field,
-            reason: `Unresolved ${c.label.toLowerCase()} conflict — row not committed`,
-          });
+        for (const line of d.lines) {
+          for (const c of unresolved) {
+            blocked.push({
+              line,
+              column: c.field,
+              reason: `Unresolved ${c.label.toLowerCase()} conflict — row not committed`,
+            });
+          }
         }
         continue;
       }
@@ -928,13 +1044,28 @@ export function dedupeFacilityRows(
     }
     const name = row.mapped.facility_name?.trim() || "";
     const displayName = name || "—";
-    // Resolve parent group by TIN first, then normalized name.
-    const tin = digits(row.mapped.group_tin);
-    const gName = norm(row.mapped.group_name);
-    const group =
-      (tin ? groups.find((g) => digits(g.tin) === tin) : undefined) ??
-      (gName ? groups.find((g) => norm(g.name) === gName) : undefined) ??
-      null;
+    const groupMatch = matchGroupLocator(
+      {
+        name: row.mapped.group_name,
+        tin: row.mapped.group_tin,
+        npiType2: row.mapped.group_npi,
+      },
+      groups,
+    );
+    if (groupMatch.status !== "matched") {
+      const label = row.mapped.group_name ?? row.mapped.group_tin ?? "unknown";
+      result.blocked.push({
+        line: row.line,
+        column: groupMatch.status === "ambiguous" ? "group_npi" : "group_name",
+        displayName,
+        reason:
+          groupMatch.status === "ambiguous"
+            ? groupMatch.reason
+            : `Parent group "${label}" not found — add the provider group first`,
+      });
+      continue;
+    }
+    const group = groups.find((candidate) => candidate.id === groupMatch.group.id) ?? null;
     if (!group) {
       const label = row.mapped.group_name ?? row.mapped.group_tin ?? "unknown";
       result.blocked.push({

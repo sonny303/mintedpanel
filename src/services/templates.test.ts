@@ -22,7 +22,12 @@ vi.mock("@/lib/audit", () => ({
   writeAudit: writeAuditMock,
 }));
 
-import { publishTemplate, authorGlobalSop, SopVersionConflictError } from "./templates";
+import {
+  publishTemplate,
+  authorGlobalSop,
+  deleteOrgSopTemplate,
+  SopVersionConflictError,
+} from "./templates";
 
 describe("publishTemplate", () => {
   beforeEach(() => {
@@ -151,5 +156,58 @@ describe("authorGlobalSop", () => {
     }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toBe("column states does not exist");
+  });
+});
+
+describe("deleteOrgSopTemplate", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    fromMock.mockReset();
+    writeAuditMock.mockReset();
+  });
+
+  it("calls the delete RPC bound and returns cleared counts", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        template_id: "t1",
+        name: "Humana KS",
+        tasks_cleared: 3,
+        run_rows_cleared: 1,
+        forms_retired: 2,
+        versions_deleted: 4,
+      },
+      error: null,
+    });
+    const result = await deleteOrgSopTemplate("t1");
+    expect(result).toEqual({
+      templateId: "t1",
+      name: "Humana KS",
+      tasksCleared: 3,
+      runRowsCleared: 1,
+      formsRetired: 2,
+      versionsDeleted: 4,
+    });
+    expect(rpcMock).toHaveBeenCalledWith("delete_org_sop_template", {
+      p_org_id: "org-1",
+      p_template_id: "t1",
+    });
+    expect(writeAuditMock).not.toHaveBeenCalled();
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it("maps sop_template_not_found to a friendly error", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: "sop_template_not_found" },
+    });
+    await expect(deleteOrgSopTemplate("missing")).rejects.toThrow(/not found/i);
+  });
+
+  it("maps Not authorized to an admin-only message", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: "Not authorized" },
+    });
+    await expect(deleteOrgSopTemplate("t1")).rejects.toThrow(/admin/i);
   });
 });

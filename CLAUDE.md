@@ -234,6 +234,11 @@ before any schema work.
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 
+Object-verified applied and dropped from this list (2026-09-22):
+`20260903210000_delete_case_rpc.sql` (`pg_proc.proname = 'delete_case'`),
+`20260921220000_fix_case_generation_run_rows_created_case_check.sql`
+(CHECK dropped; `trg_case_generation_run_rows_created_case_check` present).
+
 Because some are unapplied, a `types.ts` regen may **delete** types for columns
 the repo just added. Check before regenerating.
 
@@ -250,6 +255,17 @@ All are repo migrations unless noted.
   rules, admin corrections, optimistic concurrency, append-only history with
   `reason_code_id`. At Approved, each **expected** payer ID must be supplied or
   explicitly acked missing. Exactly one overload; never add a defaulted arg.
+- **`delete_case(p_org_id, p_case_id)`** — admin-only SECURITY DEFINER hard
+  delete. Removes the case and case-scoped children (touches, tasks,
+  status_history, case_facilities; DB cascades for case_status_history /
+  payer_pipeline_history / fill_sessions). Voids matching active generation
+  exclusions; when status was `approved`, expires the live enrollment fact at
+  the same 4-part key. Writes one `audit_log` DELETE row. Does not delete
+  `audit_log` or batch `communication_event` parents. `case_generation_run_rows.case_id`
+  and `provider_documents.case_id` SET NULL (ledger retained). Migration
+  `20260903210000` (hosted). Companion `20260921220000` moves the
+  `created ⇒ case_id NOT NULL` rule from a table CHECK to a BEFORE INSERT
+  trigger so the SET NULL cascade is not blocked.
 - **`create_organization(...)`** — SECURITY DEFINER bootstrap (the org's first
   member can't satisfy RLS). Inserts org + admin membership + the 22 canonical
   `status_configs` + audit row. Sales rep is **optional** — omitting it creates
@@ -258,9 +274,11 @@ All are repo migrations unless noted.
   `merge_payer`** — the ONLY payers write path. The table itself is
   INSERT/UPDATE-locked for org roles.
 - **`author_global_sop`**, **`publish_sop_template_version`**,
-  **`upsert_global_portal`**, **`train_global_field_map`**,
+  **`delete_org_sop_template`**, **`upsert_global_portal`**, **`train_global_field_map`**,
   **`propose_shared_field_map`**, **`update_shared_field_registry`** — the
-  global/shared authoring tier.
+  global/shared authoring tier. `delete_org_sop_template` is admin-only and
+  org-authored only: nulls task/run-row stamps, retires attached payer PDFs
+  (Storage kept), deletes versions + head. Archive remains the softer path.
 - **`commit_import_run(p_run_id, p_plan jsonb)`** — transactional staged import
   commit. The RPC owns its audit rows; the service must not also `writeAudit`.
 - **`stage_import_rows`** — batched staging, `ON CONFLICT DO NOTHING` +
@@ -349,18 +367,19 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
 
 ### Frozen mirrors and deprecated columns (read, never write)
 
-| Column / table                                                                | State                                                                         |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                |
-| `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`      |
-| `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                |
-| `credential_cases.credentialing_status_id`, `payer_pipeline_state`            | read-only dual-write mirrors of `case_status`                                 |
-| `payers.payer_slug`, `last_synced_at`, `avg_decision_days`, `resolution_id_*` | deprecated in place — no writer                                               |
-| `launches` table, `providers.launch_id`                                       | legacy; nothing reads or writes them                                          |
-| `notes` table                                                                 | dormant for case/task (moved to `touches`); **still live for provider notes** |
-| `msos`, `mso_routing_rules`                                                   | dormant — routing engine deleted app-side                                     |
-| `org_payer_settings`, `next_best_action_configs`, `payer_catalog_changes`     | dormant                                                                       |
-| `org_payer_assignments.starter`                                               | dormant                                                                       |
+| Column / table                                                                | State                                                                                                                                            |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                                                                                   |
+| `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`                                                                         |
+| `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                                                                                   |
+| `credential_cases.credentialing_status_id`, `payer_pipeline_state`            | read-only dual-write mirrors of `case_status`                                                                                                    |
+| `payers.payer_slug`, `last_synced_at`, `avg_decision_days`, `resolution_id_*` | deprecated in place — no writer                                                                                                                  |
+| `providers.license_*` (number/state/issue/expiration)                         | **never written; null for every provider.** `state_licenses` is the real grain and what provider create/update writes — `license.*` is canonical |
+| `launches` table, `providers.launch_id`                                       | legacy; nothing reads or writes them                                                                                                             |
+| `notes` table                                                                 | dormant for case/task (moved to `touches`); **still live for provider notes**                                                                    |
+| `msos`, `mso_routing_rules`                                                   | dormant — routing engine deleted app-side                                                                                                        |
+| `org_payer_settings`, `next_best_action_configs`, `payer_catalog_changes`     | dormant                                                                                                                                          |
+| `org_payer_assignments.starter`                                               | dormant                                                                                                                                          |
 
 ## Cross-cutting subsystems
 
@@ -428,6 +447,12 @@ file** — it is not on the one-door allowlist and must not be added.
 
 Candidates = active `payer_network_targets` × group roster, filtered to
 providers with a facility assignment **and a footprint in the target state**.
+That footprint rule (an active assigned clinic of that group in that state, OR
+a license on file for it) lives in **`src/lib/providerFootprint.ts`** and is
+shared with the provider Readiness card — one definition, so the two surfaces
+can never disagree about which states a provider belongs in. Build the index
+once per derivation with `buildFootprintIndex`, then ask
+`hasStateFootprint` / `providerFootprintFor` per row.
 Buckets (candidate / enrolled / existing / excluded) are pure
 (`src/lib/generationGrid.ts`), and the confirm bar states a sum invariant —
 every candidate is accounted for.
@@ -440,8 +465,10 @@ flagged fallback. Exclusions are reasoned and voided-not-deleted.
 ### Touchlog
 
 `touches` is the single case-activity spine: `entry_type ∈ {touchpoint, note,
-system_event, task_update}`, append-only. **Corrections are appends, never
-edits.** Only touchpoints carry `touch_type`/`outcome`; seven canonical touch
+system_event, task_update}`, append-only for ordinary writers. **Corrections
+are appends, never edits.** Admin hard-delete of a case (`delete_case`) is the
+controlled carve-out that removes that case's touch rows. Only touchpoints
+carry `touch_type`/`outcome`; seven canonical touch
 types. `src/lib/touchOutcomes.ts` is the channel→outcome source of truth.
 
 Follow-up cadence uses a **carry-forward reducer** (`src/lib/followUps.ts`):
@@ -455,6 +482,20 @@ creates tasks), `src/lib/nextBestActions.ts` (fixed shipped ranking; the config
 seam was removed), `src/lib/providerGaps.ts`, `src/lib/reports.ts` (grouped
 index — adding a report is one registry entry + one route),
 `src/lib/casesMatrix.ts` (the `/cases` Matrix board — see below).
+
+**The readiness matrix is deliberately WIDE, and that is not what any one
+screen shows.** `evaluateEnrollmentReadiness` emits active targets × group
+roster with no footprint filter, because three consumers need the superset:
+`useGenerationPreview` (soft-warn chips), `useNextBestActions`, and
+`services/nextBestAction.ts` (the `/api` route) all look rows up by case key,
+and a filtered matrix would miss keys. **Scope at the render layer, never
+inside the evaluator.** `ProviderReadinessSection` does exactly that: it shows
+only states the provider has a footprint in, with a "Show all group targets"
+checkbox that reveals the rest (a group targeting eight states does not make
+its PT licensed in eight states, and those rows can never go green). Note the
+UI hook does NOT pass `contracts`, so on that card the payer axis carries no
+information the `(group, state)` pair doesn't already — the other two callers
+do pass it.
 
 `casesMatrix.ts` derives the provider × payer board a section at a time, where
 a section is **one group + one state**. That pinning is what makes "one cell =
@@ -551,8 +592,43 @@ Stale rows keep their controls — staleness is information, not a lock.
 Re-capture is drift **repair**, not a reset: it refreshes presentation columns
 and leaves decisions untouched.
 
+### Fill-skip telemetry pins (`src/lib/formDrift.ts`)
+
+`fill_sessions.fields_skipped` carries `{ label, reason, mapId?, kind }` from
+the extension content script. **This panel owns the wording**; the extension
+mirrors it (`src/shared/fillPage.ts`, `src/shared/hiddenField.ts`). Three
+disjoint pins, and a new one is added here FIRST:
+
+| kind         | reason                          | Meaning                                   |
+| ------------ | ------------------------------- | ----------------------------------------- |
+| `skipped`    | `field not found on this page`  | dead selector — **the only drift**        |
+| `other_page` | `field belongs to another page` | exact off-page map (DYN-PAGE-01)          |
+| `hidden`     | `field is hidden on this page`  | resolved into an inactive panel (PAGE-02) |
+
+Drift needs **both** halves (`isOnPageNotFound`); the two no-evidence kinds
+match on **either** half, so a producer that overwrites `kind` still cannot
+become drift. `lastWorkingAt` walks past every no-evidence kind
+(`isNoEvidenceSkip`) — "not reported broken" is only success when the fill
+actually tested the selector. **Add a kind to that predicate, or a hidden
+control silently dates a break to a fill that never touched it.**
+
 ## Known warts — don't rediscover these
 
+- Cross-org provider name/NPI lookup is the shell palette (Find a provider /
+  Ctrl+K or ⌘K). `searchProvidersAcrossOrgs`
+  (`src/services/globalProviderSearch.ts`) is the second service that skips
+  `requireActiveOrg()` — the browser read sends no org filter because
+  `providers_select` is `org_id IN user_org_ids()`. Do not move that query
+  onto the service-role client without an explicit membership filter; the
+  service key bypasses RLS, which is the wall. Analysis:
+  `docs/ops/global-provider-search-spike.md`.
+- The provider footprint (`loadProviderDossier`,
+  `src/services/providerDossier.ts`) is the same kind of read, one embedded
+  select, issued only when the inspector opens on `/dev/global-search`. It
+  is not on the shell palette and it is not an RPC. Licenses collapse in
+  `src/lib/providerDossier.ts`; a conflicting expiration is shown, not
+  dropped. DEA, SSN, and home address are not in the select. Analysis:
+  `docs/ops/provider-dossier-spike.md`.
 - `PROVIDER_LIST_COLUMNS` is a **partial projection**; list rows are typed
   `Provider` but omit unlisted columns. `getProvider` selects `*`.
 - `provider_facility_assignments.practice_frequency` is never written.
@@ -568,6 +644,14 @@ and leaves decisions untouched.
   an inbound-email writer must ship a constraint migration **before** inserting.
 - The Pre-Credentialing sentinel payer workflow code is intact but unreachable
   (no creatable payer carries the name).
+- **The token picker offers more than either fill can resolve, and the payer-PDF
+  sample fill used to hide it.** `useTokenCatalog()` serves one 157-token
+  catalog to BOTH mappers. TOKEN-01/06 narrowed the mapping pickers and made
+  the sample fill honest via `PDF_FILL_FAMILIES` (`fillTokenReach.ts`). The
+  real payer-PDF path (`buildProviderTokenValues`) now reaches `provider.*` /
+  `group.*` / `facility.*` / `license.*` / `groupInsurance.*`. Remaining
+  web-only gap: `assignment.*`, `user.*`. Measured posture per family in
+  `docs/ops/dyn-token-00-parity-spike.md` — read it before adding a token.
 - The extension's picker is driven from the served `catalog`;
   `src/shared/quickCards.ts` holds only the default layout and projection
   helpers, not a field-list mirror. (An older note here claimed otherwise —

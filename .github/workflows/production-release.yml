@@ -1,0 +1,74 @@
+name: Production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_run_id:
+        description: Successful staging delivery run containing the immutable release record
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: minted-production-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify delivery controls (simulation)
+        run: node --test scripts/delivery/*.test.mjs
+
+      # This step cannot succeed until authenticated collectors and the immutable
+      # artifact-to-summary binding are connected. It has no production secrets.
+      - name: Prepare immutable approval summary (activation blocked)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINTED_STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          MINTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          export MINTED_CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node scripts/delivery/cli.mjs prepare-production
+
+  production:
+    name: Approve and execute production release
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+
+      # The final provider adapters, credential references, exact candidate build,
+      # migration, promote, postcheck and conditional rollback all belong HERE,
+      # in this same approved job. Never add a second approval/rollback job.
+      - name: Execute approved release (activation blocked)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          export MINTED_CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node scripts/delivery/cli.mjs production

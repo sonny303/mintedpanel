@@ -214,7 +214,7 @@ describe("CSV row resolution + eligibility", () => {
     ],
   };
 
-  it("resolves the group by TIN first (dashed tolerated), then name", () => {
+  it("resolves the group by name, then TIN (dashed tolerated)", () => {
     expect(resolveAttachGroup(ctx.groups, null, "12-3456789")?.id).toBe("g1");
     expect(resolveAttachGroup(ctx.groups, "outer banks rehab group", null)?.id).toBe("g1");
     expect(resolveAttachGroup(ctx.groups, "nope", null)).toBeNull();

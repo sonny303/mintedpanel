@@ -5,9 +5,10 @@
 // rewrites history — and the label opens E1.7b's read-only version view
 // (F1.7b.2) directly on that version. A fallback-stamped pair carries the
 // neutral "Generic SOP" pill (TE-3 structural identity via the templates
-// cache). An unresolvable stamp (cross-org/unreadable version row) renders a
-// neutral "version unavailable" — never an error. Legacy tasks (NULL stamps)
-// contribute no pairs, so pre-E2.2 cases render exactly as before.
+// cache). An unresolvable stamp (cross-org/unreadable version row, or a
+// template hard-deleted after this case was generated) renders a neutral
+// "unknown template" — never an error. Legacy tasks and post-delete null
+// stamps contribute no pairs, so those cases render exactly as before.
 import { useState } from "react";
 import { FileText } from "lucide-react";
 import { StatusPill } from "@/components/StatusPill";
@@ -48,9 +49,7 @@ function ProvenanceLine({ templateId, version }: { templateId: string; version: 
   const versionRow = versionQ.data ?? null;
   if (!versionRow) {
     return (
-      <span className="text-[12px] text-muted-foreground">
-        Generated from an SOP — version unavailable
-      </span>
+      <span className="text-[12px] text-muted-foreground">Generated from an unknown template</span>
     );
   }
 

@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   vault-authorization:
     name: P01 vault authorization
@@ -24,10 +27,39 @@ jobs:
       - name: Reproduce DB-01 and verify repaired role boundaries
         run: node scripts/security/verify-ssn-vault.mjs
 
+  release-guardrails:
+    name: Release guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # The release checks use node:test and built-in modules only.
+      # No hosted credentials, deployment or environment approval is needed.
+      - name: Check release contract and source controls
+        run: npm run test:release
+
+      - name: Install encryption test dependency
+        run: sudo apt-get update && sudo apt-get install -y age
+
+      - name: Check encrypted recovery and evidence boundaries
+        run: npm run test:recovery
+
+      - name: Check delivery controls and provider adapters with simulated data
+        run: npm run test:delivery
+
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -80,6 +112,8 @@ jobs:
       PGDATABASE: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install postgres client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -131,6 +165,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Node 22 (not 20): the SSR dev server constructs the Supabase client at
       # module load, and @supabase/realtime-js needs a global WebSocket, which

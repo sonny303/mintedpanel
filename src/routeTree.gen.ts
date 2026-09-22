@@ -57,6 +57,7 @@ import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
 import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId'
 import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
+import { Route as DevGlobalSearchRouteImport } from './routes/dev.global-search'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
 import { Route as CaptureTokenRouteImport } from './routes/capture.$token'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
@@ -336,6 +337,11 @@ const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
   path: '/dev/primitives',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevGlobalSearchRoute = DevGlobalSearchRouteImport.update({
+  id: '/dev/global-search',
+  path: '/dev/global-search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CasesIdRoute = CasesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -552,6 +558,7 @@ export interface FileRoutesByFullPath {
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
+  '/dev/global-search': typeof DevGlobalSearchRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation/runs': typeof GenerationRunsRouteWithChildren
   '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
@@ -631,6 +638,7 @@ export interface FileRoutesByTo {
   '/admin/statuses': typeof AdminStatusesRoute
   '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
+  '/dev/global-search': typeof DevGlobalSearchRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
@@ -714,6 +722,7 @@ export interface FileRoutesById {
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
+  '/dev/global-search': typeof DevGlobalSearchRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation_/runs': typeof GenerationRunsRouteWithChildren
   '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
@@ -801,6 +810,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/capture/$token'
     | '/cases/$id'
+    | '/dev/global-search'
     | '/dev/primitives'
     | '/generation/runs'
     | '/groups/$groupId'
@@ -880,6 +890,7 @@ export interface FileRouteTypes {
     | '/admin/statuses'
     | '/capture/$token'
     | '/cases/$id'
+    | '/dev/global-search'
     | '/dev/primitives'
     | '/import/$runId'
     | '/launches/$id'
@@ -962,6 +973,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/capture/$token'
     | '/cases/$id'
+    | '/dev/global-search'
     | '/dev/primitives'
     | '/generation_/runs'
     | '/groups/$groupId'
@@ -1047,6 +1059,7 @@ export interface RootRouteChildren {
   AdminStatusesRoute: typeof AdminStatusesRoute
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   CaptureTokenRoute: typeof CaptureTokenRoute
+  DevGlobalSearchRoute: typeof DevGlobalSearchRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
   GroupsGroupIdRoute: typeof GroupsGroupIdRouteWithChildren
@@ -1408,6 +1421,13 @@ declare module '@tanstack/react-router' {
       path: '/dev/primitives'
       fullPath: '/dev/primitives'
       preLoaderRoute: typeof DevPrimitivesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/global-search': {
+      id: '/dev/global-search'
+      path: '/dev/global-search'
+      fullPath: '/dev/global-search'
+      preLoaderRoute: typeof DevGlobalSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cases/$id': {
@@ -1833,6 +1853,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminStatusesRoute: AdminStatusesRoute,
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   CaptureTokenRoute: CaptureTokenRoute,
+  DevGlobalSearchRoute: DevGlobalSearchRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
   GenerationRunsRoute: GenerationRunsRouteWithChildren,
   GroupsGroupIdRoute: GroupsGroupIdRouteWithChildren,

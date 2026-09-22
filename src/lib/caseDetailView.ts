@@ -42,6 +42,28 @@ export function currentStepPointer(tasks: readonly Task[]): CurrentStepPointer |
   return null;
 }
 
+export interface OpenTaskDrawerResolution {
+  task: Task;
+  locked: boolean;
+}
+
+/** Resolve the open drawer from the current visible task set on every render.
+ * This prevents a stored unlocked snapshot from surviving when an earlier task
+ * is reopened or refetched as incomplete. */
+export function resolveOpenTaskDrawer(
+  tasks: readonly Task[],
+  openTaskId: string | null,
+): OpenTaskDrawerResolution | null {
+  if (openTaskId === null) return null;
+  const index = tasks.findIndex((task) => task.id === openTaskId);
+  if (index < 0) return null;
+  const task = tasks[index];
+  const locked =
+    task.status !== "completed" &&
+    tasks.slice(0, index).some((previous) => previous.status !== "completed");
+  return { task, locked };
+}
+
 /** Ordered steps for display — the stored order wins; ties keep array order. */
 export function orderedSteps(task: Task): SOPStep[] {
   return (task.sopContent ?? [])
