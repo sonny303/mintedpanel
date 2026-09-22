@@ -375,7 +375,12 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   await uploadRoster(
     section,
     "renamed.csv",
-    [HEADER_LINE.replace("npi,", "npi_number,"), rowLine()].join("\n"),
+    [
+      HEADER_LINE.split(",")
+        .map((header) => (header === "npi" ? "npi_number" : header))
+        .join(","),
+      rowLine(),
+    ].join("\n"),
   );
   await expect(section.getByRole("alert")).toContainText("missing: npi");
   await expect(section.getByRole("alert")).toContainText("npi_number");
