@@ -8,7 +8,7 @@ Release guardrails and activation status live in
 [`staging-delivery.md`](staging-delivery.md), and
 [`production-release.md`](production-release.md).
 
-**As of this document:** hosted staging/production *control code* exists in
+**As of this document:** hosted staging/production _control code_ exists in
 repo, but **hosted delivery activation is blocked** (`HOSTED_ACTIVATION_BLOCKED`
 in `scripts/delivery/boundary.mjs`). Identity below is from the reviewed G0
 allowlist and live Supabase inventory — not proof that every alias/cutover has
@@ -59,10 +59,10 @@ flowchart TB
 
 ## 2. Repositories (separate mapping)
 
-| Repo | Role | Default branch | CI | Deploy artifact |
-| ---- | ---- | -------------- | -- | --------------- |
-| [`sonny303/mintedpanel`](https://github.com/sonny303/mintedpanel) | Panel UI, nitro `/api/*`, Supabase migrations, release controllers | `main` | `.github/workflows/ci.yml` (+ manual `staging-delivery.yml`, `production-release.yml`) | Vercel Build Output (TanStack Start / nitro) |
-| [`sonny303/minted-extension`](https://github.com/sonny303/minted-extension) | MV3 side panel, content scripts, fill/capture | `main` | `.github/workflows/ci.yml` | Chrome packaged / unpacked build — **not** a Vercel project |
+| Repo                                                                        | Role                                                               | Default branch | CI                                                                                     | Deploy artifact                                             |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [`sonny303/mintedpanel`](https://github.com/sonny303/mintedpanel)           | Panel UI, nitro `/api/*`, Supabase migrations, release controllers | `main`         | `.github/workflows/ci.yml` (+ manual `staging-delivery.yml`, `production-release.yml`) | Vercel Build Output (TanStack Start / nitro)                |
+| [`sonny303/minted-extension`](https://github.com/sonny303/minted-extension) | MV3 side panel, content scripts, fill/capture                      | `main`         | `.github/workflows/ci.yml`                                                             | Chrome packaged / unpacked build — **not** a Vercel project |
 
 Cross-repo rule ([`repo-workflow.md`](repo-workflow.md)): **panel-first** for
 `/api` wire contracts; mirror types in the extension in a coordinated follow-up.
@@ -94,11 +94,11 @@ flowchart LR
 
 ### 3.1 Environment matrix
 
-| Environment | Git ref (intended) | Vercel project | Vercel target | Supabase project | Primary URLs / aliases |
-| ----------- | ------------------ | -------------- | ------------- | ---------------- | ---------------------- |
-| **Local / cloud sandbox** | feature branch | none | `npm run dev` | optional local Supabase **or** Playwright mock (`example.supabase.co`) | `http://localhost:…` |
-| **Staging** | `staging` (fast-forward from admitted `main` CI SHA) | `prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch` | Preview (all-Preview env vars) | `mintedpanel-staging` (`vmznysvietfaddakkegt`) | `staging.mintedpanel.com`, `mintedpanel-staging.vercel.app` |
-| **Production** | `main` | `prj_ILhPJbkyaiptdVA8DtsmNyw3tiub` | Production | `mintedpanel` (`fkvuhfsqcmujywzgczmc`) | `mintedpanel.com`, `www.mintedpanel.com`, `mintedpanel.vercel.app` |
+| Environment               | Git ref (intended)                                   | Vercel project                     | Vercel target                  | Supabase project                                                       | Primary URLs / aliases                                             |
+| ------------------------- | ---------------------------------------------------- | ---------------------------------- | ------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **Local / cloud sandbox** | feature branch                                       | none                               | `npm run dev`                  | optional local Supabase **or** Playwright mock (`example.supabase.co`) | `http://localhost:…`                                               |
+| **Staging**               | `staging` (fast-forward from admitted `main` CI SHA) | `prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch` | Preview (all-Preview env vars) | `mintedpanel-staging` (`vmznysvietfaddakkegt`)                         | `staging.mintedpanel.com`, `mintedpanel-staging.vercel.app`        |
+| **Production**            | `main`                                               | `prj_ILhPJbkyaiptdVA8DtsmNyw3tiub` | Production                     | `mintedpanel` (`fkvuhfsqcmujywzgczmc`)                                 | `mintedpanel.com`, `www.mintedpanel.com`, `mintedpanel.vercel.app` |
 
 There is **no separate “dev” hosted Vercel/Supabase project** in the G0
 allowlist. Preview URLs on the production project are not a release target
@@ -132,10 +132,10 @@ Controls that matter:
 
 ### 3.3 Supabase
 
-| Project name | Ref | Region | Role |
-| ------------ | --- | ------ | ---- |
-| `mintedpanel` | `fkvuhfsqcmujywzgczmc` | us-east-2 | Production + current demo/UAT data (pre-launch; not real patient data) |
-| `mintedpanel-staging` | `vmznysvietfaddakkegt` | ca-central-1 | Isolated staging database |
+| Project name          | Ref                    | Region       | Role                                                                   |
+| --------------------- | ---------------------- | ------------ | ---------------------------------------------------------------------- |
+| `mintedpanel`         | `fkvuhfsqcmujywzgczmc` | us-east-2    | Production + current demo/UAT data (pre-launch; not real patient data) |
+| `mintedpanel-staging` | `vmznysvietfaddakkegt` | ca-central-1 | Isolated staging database                                              |
 
 Both projects are `ACTIVE_HEALTHY`. Migrations live only in
 `mintedpanel/supabase/migrations/` and are applied to hosted projects **manually
@@ -224,20 +224,20 @@ flowchart LR
 ```
 
 - Extension release is **not** performed by `staging-delivery.yml` /
-  `production-release.yml`. Those workflows only require *compatibility proof*
+  `production-release.yml`. Those workflows only require _compatibility proof_
   against declared installed extension versions.
 - Build-time overrides (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
   `VITE_API_BASE_URL`) let an unpacked build target staging; defaults remain
   production when unset.
 
-### 4.4 What is *not* a promotion path
+### 4.4 What is _not_ a promotion path
 
-| Path | Why not |
-| ---- | ------- |
-| Auto-deploy on every `main` push | Disabled by `vercel.json` `git.deploymentEnabled: false` |
+| Path                                         | Why not                                                                                            |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Auto-deploy on every `main` push             | Disabled by `vercel.json` `git.deploymentEnabled: false`                                           |
 | Promote a Preview URL directly to Production | Creates a different production build; contract requires an explicit production candidate + promote |
-| Extension writing to Supabase tables | Forbidden — JWT + panel `/api` only |
-| Agent self-merge to `main` | Governance — PM merges |
+| Extension writing to Supabase tables         | Forbidden — JWT + panel `/api` only                                                                |
+| Agent self-merge to `main`                   | Governance — PM merges                                                                             |
 
 ---
 
@@ -341,7 +341,7 @@ flowchart LR
   USER[User] --> GOTRUE[Supabase Auth]
   GOTRUE --> JWT[JWT]
   JWT --> MEMBER[memberships<br/>org_id + role]
-  MEMBER --> ACTIVE[Zustand activeOrgId<br/>panel] 
+  MEMBER --> ACTIVE[Zustand activeOrgId<br/>panel]
   MEMBER --> XORG[x-org-id header<br/>extension]
   ACTIVE --> RLS[RLS user_org_ids]
   XORG --> GUARD[guard authenticate]
@@ -354,27 +354,27 @@ flowchart LR
 
 ## 6. Secrets & config by surface
 
-| Surface | Supabase URL / anon | Service role | API base | CORS |
-| ------- | ------------------- | ------------ | -------- | ---- |
-| Panel browser | `VITE_SUPABASE_*` | never | same origin | n/a |
-| Panel nitro `/api` | `SUPABASE_URL` (or Vite URL on server) | `SUPABASE_SERVICE_ROLE_KEY` | self | `API_CORS_ORIGINS` incl. `chrome-extension://…` |
-| Extension (prod default) | baked / `VITE_SUPABASE_*` | never | production panel origin | must be allowlisted on panel |
-| Extension (staging build) | override env at build | never | staging panel origin | staging project CORS |
-| Local e2e (cloud) | `https://example.supabase.co` mock | n/a | mock harness | n/a |
+| Surface                   | Supabase URL / anon                    | Service role                | API base                | CORS                                            |
+| ------------------------- | -------------------------------------- | --------------------------- | ----------------------- | ----------------------------------------------- |
+| Panel browser             | `VITE_SUPABASE_*`                      | never                       | same origin             | n/a                                             |
+| Panel nitro `/api`        | `SUPABASE_URL` (or Vite URL on server) | `SUPABASE_SERVICE_ROLE_KEY` | self                    | `API_CORS_ORIGINS` incl. `chrome-extension://…` |
+| Extension (prod default)  | baked / `VITE_SUPABASE_*`              | never                       | production panel origin | must be allowlisted on panel                    |
+| Extension (staging build) | override env at build                  | never                       | staging panel origin    | staging project CORS                            |
+| Local e2e (cloud)         | `https://example.supabase.co` mock     | n/a                         | mock harness            | n/a                                             |
 
 ---
 
 ## 7. Related documents
 
-| Doc | Use when |
-| --- | -------- |
-| [`ARCHITECTURE.md`](../../ARCHITECTURE.md) | In-process layering and `/api` DI |
-| [`repo-workflow.md`](repo-workflow.md) | Who merges what; human-only ops |
-| [`release-contract.md`](release-contract.md) | G0 identity allowlist and validation |
-| [`staging-delivery.md`](staging-delivery.md) | Staging controller status and blockers |
-| [`production-release.md`](production-release.md) | Production approval / promote sequence |
-| [`release-controls.md`](release-controls.md) | Git freeze, GitHub Production environment |
-| Extension `CLAUDE.md` | Workbench wire contracts (sibling repo) |
+| Doc                                              | Use when                                  |
+| ------------------------------------------------ | ----------------------------------------- |
+| [`ARCHITECTURE.md`](../../ARCHITECTURE.md)       | In-process layering and `/api` DI         |
+| [`repo-workflow.md`](repo-workflow.md)           | Who merges what; human-only ops           |
+| [`release-contract.md`](release-contract.md)     | G0 identity allowlist and validation      |
+| [`staging-delivery.md`](staging-delivery.md)     | Staging controller status and blockers    |
+| [`production-release.md`](production-release.md) | Production approval / promote sequence    |
+| [`release-controls.md`](release-controls.md)     | Git freeze, GitHub Production environment |
+| Extension `CLAUDE.md`                            | Workbench wire contracts (sibling repo)   |
 
 ---
 
