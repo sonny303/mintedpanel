@@ -26,14 +26,25 @@ jobs:
           version: latest
       - run: npm ci
       - name: Start and reset local Supabase
+        shell: bash
         run: |
-          supabase start
-          supabase db reset
+          set -euo pipefail
+          uat_workdir="$RUNNER_TEMP/mintedpanel-uat"
+          mkdir -p "$uat_workdir"
+          cp -R supabase "$uat_workdir/supabase"
+          # The repository has two historical migrations at 20260903210000.
+          # Supabase's ledger rejects duplicate versions, so the isolated CI
+          # copy gives the second file its next timestamp; source stays intact.
+          mv "$uat_workdir/supabase/migrations/20260903210000_delete_org_sop_template.sql" \
+             "$uat_workdir/supabase/migrations/20260903210001_delete_org_sop_template.sql"
+          echo "UAT_SUPABASE_WORKDIR=$uat_workdir" >> "$GITHUB_ENV"
+          supabase --workdir "$uat_workdir" start
+          supabase --workdir "$uat_workdir" db reset
       - name: Seed twice, verify invariants, and reset deletion pool
         shell: bash
         run: |
           set -euo pipefail
-          status_json="$(supabase status -o json)"
+          status_json="$(supabase --workdir "$UAT_SUPABASE_WORKDIR" status -o json)"
           export SUPABASE_URL="$(jq -r '.API_URL' <<<"$status_json")"
           export SUPABASE_SERVICE_ROLE_KEY="$(jq -r '.SERVICE_ROLE_KEY' <<<"$status_json")"
           export UAT_SUPABASE_ANON_KEY="$(jq -r '.ANON_KEY' <<<"$status_json")"
