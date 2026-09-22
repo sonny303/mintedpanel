@@ -11,8 +11,8 @@
 // F3.3.1's "no more, no fewer" is literally testable:
 //   - provider_group ← ProviderGroupForm / GroupFormValue
 //   - facility       ← FacilityForm / FacilityInput
-//   - provider       ← ProviderRosterForm / ProviderInput (the E3.0 provider
-//                      subset minus the facility-creation columns)
+//   - provider       ← Add Provider / ProviderFormState plus documented
+//                      relationship and middle-initial extras
 //
 // TE-3 — non-scalar form fields ride a documented FLAT encoding (a CSV cannot
 // mirror a nested form verbatim):
@@ -32,6 +32,12 @@ import { toCsv } from "@/lib/csv";
 import { matchFacilityLocator, type FacilityLocatorRecord } from "@/lib/facilityLocator";
 import { matchGroupLocator, type GroupMatchCandidate } from "@/lib/groupLocator";
 import { validatePayerAttachRow, type PayerAttachScanContext } from "@/lib/groupPayerAttach";
+import {
+  CAQH_RE,
+  EMAIL_RE,
+  NPI_RE,
+  type ProviderFormState,
+} from "@/components/providers/providerFormShared";
 import type { ImportEntityKind } from "@/types";
 import {
   DEFAULT_TIN_COLUMNS,
@@ -101,6 +107,14 @@ interface SectionScanSpec {
   ssn4Columns: readonly string[];
   middleInitialColumns: readonly string[];
   boolColumns: readonly string[];
+  /** columns that use Add Provider's stricter field validators */
+  addProviderNpiColumns?: readonly string[];
+  caqhColumns?: readonly string[];
+  emailColumns?: readonly string[];
+  /** column → exact accepted values */
+  enumColumns?: Readonly<Record<string, readonly string[]>>;
+  /** boolean column → fields disabled and cleared when that column is true */
+  ignoredWhenTrue?: Readonly<Record<string, readonly string[]>>;
   /** `;`-delimited columns: decoded + validated */
   multiValueColumns: readonly string[];
   /** multi-value columns whose items must each be a 2-letter state */
@@ -216,9 +230,48 @@ export const FACILITY_TEMPLATE_HEADERS = [
   "ada_notes",
 ] as const;
 
-// provider ← ProviderRosterForm / ProviderInput (E1.3). The E3.0 provider
-// subset minus the facility-creation columns the combined template bundled; one
-// row per license (folded on commit).
+// provider ← Add Provider / ProviderFormState. The mapping is a compile-time
+// exhaustiveness contract: a new form field must be deliberately represented
+// here before TypeScript passes. Relationship columns and middle_initial are
+// documented extras beyond Add Provider; one row still represents one license
+// and one relationship combination (folded on commit).
+export const PROVIDER_FORM_TEMPLATE_HEADERS = {
+  groupId: ["group_name", "group_tin"],
+  firstName: ["provider_first_name"],
+  lastName: ["provider_last_name"],
+  credentials: ["credentials"],
+  dateOfBirth: ["date_of_birth"],
+  ssnLast4: ["ssn_last4"],
+  email: ["email"],
+  phone: ["phone"],
+  npi: ["npi"],
+  caqhId: ["caqh_id"],
+  isNewGrad: ["is_new_grad"],
+  caqhLastAttestedDate: ["caqh_last_attested_date"],
+  taxonomyCode: ["taxonomy_code"],
+  licenses: [
+    "license_state",
+    "license_number",
+    "license_type",
+    "license_issue_date",
+    "license_expiration_date",
+  ],
+  facilityIds: ["facility_name"],
+  specialty: ["specialty"],
+  startDate: ["start_date"],
+  degree: ["degree"],
+  schoolName: ["school_name"],
+  graduationDate: ["graduation_date"],
+} as const satisfies { readonly [K in keyof ProviderFormState]: readonly string[] };
+
+export const PROVIDER_TEMPLATE_EXTRA_HEADERS = [
+  "group_npi",
+  "provider_middle_initial",
+  "enrollment_payer",
+  "enrollment_state",
+  "enrollment_effective_date",
+] as const;
+
 export const PROVIDER_TEMPLATE_HEADERS = [
   "group_name",
   "group_tin",
@@ -226,16 +279,26 @@ export const PROVIDER_TEMPLATE_HEADERS = [
   "provider_first_name",
   "provider_middle_initial",
   "provider_last_name",
+  "credentials",
+  "date_of_birth",
+  "ssn_last4",
+  "email",
+  "phone",
   "npi",
   "caqh_id",
+  "caqh_last_attested_date",
+  "is_new_grad",
   "specialty",
   "taxonomy_code",
-  "license_number",
+  "start_date",
+  "degree",
+  "school_name",
+  "graduation_date",
   "license_state",
+  "license_number",
+  "license_type",
   "license_issue_date",
   "license_expiration_date",
-  "ssn_last4",
-  "date_of_birth",
   // E6.4 F6.4.6 — one row per RELATIONSHIP: repeat identity columns and vary
   // these (multi-facility / multi-enrollment; groups vary via group_name/tin).
   "facility_name",
@@ -300,6 +363,10 @@ function scanWith(descriptor: SectionDescriptor, record: CsvRecord, headers: str
   for (const h of headers) {
     if (h === "") continue;
     const v = raw[h] ?? "";
+    const ignored = Object.entries(spec.ignoredWhenTrue ?? {}).some(
+      ([toggle, fields]) => coerceBool(raw[toggle] ?? "").value === true && fields.includes(h),
+    );
+    if (ignored) continue;
     if (spec.tinColumns.includes(h) && v && !isTin(v)) {
       fail(h, `${h} must be 9 digits (or XX-XXXXXXX), got "${v}"`);
     }
@@ -308,6 +375,19 @@ function scanWith(descriptor: SectionDescriptor, record: CsvRecord, headers: str
     }
     if (spec.npiColumns.includes(h) && v && !isNpi(v)) {
       fail(h, `${h} must be exactly 10 digits, got "${v}"`);
+    }
+    if (spec.addProviderNpiColumns?.includes(h) && v && !NPI_RE.test(v)) {
+      fail(h, "NPI must be 10 digits and start with 1");
+    }
+    if (spec.caqhColumns?.includes(h) && v && !CAQH_RE.test(v)) {
+      fail(h, "CAQH must be 8 digits");
+    }
+    if (spec.emailColumns?.includes(h) && v && !EMAIL_RE.test(v)) {
+      fail(h, "Invalid email");
+    }
+    const acceptedValues = spec.enumColumns?.[h];
+    if (acceptedValues && v && !acceptedValues.includes(v)) {
+      fail(h, `${h} must be one of: ${acceptedValues.join(", ")}`);
     }
     if (spec.stateColumns.includes(h) && v && !isStateCode(v)) {
       fail(h, `${h} must be a 2-letter code, got "${v}"`);
@@ -500,29 +580,40 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
   headers: PROVIDER_TEMPLATE_HEADERS,
   templateFilename: "provider-import-template.csv",
   helperText:
-    "One row per provider × license (repeat identity columns for extra licenses, facilities, groups, or enrollments). facility_name accepts the exact facility name or the location's street address — the first facility on the file is the primary. The parent group is matched by group_name, then group_tin, then group_npi (the group's Type 2 NPI) when that TIN is on more than one group. Only the last 4 SSN digits in ssn_last4.",
+    "Re-download the current template; old versions are rejected. One row per provider × license (repeat identity columns for extra licenses, facilities, groups, or enrollments). Contact, education, start date, new-grad/CAQH, and license type fields are optional. facility_name accepts the exact facility name or the location's street address — the first facility on the file is the primary. The parent group is matched by group_name, then group_tin, then group_npi (the group's Type 2 NPI) when that TIN is on more than one group. Only the last 4 SSN digits in ssn_last4.",
   optionalHeaders: ["group_npi"],
   spec: {
     required: ["provider_first_name", "provider_last_name", "npi"],
     requireGroupKey: true,
     tinColumns: ["group_tin"],
-    npiColumns: ["npi", "group_npi"],
+    npiColumns: ["group_npi"],
+    addProviderNpiColumns: ["npi"],
+    caqhColumns: ["caqh_id"],
+    emailColumns: ["email"],
+    enumColumns: { license_type: ["full", "compact"] },
+    ignoredWhenTrue: {
+      is_new_grad: ["caqh_id", "caqh_last_attested_date"],
+    },
     stateColumns: ["license_state", "enrollment_state"],
     dateColumns: [
+      "date_of_birth",
+      "start_date",
+      "graduation_date",
+      "caqh_last_attested_date",
       "license_issue_date",
       "license_expiration_date",
-      "date_of_birth",
       "enrollment_effective_date",
     ],
     ssn4Columns: ["ssn_last4"],
     middleInitialColumns: ["provider_middle_initial"],
-    boolColumns: [],
+    boolColumns: ["is_new_grad"],
     multiValueColumns: [],
     multiValueStateColumns: [],
     requiredMultiValue: [],
   },
   buildMapped(ctx) {
     const middle = ctx.cell("provider_middle_initial");
+    const isNewGrad = ctx.bool("is_new_grad");
     return {
       group_name: ctx.nullable("group_name"),
       group_tin: ctx.cell("group_tin") ? ctx.cell("group_tin").replace("-", "") : null,
@@ -530,16 +621,26 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
       provider_first_name: ctx.nullable("provider_first_name"),
       provider_middle_initial: NULLABLE(middle ? middle.replace(".", "").toUpperCase() : ""),
       provider_last_name: ctx.nullable("provider_last_name"),
+      credentials: ctx.nullable("credentials"),
+      date_of_birth: ctx.date("date_of_birth"),
+      ssn_last4: ctx.nullable("ssn_last4"),
+      email: ctx.nullable("email"),
+      phone: ctx.nullable("phone"),
       npi: ctx.nullable("npi"),
-      caqh_id: ctx.nullable("caqh_id"),
+      caqh_id: isNewGrad === "true" ? null : ctx.nullable("caqh_id"),
+      caqh_last_attested_date: isNewGrad === "true" ? null : ctx.date("caqh_last_attested_date"),
+      is_new_grad: isNewGrad,
       specialty: ctx.nullable("specialty"),
       taxonomy_code: ctx.nullable("taxonomy_code"),
-      license_number: ctx.nullable("license_number"),
+      start_date: ctx.date("start_date"),
+      degree: ctx.nullable("degree"),
+      school_name: ctx.nullable("school_name"),
+      graduation_date: ctx.date("graduation_date"),
       license_state: ctx.upper("license_state"),
+      license_number: ctx.nullable("license_number"),
+      license_type: ctx.nullable("license_type"),
       license_issue_date: ctx.date("license_issue_date"),
       license_expiration_date: ctx.date("license_expiration_date"),
-      ssn_last4: ctx.nullable("ssn_last4"),
-      date_of_birth: ctx.date("date_of_birth"),
       facility_name: ctx.nullable("facility_name"),
       enrollment_payer: ctx.nullable("enrollment_payer"),
       enrollment_state: ctx.upper("enrollment_state"),

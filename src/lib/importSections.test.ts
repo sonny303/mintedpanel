@@ -13,6 +13,8 @@ import {
   GROUP_DESCRIPTOR,
   PAYER_ATTACH_DESCRIPTOR,
   PROVIDER_DESCRIPTOR,
+  PROVIDER_FORM_TEMPLATE_HEADERS,
+  PROVIDER_TEMPLATE_EXTRA_HEADERS,
   decodeDelimited,
   encodeDelimited,
   looksLikeCombinedTemplate,
@@ -24,6 +26,7 @@ import {
   type SectionScanContext,
 } from "@/lib/importSections";
 import { ROSTER_TEMPLATE_HEADERS } from "@/lib/rosterImport";
+import { emptyProviderFormState } from "@/components/providers/providerFormShared";
 import type { ScannedRow } from "@/lib/rosterImport";
 
 // Build one data record from a header→cell map (template order) and scan it.
@@ -103,6 +106,59 @@ describe("per-section header gates (F3.3.1 no-more-no-fewer)", () => {
         expect(checkHeaders([...a.headers], b.headers).ok).toBe(false);
       }
     }
+  });
+
+  it("provider template covers every Add Provider field plus only documented extras (R1)", () => {
+    expect(Object.keys(PROVIDER_FORM_TEMPLATE_HEADERS).sort()).toEqual(
+      Object.keys(emptyProviderFormState).sort(),
+    );
+    const expectedHeaders = [
+      ...Object.values(PROVIDER_FORM_TEMPLATE_HEADERS).flat(),
+      ...PROVIDER_TEMPLATE_EXTRA_HEADERS,
+    ];
+    expect(new Set(PROVIDER_DESCRIPTOR.headers)).toEqual(new Set(expectedHeaders));
+    expect(new Set(PROVIDER_DESCRIPTOR.headers).size).toBe(PROVIDER_DESCRIPTOR.headers.length);
+  });
+
+  it("rejects the pre-parity provider template with re-download guidance", () => {
+    const oldHeaders = [
+      "group_name",
+      "group_tin",
+      "provider_first_name",
+      "provider_middle_initial",
+      "provider_last_name",
+      "npi",
+      "caqh_id",
+      "specialty",
+      "taxonomy_code",
+      "license_number",
+      "license_state",
+      "license_issue_date",
+      "license_expiration_date",
+      "ssn_last4",
+      "date_of_birth",
+      "facility_name",
+      "enrollment_payer",
+      "enrollment_state",
+      "enrollment_effective_date",
+    ];
+    const result = checkHeaders(oldHeaders, PROVIDER_DESCRIPTOR.headers);
+    expect(result.ok).toBe(false);
+    expect(result.missing).toEqual(
+      expect.arrayContaining([
+        "credentials",
+        "email",
+        "phone",
+        "start_date",
+        "degree",
+        "school_name",
+        "graduation_date",
+        "caqh_last_attested_date",
+        "is_new_grad",
+        "license_type",
+      ]),
+    );
+    expect(headerGateMessage(result)).toMatch(/download the template and re-upload/i);
   });
 });
 
@@ -253,6 +309,71 @@ describe("provider scan (TE-2/TE-6)", () => {
     expect(b.mapped?.license_state).toBe("SC");
     // same provider identity across both license rows
     expect(a.mapped?.npi).toBe(b.mapped?.npi);
+  });
+
+  it("maps every Add Provider parity scalar and license_type", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, {
+      ...PROVIDER_ROW,
+      credentials: "PT DPT",
+      email: "nathan.scott@example.test",
+      phone: "910-555-0100",
+      start_date: "10/01/2026",
+      degree: "DPT",
+      school_name: "Duke University",
+      graduation_date: "05/15/2024",
+      caqh_id: "12345678",
+      caqh_last_attested_date: "09/01/2026",
+      is_new_grad: "no",
+      license_type: "compact",
+    });
+
+    expect(row.rowState).toBe("staged");
+    expect(row.mapped).toMatchObject({
+      credentials: "PT DPT",
+      email: "nathan.scott@example.test",
+      phone: "910-555-0100",
+      start_date: "2026-10-01",
+      degree: "DPT",
+      school_name: "Duke University",
+      graduation_date: "2024-05-15",
+      caqh_id: "12345678",
+      caqh_last_attested_date: "2026-09-01",
+      is_new_grad: "false",
+      license_type: "compact",
+    });
+  });
+
+  it("clears CAQH fields during mapping when is_new_grad is yes", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, {
+      ...PROVIDER_ROW,
+      caqh_id: "not-used",
+      caqh_last_attested_date: "not-used",
+      is_new_grad: "yes",
+    });
+
+    expect(row.rowState).toBe("staged");
+    expect(row.mapped).toMatchObject({
+      caqh_id: null,
+      caqh_last_attested_date: null,
+      is_new_grad: "true",
+    });
+  });
+
+  it.each([
+    ["email", "not-an-email"],
+    ["npi", "0234567893"],
+    ["caqh_id", "1234567"],
+    ["is_new_grad", "maybe"],
+    ["license_type", "temporary"],
+  ])("rejects invalid %s values using Add Provider semantics", (column, value) => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, [column]: value });
+    expect(row.rowState).toBe("error");
+    expect(row.errorColumn).toBe(column);
+  });
+
+  it("keeps status off the provider template and names the breaking re-download", () => {
+    expect(PROVIDER_DESCRIPTOR.headers).not.toContain("status");
+    expect(PROVIDER_DESCRIPTOR.helperText).toMatch(/re-download/i);
   });
 
   it("rejects a full SSN anywhere and redacts it (TE-6, verbatim from E3.0)", () => {
