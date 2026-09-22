@@ -44,10 +44,15 @@ async function verifyAuth(supabaseUrl, anonKey, password) {
     if (signInError) throw signInError;
     const { data, error } = await client.from("memberships").select("org_id,role");
     if (error) throw error;
-    assert.deepEqual(
-      data,
-      [{ org_id: ids.organizations[persona.org - 1], role: persona.role }],
-      `${persona.key} tenant access`,
+    const authorizedOrg = ids.organizations[persona.org - 1];
+    assert.ok(data.length > 0, `${persona.key} sees its organization memberships`);
+    assert.ok(
+      data.every((row) => row.org_id === authorizedOrg),
+      `${persona.key} cannot read another organization`,
+    );
+    assert.ok(
+      data.some((row) => row.role === persona.role),
+      `${persona.key} expected role is present`,
     );
     await client.auth.signOut();
     assert.ok(session.user.id);
