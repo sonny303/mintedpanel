@@ -353,6 +353,63 @@ export async function createTemplate(input: TemplateInput): Promise<SOPTemplate>
   return created;
 }
 
+export interface DeleteOrgSopTemplateResult {
+  templateId: string;
+  name: string;
+  tasksCleared: number;
+  runRowsCleared: number;
+  formsRetired: number;
+  versionsDeleted: number;
+}
+
+/**
+ * Hard-delete an org-authored SOP template. Nulls task/run-row stamps so prior
+ * cases keep their sop_content, retires attached payer PDFs (Storage kept),
+ * then deletes version rows + the head. Portals are unlink-only (left alone).
+ * Global templates are rejected by the RPC. The RPC owns the audit row.
+ */
+export async function deleteOrgSopTemplate(
+  templateId: string,
+): Promise<DeleteOrgSopTemplateResult> {
+  const orgId = requireActiveOrg();
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc("delete_org_sop_template", {
+    p_org_id: orgId,
+    p_template_id: templateId,
+  });
+  if (error) {
+    const text = pgWireText(error);
+    if (text.includes("sop_template_not_found")) {
+      throw new Error("That template was not found in this organization.");
+    }
+    if (text.includes("sop_template_not_org_authored")) {
+      throw new Error(
+        "Only organization templates can be deleted. Archive a global template instead.",
+      );
+    }
+    if (text.includes("Not authorized")) {
+      throw new Error("Only an admin can delete a template.");
+    }
+    throw error;
+  }
+  const row = (data ?? {}) as {
+    template_id?: string;
+    name?: string;
+    tasks_cleared?: number;
+    run_rows_cleared?: number;
+    forms_retired?: number;
+    versions_deleted?: number;
+  };
+  return {
+    templateId: row.template_id ?? templateId,
+    name: row.name ?? "",
+    tasksCleared: row.tasks_cleared ?? 0,
+    runRowsCleared: row.run_rows_cleared ?? 0,
+    formsRetired: row.forms_retired ?? 0,
+    versionsDeleted: row.versions_deleted ?? 0,
+  };
+}
+
 export async function updateTemplate(
   id: string,
   patch: Partial<TemplateInput>,

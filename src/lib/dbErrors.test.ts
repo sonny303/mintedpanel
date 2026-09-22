@@ -116,6 +116,25 @@ describe("translateDbError — 23514 check violations", () => {
     expect(messageOf(result)).toBe("A facility assignment requires a start date.");
   });
 
+  it("translates the generation-ledger created⇒case_id check (residual table CHECK)", () => {
+    const result = translateDbError(
+      pgError(
+        "23514",
+        'new row for relation "case_generation_run_rows" violates check constraint "case_generation_run_rows_created_case_check"',
+      ),
+    );
+    expect(messageOf(result)).toBe(
+      "This case cannot be deleted while linked to generation run records.",
+    );
+  });
+
+  it("translates the INSERT-only created⇒case_id trigger RAISE", () => {
+    const result = translateDbError(
+      pgError("23514", "case_id is required when disposition is created"),
+    );
+    expect(messageOf(result)).toBe("A created generation row must link a case.");
+  });
+
   it("passes an unknown check violation through unchanged", () => {
     const original = pgError(
       "23514",

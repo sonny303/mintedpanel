@@ -18,12 +18,14 @@ Journey B — the consolidated people record.
 - The provider CSV **lives on this page** (one row per relationship —
   repeat identity columns for extra facilities, groups, licenses, and
   enrollments). The template download comes with a **reference sheet of
-  your real group/facility/payer names**; unknown names are row errors
-  naming the column, and the post-commit summary counts every relationship
-  attached. **Copy `facility_name` from that sheet** to assign the location
-  in the same upload — the first facility on the file is the primary
-  (same rule as Add Provider). Facilities themselves are created by the
-  Facilities CSV first; this column attaches, it does not create a clinic.
+  your real group names, Type 2 NPIs, facility names, and facility
+  addresses**. `facility_name` accepts the exact facility name or that
+  location's street address, and an address has to match exactly one
+  facility. The parent group matches on `group_name`, then `group_tin`,
+  then `group_npi` (the group's Type 2 NPI) when two groups share a TIN.
+  The first facility on the file is the primary (same rule as Add
+  Provider). Facilities themselves are created by the Facilities CSV
+  first; this column attaches, it does not create a clinic.
 
 ## Add provider — shipped
 

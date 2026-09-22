@@ -59,7 +59,7 @@ export function useRetirePayerForm() {
   return useMutation({
     mutationFn: (form: PayerForm) => retirePayerForm(form),
     onSuccess: (form) => {
-      qc.invalidateQueries({ queryKey: queryKeys.payerForms(orgId, form.templateId) });
+      qc.invalidateQueries({ queryKey: queryKeys.payerForms(orgId, form.templateId ?? "") });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

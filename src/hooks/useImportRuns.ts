@@ -242,7 +242,12 @@ export function useImportPreview(runId: string | null) {
         npi: p.npi,
         specialty: p.specialty,
       })),
-      groups: (groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name, tin: g.tin })),
+      groups: (groupsQ.data ?? []).map((g) => ({
+        id: g.id,
+        name: g.name,
+        tin: g.tin,
+        npiType2: g.npiType2,
+      })),
       facilities: (facilitiesQ.data ?? []).map((f) => ({ id: f.id, name: f.name })),
       groupAssignments: (groupAssignmentsQ.data ?? []).map((a) => ({
         providerId: a.providerId,
@@ -321,7 +326,12 @@ export function useSectionImportPreview(
 
   const result = useMemo<SectionDedupeResult | null>(() => {
     if (!rowsQ.data) return null;
-    const groups = (groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name, tin: g.tin }));
+    const groups = (groupsQ.data ?? []).map((g) => ({
+      id: g.id,
+      name: g.name,
+      tin: g.tin,
+      npiType2: g.npiType2,
+    }));
     if (entityKind === "provider_group") return dedupeGroupRows(rowsQ.data, groups);
     const facilities = (facilitiesQ.data ?? []).map((f) => ({
       id: f.id,

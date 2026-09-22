@@ -12,7 +12,7 @@ import { isOpenCaseStatus } from "@/lib/caseStatus";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { templateStates } from "@/lib/sopMatchKey";
 import { enrollmentIdBadge, type EnrollmentIdBadge } from "@/lib/payerIssuedIds";
-import type { FunnelFormSuggestion, FunnelNextAction } from "@/lib/payerReadinessFunnel";
+import type { FunnelFormSuggestion } from "@/lib/payerReadinessFunnel";
 import type { TemplateEditorIntent } from "@/lib/templateEditorIntent";
 import type {
   CredentialCase,
@@ -27,6 +27,7 @@ export const PAYER_DETAIL_TABS = [
   "enrollments",
   "cases",
   "templates",
+  "portals",
   "scorecard",
   "manage",
 ] as const;
@@ -38,6 +39,7 @@ export const PAYER_DETAIL_TAB_LABELS: Record<PayerDetailTab, string> = {
   enrollments: "Enrollments",
   cases: "Cases",
   templates: "Templates",
+  portals: "Portals",
   scorecard: "Scorecard",
   manage: "Manage",
 };
@@ -65,59 +67,6 @@ export function templateIntentForFormSuggestion(
   suggestion: FunnelFormSuggestion,
 ): TemplateEditorIntent {
   return FORM_SUGGESTION_INTENT[suggestion];
-}
-
-/** The Templates tab's next-step CTA: what to do, and where it goes. */
-export interface TemplateNextStep {
-  action: FunnelNextAction | FunnelFormSuggestion;
-  label: string;
-  /** Form-setup ladder position, "" for the non-ladder actions. */
-  position: string;
-  /** null when the action is "author a template" (no template to open yet). */
-  templateId: string | null;
-  intent: TemplateEditorIntent | null;
-}
-
-const NEXT_ACTION_COPY: Record<FunnelNextAction, { label: string; position: string }> = {
-  author_sop: { label: "Author template", position: "" },
-  ready: { label: "Ready", position: "" },
-};
-
-const FORM_SUGGESTION_COPY: Record<FunnelFormSuggestion, { label: string; position: string }> = {
-  register_portal: { label: "Register portal", position: "Autofill · optional" },
-  train_mappings: { label: "Map fields", position: "Autofill · optional" },
-  repair_drift: { label: "Repair drift", position: "Autofill · drift" },
-  run_dry_test: { label: "Check coverage", position: "Autofill · optional" },
-};
-
-export function templateNextStep(row: {
-  nextAction: FunnelNextAction;
-  sopTemplateId: string | null;
-}): TemplateNextStep {
-  const copy = NEXT_ACTION_COPY[row.nextAction];
-  return {
-    action: row.nextAction,
-    label: copy.label,
-    position: copy.position,
-    templateId: row.sopTemplateId,
-    intent: null,
-  };
-}
-
-/** Soft autofill CTA when the checklist is Ready but form setup is incomplete. */
-export function autofillSuggestionStep(row: {
-  formSuggestion: FunnelFormSuggestion | null;
-  sopTemplateId: string | null;
-}): TemplateNextStep | null {
-  if (!row.formSuggestion) return null;
-  const copy = FORM_SUGGESTION_COPY[row.formSuggestion];
-  return {
-    action: row.formSuggestion,
-    label: copy.label,
-    position: copy.position,
-    templateId: row.sopTemplateId,
-    intent: templateIntentForFormSuggestion(row.formSuggestion),
-  };
 }
 
 export interface PayerTemplateRow {

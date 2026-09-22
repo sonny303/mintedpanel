@@ -5,11 +5,10 @@
 // the unified Status timeline).
 //
 // Deliberately NOT here (handoff §2.7 — do not re-add): the required-documents
-// card (documents are not a product capability), the Work-in-portal launcher
-// (extension surfaces deferred), the duplicate tracking-ID warning, and the
-// two legacy pre-unification history ledgers — the unified timeline is the one
-// history surface. Every retired component still exists; only this screen
-// stopped rendering them.
+// card (documents are not a product capability), the duplicate tracking-ID
+// warning, and the two legacy pre-unification history ledgers — the unified
+// timeline is the one history surface. The narrow Work-in-portal launcher
+// lives only inside an eligible case TaskDrawer online-form step.
 import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { parseISO } from "date-fns";
@@ -31,10 +30,13 @@ import {
   useSetPayerReference,
   useSetPrimaryCaseFacility,
 } from "@/hooks/useCases";
-import { useCoordinators, useFacilities } from "@/hooks/useLookups";
+import { useCoordinators, useFacilities, useStateLicensesByProvider } from "@/hooks/useLookups";
+import { useGroupInsurancePolicies } from "@/hooks/useOrgSettings";
 import { useProviderAssignments } from "@/hooks/useProviders";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { caseFacilityOptions } from "@/lib/caseFacility";
+import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
+import { pickLicenseForState } from "@/lib/licensePick";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseStatusControl } from "@/components/cases/CaseStatusControl";
@@ -43,8 +45,10 @@ import { TrackingIdField } from "@/components/cases/pipeline/TrackingIdField";
 import { isTerminalCaseStatus } from "@/lib/caseStatus";
 import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
+import { DeleteCaseAction } from "@/components/cases/DeleteCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
+import { handoffFacilityOptions } from "@/lib/casePortals";
 
 export const Route = createFileRoute("/cases/$id")({
   component: CaseDetailPage,
@@ -63,6 +67,10 @@ function CaseDetailPage() {
   const facilityAssignmentsQ = useProviderAssignments();
   const caseFacilitiesQ = useCaseFacilities(id);
   const c = caseQ.data;
+  const licensesQ = useStateLicensesByProvider(c?.providerId);
+  // DYN-TOKEN-05 — policies for the CASE's group (not the provider's primary
+  // mirror). Empty string keeps the query disabled until a group is known.
+  const policiesQ = useGroupInsurancePolicies(c?.groupId ?? "");
 
   const setStatusM = useSetCaseStatus();
   const logTouchM = useLogTouch();
@@ -93,11 +101,38 @@ function CaseDetailPage() {
     );
   }, [c?.providerId, c?.groupId, c?.facilityId, facilityAssignmentsQ.data, facilitiesQ.data]);
 
-  // token -> value map for the TaskDrawer's pdf-step form filler, from the
-  // data this page already holds (no extra fetch). PHI stays in the browser.
+  // DYN-TOKEN-05 — which of the provider's state licenses the license.* tokens
+  // mean. The CASE names exactly one state (it is part of the 4-part case key),
+  // so this is unambiguous here in a way the web profile's ?state= param has to
+  // ask for. Same shared rule either way: no state match, or several licenses
+  // and no state, resolves to null rather than to a plausible wrong number on a
+  // payer application.
+  const caseLicense = useMemo(
+    () => pickLicenseForState(licensesQ.data ?? [], c?.state).row,
+    [licensesQ.data, c?.state],
+  );
+
+  // DYN-TOKEN-05 — which group insurance policy groupInsurance.* tokens mean.
+  // Same shared rule as the web profile (malpractice → primary → newest end
+  // date). The CASE's groupId decides which policies are candidates; the web
+  // profile uses the provider's primary group because it has no case.
+  const caseGroupInsurance = useMemo(
+    () => pickGroupInsurancePolicy(policiesQ.data ?? [], Boolean(c?.groupId)).row,
+    [policiesQ.data, c?.groupId],
+  );
+
+  // token -> value map for the TaskDrawer's pdf-step form filler and the Payer
+  // PDF action, from the data this page already holds. PHI stays in the browser.
   const stepTokenValues = useMemo(
-    () => buildProviderTokenValues(c?.provider ?? null, c?.group ?? null, c?.facility ?? null),
-    [c?.provider, c?.group, c?.facility],
+    () =>
+      buildProviderTokenValues(
+        c?.provider ?? null,
+        c?.group ?? null,
+        c?.facility ?? null,
+        caseLicense,
+        caseGroupInsurance,
+      ),
+    [c?.provider, c?.group, c?.facility, caseLicense, caseGroupInsurance],
   );
 
   if (caseQ.isLoading) {
@@ -181,6 +216,7 @@ function CaseDetailPage() {
         ) : null}
 
         <ReapplyCaseAction c={c} canEdit={canEdit} />
+        <DeleteCaseAction c={c} isAdmin={isAdmin} />
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
@@ -196,6 +232,28 @@ function CaseDetailPage() {
                 c?.provider ? `${c.provider.firstName} ${c.provider.lastName}` : "this provider"
               }
               groupName={c?.group?.name ?? null}
+              portalHandoff={{
+                caseId: c.id,
+                providerId: c.providerId,
+                orgId: c.orgId,
+                caseFacilityId: c.facilityId,
+                facilityLoadState: caseFacilitiesQ.isError
+                  ? "error"
+                  : caseFacilitiesQ.isLoading
+                    ? "loading"
+                    : "ready",
+                // The whole case-location set is required: reducing this to
+                // credential_cases.facility_id would erase a selected
+                // secondary and make safe choice impossible.
+                facilities: handoffFacilityOptions(
+                  (caseFacilitiesQ.data ?? []).map((row) => ({
+                    id: row.facilityId,
+                    name: row.facility.name,
+                  })),
+                  c.facilityId,
+                  c.facility ? { id: c.facility.id, name: c.facility.name } : null,
+                ),
+              }}
             />
             <CaseTouchesPanel
               touches={touches}

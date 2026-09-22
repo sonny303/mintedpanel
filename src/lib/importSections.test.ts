@@ -33,7 +33,12 @@ function scanRow(
   context?: SectionScanContext,
 ): ScannedRow {
   const headerLine = descriptor.headers.join(",");
-  const dataLine = descriptor.headers.map((h) => cells[h] ?? "").join(",");
+  const dataLine = descriptor.headers
+    .map((h) => {
+      const value = cells[h] ?? "";
+      return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+    })
+    .join(",");
   const parsed = parseCsv(`${headerLine}\n${dataLine}`);
   return scanSectionRecord(descriptor, parsed.records[0], parsed.headers, context);
 }
@@ -349,15 +354,16 @@ describe("payer attach descriptor (E6.2 F6.2.4)", () => {
     return scanSectionRecord(PAYER_ATTACH_DESCRIPTOR, parsed.records[0], parsed.headers, ctx);
   }
 
-  it("template is exactly group_name, group_tin, payer, states", () => {
+  it("template is group_name, group_tin, group_npi, payer, states", () => {
     expect([...PAYER_ATTACH_DESCRIPTOR.headers]).toEqual([
       "group_name",
       "group_tin",
+      "group_npi",
       "payer",
       "states",
     ]);
     expect(sectionTemplateCsv(PAYER_ATTACH_DESCRIPTOR).trim()).toBe(
-      "group_name,group_tin,payer,states",
+      "group_name,group_tin,group_npi,payer,states",
     );
   });
 
@@ -458,6 +464,70 @@ describe("provider relationship columns (E6.4 F6.4.6)", () => {
     expect(half.errorColumn).toBe("enrollment_state");
     const plain = scanRow(PROVIDER_DESCRIPTOR, PROVIDER_ROW);
     expect(plain.rowState).toBe("staged");
+  });
+
+  it("resolves facility_name from a street address and group_npi when a TIN is shared", () => {
+    const groups = [
+      { id: "llc", name: "BEST Physical Therapy, LLC", tin: "851502637", npiType2: "1427674019" },
+      {
+        id: "dba",
+        name: "BEST Health Wellness Performance",
+        tin: "851502637",
+        npiType2: "1225755416",
+      },
+    ];
+    const context: SectionScanContext = {
+      provider: {
+        facilities: [
+          {
+            id: "f-hargrove",
+            name: "BEST Physical Therapy - Hargrove",
+            street: "4801 Hargrove Road",
+            suite: "Suite 100",
+            city: "Raleigh",
+            state: "NC",
+            zip: "27616",
+          },
+        ],
+        payers: [],
+        groups,
+      },
+    };
+    const blocked = scanRow(
+      PROVIDER_DESCRIPTOR,
+      {
+        ...PROVIDER_ROW,
+        group_name: "B.E.S.T. Physical Therapy",
+        group_tin: "85-1502637",
+        facility_name: "4801 Hargrove Road, Suite 100, Raleigh, NC 27616",
+      },
+      context,
+    );
+    expect(blocked.rowState).toBe("error");
+    expect(blocked.errorColumn).toBe("group_npi");
+
+    const picked = scanRow(
+      PROVIDER_DESCRIPTOR,
+      {
+        ...PROVIDER_ROW,
+        group_name: "B.E.S.T. Physical Therapy",
+        group_tin: "85-1502637",
+        group_npi: "1225755416",
+        facility_name: "4801 Hargrove Road, Suite 100, Raleigh, NC 27616",
+      },
+      context,
+    );
+    expect(picked.rowState).toBe("staged");
+    expect(picked.mapped?.facility_id).toBe("f-hargrove");
+    expect(picked.mapped?.group_id).toBe("dba");
+  });
+
+  it("a provider file may omit the optional group_npi column", () => {
+    const headers = PROVIDER_DESCRIPTOR.headers.filter((h) => h !== "group_npi");
+    expect(
+      checkHeaders([...headers], PROVIDER_DESCRIPTOR.headers, PROVIDER_DESCRIPTOR.optionalHeaders)
+        .ok,
+    ).toBe(true);
   });
 
   it("the extended template never trips the combined-template rejection", () => {

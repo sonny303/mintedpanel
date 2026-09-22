@@ -2,6 +2,15 @@ import { defineConfig, devices } from "@playwright/test";
 import { existsSync } from "fs";
 
 const SANDBOX_CHROMIUM = "/opt/pw-browsers/chromium";
+const LOCAL_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const LINUX_CHROME = "/opt/google/chrome/chrome";
+const CHROME_EXECUTABLE = existsSync(SANDBOX_CHROMIUM)
+  ? SANDBOX_CHROMIUM
+  : existsSync(LOCAL_CHROME)
+    ? LOCAL_CHROME
+    : existsSync(LINUX_CHROME)
+      ? LINUX_CHROME
+      : undefined;
 
 // Smoke skeleton (Gate 0). See docs/minted-panel-phase-gates.md.
 // Serves the app via the Vite dev server with dummy Supabase env vars: the app
@@ -25,7 +34,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         launchOptions: {
-          executablePath: existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined,
+          executablePath: CHROME_EXECUTABLE,
         },
       },
     },
@@ -35,5 +44,13 @@ export default defineConfig({
     url: "http://localhost:8080",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: {
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? "https://example.supabase.co",
+      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? "dummy-anon-key",
+      // Mocked-browser layer only. Installed acceptance must use the actual
+      // guarded staging ID and is tracked separately under H10.
+      VITE_MINTED_EXTENSION_ID:
+        process.env.VITE_MINTED_EXTENSION_ID ?? "abcdefghijklmnopabcdefghijklmnop",
+    },
   },
 });
