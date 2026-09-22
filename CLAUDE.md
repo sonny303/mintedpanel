@@ -33,8 +33,15 @@ for auth/org state, Supabase (Postgres + GoTrue + Storage) for everything
 server-side. `src/server.ts` and `src/start.ts` are a real server runtime — this
 is not a plain Vite SPA.
 
-Hosted Supabase project: `fkvuhfsqcmujywzgczmc` ("openpanel", us-east-2).
-Deployed on Vercel at `https://mintedpanel.vercel.app`.
+Hosted Supabase: production `fkvuhfsqcmujywzgczmc` (`mintedpanel`, us-east-2);
+staging `vmznysvietfaddakkegt` (`mintedpanel-staging`, ca-central-1). Vercel team
+`minted` / `mintedpanel` — production project
+`prj_ILhPJbkyaiptdVA8DtsmNyw3tiub` (aliases `mintedpanel.com`,
+`www.mintedpanel.com`, `mintedpanel.vercel.app`) and dedicated staging project
+`prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch` (intended aliases `staging.mintedpanel.com`,
+`mintedpanel-staging.vercel.app`). Full environment / promotion diagram:
+[`docs/ops/environment-architecture.md`](docs/ops/environment-architecture.md).
+Internal nickname "openpanel" still refers to the production Supabase project.
 
 ## How work arrives
 
