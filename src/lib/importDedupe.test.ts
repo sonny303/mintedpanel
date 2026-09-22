@@ -284,6 +284,291 @@ describe("conflict detection + resolution (TS-62)", () => {
   });
 });
 
+describe("P02 — provider identity separation (audit Session #69)", () => {
+  const GROUP3 = { id: "grp-3", name: "Shelby Group 3", tin: "555666777" };
+  const FAC3 = { id: "fac-3", name: "Shelby Clinic West" };
+  const groups = [GROUP1, GROUP2, GROUP3];
+  const facilities = [FAC1, FAC2, FAC3];
+  const states = ["NC", "SC", "CO"];
+  const directions = ["forward", "reversed"] as const;
+
+  function expectIdentityBlocked(inputs: DedupeInputs) {
+    const dispositions = dedupeImportRows(inputs);
+    const lines = inputs.rows.map((r) => r.line).sort((a, b) => a - b);
+    expect(dispositions).toHaveLength(lines.length);
+    expect(
+      only(dispositions, "blocked")
+        .map((d) => d.line)
+        .sort((a, b) => a - b),
+    ).toEqual(lines);
+    expect(
+      only(dispositions, "blocked").every((d) => d.column === "npi" && d.reason.length > 0),
+    ).toBe(true);
+    // Ordinary field picks cannot make an unresolved identity writable.
+    for (const choice of ["existing", "imported"] as const) {
+      const resolutions = Object.fromEntries(
+        inputs.providers.map((provider) => [provider.id, { npi: choice }]),
+      );
+      const plan = buildCommitPlan(dispositions, resolutions);
+      expect(plan.creates).toEqual([]);
+      expect(plan.updates).toEqual([]);
+      expect(plan.skipped_count).toBe(0);
+      expect(plan.blocked_entries.map((entry) => entry.line).sort((a, b) => a - b)).toEqual(lines);
+      expect(summarizeImportPreview(dispositions, resolutions, 0)).toMatchObject({
+        createProviders: 0,
+        updateProviders: 0,
+        blockedRows: lines.length,
+        stagedRowsCovered: lines.length,
+      });
+    }
+  }
+
+  it.each(directions)(
+    "blocks both NPIs competing for one NPI-less target (%s rows)",
+    (direction) => {
+      const rows = [
+        janeRow(2, { license_state: "NC", license_number: "NC-100" }),
+        janeRow(3, {
+          npi: "9998887776",
+          group_name: GROUP2.name,
+          group_tin: GROUP2.tin,
+          facility_name: FAC2.name,
+          license_state: "SC",
+          license_number: "SC-200",
+        }),
+      ];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [{ ...JANE, npi: null }];
+      expectIdentityBlocked(inputs);
+    },
+  );
+
+  it.each(directions)("blocks multiple NPI-less name candidates (%s providers)", (direction) => {
+    const inputs = baseInputs([janeRow(2)]);
+    const providers = [
+      { ...JANE, npi: null },
+      { ...JANE, id: "prov-other-jane", npi: null },
+    ];
+    inputs.providers = direction === "reversed" ? providers.reverse() : providers;
+    expectIdentityBlocked(inputs);
+  });
+
+  it.each(directions)("blocks duplicate exact-NPI candidates (%s providers)", (direction) => {
+    const inputs = baseInputs([
+      janeRow(2, { group_name: GROUP2.name, group_tin: GROUP2.tin }),
+      janeRow(3, { facility_name: FAC2.name, license_state: "SC", license_number: "SC-200" }),
+    ]);
+    const providers = [JANE, { ...JANE, id: "prov-duplicate-npi", firstName: "Janet" }];
+    inputs.providers = direction === "reversed" ? providers.reverse() : providers;
+    expectIdentityBlocked(inputs);
+  });
+
+  it.each(directions)(
+    "blocks one incoming NPI claiming two name-fallback targets (%s rows)",
+    (direction) => {
+      const rows = [
+        janeRow(2),
+        janeRow(3, { provider_first_name: "Janet", facility_name: FAC2.name }),
+      ];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [
+        { ...JANE, npi: null },
+        { ...JANE, id: "prov-janet", firstName: "Janet", npi: null },
+      ];
+      expectIdentityBlocked(inputs);
+    },
+  );
+
+  it.each(directions)(
+    "blocks create-versus-name-fallback disagreement for one NPI (%s rows)",
+    (direction) => {
+      const rows = [newProviderRow(2, { npi: JANE.npi }), janeRow(3, { facility_name: FAC2.name })];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [{ ...JANE, npi: null }];
+      expectIdentityBlocked(inputs);
+    },
+  );
+
+  it("blocks another NPI claiming a target already disputed by a multi-target identity", () => {
+    const inputs = baseInputs([
+      janeRow(2),
+      janeRow(3, { provider_first_name: "Janet" }),
+      janeRow(4, { npi: "9998887776", license_state: "CO", license_number: "CO-300" }),
+    ]);
+    inputs.providers = [
+      { ...JANE, npi: null },
+      { ...JANE, id: "prov-janet", firstName: "Janet", npi: null },
+    ];
+    expectIdentityBlocked(inputs);
+  });
+
+  it("keeps an unrelated clean identity committable beside a disputed identity", () => {
+    const inputs = baseInputs([janeRow(2), janeRow(3, { npi: "9998887776" }), newProviderRow(4)]);
+    inputs.providers = [{ ...JANE, npi: null }];
+    const dispositions = dedupeImportRows(inputs);
+    const plan = buildCommitPlan(dispositions, { [JANE.id]: { npi: "imported" } });
+    expect(plan.creates).toHaveLength(1);
+    expect(plan.creates[0].provider.npi).toBe("1112223334");
+    expect(plan.updates).toEqual([]);
+    expect(plan.blocked_entries.map((entry) => entry.line)).toEqual([2, 3]);
+  });
+
+  it("keeps a unique exact-NPI match ahead of ambiguous name-only candidates", () => {
+    const inputs = baseInputs([janeRow(2, { group_name: GROUP2.name, group_tin: GROUP2.tin })]);
+    inputs.providers = [
+      { ...JANE, id: "prov-npiless-1", npi: null },
+      JANE,
+      { ...JANE, id: "prov-npiless-2", npi: null },
+    ];
+    const plan = buildCommitPlan(dedupeImportRows(inputs), {});
+    expect(plan.creates).toEqual([]);
+    expect(plan.blocked_entries).toEqual([]);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0]).toMatchObject({ provider_id: JANE.id, add_group_ids: [GROUP2.id] });
+  });
+
+  it("blocks multiple NPI-less same-name targets even when a same-name NPI neighbor exists", () => {
+    const inputs = baseInputs([janeRow(2, { npi: "1111111111" })]);
+    inputs.providers = [
+      { ...JANE, id: "prov-npiless-1", npi: null },
+      { ...JANE, id: "prov-npiless-2", npi: null },
+      { ...JANE, id: "prov-with-npi", npi: "9999999999" },
+    ];
+    expectIdentityBlocked(inputs);
+  });
+
+  it("dedupes identical provider list entries by id before treating an NPI as ambiguous", () => {
+    const inputs = baseInputs([janeRow(2, { group_name: GROUP2.name, group_tin: GROUP2.tin })]);
+    inputs.providers = [JANE, { ...JANE }];
+    const plan = buildCommitPlan(dedupeImportRows(inputs), {});
+    expect(plan.blocked_entries).toEqual([]);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0]).toMatchObject({ provider_id: JANE.id, add_group_ids: [GROUP2.id] });
+  });
+
+  it.each(directions)(
+    "preserves a create when a distinct-NPI neighbor rules out the only legacy target (%s rows)",
+    (direction) => {
+      const rows = [janeRow(2, { npi: "1111111111" }), newProviderRow(3, { npi: "1111111111" })];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [
+        { ...JANE, npi: null },
+        { ...JANE, id: "prov-with-npi", npi: "9999999999" },
+      ];
+      const dispositions = dedupeImportRows(inputs);
+      const plan = buildCommitPlan(dispositions, {});
+      expect(plan.blocked_entries).toEqual([]);
+      expect(plan.updates).toEqual([]);
+      expect(plan.creates).toHaveLength(1);
+      expect(plan.creates[0].provider.npi).toBe("1111111111");
+      expect(only(dispositions, "create")[0].lines.slice().sort()).toEqual([2, 3]);
+    },
+  );
+
+  it.each(directions)(
+    "blocks an eligible legacy match mixed with a distinct-NPI create (%s rows)",
+    (direction) => {
+      const rows = [janeRow(2, { npi: "1111111111" }), newProviderRow(3, { npi: "1111111111" })];
+      const inputs = baseInputs(direction === "reversed" ? rows.reverse() : rows);
+      inputs.providers = [
+        { ...JANE, npi: null },
+        {
+          ...JANE,
+          id: "prov-with-npi",
+          firstName: "Nora",
+          lastName: "Newton",
+          npi: "9999999999",
+        },
+      ];
+      expectIdentityBlocked(inputs);
+    },
+  );
+
+  it("still blocks a unique name-fallback that shares a legacy target with a create-vs-match dispute", () => {
+    const inputs = baseInputs([
+      row(2, {
+        provider_first_name: "Nora",
+        provider_last_name: "Newton",
+        npi: "1111111111",
+        group_name: GROUP1.name,
+        group_tin: GROUP1.tin,
+        facility_name: FAC1.name,
+      }),
+      janeRow(3, { npi: "1111111111" }),
+      janeRow(4, { npi: "2222222222" }),
+    ]);
+    inputs.providers = [{ ...JANE, npi: null }];
+    expectIdentityBlocked(inputs);
+  });
+
+  it.each(["new", "exact-NPI", "name-fallback"] as const)(
+    "preserves one %s identity across three groups, facilities, states, and licenses",
+    (match) => {
+      const rows = groups.map((group, index) =>
+        janeRow(index + 2, {
+          group_name: group.name,
+          group_tin: group.tin,
+          facility_name: facilities[index].name,
+          license_state: states[index],
+          license_number: `${states[index]}-100`,
+        }),
+      );
+      const inputs: DedupeInputs = {
+        ...baseInputs(rows),
+        providers:
+          match === "new" ? [] : [{ ...JANE, npi: match === "name-fallback" ? null : JANE.npi }],
+        groups,
+        facilities,
+        groupAssignments: [],
+        facilityAssignments: [],
+        licenses: [],
+      };
+      const dispositions = dedupeImportRows(inputs);
+      expect(dispositions).toHaveLength(1);
+      expect(dispositions[0]).toMatchObject({ lines: [2, 3, 4] });
+      const expectedLicenses = states.map((state) => ({
+        state,
+        license_number: `${state}-100`,
+        issue_date: null,
+        expiration_date: null,
+      }));
+
+      for (const choice of ["existing", "imported"] as const) {
+        const plan = buildCommitPlan(dispositions, { [JANE.id]: { npi: choice } });
+        expect(plan.blocked_entries).toEqual([]);
+        if (match === "new") {
+          expect(plan.updates).toEqual([]);
+          expect(plan.creates).toHaveLength(1);
+          expect(plan.creates[0]).toMatchObject({
+            provider: { npi: JANE.npi },
+            group_ids: groups.map((group) => group.id),
+            facility_ids: facilities.map((facility) => facility.id),
+            licenses: expectedLicenses,
+          });
+        } else {
+          expect(plan.creates).toEqual([]);
+          expect(plan.updates).toHaveLength(1);
+          expect(plan.updates[0]).toMatchObject({
+            provider_id: JANE.id,
+            set: match === "name-fallback" && choice === "imported" ? { npi: JANE.npi } : {},
+            add_group_ids: groups.map((group) => group.id),
+            add_facility_ids: facilities.map((facility) => facility.id),
+            license_inserts: expectedLicenses,
+          });
+          expect(plan.updates[0].license_updates).toEqual([]);
+        }
+      }
+
+      if (match === "name-fallback") {
+        const unresolved = buildCommitPlan(dispositions, {});
+        expect(unresolved.updates).toEqual([]);
+        expect(unresolved.blocked_entries.map((entry) => entry.line)).toEqual([2, 3, 4]);
+        expect(summarizeImportPreview(dispositions, {}, 0).blockedRows).toBe(3);
+      }
+    },
+  );
+});
+
 describe("summarizeImportPreview — exact reconciliation (F3.1.1)", () => {
   it("reconciles create/update/blocked/skip counts with the staged rows", () => {
     const rows = [
@@ -342,6 +627,7 @@ describe("buildCommitPlan", () => {
     expect(unresolvedPlan.updates).toHaveLength(0);
     expect(unresolvedPlan.blocked_entries).toEqual([
       { line: 3, column: "specialty", reason: "Unresolved specialty conflict — row not committed" },
+      { line: 4, column: "specialty", reason: "Unresolved specialty conflict — row not committed" },
     ]);
     expect(unresolvedPlan.skipped_count).toBe(0);
 

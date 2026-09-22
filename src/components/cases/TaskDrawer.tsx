@@ -28,11 +28,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { StepBody } from "@/components/cases/StepDetails";
+import type { PortalHandoffContext } from "@/components/portals/PortalStepLink";
 import { CaseRequiredDocuments } from "@/components/documents/CaseRequiredDocuments";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
+import { isPortalHandoffStepEligible } from "@/lib/casePortals";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
 interface TaskDrawerProps {
@@ -54,6 +56,9 @@ interface TaskDrawerProps {
   caseTasks?: Task[];
   providerName?: string;
   groupName?: string | null;
+  /** Exact route-owned case context. The drawer only exposes it to the active,
+   * incomplete online-form step when the task identifiers match. */
+  portalHandoff?: PortalHandoffContext;
 }
 
 function initialsOf(name: string | null | undefined): string {
@@ -89,6 +94,7 @@ export function TaskDrawer({
   caseTasks = [],
   providerName = "this provider",
   groupName = null,
+  portalHandoff,
 }: TaskDrawerProps) {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
@@ -286,6 +292,19 @@ export function TaskDrawer({
                       const isChecked = step.isCompleted;
                       const isActive = !isChecked && index === firstIncompleteIndex;
                       const isLocked = !isChecked && !isActive;
+                      const stepPortalHandoff =
+                        portalHandoff &&
+                        task.caseId === portalHandoff.caseId &&
+                        task.providerId === portalHandoff.providerId &&
+                        isPortalHandoffStepEligible(
+                          step,
+                          index,
+                          firstIncompleteIndex,
+                          locked,
+                          task.status,
+                        )
+                          ? portalHandoff
+                          : undefined;
                       return (
                         <div key={step.id} className="flex items-start gap-3 p-3">
                           {isLocked ? (
@@ -329,6 +348,7 @@ export function TaskDrawer({
                                 caseId={task.caseId}
                                 providerId={task.providerId}
                                 groupId={groupId}
+                                portalHandoff={stepPortalHandoff}
                               />
                             )}
                           </div>

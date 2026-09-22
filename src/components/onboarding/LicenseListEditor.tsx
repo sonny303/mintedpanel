@@ -30,10 +30,11 @@ const PSV_PILL: Record<PsvStatus, { color: "neutral" | "green" | "red"; label: s
 interface LicenseListEditorProps {
   value: LicenseDraft[];
   onChange: (next: LicenseDraft[]) => void;
+  onRemove?: (removed: LicenseDraft) => void;
   errors: Record<number, string>;
 }
 
-export function LicenseListEditor({ value, onChange, errors }: LicenseListEditorProps) {
+export function LicenseListEditor({ value, onChange, onRemove, errors }: LicenseListEditorProps) {
   const setRow = (index: number, patch: Partial<LicenseDraft>) =>
     onChange(value.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
@@ -66,7 +67,10 @@ export function LicenseListEditor({ value, onChange, errors }: LicenseListEditor
                 size="sm"
                 className="h-7 px-2 text-[11px] text-muted-foreground"
                 aria-label={`Remove license ${i + 1}`}
-                onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+                onClick={() => {
+                  onRemove?.(row);
+                  onChange(value.filter((_, idx) => idx !== i));
+                }}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

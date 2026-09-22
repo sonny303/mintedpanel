@@ -6,7 +6,7 @@
 // steps render beneath it; the CURRENT step (the first incomplete step of the
 // first unfinished task) carries the "Open step" affordance that opens the
 // drawer, where the step bodies and Mark-step-done live.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { differenceInDays, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,11 +27,27 @@ import { fmtDate } from "@/lib/format";
 import { useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useCanWrite } from "@/lib/permissions";
 import { TaskDrawer } from "@/components/cases/TaskDrawer";
+import type { PortalHandoffContext } from "@/components/portals/PortalStepLink";
 import { PayerFormActionRow } from "@/components/cases/PayerFormActionRow";
 import { isPayerFormRemoved, taskPayerFormPointer } from "@/lib/payerForms";
-import { currentStepPointer, orderedSteps, summarizeTasks } from "@/lib/caseDetailView";
+import {
+  currentStepPointer,
+  orderedSteps,
+  resolveOpenTaskDrawer,
+  summarizeTasks,
+} from "@/lib/caseDetailView";
 import { EXECUTION_TYPE_LABELS, resolveExecutionType } from "@/lib/executionTypes";
+import type { HandoffFacilityLoadState, HandoffFacilityOption } from "@/lib/casePortals";
 import type { Task, TaskStatus } from "@/types";
+
+export interface CasePortalHandoffData {
+  caseId: string;
+  providerId: string;
+  orgId: string;
+  caseFacilityId: string | null;
+  facilityLoadState: HandoffFacilityLoadState;
+  facilities: HandoffFacilityOption[];
+}
 
 function taskStatusIcon(status: Task["status"], locked: boolean) {
   if (locked) return <Lock className="w-4 h-4 text-muted-foreground" />;
@@ -47,6 +63,7 @@ export function CaseTasksPanel({
   groupId = null,
   providerName = "this provider",
   groupName = null,
+  portalHandoff,
 }: {
   tasks: Task[];
   /** token -> value map for the drawer's pdf-step filler (built by the case page). */
@@ -56,13 +73,26 @@ export function CaseTasksPanel({
   groupId?: string | null;
   providerName?: string;
   groupName?: string | null;
+  portalHandoff?: CasePortalHandoffData;
 }) {
   const canEdit = useCanWrite();
   const updateStatusM = useUpdateTaskStatus();
-  const [drawerTask, setDrawerTask] = useState<{ task: Task; locked: boolean } | null>(null);
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string | undefined>(undefined);
+  const handoffCaseId = portalHandoff?.caseId;
+  useEffect(() => {
+    setSelectedFacilityId(undefined);
+  }, [handoffCaseId]);
+  const drawerPortalHandoff: PortalHandoffContext | undefined = portalHandoff
+    ? {
+        ...portalHandoff,
+        selectedFacilityId,
+        onSelectFacility: setSelectedFacilityId,
+      }
+    : undefined;
   // Payer PDF — a removed payer form is off this case for good, so it drops out
   // BEFORE anything derives from the list: the summary counts, the sequential
   // lock, and the current-step pointer must all behave as though it was never
@@ -72,9 +102,10 @@ export function CaseTasksPanel({
   const tasks = allTasks.filter((t) => !isPayerFormRemoved(t.sopContent));
   const summary = summarizeTasks(tasks);
   const currentStep = currentStepPointer(tasks);
+  const drawerTask = resolveOpenTaskDrawer(tasks, drawerTaskId);
 
-  const openDrawer = (task: Task, locked: boolean) => {
-    setDrawerTask({ task, locked });
+  const openDrawer = (task: Task) => {
+    setDrawerTaskId(task.id);
     setDrawerOpen(true);
   };
 
@@ -162,10 +193,10 @@ export function CaseTasksPanel({
                     }`}
                     onClick={() => {
                       if (locked) {
-                        openDrawer(t, true);
+                        openDrawer(t);
                         return;
                       }
-                      openDrawer(t, false);
+                      openDrawer(t);
                     }}
                   >
                     <button
@@ -283,7 +314,7 @@ export function CaseTasksPanel({
                                   className="h-6 px-2 text-[12px]"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openDrawer(t, false);
+                                    openDrawer(t);
                                   }}
                                 >
                                   Open step
@@ -324,6 +355,7 @@ export function CaseTasksPanel({
         caseTasks={tasks}
         providerName={providerName}
         groupName={groupName}
+        portalHandoff={drawerPortalHandoff}
       />
 
       <Dialog

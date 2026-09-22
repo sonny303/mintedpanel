@@ -38,7 +38,6 @@ import {
   unresolvedConflicts,
   type ConflictChoice,
   type ImportConflict,
-  type ImportRowDisposition,
   type RunResolutions,
   type UpdateDisposition,
 } from "@/lib/importDedupe";
@@ -254,6 +253,7 @@ export function ImportPreviewContent({ runId }: { runId: string }) {
   const creates = dispositions.filter((d) => d.kind === "create");
   const updates = dispositions.filter((d): d is UpdateDisposition => d.kind === "update");
   const skips = dispositions.filter((d) => d.kind === "skip");
+  const blocked = dispositions.filter((d) => d.kind === "blocked");
 
   const resolve = (providerId: string, key: string, choice: ConflictChoice) =>
     setResolutions((prev) => ({
@@ -367,10 +367,33 @@ export function ImportPreviewContent({ runId }: { runId: string }) {
         <DrilldownSection title="Blocked rows" count={summary.blockedRows}>
           <div className="space-y-2 text-[13px]">
             <p className="text-muted-foreground">
-              Rows with scan errors and rows with unresolved conflicts are not committed. Scan
-              errors are detailed in the downloadable report; resolve conflicts above to unblock
-              those rows.
+              Rows with scan errors, identity conflicts, or unresolved field conflicts are not
+              committed. For identity conflicts, correct the source or existing provider data and
+              re-import. Resolve field conflicts above; scan errors are detailed in the downloadable
+              report.
             </p>
+            {blocked.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Source row</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Field</TableHead>
+                    <TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {blocked.map((entry) => (
+                    <TableRow key={`b-${entry.line}`}>
+                      <TableCell className="tabular-nums">{entry.line}</TableCell>
+                      <TableCell className="font-medium">{entry.displayName}</TableCell>
+                      <TableCell>{entry.column ?? "—"}</TableCell>
+                      <TableCell>{entry.reason}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : null}
             {(run.errorRows ?? 0) > 0 ? (
               <Button
                 variant="outline"
