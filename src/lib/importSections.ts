@@ -265,6 +265,7 @@ export const PROVIDER_FORM_TEMPLATE_HEADERS = {
 } as const satisfies { readonly [K in keyof ProviderFormState]: readonly string[] };
 
 export const PROVIDER_TEMPLATE_EXTRA_HEADERS = [
+  "group_npi",
   "provider_middle_initial",
   "enrollment_payer",
   "enrollment_state",
