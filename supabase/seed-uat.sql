@@ -101,7 +101,7 @@ ON CONFLICT (provider_id,group_id) DO UPDATE SET is_primary=true;
 
 INSERT INTO public.state_licenses (id, org_id, provider_id, state, license_number, license_type, issue_date, expiration_date, status, verified_status, verification_source_url)
 SELECT pg_temp.uat_uuid('license',i), p.org_id, p.id, CASE WHEN i%3=0 THEN 'WY' ELSE 'CO' END,
-  'UAT-LIC-'||lpad(i::text,3,'0'), 'PT', DATE '2024-01-01',
+  'UAT-LIC-'||lpad(i::text,3,'0'), CASE WHEN i%3=0 THEN 'compact' ELSE 'full' END, DATE '2024-01-01',
   CASE WHEN i%5=0 THEN CURRENT_DATE-30 WHEN i%5=1 THEN CURRENT_DATE+30 ELSE CURRENT_DATE+365 END,
   CASE WHEN i%5=0 THEN 'expired' ELSE 'active' END,
   CASE WHEN i%4=0 THEN 'verified' ELSE 'unverified' END,
