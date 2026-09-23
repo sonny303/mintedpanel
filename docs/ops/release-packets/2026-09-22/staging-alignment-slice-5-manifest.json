@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "status": "AUTHOR_ONLY_NOT_APPLIED",
+  "baseCommit": "99e805abee603da618d71aaa406d096e4da95620",
+  "sourceSha": "7a40fc7876c4b53810e1391426afbed865176c3b",
+  "stagingProjectRef": "vmznysvietfaddakkegt",
+  "forbiddenProductionProjectRef": "fkvuhfsqcmujywzgczmc",
+  "packet": {
+    "files": ["staging-alignment-slice-5.sql"],
+    "checksums": {
+      "staging-alignment-slice-5.sql": "11991a2d55ba09077da83ab1cc458124633c60b7ceab5086be321ab2325bf094"
+    },
+    "execution": "serial_same_session_after_fresh_qualified_restore_rehearsal",
+    "hostedApply": "operator_only_after_recovery_qualification_and_review"
+  },
+  "targetBinding": {
+    "hosted": {
+      "sessionKind": "hosted_staging",
+      "projectRef": "vmznysvietfaddakkegt",
+      "requiredPhysicalSystemIdentifier": "7662742571317219726",
+      "productionRefRejected": true
+    },
+    "local": {
+      "sessionKind": "qualified_local_restore",
+      "requiredDatabase": "minted_recovery",
+      "requiredPhysicalSystemIdentifier": "supplied_by_qualified_restore_receipt",
+      "requiredExternalReceiptBinding": true,
+      "currentReceipt": {
+        "status": "REHEARSAL_HELD_PENDING_FRESH_POST_CLEANUP_CAPTURE_AND_RESTORE",
+        "eligibleForApply": false
+      }
+    }
+  },
+  "sourceFiles": {
+    "supabase/migrations/20260721120000_party_role_label_terminology.sql": "c298e496a17b7ec978baeae60c124142d2bfb194819feb4cf11bfdc2e841543a",
+    "supabase/migrations/20260807130000_people_contact_roles.sql": "5185702ddc5b889cd2df57db94ab6612e5f011de482285700d6a35a0751ae57a",
+    "supabase/migrations/20260807130100_people_contact_role_rpcs.sql": "e6c9d39c4b5680f21de0e78f7d2b7e1a938333a4bca359efadf98507ebc6dc4d",
+    "supabase/migrations/20260807150937_harden_party_role_tenant_integrity.sql": "b8c6a8e263f4cc3de74323a4c95b2a442c40892ecc29c51ca9a1b211e69a9405"
+  },
+  "targetCounts": {
+    "partyRows": 17,
+    "partyAssignmentResolution": "every party has at least one assignment and exactly one distinct assignment org"
+  },
+  "preservation": {
+    "perPrimaryKeyRowHashTables": [
+      "parties",
+      "party_role_assignments",
+      "party_capture_links",
+      "audit_log",
+      "party_role_types"
+    ],
+    "allowedPartyColumns": ["org_id", "first_name", "last_name", "title", "fax", "phone_extension"],
+    "allowedAssignmentColumns": ["is_default"],
+    "allowedRoleTypeColumns": ["label", "is_active"]
+  },
+  "aclContracts": {
+    "privateHelpers": [
+      "_party_first_name(text)",
+      "_party_last_name(text)",
+      "insert_contact_party(jsonb, uuid, uuid)"
+    ],
+    "authenticatedRpcs": [
+      "create_organization(text, text, text)",
+      "create_organization(text, text, text, jsonb, jsonb)",
+      "create_capture_link(uuid, uuid, text, text)",
+      "set_default_party_role(uuid, uuid, text)"
+    ],
+    "publicCaptureRpcs": ["validate_capture_token(text)", "submit_capture(text, jsonb)"],
+    "retainedLegacyHelper": "insert_contact_party(jsonb, uuid) remains untouched when present and revoked from browser roles"
+  },
+  "requiredInvariants": [
+    "No historical orphan delete and no creator-membership org fallback; unresolved or multiply assigned parties abort.",
+    "All 17 party IDs, every assignment, every capture link, and every audit row survive by primary-key row hash.",
+    "Existing valid sole defaults remain; multiple defaults and cross-org assignments abort.",
+    "The composite tenant FK, immutable party org trigger, membership-scoped policies, role labels/activation, and final RPC signatures are present.",
+    "No migration ledger write or hosted SQL execution is part of this packet."
+  ]
+}
