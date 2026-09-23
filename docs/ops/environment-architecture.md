@@ -182,7 +182,7 @@ flowchart LR
 flowchart LR
   DEV["Feature branch<br/>cursor/* or epic branch"] -->|"PR"| MAIN["main"]
   MAIN -->|"CI: lint / typecheck / test / build"| GREEN["Required checks green"]
-  GREEN -->|"PM merge — never self-merge"| MAIN
+  GREEN -->|"PM merge (or PM-authorized agent merge)"| MAIN
 ```
 
 - Panel CI: format, typecheck, lint, unit tests, build, migration dry-run,
@@ -248,7 +248,7 @@ flowchart LR
 | Auto-deploy on every `main` push             | Disabled by `vercel.json` `git.deploymentEnabled: false`                                           |
 | Promote a Preview URL directly to Production | Creates a different production build; contract requires an explicit production candidate + promote |
 | Extension writing to Supabase tables         | Forbidden — JWT + panel `/api` only                                                                |
-| Agent self-merge to `main`                   | Governance — PM merges                                                                             |
+| Autonomous agent self-merge to `main`        | Governance — PM approval required (PM merges or explicitly authorizes agent merge)                 |
 
 ---
 

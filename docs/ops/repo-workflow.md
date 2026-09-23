@@ -10,10 +10,10 @@ manual today**.
 
 ## Two lanes
 
-| Lane              | Who builds                           | Branch pattern                                                            | Merge                                      |
-| ----------------- | ------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------ |
-| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `main`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges — **never self-merge**  |
-| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                  | PM merges draft PRs — **never self-merge** |
+| Lane              | Who builds                           | Branch pattern                                                            | Merge                                                      |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `main`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges (or explicitly authorizes agent merge)  |
+| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                  | PM merges draft PRs (or explicitly authorizes agent merge) |
 
 Epic lane owns roadmap features (e.g. E6.9 Form Setup). The 3M lane owns
 reliability, muda deletion, and approved simplification slices — it must not
@@ -64,6 +64,13 @@ Summary:
 4. Protected files unchanged unless the slice explicitly authorizes them.
 5. PM verifies UI/preview where the slice touches journeys; agent runs CI only.
 
+### Authorized merge execution
+
+Because automatic deployments from Git pushes are disabled in `vercel.json` (`git.deploymentEnabled: false`), merging to `main` is strictly a code integration step and does not trigger an uncontrolled release. To balance governance with developer velocity:
+
+- **Autonomous self-merging is prohibited**: Agents must never merge a PR or push directly to `main` on their own initiative without PM review.
+- **Authorized operator merge is permitted**: When the PM explicitly authorizes or requests a merge (e.g., _"merge to main"_, _"merge PR #..."_), the agent is permitted to execute the merge, provided all required CI checks are green, no unresolved merge conflicts exist, and the working tree is clean.
+
 ### CI surfaces (panel)
 
 | Workflow                   | What                                                                                 |
@@ -98,13 +105,13 @@ the extension (JWT + panel `/api` only).
 These are not agent-verifiable. Checklist:
 [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md).
 
-| Step                                                      | Why manual                                           |
-| --------------------------------------------------------- | ---------------------------------------------------- |
-| Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet     |
-| Provision Vault secret `ssn_vault_key`                    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed |
-| Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op |
-| Merge PRs / approve epics                                 | Governance: never self-merge                         |
-| Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat    |
+| Step                                                      | Why manual                                                                                   |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet                                             |
+| Provision Vault secret `ssn_vault_key`                    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed                                         |
+| Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op                                         |
+| Merge PRs / approve epics                                 | Governance: PM approval required (no autonomous self-merge; PM may delegate merge execution) |
+| Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat                                            |
 
 ---
 
