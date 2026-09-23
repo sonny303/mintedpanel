@@ -180,7 +180,16 @@ export async function backupDatabase({
 
   try {
     // 1. Resolve connection parameters
-    if (supabaseToken) {
+    if (databaseUrl) {
+      const parsed = new URL(databaseUrl);
+      connectionParams = {
+        host: parsed.hostname,
+        port: parsed.port || 5432,
+        user: parsed.username,
+        password: decodeURIComponent(parsed.password),
+        database: parsed.pathname.slice(1) || "postgres",
+      };
+    } else if (supabaseToken) {
       // Ephemeral login role via Supabase Management API
       // Request read_only: true since backups only perform pg_dump read operations
       let res = await fetch(`https://api.supabase.com/v1/projects/${target.ref}/cli/login-role`, {
@@ -222,15 +231,6 @@ export async function backupDatabase({
         user: `${target.ref}.${roleData.role}`,
         password: roleData.password,
         database: target.database,
-      };
-    } else if (databaseUrl) {
-      const parsed = new URL(databaseUrl);
-      connectionParams = {
-        host: parsed.hostname,
-        port: parsed.port || 5432,
-        user: parsed.username,
-        password: decodeURIComponent(parsed.password),
-        database: parsed.pathname.slice(1) || "postgres",
       };
     }
 
