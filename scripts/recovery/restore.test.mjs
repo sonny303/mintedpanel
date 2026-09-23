@@ -159,6 +159,7 @@ test("target preparation uses one pinned private engine and no published port or
   assert.ok(createNetwork.includes("--internal"));
   assert.ok(run.includes(POSTGRES_IMAGE));
   assert.ok(run.includes("no-new-privileges:true"));
+  assert.ok(run.includes("listen_addresses=*"));
   assert.ok(!run.includes("--publish"));
   assert.ok(!run.includes("--volume"));
   assert.ok(run.includes(`type=volume,source=${PROFILE}-${runId},target=/var/lib/postgresql/data`));

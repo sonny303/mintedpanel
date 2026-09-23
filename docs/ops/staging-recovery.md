@@ -1,13 +1,23 @@
 # Staging recovery — G2 boundary and runbook
 
 This slice supplies local encryption, a fixed staging credential provider, an
-owned backup coordinator, an isolated database restore executor and evidence
-guards. A live run remains evidence, not an effect of merging this code. The
-coordinator requires an authenticated Supabase CLI token source and a separately
-protected age identity. A database restore proves the database boundary; an
-operational local Auth/REST service still requires separately reviewed service
-containers and replacement local keys. Product/schema repairs remain outside
-this task. Production backup and recovery evidence is separate and unverified.
+owned backup coordinator, an isolated database restore executor, the reviewed
+local Auth/REST qualifier and evidence guards. A live run remains evidence, not
+an effect of merging this code. The coordinator requires an authenticated
+Supabase CLI token source and a separately protected age identity. The latest
+local run used the old pre-cleanup capture method, passed the full recovery
+suite 321/321 and verified the local Auth/REST boundary only. Its success and
+cleanup receipts are retained at:
+
+- `/Users/ar/Codex-Minted/recovery-qualify-core-20260923-Ki8PJ9/auth-rest.json`
+- `/Users/ar/Codex-Minted/recovery-qualify-core-20260923-Ki8PJ9/auth-rest-89414b39111817b9-cleanup.json`
+
+The run ID is `89414b39111817b9`; its receipt binds the current recovery-core
+code hashes. The isolated target was destroyed with zero remaining resources.
+
+Hosted service/configuration parity, production recovery and the remaining full
+recovery gates are unverified. Product/schema repairs remain outside this task.
+Production backup and recovery evidence is separate and unverified.
 
 ## Fixed source and runtime
 
@@ -351,17 +361,22 @@ target identity evidence only; it does not export, restore or claim recovery PAS
 4. Initialize the pinned local platform baseline while empty. The executor
    creates a separate `minted_recovery` database from `template0`, then streams
    the authenticated custom archive into `pg_restore --single-transaction
---exit-on-error`. Do not
-   reuse hosted passwords, JWTs or server keys locally. Do not attach unreviewed
-   Auth/REST peers: their pinned images, task ownership and outbound isolation
-   need a collector extension and independent review. The current DB-only guard
-   cannot itself prove an operational Auth service.
+--exit-on-error`. Do not reuse hosted passwords, JWTs or server keys locally.
+   The reviewed Auth/REST peers use pinned images, task ownership and outbound
+   isolation on the same internal-only network. The successful local run used
+   the old pre-cleanup capture method and does not establish hosted parity.
 5. Start the recovery clock at detection, before preparation. Re-authenticate
    every age stream and compare its bytes and SHA-256 with `capture.json`.
    `restore.mjs` fixes the Docker context/socket, image, local database, role and
    executable paths. Before the first named-resource creation attempt, it writes
    a private `restore-<runId>-journal.json` containing the stable run ID and exact
-   resource name. It accepts no host, connection URL, SQL or image override:
+   resource name. It accepts no host, connection URL, SQL or image override.
+   The original peer-start failure was the database's default
+   `listen_addresses=localhost`, which left Auth/REST unable to connect. The
+   bounded fix starts the disposable database with `listen_addresses=*` on the
+   Docker `--internal` network only; no host port is published. Readiness still
+   probes `127.0.0.1` inside the database container, while peers use internal
+   service aliases.
 
    ```sh
    node scripts/recovery/restore.mjs restore \
@@ -375,17 +390,17 @@ target identity evidence only; it does not export, restore or claim recovery PAS
    triggers, extension versions, roles and memberships. It also checks outbound
    subscriptions/foreign objects and large objects. The sanitized result is
    written as `restore.json`; a failure publishes no PASS. The direct executor
-   emits `REHEARSED_ONLY` with a nested `RESTORE_VERIFIED_ONLY`, a null release
-   context digest and the unresolved capture/qualifier prerequisites. These
-   records are deliberately not a release G0 backup or recovery PASS. They emit
-   an empty `qualifiedRecoveryScopes` array and
-   `COMPLETE_RECOVERY_SCOPE_VERIFICATION` until every category in the complete
-   inventory is collected and canonically compared.
+   continues to emit `REHEARSED_ONLY` with a nested `RESTORE_VERIFIED_ONLY`, a
+   null release context digest and an empty `qualifiedRecoveryScopes` array.
+   The separately reviewed local Auth/REST qualifier completed the 321-test
+   local run above, but neither receipt is a release G0 backup or recovery PASS.
 7. Auth rows, Storage metadata and Vault metadata are included in the table
    integrity comparison. Storage object bytes and Vault key recovery must be
-   proved separately when either source inventory is nonempty. An operational
-   Auth login and cross-tenant denial test still require the separately reviewed
-   local Auth/REST service boundary; the DB-only executor does not claim them.
+   proved separately when either source inventory is nonempty. The local
+   Auth/REST qualifier verified password login, refresh, identity lookup and
+   cross-tenant denial for the synthetic fixture. Hosted parity, production
+   recovery, Storage object bytes, Vault key recovery and the remaining full
+   recovery gates remain unverified.
 8. On every failure after the journal, cleanup discovers container, network and
    volume independently by exact name and both ownership labels. It refuses a
    foreign resource, attempts all owned removals even when one fails, rechecks
