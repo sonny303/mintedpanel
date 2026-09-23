@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:release": "node --test scripts/release/*.test.mjs",
     "test:recovery": "node --test scripts/recovery/*.test.mjs",
+    "test:backup": "node --test scripts/backup/*.test.mjs",
     "test:delivery": "node --test scripts/delivery/*.test.mjs",
     "test:e2e": "playwright test",
     "format": "prettier --write .",

@@ -1,0 +1,111 @@
+name: Scheduled Nightly Backup (GCS)
+
+on:
+  schedule:
+    # 04:00 UTC daily (middle of the night off-peak)
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target Environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+      backup_repo:
+        description: "Backup Git Repository"
+        required: true
+        default: true
+        type: boolean
+      backup_db:
+        description: "Backup Database"
+        required: true
+        default: true
+        type: boolean
+      dry_run:
+        description: "Dry Run (validate process without modifying cloud storage)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: minted-scheduled-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Execute Nightly Backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install system dependencies (age & postgresql-client)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age postgresql-client
+
+      - name: Prepare workspace and date
+        run: |
+          BACKUP_DATE=$(date -u +%Y-%m-%d)
+          WORKSPACE="${RUNNER_TEMP}/backup-artifacts"
+          mkdir -p "${WORKSPACE}"
+          echo "BACKUP_DATE=${BACKUP_DATE}" >> "$GITHUB_ENV"
+          echo "WORKSPACE=${WORKSPACE}" >> "$GITHUB_ENV"
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        if: ${{ !inputs.dry_run }}
+        id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Run Backup Coordinator
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          TARGET_ENV="${{ inputs.environment || 'production' }}"
+          EXTRA_FLAGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            EXTRA_FLAGS="--dry-run"
+          fi
+
+          node scripts/backup/nightly-backup.mjs \
+            --workspace "${{ env.WORKSPACE }}" \
+            --target-env "${TARGET_ENV}" \
+            ${EXTRA_FLAGS}
+
+      - name: Upload Artifacts to Google Cloud Storage
+        if: ${{ !inputs.dry_run }}
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: ${{ env.WORKSPACE }}
+          destination: "${{ secrets.GCS_BACKUP_BUCKET }}/backups/${{ env.BACKUP_DATE }}"
+          parent: false
+
+      - name: "Archive Fallback Artifacts (GitHub Retention: 7 Days)"
+        uses: actions/upload-artifact@v4
+        with:
+          name: mintedpanel-backup-${{ env.BACKUP_DATE }}
+          path: ${{ env.WORKSPACE }}
+          retention-days: 7
+          if-no-files-found: warn
