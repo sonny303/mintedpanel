@@ -249,6 +249,7 @@ flowchart LR
 | Promote a Preview URL directly to Production | Creates a different production build; contract requires an explicit production candidate + promote |
 | Extension writing to Supabase tables         | Forbidden — JWT + panel `/api` only                                                                |
 | Autonomous agent self-merge to `main`        | Governance — PM approval required (PM merges or explicitly authorizes agent merge)                 |
+| Feature PRs targeting `staging` directly     | Forbidden — dual-branch merging retired; `staging` is strictly a fast-forwarded deployment pointer |
 
 ---
 
