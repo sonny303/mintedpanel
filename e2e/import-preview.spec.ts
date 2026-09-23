@@ -136,6 +136,7 @@ function license(
   providerId: string,
   state: string,
   number: string,
+  licenseType: string | null = null,
 ): Record<string, unknown> {
   return {
     id,
@@ -143,7 +144,7 @@ function license(
     provider_id: providerId,
     state,
     license_number: number,
-    license_type: null,
+    license_type: licenseType,
     issue_date: null,
     expiration_date: "2027-01-01",
     status: "active",
@@ -278,7 +279,7 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>, wire: 
       const updated: string[] = [];
       for (const c of plan.creates ?? []) {
         const pid = `imp-prov-${seq++}`;
-        const p = c.provider as Record<string, string | null>;
+        const p = c.provider as Record<string, string | boolean | null>;
         const groupIds = (c.group_ids as string[]) ?? [];
         fixtures.providers.push(
           provider({
@@ -286,12 +287,21 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>, wire: 
             first_name: p.first_name,
             last_name: p.last_name,
             middle_initial: p.middle_initial,
+            credentials: p.credentials,
+            email: p.email,
+            phone: p.phone,
             npi: p.npi,
             caqh_id: p.caqh_id,
+            caqh_last_attested_date: p.caqh_last_attested_date,
+            is_new_grad: p.is_new_grad,
             specialty: p.specialty,
             taxonomy_code: p.taxonomy_code,
             ssn_last4: p.ssn_last4,
             date_of_birth: p.date_of_birth,
+            start_date: p.start_date,
+            degree: p.degree,
+            school_name: p.school_name,
+            graduation_date: p.graduation_date,
             group_id: groupIds[0] ?? null,
             status: "onboarding",
             verification_state: "pending_verification",
@@ -323,7 +333,13 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>, wire: 
         );
         ((c.licenses as Array<Record<string, string | null>>) ?? []).forEach((l) =>
           fixtures.state_licenses.push(
-            license(`imp-lic-${seq++}`, pid, (l.state ?? "").toUpperCase(), l.license_number ?? ""),
+            license(
+              `imp-lic-${seq++}`,
+              pid,
+              (l.state ?? "").toUpperCase(),
+              l.license_number ?? "",
+              l.license_type ?? null,
+            ),
           ),
         );
         fixtures.audit_log.push({
@@ -721,11 +737,22 @@ test("TS-61: preview summary + five-part dedupe (create / skip / multi-group upd
       group_tin: "111111111",
       provider_first_name: "Nora",
       provider_last_name: "Newton",
+      credentials: "PT DPT",
+      email: "nora.newton@example.test",
+      phone: "9105550100",
       npi: "1112223334",
+      caqh_id: "12345678",
+      caqh_last_attested_date: "2026-09-01",
+      is_new_grad: "true",
       specialty: "Physical Therapy",
+      start_date: "2026-10-01",
+      degree: "DPT",
+      school_name: "Duke University",
+      graduation_date: "2024-05-15",
       facility_name: "Clinic North",
       license_state: "NC",
       license_number: "NC-200",
+      license_type: "compact",
       license_expiration_date: "2028-06-01",
     }),
     // exact five-part duplicate → skip
@@ -839,9 +866,22 @@ test("TS-62: per-field conflict review blocks only its row; resolve + commit →
       group_tin: "111111111",
       provider_first_name: "Nora",
       provider_last_name: "Newton",
+      credentials: "PT DPT",
+      email: "nora.newton@example.test",
+      phone: "9105550100",
       npi: "1112223334",
+      caqh_id: "12345678",
+      caqh_last_attested_date: "2026-09-01",
+      is_new_grad: "true",
       specialty: "Physical Therapy",
+      start_date: "2026-10-01",
+      degree: "DPT",
+      school_name: "Duke University",
+      graduation_date: "2024-05-15",
       facility_name: "Clinic North",
+      license_state: "NC",
+      license_number: "NC-200",
+      license_type: "compact",
     }),
     // Jane with a conflicting specialty (name+NPI match, same group/facility)
     stagedRow(3, {
@@ -887,10 +927,28 @@ test("TS-62: per-field conflict review blocks only its row; resolve + commit →
   await expect(page.getByText("1 provider created · 1 updated", { exact: true })).toBeVisible();
   expect(wire.commitCalls).toHaveLength(1);
   const plan = wire.commitCalls[0].p_plan as {
-    creates: unknown[];
+    creates: Array<{
+      provider: Record<string, string | boolean | null>;
+      licenses: Array<Record<string, string | null>>;
+    }>;
     updates: Array<{ provider_id: string; set: Record<string, string> }>;
   };
   expect(plan.creates).toHaveLength(1);
+  expect(plan.creates[0].provider).toMatchObject({
+    credentials: "PT DPT",
+    email: "nora.newton@example.test",
+    phone: "9105550100",
+    start_date: "2026-10-01",
+    degree: "DPT",
+    school_name: "Duke University",
+    graduation_date: "2024-05-15",
+    is_new_grad: true,
+    caqh_id: null,
+    caqh_last_attested_date: null,
+  });
+  expect(plan.creates[0].licenses).toEqual([
+    expect.objectContaining({ license_number: "NC-200", license_type: "compact" }),
+  ]);
   expect(plan.updates).toHaveLength(1);
   // "Keep existing" → the resolved update carries NO overwrite in `set`.
   expect(plan.updates[0].set).toEqual({});
@@ -898,6 +956,21 @@ test("TS-62: per-field conflict review blocks only its row; resolve + commit →
   // Nora landed Pending Verification; Jane's specialty was NOT overwritten.
   const nora = fixtures.providers.find((p) => p.npi === "1112223334");
   expect(nora?.verification_state).toBe("pending_verification");
+  expect(nora).toMatchObject({
+    credentials: "PT DPT",
+    email: "nora.newton@example.test",
+    phone: "9105550100",
+    start_date: "2026-10-01",
+    degree: "DPT",
+    school_name: "Duke University",
+    graduation_date: "2024-05-15",
+    is_new_grad: true,
+    caqh_id: null,
+    caqh_last_attested_date: null,
+  });
+  expect(
+    fixtures.state_licenses.find((licenseRow) => licenseRow.provider_id === nora?.id),
+  ).toMatchObject({ license_number: "NC-200", license_type: "compact" });
   expect(fixtures.providers.find((p) => p.id === JANE_ID)?.specialty).toBe("Physical Therapy");
   const noraFacilities = fixtures.provider_facility_assignments.filter(
     (a) => a.provider_id === nora?.id,

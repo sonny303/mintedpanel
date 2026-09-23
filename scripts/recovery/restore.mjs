@@ -232,7 +232,10 @@ export async function prepareIsolatedTarget(
             name,
             "/nix/var/nix/profiles/default/bin/pg_isready",
             "-h",
-            "/var/run/postgresql",
+            // The pinned image runs a socket-only bootstrap server before
+            // initialization completes. Only the final server listens on TCP.
+            // This loopback probe stays inside the owned, unpublished container.
+            "127.0.0.1",
             "-p",
             "5432",
             "-U",
@@ -262,7 +265,7 @@ export async function prepareIsolatedTarget(
   }
 }
 
-function psqlArgs(containerId, database, readOnly = true) {
+function psqlArgs(containerId, database, readOnly = true, username = "postgres") {
   return dockerArgs(
     "exec",
     "--interactive",
@@ -284,7 +287,7 @@ function psqlArgs(containerId, database, readOnly = true) {
     "-p",
     "5432",
     "-U",
-    "postgres",
+    username,
     "-d",
     database,
     "--set",
@@ -292,8 +295,15 @@ function psqlArgs(containerId, database, readOnly = true) {
   );
 }
 
-async function query(target, sql, database = DATABASE, readOnly = true, execute = docker) {
-  return execute(psqlArgs(target.containerId, database, readOnly), `${sql}\n`, 180_000);
+async function query(
+  target,
+  sql,
+  database = DATABASE,
+  readOnly = true,
+  execute = docker,
+  username = "postgres",
+) {
+  return execute(psqlArgs(target.containerId, database, readOnly, username), `${sql}\n`, 180_000);
 }
 
 async function privateFile(path, maximumBytes = MAX_JSON) {
@@ -344,7 +354,109 @@ async function decryptJson(workspace, name, identityPath, execute = executeFile)
   }
 }
 
-async function streamArchive(target, workspace, identityPath, launch = spawn) {
+export function filterRestoreTableOfContents(text, schemas) {
+  check(typeof text === "string" && text.length <= 8 * 1024 * 1024 && Array.isArray(schemas));
+  const counts = new Map(schemas.map((schema) => [schema.name, 0]));
+  const result = text.split("\n").map((line) => {
+    const match = line.match(/^\d+; \d+ \d+ SCHEMA - (\S+) (\S+)$/);
+    if (!match || !counts.has(match[1])) return line;
+    const expected = schemas.find((schema) => schema.name === match[1]);
+    check(match[2] === expected.owner);
+    counts.set(match[1], counts.get(match[1]) + 1);
+    return `; source-owned schema precreated: ${line}`;
+  });
+  check([...counts.values()].every((count) => count === 1));
+  return result.join("\n");
+}
+
+async function archiveTableOfContents(target, workspace, identityPath, launch) {
+  const age = launch(
+    AGE,
+    ["--decrypt", "--identity", identityPath, join(workspace, "backup.age")],
+    { stdio: ["ignore", "pipe", "ignore"], env: { PATH: "/usr/bin:/bin", LANG: "C" } },
+  );
+  const listing = launch(
+    DOCKER,
+    dockerArgs(
+      "exec",
+      "--interactive",
+      "--user",
+      "postgres",
+      target.containerId,
+      "/nix/var/nix/profiles/default/bin/pg_restore",
+      "--list",
+    ),
+    {
+      stdio: ["pipe", "pipe", "ignore"],
+      env: {
+        PATH: "/usr/bin:/bin",
+        HOME: "/Users/ar",
+        DOCKER_CONFIG: "/Users/ar/.docker",
+        LANG: "C",
+      },
+    },
+  );
+  let text = "",
+    overflow = false;
+  listing.stdout.on("data", (chunk) => {
+    if (text.length + chunk.length > 8 * 1024 * 1024) {
+      overflow = true;
+      listing.kill("SIGKILL");
+      age.kill("SIGKILL");
+    } else text += chunk.toString("utf8");
+  });
+  const closed = (child) =>
+    new Promise((resolve) => {
+      child.once("error", () => resolve(-1));
+      child.once("close", (code) => resolve(code));
+    });
+  const listDone = closed(listing),
+    ageDone = closed(age);
+  const transfer = pipeline(age.stdout, listing.stdin).catch((error) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+  transfer.catch(() => {});
+  const timer = setTimeout(() => {
+    age.kill("SIGKILL");
+    listing.kill("SIGKILL");
+  }, 60000);
+  try {
+    check((await listDone) === 0 && !overflow);
+    // --list can stop reading once the archive header is complete. Integrity
+    // authentication of the full ciphertext already preceded this operation.
+    age.kill("SIGKILL");
+    await Promise.allSettled([ageDone, transfer]);
+    return text;
+  } finally {
+    clearTimeout(timer);
+    age.kill("SIGKILL");
+    listing.kill("SIGKILL");
+    await Promise.allSettled([ageDone, listDone, transfer]);
+  }
+}
+
+export async function streamArchive(target, workspace, identityPath, options = {}, launch = spawn) {
+  const tocPath = "/tmp/minted-recovery-restore.list";
+  const useList = Array.isArray(options.precreatedSchemas) && options.precreatedSchemas.length > 0;
+  if (useList) {
+    const list = filterRestoreTableOfContents(
+      await archiveTableOfContents(target, workspace, identityPath, launch),
+      options.precreatedSchemas,
+    );
+    await docker(
+      dockerArgs(
+        "exec",
+        "--interactive",
+        "--user",
+        "postgres",
+        target.containerId,
+        "/bin/sh",
+        "-c",
+        "umask 077; set -C; cat > /tmp/minted-recovery-restore.list",
+      ),
+      list,
+    );
+  }
   const age = launch(
     AGE,
     ["--decrypt", "--identity", identityPath, join(workspace, "backup.age")],
@@ -367,7 +479,12 @@ async function streamArchive(target, workspace, identityPath, launch = spawn) {
       "--no-password",
       "--host=/var/run/postgresql",
       "--port=5432",
-      "--username=postgres",
+      // The local Supabase image's postgres role cannot SET ROLE to every
+      // managed schema owner. Restore as the isolated image's administrator
+      // so archive ownership/ACLs remain intact; verification still uses postgres.
+      "--username=supabase_admin",
+      "--role=postgres",
+      ...(useList ? [`--use-list=${tocPath}`] : []),
       `--dbname=${DATABASE}`,
     ),
     {
@@ -406,6 +523,10 @@ async function streamArchive(target, workspace, identityPath, launch = spawn) {
     throw fail();
   } finally {
     clearTimeout(timeout);
+    if (useList)
+      await docker(
+        dockerArgs("exec", "--user", "postgres", target.containerId, "/bin/rm", "--", tocPath),
+      );
   }
 }
 
@@ -426,10 +547,18 @@ export async function inspectSealedBackup(
         capture.captured.status === "CAPTURED_ONLY",
     );
     const lifecycle = capture.loginRoleLifecycle;
+    const maintenance = lifecycle?.cleanupMode === "exclusive-staging-maintenance";
+    const lifecycleKeys =
+      "cleanupReceivedAt,cleanupRequestedAt,exactRoleAbsent,loginReceivedAt,loginRequestedAt,poststateInventoryDigest,poststateRoleCount,prestateInventoryDigest,prestateReceivedAt,prestateRequestedAt,roleDigest,verifiedAt".split(
+        ",",
+      );
+    if (maintenance) lifecycleKeys.push("cleanupMode");
     check(
       lifecycle &&
-        Object.keys(lifecycle).sort().join(",") ===
-          "cleanupReceivedAt,cleanupRequestedAt,exactRoleAbsent,loginReceivedAt,loginRequestedAt,poststateInventoryDigest,poststateRoleCount,prestateInventoryDigest,prestateReceivedAt,prestateRequestedAt,roleDigest,verifiedAt" &&
+        Object.keys(lifecycle).sort().join(",") === lifecycleKeys.sort().join(",") &&
+        (!maintenance ||
+          (lifecycle.poststateRoleCount === 0 &&
+            lifecycle.poststateInventoryDigest === canonicalDigest([]))) &&
         [
           lifecycle.prestateRequestedAt,
           lifecycle.prestateReceivedAt,
@@ -551,6 +680,362 @@ export async function inspectSealedBackup(
   }
 }
 
+const ROLE_FIELDS = Object.freeze({
+  rolsuper: "SUPERUSER",
+  rolinherit: "INHERIT",
+  rolcreaterole: "CREATEROLE",
+  rolcreatedb: "CREATEDB",
+  rolcanlogin: "LOGIN",
+  rolreplication: "REPLICATION",
+  rolbypassrls: "BYPASSRLS",
+});
+const roleIdentifier = (value) => {
+  check(
+    typeof value === "string" &&
+      value.length > 0 &&
+      Buffer.byteLength(value) <= 63 &&
+      !value.includes("\0"),
+  );
+  return `"${value.replaceAll('"', '""')}"`;
+};
+const sqlLiteral = (value) => {
+  check(typeof value === "string" && !value.includes("\0"));
+  return `E'${value.replaceAll("\\", "\\\\").replaceAll("'", "''")}'`;
+};
+const roleAttributes = (role) => {
+  const options = Object.entries(ROLE_FIELDS).map(([key, option]) => {
+    check(typeof role[key] === "boolean");
+    return `${role[key] ? "" : "NO"}${option}`;
+  });
+  check(Number.isSafeInteger(role.rolconnlimit) && role.rolconnlimit >= -1);
+  check(role.rolvaliduntil === null || typeof role.rolvaliduntil === "string");
+  return `${options.join(" ")} CONNECTION LIMIT ${role.rolconnlimit}${role.rolvaliduntil === null ? "" : ` VALID UNTIL ${sqlLiteral(role.rolvaliduntil)}`}`;
+};
+const roleConfig = (role, setting, database = null) => {
+  check(typeof setting === "string" && setting.includes("="));
+  const split = setting.indexOf("=");
+  const key = setting.slice(0, split);
+  check(/^[A-Za-z_][A-Za-z0-9_.]*$/.test(key));
+  const scope =
+    role === null
+      ? `ALTER DATABASE ${identifier(DATABASE)}`
+      : `ALTER ROLE ${roleIdentifier(role)}${database ? ` IN DATABASE ${identifier(DATABASE)}` : ""}`;
+  // SET ... TO a single SQL literal changes list-valued GUC semantics (for
+  // example search_path). Use the raw GUC parser, store FROM CURRENT, then
+  // restore the operator session value without emitting configuration contents.
+  const ddl = `${scope} SET ${roleIdentifier(key)} FROM CURRENT`;
+  let delimiter = "$minted_config$";
+  while (setting.includes(delimiter) || ddl.includes(delimiter))
+    delimiter = delimiter.slice(0, -1) + "_$";
+  return `DO ${delimiter} DECLARE prior text := pg_catalog.current_setting(${sqlLiteral(key)}, true); BEGIN PERFORM pg_catalog.set_config(${sqlLiteral(key)}, ${sqlLiteral(setting.slice(split + 1))}, true); EXECUTE ${sqlLiteral(ddl)}; IF prior IS NULL THEN EXECUTE ${sqlLiteral(`RESET ${roleIdentifier(key)}`)}; ELSE PERFORM pg_catalog.set_config(${sqlLiteral(key)}, prior, true); END IF; END ${delimiter};`;
+};
+
+// Pure planner for the already authenticated encrypted catalog. SQL is sent only
+// to the owned isolated container, never persisted or logged. No passwords appear.
+export function planLocalRoles(source, local) {
+  check(
+    Array.isArray(source?.roles) &&
+      Array.isArray(local?.roles) &&
+      Array.isArray(source.memberships) &&
+      Array.isArray(local.memberships) &&
+      Array.isArray(source.roleDatabaseSettings),
+  );
+  const retained = (roles) => roles.filter((role) => !/^cli_login_/.test(role.rolname));
+  const wanted = retained(source.roles),
+    existing = retained(local.roles);
+  const wantedByName = new Map(wanted.map((role) => [role.rolname, role]));
+  const localByName = new Map(existing.map((role) => [role.rolname, role]));
+  check(wantedByName.size === wanted.length && localByName.size === existing.length);
+  check(
+    wantedByName.get("supabase_admin")?.rolsuper === true &&
+      localByName.get("supabase_admin")?.rolsuper === true,
+  );
+  check(existing.every((role) => wantedByName.has(role.rolname)));
+  const statements = ["BEGIN;"];
+  for (const role of wanted) {
+    const name = roleIdentifier(role.rolname);
+    const attributes = roleAttributes(role);
+    const old = localByName.get(role.rolname);
+    check(!old || role.rolvaliduntil !== null || old.rolvaliduntil === null);
+    check(role.rolconfig === null || Array.isArray(role.rolconfig));
+    if (role.rolname.startsWith("pg_")) {
+      check(
+        old &&
+          roleAttributes(old) === attributes &&
+          canonicalDigest(old.rolconfig) === canonicalDigest(role.rolconfig),
+      );
+      continue;
+    }
+    if (!old) statements.push(`CREATE ROLE ${name} WITH ${attributes};`);
+    else if (roleAttributes(old) !== attributes)
+      statements.push(`ALTER ROLE ${name} WITH ${attributes};`);
+    if (!old || canonicalDigest(old.rolconfig) !== canonicalDigest(role.rolconfig)) {
+      statements.push(`ALTER ROLE ${name} RESET ALL;`);
+      for (const setting of role.rolconfig ?? [])
+        statements.push(roleConfig(role.rolname, setting));
+    }
+  }
+  const memberships = (catalog) => {
+    const names = new Map(catalog.roles.map((role) => [String(role.oid), role.rolname]));
+    return catalog.memberships
+      .map((row) => {
+        const named = {
+          role: names.get(String(row.roleid)),
+          member: names.get(String(row.member)),
+          grantor: names.get(String(row.grantor)),
+          admin: row.admin_option,
+          inherit: row.inherit_option,
+          set: row.set_option,
+        };
+        check(
+          named.role &&
+            named.member &&
+            named.grantor &&
+            [named.admin, named.inherit, named.set].every((value) => typeof value === "boolean"),
+        );
+        return named;
+      })
+      .filter(
+        (row) => ![row.role, row.member, row.grantor].some((name) => /^cli_login_/.test(name)),
+      );
+  };
+  const desiredMemberships = memberships(source),
+    currentMemberships = memberships(local);
+  const identity = (row) => JSON.stringify([row.role, row.member, row.grantor]);
+  check(
+    currentMemberships.every((row) =>
+      desiredMemberships.some((want) => identity(row) === identity(want)),
+    ),
+  );
+  const ready = currentMemberships.filter((row) =>
+    desiredMemberships.some((want) => canonicalDigest(row) === canonicalDigest(want)),
+  );
+  const pending = desiredMemberships.filter(
+    (row) => !ready.some((done) => canonicalDigest(row) === canonicalDigest(done)),
+  );
+  while (pending.length) {
+    const index = pending.findIndex(
+      (row) =>
+        wantedByName.get(row.grantor)?.rolsuper ||
+        ready.some(
+          (grant) => grant.role === row.role && grant.member === row.grantor && grant.admin,
+        ),
+    );
+    check(index >= 0);
+    const [row] = pending.splice(index, 1);
+    statements.push(
+      `GRANT ${roleIdentifier(row.role)} TO ${roleIdentifier(row.member)} WITH ADMIN ${row.admin}, INHERIT ${row.inherit}, SET ${row.set} GRANTED BY ${roleIdentifier(row.grantor)};`,
+    );
+    ready.push(row);
+  }
+  statements.push("COMMIT;");
+  const databaseStatements = ["BEGIN;"];
+  const names = new Map(source.roles.map((role) => [String(role.oid), role.rolname]));
+  for (const setting of source.roleDatabaseSettings) {
+    check(
+      /^(0|[1-9][0-9]{0,9})$/.test(String(setting.setdatabase)) &&
+        /^(0|[1-9][0-9]{0,9})$/.test(String(setting.setrole)) &&
+        Array.isArray(setting.setconfig),
+    );
+    if (String(setting.setdatabase) === "0") continue; // rolconfig above is the global per-role setting.
+    const role = String(setting.setrole) === "0" ? null : names.get(String(setting.setrole));
+    check(role !== undefined);
+    if (role?.startsWith("cli_login_")) continue;
+    check(!role?.startsWith("pg_"));
+    for (const config of setting.setconfig)
+      databaseStatements.push(roleConfig(role, config, DATABASE));
+  }
+  databaseStatements.push("COMMIT;");
+  return { rolesSql: statements.join("\n"), databaseSettingsSql: databaseStatements.join("\n") };
+}
+
+async function prepareArchiveExtensions(target, catalog, execute) {
+  check(Array.isArray(catalog.extensions) && Array.isArray(catalog.schemas));
+  const desired = catalog.extensions.map((extension) => {
+    check(typeof extension.version === "string" && /^[A-Za-z0-9_.-]+$/.test(extension.version));
+    roleIdentifier(extension.name);
+    roleIdentifier(extension.owner);
+    roleIdentifier(extension.schema);
+    return extension;
+  });
+  const current = JSON.parse(
+    await query(
+      target,
+      "SELECT coalesce(jsonb_agg(jsonb_build_object('name',e.extname,'version',e.extversion,'owner',pg_catalog.pg_get_userbyid(e.extowner),'schema',n.nspname)),'[]') FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace;",
+      DATABASE,
+      true,
+      execute,
+      "supabase_admin",
+    ),
+  );
+  check(
+    Array.isArray(current) &&
+      current.every((row) =>
+        desired.some((extension) =>
+          ["name", "version", "owner", "schema"].every((key) => extension[key] === row[key]),
+        ),
+      ),
+  );
+  const available = JSON.parse(
+    await query(
+      target,
+      "SELECT coalesce(jsonb_agg(jsonb_build_object('name',name,'version',version)),'[]') FROM pg_catalog.pg_available_extension_versions;",
+      DATABASE,
+      true,
+      execute,
+      "supabase_admin",
+    ),
+  );
+  check(
+    desired.every((extension) =>
+      available.some((row) => row.name === extension.name && row.version === extension.version),
+    ),
+  );
+  const precreate = desired.filter(
+    (extension) =>
+      extension.owner !== "postgres" && !current.some((row) => row.name === extension.name),
+  );
+  // The reviewed staging archive has one exceptional extension owner/schema.
+  // Reject a future topology change instead of silently expanding TOC omissions.
+  check(
+    precreate.every(
+      (extension) =>
+        extension.name === "supabase_vault" &&
+        extension.schema === "vault" &&
+        extension.owner === "supabase_admin",
+    ),
+  );
+  const schemas = precreate.map((extension) => {
+    const schema = catalog.schemas.find((row) => row.name === extension.schema);
+    check(schema?.owner === extension.owner);
+    return { name: schema.name, owner: schema.owner };
+  });
+  for (const extension of precreate)
+    await query(
+      target,
+      `BEGIN; CREATE SCHEMA ${roleIdentifier(extension.schema)} AUTHORIZATION ${roleIdentifier(extension.owner)}; SET LOCAL ROLE ${roleIdentifier(extension.owner)}; CREATE EXTENSION ${roleIdentifier(extension.name)} WITH SCHEMA ${roleIdentifier(extension.schema)} VERSION ${sqlLiteral(extension.version)}; COMMIT;`,
+      DATABASE,
+      false,
+      execute,
+      "supabase_admin",
+    );
+  return schemas;
+}
+
+// PostgreSQL requires an event trigger's new owner to be a superuser. Hosted
+// Supabase can retain managed event triggers owned by its non-superuser postgres
+// role. Reproduce that ownership only inside the owned isolated restore target,
+// then remove every temporary elevation before any verification can succeed.
+export async function restoreArchiveWithEventOwners(
+  { target, workspace, identityPath, catalog },
+  {
+    execute = docker,
+    restoreStream = streamArchive,
+    prepareExtensions = prepareArchiveExtensions,
+  } = {},
+) {
+  check(Array.isArray(catalog?.roles) && Array.isArray(catalog.eventTriggers));
+  const roles = new Map(catalog.roles.map((role) => [String(role.oid), role]));
+  const expected = catalog.eventTriggers
+    .map((trigger) => {
+      const owner = roles.get(String(trigger.evtowner));
+      check(owner && !owner.rolname.startsWith("cli_login_") && !owner.rolname.startsWith("pg_"));
+      roleIdentifier(owner.rolname);
+      roleIdentifier(trigger.evtname);
+      check(typeof owner.rolsuper === "boolean");
+      return { name: trigger.evtname, owner: owner.rolname };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const elevated = [
+    ...new Set(
+      expected
+        .filter((event) => !catalog.roles.find((role) => role.rolname === event.owner).rolsuper)
+        .map((event) => event.owner),
+    ),
+  ];
+  try {
+    if (elevated.length)
+      await query(
+        target,
+        "BEGIN;\n" +
+          elevated.map((name) => `ALTER ROLE ${roleIdentifier(name)} SUPERUSER;`).join("\n") +
+          "\nCOMMIT;",
+        "postgres",
+        false,
+        execute,
+        "supabase_admin",
+      );
+    const precreatedSchemas = await prepareExtensions(target, catalog, execute);
+    await restoreStream(target, workspace, identityPath, { precreatedSchemas });
+    if (precreatedSchemas.length) {
+      const actualSchemas = JSON.parse(
+        await query(
+          target,
+          `SELECT jsonb_agg(jsonb_build_object('name',nspname,'owner',pg_catalog.pg_get_userbyid(nspowner),'acl',nspacl)) FROM pg_catalog.pg_namespace WHERE nspname IN (${precreatedSchemas.map((schema) => sqlLiteral(schema.name)).join(",")});`,
+          DATABASE,
+          true,
+          execute,
+          "supabase_admin",
+        ),
+      );
+      const expectedSchemas = catalog.schemas
+        .filter((schema) => precreatedSchemas.some((item) => item.name === schema.name))
+        .map((schema) => ({
+          name: schema.name,
+          owner: schema.owner,
+          acl: normalizeAcl(schema.acl),
+        }));
+      check(Array.isArray(actualSchemas));
+      actualSchemas.forEach((schema) => (schema.acl = normalizeAcl(schema.acl)));
+      actualSchemas.sort((a, b) => a.name.localeCompare(b.name));
+      expectedSchemas.sort((a, b) => a.name.localeCompare(b.name));
+      check(canonicalDigest(actualSchemas) === canonicalDigest(expectedSchemas));
+    }
+  } finally {
+    if (elevated.length)
+      await query(
+        target,
+        "BEGIN;\n" +
+          elevated.map((name) => `ALTER ROLE ${roleIdentifier(name)} NOSUPERUSER;`).join("\n") +
+          "\nCOMMIT;",
+        "postgres",
+        false,
+        execute,
+        "supabase_admin",
+      );
+  }
+  const actual = JSON.parse(
+    await query(
+      target,
+      "SELECT coalesce(jsonb_agg(jsonb_build_object('name',evtname,'owner',pg_catalog.pg_get_userbyid(evtowner)) ORDER BY evtname),'[]') FROM pg_catalog.pg_event_trigger;",
+      DATABASE,
+      true,
+      execute,
+      "supabase_admin",
+    ),
+  );
+  check(Array.isArray(actual));
+  actual.sort((a, b) => a.name.localeCompare(b.name));
+  check(canonicalDigest(actual) === canonicalDigest(expected));
+  if (elevated.length) {
+    const restoredRoles = JSON.parse(
+      await query(
+        target,
+        `SELECT coalesce(jsonb_agg(jsonb_build_object('name',rolname,'superuser',rolsuper) ORDER BY rolname),'[]') FROM pg_catalog.pg_roles WHERE rolname IN (${elevated.map(sqlLiteral).join(",")});`,
+        "postgres",
+        true,
+        execute,
+        "supabase_admin",
+      ),
+    );
+    check(
+      Array.isArray(restoredRoles) &&
+        restoredRoles.length === elevated.length &&
+        restoredRoles.every((role) => elevated.includes(role.name) && role.superuser === false),
+    );
+  }
+}
+
 export async function restoreEncryptedBackup(
   { target, workspace, identityPath, verifiedBackup } = {},
   { execute = docker, restoreStream = streamArchive } = {},
@@ -564,14 +1049,31 @@ export async function restoreEncryptedBackup(
         verifiedBackup.status === "SEALED_VERIFIED" &&
         verifiedBackup.workspaceDigest === canonicalDigest(resolve(workspace)),
     );
+    const localRoles = JSON.parse(
+      await query(
+        target,
+        "SELECT jsonb_build_object('roles',(SELECT jsonb_agg(to_jsonb(r)-'rolpassword') FROM pg_catalog.pg_roles r),'memberships',(SELECT coalesce(jsonb_agg(to_jsonb(m)),'[]') FROM pg_catalog.pg_auth_members m));",
+        "postgres",
+        true,
+        execute,
+        "supabase_admin",
+      ),
+    );
+    const rolePlan = planLocalRoles(verifiedBackup.schema.before, localRoles);
+    await query(target, rolePlan.rolesSql, "postgres", false, execute, "supabase_admin");
     await query(
       target,
       `CREATE DATABASE ${identifier(DATABASE)} OWNER postgres TEMPLATE template0;`,
       "postgres",
       false,
       execute,
+      "supabase_admin",
     );
-    await restoreStream(target, workspace, identityPath);
+    await query(target, rolePlan.databaseSettingsSql, DATABASE, false, execute, "supabase_admin");
+    await restoreArchiveWithEventOwners(
+      { target, workspace, identityPath, catalog: verifiedBackup.schema.before },
+      { execute, restoreStream },
+    );
     const restored = JSON.parse(
       await query(
         target,
@@ -596,7 +1098,7 @@ function normalizeAcl(value) {
   return value === null ? null : [...value].sort();
 }
 
-function sourceAccess(catalog) {
+export function sourceAccess(catalog) {
   const roleNames = new Map(catalog.roles.map((role) => [String(role.oid), role.rolname]));
   return {
     relations: catalog.relations
@@ -633,7 +1135,14 @@ function sourceAccess(catalog) {
         name: item.name,
         command: item.command,
         permissive: item.permissive,
-        roles: item.roles.map((oid) => (oid === 0 ? "public" : roleNames.get(String(oid)))).sort(),
+        roles: item.roles
+          .map((oid) => {
+            if (String(oid) === "0") return "public";
+            const name = roleNames.get(String(oid));
+            check(typeof name === "string");
+            return name;
+          })
+          .sort(),
         using: item.using,
         check: item.check,
       }))
@@ -809,6 +1318,70 @@ async function dataProof(target, integrity, execute) {
   };
 }
 
+export function normalizeRestoredAccess(access) {
+  const normalized = structuredClone(access);
+  normalized.relations.forEach((item) => (item.acl = normalizeAcl(item.acl)));
+  normalized.columns.forEach((item) => (item.acl = normalizeAcl(item.acl)));
+  normalized.policies.forEach((item) => (item.roles = [...item.roles].sort()));
+  normalized.relations.sort((a, b) =>
+    `${a.schema}.${a.name}`.localeCompare(`${b.schema}.${b.name}`),
+  );
+  normalized.columns.sort((a, b) =>
+    `${a.schema}.${a.table}.${String(a.position).padStart(5, "0")}`.localeCompare(
+      `${b.schema}.${b.table}.${String(b.position).padStart(5, "0")}`,
+    ),
+  );
+  normalized.policies.sort((a, b) =>
+    `${a.schema}.${a.table}.${a.name}`.localeCompare(`${b.schema}.${b.table}.${b.name}`),
+  );
+  return normalized;
+}
+
+export function normalizeCatalogProof(kind, value) {
+  const keys = {
+    roles: {
+      roles: (row) => row.rolname,
+      memberships: (row) => `${row.role}.${row.member}.${row.grantor}`,
+    },
+    structure: {
+      constraints: (row) => `${row.schema}.${row.relation}.${row.name}`,
+      indexes: (row) => `${row.schema}.${row.name}`,
+      functions: (row) => row.identity,
+      triggers: (row) => `${row.schema}.${row.table}.${row.name}.${row.definition}`,
+      extensions: (row) => row.name,
+    },
+  }[kind];
+  check(
+    keys && value && Object.keys(value).sort().join(",") === Object.keys(keys).sort().join(","),
+  );
+  const result = structuredClone(value);
+  if (kind === "structure") {
+    for (const trigger of result.triggers) {
+      if (!trigger.internal || !/^RI_ConstraintTrigger_[ac]_[0-9]+$/.test(trigger.name)) continue;
+      const prefix = `CREATE CONSTRAINT TRIGGER "${trigger.name}" `;
+      check(typeof trigger.definition === "string" && trigger.definition.startsWith(prefix));
+      trigger.name = trigger.name.replace(/_[0-9]+$/, "_OID");
+      trigger.definition =
+        `CREATE CONSTRAINT TRIGGER "${trigger.name}" ` + trigger.definition.slice(prefix.length);
+    }
+  }
+  for (const [category, identity] of Object.entries(keys)) {
+    check(
+      Array.isArray(result[category]) &&
+        result[category].every(
+          (row) =>
+            row &&
+            typeof row === "object" &&
+            !Array.isArray(row) &&
+            typeof identity(row) === "string",
+        ),
+    );
+    result[category].sort((a, b) => identity(a).localeCompare(identity(b)));
+  }
+  if (kind === "structure") result.functions.forEach((row) => (row.acl = normalizeAcl(row.acl)));
+  return result;
+}
+
 export async function verifyRestoredBackup(
   { target, verifiedBackup } = {},
   { execute = docker, clock = () => new Date().toISOString() } = {},
@@ -820,16 +1393,20 @@ export async function verifyRestoredBackup(
         verifiedBackup.status === "SEALED_VERIFIED",
     );
     const { sealed, schema, integrity, lineage } = verifiedBackup;
-    const actualAccess = JSON.parse(await query(target, ACCESS_SQL, DATABASE, true, execute));
-    actualAccess.relations.forEach((item) => (item.acl = normalizeAcl(item.acl)));
-    actualAccess.columns.forEach((item) => (item.acl = normalizeAcl(item.acl)));
-    actualAccess.policies.forEach((item) => (item.roles = [...item.roles].sort()));
+    const actualAccess = normalizeRestoredAccess(
+      JSON.parse(await query(target, ACCESS_SQL, DATABASE, true, execute)),
+    );
     check(canonicalDigest(actualAccess) === canonicalDigest(sourceAccess(schema.before)));
     const actualRoles = JSON.parse(await query(target, ROLES_SQL, DATABASE, true, execute));
-    check(canonicalDigest(actualRoles) === canonicalDigest(sourceRoles(schema.before)));
+    check(
+      canonicalDigest(normalizeCatalogProof("roles", actualRoles)) ===
+        canonicalDigest(normalizeCatalogProof("roles", sourceRoles(schema.before))),
+    );
     const actualStructure = JSON.parse(await query(target, STRUCTURE_SQL, DATABASE, true, execute));
-    actualStructure.functions.forEach((item) => (item.acl = normalizeAcl(item.acl)));
-    check(canonicalDigest(actualStructure) === canonicalDigest(sourceStructure(schema.before)));
+    check(
+      canonicalDigest(normalizeCatalogProof("structure", actualStructure)) ===
+        canonicalDigest(normalizeCatalogProof("structure", sourceStructure(schema.before))),
+    );
     const data = await dataProof(target, integrity, execute);
     const outbound = JSON.parse(
       await query(
