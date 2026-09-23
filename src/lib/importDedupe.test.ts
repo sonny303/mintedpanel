@@ -92,7 +92,13 @@ describe("dedupeImportRows — five-part matching", () => {
     expect(create.groupIds).toEqual([GROUP1.id]);
     expect(create.facilityIds).toEqual([FAC1.id]);
     expect(create.licenses).toEqual([
-      { state: "NC", licenseNumber: "NC-200", issueDate: null, expirationDate: "2028-06-01" },
+      {
+        state: "NC",
+        licenseNumber: "NC-200",
+        licenseType: null,
+        issueDate: null,
+        expirationDate: "2028-06-01",
+      },
     ]);
   });
 
@@ -176,6 +182,122 @@ describe("dedupeImportRows — five-part matching", () => {
     expect(create.groupIds).toEqual([GROUP1.id, GROUP2.id]);
     expect(create.facilityIds).toEqual([FAC1.id, FAC2.id]);
     expect(create.licenses.map((l) => l.state)).toEqual(["NC", "SC"]);
+  });
+
+  it("uses the first row for new provider scalars and notes later disagreements", () => {
+    const first = {
+      credentials: "PT, DPT",
+      email: "first@example.test",
+      phone: "9105550100",
+      start_date: "2026-10-01",
+      degree: "DPT",
+      school_name: "Duke University",
+      graduation_date: "2024-05-15",
+      is_new_grad: "false",
+      caqh_id: "12345678",
+      caqh_last_attested_date: "2026-09-01",
+    };
+    const second = {
+      credentials: "PT",
+      email: "later@example.test",
+      phone: "9105559999",
+      start_date: "2026-11-01",
+      degree: "MPT",
+      school_name: "UNC",
+      graduation_date: "2023-05-15",
+      is_new_grad: "true",
+      caqh_id: null,
+      caqh_last_attested_date: null,
+      license_state: "SC",
+      license_number: "SC-300",
+    };
+    const create = only(
+      dedupeImportRows(baseInputs([newProviderRow(2, first), newProviderRow(3, second)])),
+      "create",
+    )[0];
+
+    expect(create.provider).toMatchObject({
+      credentials: "PT, DPT",
+      email: "first@example.test",
+      phone: "9105550100",
+      startDate: "2026-10-01",
+      degree: "DPT",
+      schoolName: "Duke University",
+      graduationDate: "2024-05-15",
+      isNewGrad: false,
+      caqhId: "12345678",
+      caqhLastAttestedDate: "2026-09-01",
+    });
+    expect(create.notes).toEqual([
+      expect.stringMatching(
+        /Row 3.*credentials.*email.*phone.*start date.*degree.*school.*graduation date.*new grad.*CAQH ID.*CAQH attestation.*first row/i,
+      ),
+    ]);
+  });
+
+  // verify-pr risk 1: same license identity on a create fold must not silently
+  // drop a later license_type disagreement (first-row-wins needs a note).
+  it("notes license_type disagreement when create rows share state+number", () => {
+    const create = only(
+      dedupeImportRows(
+        baseInputs([
+          newProviderRow(2, { license_type: "full" }),
+          newProviderRow(3, {
+            license_state: "NC",
+            license_number: "NC-200",
+            license_type: "compact",
+            license_expiration_date: "2028-06-01",
+          }),
+        ]),
+      ),
+      "create",
+    )[0];
+
+    expect(create.licenses).toEqual([
+      expect.objectContaining({
+        state: "NC",
+        licenseNumber: "NC-200",
+        licenseType: "full",
+      }),
+    ]);
+    expect(create.notes.some((n) => /license type/i.test(n) && /Row 3/.test(n))).toBe(true);
+  });
+
+  // verify-pr risk 2: license_type on an existing same-number license is
+  // insert-only and currently becomes a quiet skip with no note.
+  it("notes when an update supplies license_type for an existing same-number license", () => {
+    const out = dedupeImportRows(
+      baseInputs([
+        janeRow(2, {
+          license_state: "NC",
+          license_number: "NC-100",
+          license_type: "compact",
+        }),
+      ]),
+    );
+    expect(only(out, "skip")).toHaveLength(1);
+    expect(only(out, "skip")[0].notes.some((n) => /license type/i.test(n))).toBe(true);
+  });
+
+  // verify-pr risk 3: create-fold specialty disagreement is still silent even
+  // though new parity scalars now emit first-row-wins notes.
+  it("notes specialty disagreement on create folds", () => {
+    const create = only(
+      dedupeImportRows(
+        baseInputs([
+          newProviderRow(2, { specialty: "Physical Therapy" }),
+          newProviderRow(3, {
+            specialty: "Occupational Therapy",
+            license_state: "SC",
+            license_number: "SC-300",
+          }),
+        ]),
+      ),
+      "create",
+    )[0];
+
+    expect(create.provider.specialty).toBe("Physical Therapy");
+    expect(create.notes.some((n) => /specialty/i.test(n) && /Row 3/.test(n))).toBe(true);
   });
 
   it("folds multiple lines of one EXISTING provider into ONE update", () => {
@@ -271,7 +393,13 @@ describe("conflict detection + resolution (TS-62)", () => {
     const update = only(out, "update")[0];
     expect(update.conflicts).toHaveLength(0);
     expect(update.licenseInserts).toEqual([
-      { state: "SC", licenseNumber: "SC-500", issueDate: null, expirationDate: null },
+      {
+        state: "SC",
+        licenseNumber: "SC-500",
+        licenseType: null,
+        issueDate: null,
+        expirationDate: null,
+      },
     ]);
   });
 
@@ -613,6 +741,62 @@ describe("summarizeImportPreview — exact reconciliation (F3.1.1)", () => {
 });
 
 describe("buildCommitPlan", () => {
+  it("carries create-only Add Provider fields and license_type into the RPC plan", () => {
+    const create = only(
+      dedupeImportRows(
+        baseInputs([
+          newProviderRow(2, {
+            credentials: "PT, DPT",
+            email: "nora@example.test",
+            phone: "9105550100",
+            start_date: "2026-10-01",
+            degree: "DPT",
+            school_name: "Duke University",
+            graduation_date: "2024-05-15",
+            caqh_id: "12345678",
+            caqh_last_attested_date: "2026-09-01",
+            is_new_grad: "false",
+            license_type: "compact",
+          }),
+        ]),
+      ),
+      "create",
+    );
+    const plan = buildCommitPlan(create, {});
+
+    expect(plan.creates[0].provider).toMatchObject({
+      credentials: "PT, DPT",
+      email: "nora@example.test",
+      phone: "9105550100",
+      start_date: "2026-10-01",
+      degree: "DPT",
+      school_name: "Duke University",
+      graduation_date: "2024-05-15",
+      caqh_id: "12345678",
+      caqh_last_attested_date: "2026-09-01",
+      is_new_grad: false,
+    });
+    expect(plan.creates[0].licenses[0]).toMatchObject({ license_type: "compact" });
+  });
+
+  it("clears CAQH fields in the commit plan when a staged new-grad row says yes", () => {
+    const dispositions = dedupeImportRows(
+      baseInputs([
+        newProviderRow(2, {
+          is_new_grad: "true",
+          caqh_id: "12345678",
+          caqh_last_attested_date: "2026-09-01",
+        }),
+      ]),
+    );
+    const plan = buildCommitPlan(dispositions, {});
+    expect(plan.creates[0].provider).toMatchObject({
+      is_new_grad: true,
+      caqh_id: null,
+      caqh_last_attested_date: null,
+    });
+  });
+
   it("emits creates/updates in the RPC wire shape and excludes unresolved rows as blocked entries", () => {
     const rows = [
       newProviderRow(2),
@@ -643,6 +827,7 @@ describe("buildCommitPlan", () => {
         specialty: "Occupational Therapy",
         license_state: "NC",
         license_number: "NC-999",
+        license_type: "compact",
         license_expiration_date: "2029-01-01",
       }),
     ];
@@ -660,6 +845,44 @@ describe("buildCommitPlan", () => {
         expiration_date: "2029-01-01",
       },
     ]);
+  });
+
+  it("keeps create-only fields out of update set while carrying license_type on inserts", () => {
+    const out = dedupeImportRows(
+      baseInputs([
+        janeRow(2, {
+          group_name: GROUP2.name,
+          group_tin: GROUP2.tin,
+          credentials: "DPT",
+          email: "jane.new@example.test",
+          phone: "9105559999",
+          start_date: "2026-10-01",
+          degree: "DPT",
+          school_name: "Duke University",
+          graduation_date: "2024-05-15",
+          caqh_id: "12345678",
+          caqh_last_attested_date: "2026-09-01",
+          is_new_grad: "false",
+          license_state: "SC",
+          license_number: "SC-200",
+          license_type: "compact",
+        }),
+      ]),
+    );
+    const plan = buildCommitPlan(out, {});
+
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0].set).toEqual({});
+    expect(plan.updates[0].license_inserts).toEqual([
+      {
+        state: "SC",
+        license_number: "SC-200",
+        license_type: "compact",
+        issue_date: null,
+        expiration_date: null,
+      },
+    ]);
+    expect(plan.updates[0].license_updates).toEqual([]);
   });
 
   it("counts skips and carries manual-review rows as blocked entries", () => {

@@ -61,7 +61,15 @@ that exact role to `NOLOGIN` with an epoch expiry, and drop that exact role. The
 identifier is accepted only by the fixed `cli_login_[A-Za-z0-9_]{1,80}` grammar
 and is quoted by the fixed query. A fresh read-only inventory must prove the
 created role absent. A different concurrently created CLI role is preserved.
-The project-wide login-role DELETE endpoint is never used.
+Default operation never uses the project-wide login-role DELETE endpoint.
+For an explicitly approved exclusive staging CLI maintenance window only, pass
+`--exclusive-staging-maintenance`. This mode verifies the sole created role,
+rejects foreign CLI sessions/roles, terminates only its own remaining sessions,
+rechecks zero sessions, invokes the fixed staging provider cleanup endpoint,
+and verifies empty poststate. The exclusive window is essential because an
+inventory check cannot prevent another operator creating a role immediately
+afterward. Never enable this mode automatically or use it against production.
+Unknown login-POST outcomes still fail closed without bulk deletion.
 
 If the POST outcome is uncertain and no validated role name was received, the
 coordinator does not retry or guess a role and does not call a bulk cleanup. It
@@ -437,3 +445,23 @@ meets the target and its retrieval/identity/key procedure is proved. This G2
 evidence cannot qualify a production database backup. G0 release records also
 need independent release-context binding and trusted evidence collection before
 any promotion can become eligible.
+
+## September 23 authorized staging maintenance
+
+The owner explicitly approved an exclusive staging CLI window, staging data only.
+The initial sole expired login was removed and empty inventory verified at
+2026-09-23T03:58:50.920Z. The repaired maintenance adapter then captured a fresh
+encrypted snapshot and verified zero temporary roles at 04:02:35.502Z.
+A capture is not restore qualification; the rehearsal and remaining release
+gates must still pass before schema alignment. Production is outside this run.
+
+The exclusive CLI window closed at 2026-09-23 04:27:39 UTC after a fresh
+read-only check confirmed zero temporary CLI roles and zero CLI sessions.
+Further qualification uses the isolated local snapshot; another project-wide
+CLI cleanup requires a new exclusive maintenance window.
+
+The isolated database rehearsal passed at 2026-09-23 04:31:19 UTC for 92 physical
+tables and 2,034 rows, with both sequences unchanged. Public access, role, structure
+and extension-owner comparisons passed. The successful comparison target is
+retained. The receipt stays `REHEARSED_ONLY`, with no qualified global recovery
+scope; the service-level and release-context prerequisites are not silently cleared.
