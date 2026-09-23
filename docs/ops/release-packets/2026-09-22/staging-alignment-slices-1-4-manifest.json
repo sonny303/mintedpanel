@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "status": "AUTHOR_ONLY_NOT_APPLIED",
+  "sourceSha": "7a40fc7876c4b53810e1391426afbed865176c3b",
+  "stagingProjectRef": "vmznysvietfaddakkegt",
+  "forbiddenProductionProjectRef": "fkvuhfsqcmujywzgczmc",
+  "packet": {
+    "files": [
+      "staging-alignment-slice-1.sql",
+      "staging-alignment-slice-2.sql",
+      "staging-alignment-slice-3.sql",
+      "staging-alignment-slice-4.sql"
+    ],
+    "checksums": {
+      "staging-alignment-slice-1.sql": "df226ac7cefeb644ac30535fa3866e6466e0892273e37582a38d6488e5d0d881",
+      "staging-alignment-slice-2.sql": "2dc9abb0a1e6d41384542098568bfaaade15a7515f44dd338ec24fe70b979d6b",
+      "staging-alignment-slice-3.sql": "7e4fb47695208649b6a40608cc58cef95456ea321b4e7f01dfaaa17bbf196a4c",
+      "staging-alignment-slice-4.sql": "4ff47000793f3969f8a9c3abb5239a527d71f427a6faa80cf2c51e6727e0c05b"
+    },
+    "execution": "serial_same_session_after_restore_rehearsal",
+    "hostedApply": "operator_only_after_recovery_qualification_and_review"
+  },
+  "targetBinding": {
+    "hosted": {
+      "sessionKind": "hosted_staging",
+      "projectRef": "vmznysvietfaddakkegt",
+      "requiredPhysicalSystemIdentifier": "7662742571317219726",
+      "productionRefRejected": true
+    },
+    "local": {
+      "sessionKind": "qualified_local_restore",
+      "requiredDatabase": "minted_recovery",
+      "requiredPhysicalSystemIdentifier": "supplied_by_qualified_restore_receipt",
+      "requiredExternalReceiptBinding": true,
+      "currentReceipt": {
+        "runId": "db698c2326fe3f03",
+        "status": "REHEARSED_ONLY",
+        "releaseAdmission": "BLOCKED",
+        "eligibleForApply": false
+      }
+    }
+  },
+  "sourceFiles": {
+    "supabase/migrations/20260719120000_e60_unified_case_status.sql": "427b77e32eb0a3d0c1f98a0338716013afa39bcb1159a7e2ad33e9bb158dc3ad",
+    "supabase/migrations/20260719120200_e60_auto_status_transitions.sql": "f8d7bc1914b670904ff906a05090828e74e12c1ea78d673a14790e53e2c2f326",
+    "supabase/migrations/20260727150200_e68_case_status_missing_ack.sql": "bdb5c1814bac578080dfbdcbe828ced9b0f352d25d9575a087a9ea22e30a81cc",
+    "supabase/migrations/20260719170000_e65_global_authoring.sql": "74b83d0142e473873a8be113ce41a7c0e0a5ea31edaf36a6fa6c12bb7c074108",
+    "supabase/migrations/20260727120000_e67_payer_manual_setup.sql": "0f8f90cb337b59f2bc1e86e2160e9266e12fab9e20f545bc0535926c0ef836ca",
+    "supabase/migrations/20260718120000_payers_org_write_lockdown.sql": "3b7bf90d62c4f07fc32460722f06bf17ac2d82e3edc63ef6c0bdd761bd611b26",
+    "supabase/migrations/20260727150000_e68_payer_archive.sql": "23576430e10438d3fb658a1090a0564a071b033c7db92236f74c45e4bc11fd2a",
+    "supabase/migrations/20260727150100_e68_merge_payer.sql": "8f588ac6ccca0163907036f2b6843225198cf4e35d581d1784a35a31936326cd",
+    "supabase/migrations/20260810220000_opa_retire_assignment_gate.sql": "6ef3f368f0bd3da7beeacc77c8275ab743946939698d7b3d0ac6c6e034414523",
+    "supabase/migrations/20260719150000_e62_enrollment_facts.sql": "86653501b880dc2802a228d90ac3de60e7bbb91f0e9ff122f7de2ec9aa33a6ba",
+    "supabase/migrations/20260720230000_payer_issued_enrollment_ids.sql": "e6f8bc286cc7c7a2964bb7eccc36b1ba99c8fba56a22a75d3a9f50dd56952c13",
+    "supabase/migrations/20260719160000_e63_run_row_dispositions.sql": "878339b7b3a63fac9b2c7f2b49ab51724a041a727b0384a3839a5432ad8cbdb9",
+    "supabase/migrations/20260719150100_e62_import_payer_attach_kind.sql": "afc25eb2b615ed84428822dddb4dc39b8cce46f58ed38005f29d95a7e2df3e57",
+    "supabase/migrations/20260719190000_grant_floor_hardening.sql": "dbddbf57decbdbc7834f50ca9d1198a2524840b0f02797dfe22abd614ad303c2",
+    "supabase/migrations/20260722120000_case_number.sql": "3cf712398905b9b75513242e4cd63f95134567a4f81bfde7f59ee81f85fa35b9",
+    "supabase/migrations/20260827120000_e11_case_facilities.sql": "ea31538a4041f6c9edcfa27c42c71e3a0e2435ad7ad9b1456fdc0a2abf798bd5"
+  },
+  "targetCounts": {
+    "newTables": 3,
+    "newTableColumns": 32,
+    "addedExistingColumns": 13,
+    "distinctTargetColumns": 45,
+    "legacyCases": 65,
+    "explicitFacilityCases": 61,
+    "nullFacilityCases": 4,
+    "payerRows": 287,
+    "payerSourceBackfillRows": 287,
+    "enrollmentFactRowsCreated": 0,
+    "heldFacilityEligibilityExceptions": 2,
+    "productionOperatorBackupTables": 3,
+    "mappedCaseStatusCounts": {
+      "submitted": 32,
+      "approved": 14,
+      "not_started": 12,
+      "in_progress": 3,
+      "not_pursuing": 2,
+      "in_review": 1,
+      "denied": 1,
+      "action_required": 0,
+      "total": 65
+    }
+  },
+  "preservation": {
+    "perPrimaryKeyRowHashTables": [
+      "provider_facility_assignments",
+      "case_generation_runs",
+      "case_generation_run_rows",
+      "payer_pipeline_history",
+      "import_runs"
+    ],
+    "caseGuardAllowedColumns": ["case_status", "contract_executed_date", "case_number"]
+  },
+  "aclContracts": {
+    "privateHelpers": [
+      "_payer_norm_name(text)",
+      "_payer_norm_states(text[])",
+      "_payer_norm_aliases(text[])",
+      "_payer_assert_name_available(text[], uuid)"
+    ],
+    "writerRpcs": [
+      "create_payer(uuid, text, text, text[], text[], text, boolean, text, boolean, text)",
+      "update_payer(uuid, uuid, text, text, text[], text[], text, boolean, text, boolean, text)",
+      "archive_payer(uuid, uuid)",
+      "reactivate_payer(uuid, uuid)",
+      "merge_payer(uuid, uuid, uuid)"
+    ]
+  },
+  "requiredInvariants": [
+    "Every existing case id and facility_id is preserved; four NULL facility_id values remain NULL.",
+    "No provider-facility assignment is created for the two held eligibility exceptions.",
+    "All 11 staging-only payer columns and credential_cases.payer_provider_id remain present; resolution_id_label/resolution_id_expected remain the legacy fallback and are split only when both new provider fields are NULL and the exact pair is unambiguous.",
+    "Enrollment facts remain empty; no approved case is converted into an enrollment fact.",
+    "All 12 retained legacy columns (11 payer columns plus credential_cases.payer_provider_id) and all existing rows remain; only explicitly listed status, history, source, and case-number backfills may change rows.",
+    "The three production operator-backup tables remain absent and are never selected, copied, created, or written.",
+    "A missing identity/source setting, prestate drift, timeout, lock failure, or poststate mismatch aborts the current transaction."
+  ]
+}
