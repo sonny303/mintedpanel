@@ -125,7 +125,8 @@ export async function backupDatabase({
   targetEnv = "production",
   recipient,
   dryRun = false,
-  supabaseToken = process.env.SUPABASE_ACCESS_TOKEN,
+  supabaseToken = process.env.SUPABASE_ACCESS_TOKEN ||
+    process.env.SUPABASE_NIGHTLYBACKUP_ACCESS_TOKEN,
   databaseUrl = process.env.DATABASE_URL,
 }) {
   const dbOutputDir = join(workspace, "database");
@@ -405,8 +406,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const recipientIndex = args.indexOf("--recipient");
   const recipient =
     recipientIndex !== -1 ? args[recipientIndex + 1] : process.env.BACKUP_AGE_RECIPIENT;
+  const workspaceIndex = args.indexOf("--workspace");
+  const workspace = workspaceIndex !== -1 ? args[workspaceIndex + 1] : undefined;
+  const backupRepo = args.includes("--no-repo") ? false : true;
+  const backupDb = args.includes("--no-db") ? false : true;
 
-  runNightlyBackup({ targetEnv, dryRun, recipient })
+  runNightlyBackup({ workspace, targetEnv, dryRun, recipient, backupRepo, backupDb })
     .then((results) => {
       process.stdout.write(`Backup completed successfully.\nWorkspace: ${results.workspace}\n`);
     })
