@@ -10,12 +10,28 @@ final approval. UAT data must stay outside production.
 
 | ID     | Requirement                                             | Evidence required                                                                                     |
 | ------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| AUD-01 | Preserve populated staging before alignment             | Fresh encrypted capture, exact-role cleanup, isolated restore and integrity checks                    |
+| AUD-01 | Preserve populated staging before alignment             | Fresh encrypted capture, verified temporary-role cleanup, isolated restore and integrity checks       |
 | AUD-02 | Apply only a reviewed additive staging delta            | Restored-baseline rehearsal, preserved rows, dependencies and role/grant checks                       |
 | AUD-03 | Repair NULL-membership vault authorization              | P01 real PostgreSQL regression plus hosted Auth denial checks                                         |
 | AUD-04 | Keep UAT synthetic data separate from production        | Fixed staging/loopback target checks, actual database identity preflight, production packet allowlist |
 | AUD-05 | Qualify an identified dedicated staging deployment      | Source SHA, schema fingerprint, deployment ID, database binding and UAT receipt                       |
 | AUD-06 | Prepare exact production changes without executing them | Checksummed two-migration packet, preflight/readback, approval pending                                |
+
+## Authorized staging data cleanup
+
+The aggregate preflight found five ambiguous contacts and two case/facility
+eligibility gaps. The owner instructed removal of the affected staging data.
+Five-contact removal is authorized; the exact case action (delete the two cases
+or clear their selected facility) is awaiting clarification. Provider and facility
+records must remain intact.
+
+AUD-07 adds a bounded exception to general row preservation: remove only the
+explicitly selected staging rows and their enumerated dependent records, after
+verified restore and local rehearsal. Freeze the private ID manifest, dependencies
+and before-state fingerprints; use bounded table/row locks, abort on drift, and
+prove all non-target rows unchanged. Keep IDs and row data outside Git. Record
+only aggregate counts, hashes and the execution receipt in the release packet.
+No cleanup is authorized in production.
 
 ## Real production migration plan
 
@@ -75,22 +91,48 @@ schema compatibility is established. A source rollback is not a data restore.
 - Production read-only preflight passed against the recorded live function hashes and grants.
 - Actual UAT SQL guard passed in isolated PostgreSQL: matching identity accepted; missing and mismatched identities rejected before fixture statements.
 - Build and 2,303 application tests passed; lint has 14 existing warnings and no errors. Epic hygiene is clean after recording the existing payer_forms table and historical handoff metadata.
-- Backup qualification is incomplete. No application schema migration, fixture
-  seed, production write or deployment promotion has been performed in this execution.
+- Encrypted capture and strict isolated database restore passed. Full service/release qualification remains incomplete. No application schema migration, fixture seed, production write or deployment promotion has been performed in this execution.
 
-## Recovery blocker and bounded next action
+## Recovery execution status — September 23
 
-The failed capture left `cli_login_postgres` on staging. Its recorded expiry was
-2026-09-23 03:40:21 UTC, with zero sessions and no shared dependencies observed.
-Exact-role DROP is rejected with SQLSTATE 42501: the query role lacks CREATEROLE
-and ADMIN on that role. The adapter correctly refuses another capture while a
-CLI role exists. An encrypted partial file is not a usable backup.
+The owner approved an exclusive staging CLI maintenance window, staging data only.
+The sole expired role was removed and empty inventory verified at 03:58:50 UTC.
+The repaired adapter captured an encrypted staging snapshot at 04:02:30 UTC and
+verified zero remaining temporary roles at 04:02:35 UTC. Explicit maintenance mode
+is required; ordinary operation keeps exact-role cleanup. No production endpoint
+is used by either path.
 
-Do not fabricate cleanup or restore evidence. The provider exposes project-wide
-CLI login cleanup; using it requires an explicit exclusive staging-maintenance
-window and bounded owner approval because it can affect another CLI operator.
-Recheck that only the named expired role exists with no sessions immediately
-before any approved cleanup; verify an empty poststate afterward. Then repair
-and qualify the adapter lifecycle before retrying backup. An alternative is an
-explicit staging database credential with a separately reviewed backup adapter;
-never search unrelated credential stores or use a production credential.
+Isolated database restore passed at 2026-09-23 04:31:19 UTC: **92 physical tables,
+2,034 rows, two sequences, zero sequence drift**. Roles, public permissions,
+structure, extension ownership and migration-lineage checks passed. The successful
+owned local target is retained as an untouched comparator. Repairs prepare captured
+roles, preserve managed event-trigger ownership, and reproduce source extension
+ownership; temporary local privilege elevation is always reverted and checked.
+
+The receipt remains `REHEARSED_ONLY` / `RESTORE_VERIFIED_ONLY`, with release
+admission blocked and no globally qualified recovery scope. Installed Auth/REST,
+full managed-service coverage, release-context binding and final reconciliation
+remain separate gates. This result supports local SQL rehearsal and scoped cleanup
+recovery; it is not approval or qualification for a hosted application release.
+
+## Staging Auth configuration readback
+
+Read-only management API verification at 2026-09-23 04:21:46 UTC confirmed:
+
+| Setting                              | Observed staging value                                              | Release implication                                                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Site URL                             | `https://staging.mintedpanel.com`                                   | Keep the stable staging URL; verify its eventual dedicated deployment binding.                                                                            |
+| Redirect allowlist                   | Stable staging domains plus two older customer-project preview URLs | An identified dedicated candidate will need its exact callback URL admitted before callback UAT. Remove obsolete entries only after candidate acceptance. |
+| Email / auto-confirm                 | Email enabled; auto-confirm off                                     | Synthetic users require controlled admin creation; no mail delivery is needed for fixture seeding.                                                        |
+| Signup / minimum password length     | Signup enabled; minimum 6                                           | Record separately for policy review; not modified during database maintenance.                                                                            |
+| Leaked-password protection / CAPTCHA | Both disabled                                                       | Existing configuration; no change in this maintenance scope.                                                                                              |
+
+No Auth secret, mail credential or user record was exported by this settings read.
+The [management API](https://supabase.com/docs/reference/api/v1-get-auth-service-config)
+and [redirect guidance](https://supabase.com/docs/guides/auth/redirect-urls) describe
+the inspected settings. Configuration presence does not prove a successful callback.
+
+The exclusive CLI window closed at 2026-09-23 04:27:39 UTC after a fresh
+read-only check confirmed zero temporary CLI roles and zero CLI sessions.
+Further qualification uses the isolated local snapshot; another project-wide
+CLI cleanup requires a new exclusive maintenance window.

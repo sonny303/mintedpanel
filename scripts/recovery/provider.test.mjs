@@ -432,3 +432,145 @@ test("pooler observation accepts explicit session endpoint and excludes connecti
   assert.match(result.providerDigest, /^[a-f0-9]{64}$/);
   assert.ok(!JSON.stringify(result).includes("private-connection-placeholder"));
 });
+
+const maintenanceSteps = () => [
+  { body: [], status: 201 },
+  { body: loginResponse, status: 200 },
+  { body: [{ rolname: loginResponse.role }], status: 201 },
+  { body: [], status: 201 },
+  { body: [{ rolname: loginResponse.role }], status: 201 },
+  { body: [], status: 201 },
+  { body: null, status: 204 },
+  { body: [], status: 201 },
+];
+const maintenance = (operation = async () => "captured") => ({
+  token,
+  operation,
+  cleanupMode: "exclusive-staging-maintenance",
+});
+
+test("explicit staging maintenance uses pinned DELETE and requires empty verified poststate", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  const result = await withStagingLoginRole(maintenance(), {
+    clock: () => now,
+    fetchImpl: fetchSequence(steps, calls),
+  });
+  assert.equal(result.lifecycle.cleanupMode, "exclusive-staging-maintenance");
+  assert.equal(result.lifecycle.poststateRoleCount, 0);
+  assert.equal(result.lifecycle.exactRoleAbsent, true);
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 1);
+  assert.ok(
+    calls.every((c) => c.url.startsWith(`https://api.supabase.com/v1/projects/${STAGING.ref}/`)),
+  );
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, index, value] of [
+  ["extra role", 2, [{ rolname: loginResponse.role }, { rolname: "cli_login_other" }]],
+  ["replacement role", 4, [{ rolname: "cli_login_other" }]],
+  ["foreign session", 3, [{ pid: 123, usename: "cli_login_other" }]],
+  ["new session before delete", 5, [{ pid: 123, usename: loginResponse.role }]],
+]) {
+  test(`maintenance refuses ${label} without DELETE or foreign termination`, async () => {
+    const calls = [],
+      steps = maintenanceSteps();
+    steps[index].body = value;
+    await assert.rejects(
+      withStagingLoginRole(maintenance(), {
+        clock: () => now,
+        fetchImpl: fetchSequence(steps, calls),
+      }),
+      RecoveryError,
+    );
+    assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 0);
+    assert.ok(!calls.some((c) => c.options.body?.includes("pg_terminate_backend")));
+  });
+}
+
+test("maintenance terminates only its owned sessions, then rechecks before deleting", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  steps[3].body = [{ pid: 123, usename: loginResponse.role }];
+  steps.splice(4, 0, { body: [{ terminated: true }], status: 201 });
+  await withStagingLoginRole(maintenance(), {
+    clock: () => now,
+    fetchImpl: fetchSequence(steps, calls),
+  });
+  const termination = calls.find((c) => c.options.body?.includes("pg_terminate_backend"));
+  assert.match(
+    JSON.parse(termination.options.body).query,
+    new RegExp(`usename = '${loginResponse.role}'`),
+  );
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 1);
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, index, value, status] of [
+  ["provider delete failure", 6, null, 500],
+  ["remaining role", 7, [{ rolname: loginResponse.role }], 201],
+]) {
+  test(`maintenance rejects ${label} and reads poststate`, async () => {
+    const calls = [],
+      steps = maintenanceSteps();
+    steps[index] = { body: value, status };
+    await assert.rejects(
+      withStagingLoginRole(maintenance(), {
+        clock: () => now,
+        fetchImpl: fetchSequence(steps, calls),
+      }),
+      RecoveryError,
+    );
+    assert.ok(calls.at(-1).url.endsWith("/database/query/read-only"));
+    assert.equal(steps.length, 0);
+  });
+}
+
+test("maintenance cleans up after operation failure without claiming capture success", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  await assert.rejects(
+    withStagingLoginRole(
+      maintenance(async () => {
+        throw new Error("private failure");
+      }),
+      { clock: () => now, fetchImpl: fetchSequence(steps, calls) },
+    ),
+    RecoveryError,
+  );
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 1);
+  assert.equal(steps.length, 0);
+});
+
+test("unknown maintenance mode fails before any provider call", async () => {
+  await assert.rejects(
+    withStagingLoginRole(
+      { ...maintenance(), cleanupMode: "production-maintenance" },
+      { fetchImpl: async () => assert.fail("no provider request allowed") },
+    ),
+    RecoveryError,
+  );
+});
+
+test("maintenance accepts 200 empty DELETE body only with verified empty poststate", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  const sequence = fetchSequence(steps, calls);
+  const result = await withStagingLoginRole(maintenance(), {
+    clock: () => now,
+    fetchImpl: async (url, options) => {
+      const response = await sequence(url, options);
+      return options.method === "DELETE"
+        ? {
+            status: 200,
+            json: async () => {
+              throw new SyntaxError("Unexpected end of JSON input");
+            },
+          }
+        : response;
+    },
+  });
+  assert.equal(result.lifecycle.poststateRoleCount, 0);
+  assert.equal(result.lifecycle.exactRoleAbsent, true);
+  assert.equal(steps.length, 0);
+});
