@@ -108,15 +108,11 @@ else
   echo "Service account ${SERVICE_ACCOUNT_EMAIL} already exists."
 fi
 
-# Grant bucket-scoped permissions only (Least Privilege: objectCreator + objectViewer)
+# Grant bucket-scoped permissions (Least Privilege Object User: create, view, overwrite within bucket)
 echo "--> Granting bucket permissions to Service Account..."
 gcloud storage buckets add-iam-policy-binding "gs://${BUCKET_NAME}" \
   --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
-  --role="roles/storage.objectCreator" > /dev/null
-
-gcloud storage buckets add-iam-policy-binding "gs://${BUCKET_NAME}" \
-  --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
-  --role="roles/storage.objectViewer" > /dev/null
+  --role="roles/storage.objectUser" > /dev/null
 
 # 7. Setup Workload Identity Federation (WIF)
 echo "--> Configuring Workload Identity Federation (Keyless OIDC)..."
