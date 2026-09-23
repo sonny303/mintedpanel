@@ -182,17 +182,36 @@ export async function backupDatabase({
     // 1. Resolve connection parameters
     if (supabaseToken) {
       // Ephemeral login role via Supabase Management API
-      const res = await fetch(`https://api.supabase.com/v1/projects/${target.ref}/cli/login-role`, {
+      // Request read_only: true since backups only perform pg_dump read operations
+      let res = await fetch(`https://api.supabase.com/v1/projects/${target.ref}/cli/login-role`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${supabaseToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ read_only: false }),
+        body: JSON.stringify({ read_only: true }),
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to create ephemeral login role: ${res.status} ${await res.text()}`);
+        // Fallback to read_only: false in case project policy mandates it
+        const fallbackRes = await fetch(
+          `https://api.supabase.com/v1/projects/${target.ref}/cli/login-role`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${supabaseToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ read_only: false }),
+          },
+        );
+        if (fallbackRes.ok) {
+          res = fallbackRes;
+        } else {
+          throw new Error(
+            `Failed to create ephemeral login role: ${res.status} ${await res.text()}`,
+          );
+        }
       }
 
       const roleData = await res.json();
