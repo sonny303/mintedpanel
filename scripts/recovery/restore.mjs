@@ -232,7 +232,10 @@ export async function prepareIsolatedTarget(
             name,
             "/nix/var/nix/profiles/default/bin/pg_isready",
             "-h",
-            "/var/run/postgresql",
+            // The pinned image runs a socket-only bootstrap server before
+            // initialization completes. Only the final server listens on TCP.
+            // This loopback probe stays inside the owned, unpublished container.
+            "127.0.0.1",
             "-p",
             "5432",
             "-U",

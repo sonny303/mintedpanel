@@ -167,6 +167,41 @@ test("target preparation uses one pinned private engine and no published port or
   );
 });
 
+test("target preparation cannot admit the image's socket-only initialization server", async () => {
+  let finalServerReady = false;
+  let probes = 0;
+  let inspected = false;
+  const target = { runId, containerId: "a".repeat(64) };
+  const result = await prepareIsolatedTarget(runId, {
+    password: "a".repeat(32),
+    execute: async (args) => {
+      if (args[0] === "context")
+        return JSON.stringify([
+          { Name: `colima-${PROFILE}`, Endpoints: { docker: { Host: LOCAL_SOCKET } } },
+        ]);
+      if (args.some((arg) => arg.endsWith("/pg_isready"))) {
+        probes++;
+        const host = args[args.indexOf("-h") + 1];
+        // The image's init server accepts Unix sockets but disables TCP.
+        if (host === "/var/run/postgresql") return "accepting connections";
+        assert.equal(host, "127.0.0.1");
+        if (probes === 1) throw new Error("final server is not listening yet");
+        finalServerReady = true;
+      }
+      return "ok";
+    },
+    inspect: async () => {
+      assert.equal(finalServerReady, true, "do not inspect the temporary init server");
+      inspected = true;
+      return target;
+    },
+    cleanup: async () => {},
+  });
+  assert.equal(result, target);
+  assert.equal(probes, 2);
+  assert.equal(inspected, true);
+});
+
 test("restore coordinator writes a sanitized proof only after restore and verification", async () => {
   const calls = [];
   let saved;

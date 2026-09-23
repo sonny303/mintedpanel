@@ -33,6 +33,13 @@ prove all non-target rows unchanged. Keep IDs and row data outside Git. Record
 only aggregate counts, hashes and the execution receipt in the release packet.
 No cleanup is authorized in production.
 
+The five-contact cleanup completed on September 23 at 04:53:45 UTC. Exact
+deletions: five contacts, three role assignments and four capture links. Six
+audit entries were appended and independently verified. All original audit
+records and non-target rows were preserved. The remaining 17 contacts have
+unambiguous organization assignments. The two case actions are still pending;
+no case, provider or facility record was changed.
+
 ## Real production migration plan
 
 | Order | Exact file                                            | Effect when applied                                                                                          | Data migration                                              |
@@ -136,3 +143,30 @@ The exclusive CLI window closed at 2026-09-23 04:27:39 UTC after a fresh
 read-only check confirmed zero temporary CLI roles and zero CLI sessions.
 Further qualification uses the isolated local snapshot; another project-wide
 CLI cleanup requires a new exclusive maintenance window.
+
+## Current qualification checkpoint
+
+| Work                           | Verified state                                                                                    | Remaining gate                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Repository and provider audit  | Branch/PR inventory, source-to-database drift and environment boundaries documented               | Refresh exact heads at integration and release                                       |
+| Scoped database recovery       | Encrypted capture and isolated restore verified; 92 tables, 2,034 rows, two sequences, zero drift | Full service and release recovery qualification                                      |
+| Owner-directed contact cleanup | Applied and independently verified in staging only                                                | Exact action for the two case/facility gaps                                          |
+| Staging schema                 | Eight missing app tables and 119 missing columns reconciled against a clean source model          | Reviewed additive SQL, rehearsal, then hosted alignment                              |
+| Auth/API recovery              | Closed local-service design prepared                                                              | Independent review, implementation and actual login/refresh/tenant probes            |
+| Staging vault                  | Missing prerequisites identified; source definitions and ACLs under review                        | Atomic repaired definitions, independent staging key, Auth authorization checks      |
+| Hosted staging deployment      | Not qualified                                                                                     | Exact deployment/source/database binding, callbacks, browser and extension workflows |
+| Production packet              | Two checksummed function migrations prepared; no UAT data                                         | Final release evidence and owner approval before any write or promotion              |
+
+Both `94b586f20162fe38982f7a478eb4216e3897b3aa` and the newer
+`e28e05f9767ef09517b21df92281ea28b9d073ad` passed all six CI jobs, including
+Playwright smoke. These results do not cover subsequent uncommitted qualification
+work and do not establish hosted staging qualification.
+
+A further isolated restore, `b7c91def9dee9f0d`, passed the same 92-table,
+2,034-row, two-sequence baseline after a local readiness repair. The pinned
+image starts a temporary socket-only initialization server; the old socket
+probe could admit it before initialization finished. The probe now waits for
+the final server on container-local TCP without publishing a port. The regression
+failed before repair, then all 83 restore/target tests passed. Independent review
+found no material issue. The earlier unsuccessful run's owned resources were
+verified absent; the original baseline remains untouched.
