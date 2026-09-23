@@ -29,6 +29,13 @@ export const TARGET_CONFIGS = Object.freeze({
   }),
 });
 
+export function getTargetConfig(targetEnv) {
+  if (!Object.hasOwn(TARGET_CONFIGS, targetEnv)) {
+    throw new Error(`Unknown backup target environment: ${targetEnv}`);
+  }
+  return TARGET_CONFIGS[targetEnv];
+}
+
 /**
  * Locate executable binary looking in PATH, then standard fallbacks.
  */
@@ -59,6 +66,7 @@ export async function backupRepository({
   repoDir = REPO_ROOT,
   targetEnv = "production",
 }) {
+  getTargetConfig(targetEnv);
   const repoOutputDir = join(workspace, "repo");
   await mkdir(repoOutputDir, { recursive: true, mode: 0o700 });
 
@@ -125,26 +133,26 @@ export async function backupDatabase({
   targetEnv = "production",
   recipient,
   dryRun = false,
-  supabaseToken = process.env.SUPABASE_ACCESS_TOKEN ||
-    process.env.SUPABASE_NIGHTLYBACKUP_ACCESS_TOKEN,
-  databaseUrl = process.env.DATABASE_URL,
+  supabaseToken,
+  databaseUrl,
 }) {
+  const target = getTargetConfig(targetEnv);
+  const resolvedSupabaseToken =
+    supabaseToken ??
+    (targetEnv === "production" ? process.env.SUPABASE_PRODUCTION_BACKUP_ACCESS_TOKEN : undefined);
   const dbOutputDir = join(workspace, "database");
   await mkdir(dbOutputDir, { recursive: true, mode: 0o700 });
 
-  const target = TARGET_CONFIGS[targetEnv] ?? TARGET_CONFIGS.production;
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const captureManifestPath = join(dbOutputDir, "capture.json");
 
-  if (dryRun || (!supabaseToken && !databaseUrl)) {
+  if (dryRun) {
     const dryRunNotice = {
       version: 1,
       status: "SKIPPED_DRY_RUN",
       target,
       timestamp: new Date().toISOString(),
-      reason: dryRun
-        ? "Explicit --dry-run requested"
-        : "No SUPABASE_ACCESS_TOKEN or DATABASE_URL provided",
+      reason: "Explicit --dry-run requested",
     };
     await writeFile(captureManifestPath, `${JSON.stringify(dryRunNotice, null, 2)}\n`, "utf8");
     return {
@@ -152,6 +160,12 @@ export async function backupDatabase({
       target,
       captureManifestPath,
     };
+  }
+
+  if (!resolvedSupabaseToken && !databaseUrl) {
+    throw new Error(
+      "Missing backup credential: set SUPABASE_PRODUCTION_BACKUP_ACCESS_TOKEN for production or pass supabaseToken/databaseUrl explicitly",
+    );
   }
 
   if (!recipient) {
@@ -180,12 +194,12 @@ export async function backupDatabase({
 
   try {
     // 1. Resolve connection parameters
-    if (supabaseToken) {
+    if (resolvedSupabaseToken) {
       // Ephemeral login role via Supabase Management API
       const res = await fetch(`https://api.supabase.com/v1/projects/${target.ref}/cli/login-role`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${supabaseToken}`,
+          Authorization: `Bearer ${resolvedSupabaseToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ read_only: false }),
@@ -297,12 +311,12 @@ export async function backupDatabase({
     };
   } finally {
     // 4. Drop ephemeral role immediately if one was created
-    if (ephemeralRole && supabaseToken) {
+    if (ephemeralRole && resolvedSupabaseToken) {
       try {
         await fetch(`https://api.supabase.com/v1/projects/${target.ref}/database/query`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${supabaseToken}`,
+            Authorization: `Bearer ${resolvedSupabaseToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -321,10 +335,13 @@ export async function backupDatabase({
  */
 export async function runNightlyBackup(options = {}) {
   const targetEnv = options.targetEnv ?? process.env.BACKUP_TARGET_ENV ?? "production";
+  getTargetConfig(targetEnv);
   const backupRepoFlag = options.backupRepo ?? true;
   const backupDbFlag = options.backupDb ?? true;
   const dryRun = options.dryRun ?? false;
   const recipient = options.recipient ?? process.env.BACKUP_AGE_RECIPIENT;
+  const supabaseToken = options.supabaseToken;
+  const databaseUrl = options.databaseUrl;
 
   const workspace = options.workspace ?? (await mkdtemp(join(tmpdir(), "minted-backup-")));
   await chmod(workspace, 0o700);
@@ -349,6 +366,8 @@ export async function runNightlyBackup(options = {}) {
         targetEnv,
         recipient,
         dryRun,
+        supabaseToken,
+        databaseUrl,
       });
     }
 
