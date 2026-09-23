@@ -6,8 +6,8 @@
 was rejected on `facility_name` because the sheet carries street addresses and
 the scan only accepts the facility's exact name.
 
-**Sources:** panel `main` @ `cce36e0`. Hosted project `fkvuhfsqcmujywzgczmc`,
-org `BEST Physical Therapy LLC` (`5b5ee10f-e464-4d6b-8c7b-27b04e59c038`),
+**Sources:** panel `main` @ `cce36e0`. Hosted project `[REDACTED_PROJECT]`,
+org `BEST Physical Therapy LLC` (`[REDACTED_ORG_UUID]`),
 read-only. The roster and the error report are the two files attached to the
 request (39 data rows, 39 `facility_name` errors).
 
@@ -48,7 +48,7 @@ or commit. The error report is rows 2–40, column `facility_name`, that same
 reason.
 
 The cell values are full addresses, for example
-`4801 Hargrove Road, Suite 100, Raleigh, NC 27616`. The reference sheet the
+`101 Sample Road, Suite 100, Raleigh, NC 27616`. The reference sheet the
 helper text points at (`providerImportReference`) lists facility **names**
 only (`BEST Physical Therapy - Hargrove`), which this roster does not have.
 
@@ -61,33 +61,33 @@ type-and-hope matching — still holds for names.
 ## Replay against live facilities
 
 Org facilities: 28 active rows. The roster uses 22 of them. Group TIN
-`851502637` is on two groups; Hargrove is the only roster location on the dba
+`[REDACTED_TIN]` is on two groups; Hargrove is the only roster location on the dba
 group. Every other roster location is on `BEST Physical Therapy, LLC`.
 
 | Roster cell                                          | Resolved facility                            |
 | ---------------------------------------------------- | -------------------------------------------- |
-| 4801 Hargrove Road, Suite 100, Raleigh, NC 27616     | BEST Physical Therapy - Hargrove (dba group) |
-| 100 Connemara Drive, Suite 110, Cary, NC 27519       | BEST Physical Therapy - Connemara            |
-| 280 Towerview Court, Cary, NC 27513                  | BEST Physical Therapy - Towerview            |
-| 1008 Big Oak Court, Suite A, Knightdale, NC 27545    | BEST Physical Therapy - Knightdale           |
-| 9101 Leesville Rd STE 129, Raleigh, NC 27613         | BEST Physical Therapy - Leesville Rd         |
-| 11694 US-70 Business W, Clayton NC, 27520            | BEST Physical Therapy - Clayton              |
-| 4550 Fayetteville Road, Raeford, NC 28376            | BEST Physical Therapy - Raeford              |
-| 2307 N College Road, Wilmington, NC 28405            | BEST Physical Therapy - Wilmington           |
-| 275 Convention Dr, Cary, NC 27511                    | BEST Physical Therapy - Convention           |
-| 1400 Timber Drive East, Garner NC 27529              | BEST Physical Therapy - Garner               |
-| 210 Owen Dr, Fayetteville, NC 28304                  | BEST Physical Therapy - Fayetteville         |
-| 607 Mills Park Dr, Cary, NC 27519                    | BEST Physical Therapy - Cary                 |
-| 105 W North Carolina 54 #271, Durham, NC 27713       | BEST Physical Therapy - Durham               |
-| 19 Gladys Drive, Greenville, SC 29607                | BEST Physical Therapy - Greenville           |
-| 1726 Eagan Rd, Suite 101, Madison, WI 53704          | BEST Physical Therapy - Madison              |
-| 2920 Hardrock Rd, Fitchburg, WI 53719                | BEST Physical Therapy - Fitchburg            |
-| 1240 Hover St #200, Longmont, CO 80501               | BEST Physical Therapy - Longmont             |
-| 5904 Prairie Schooner Dr, Colorado Springs, CO 80923 | BEST Physical Therapy - Colorado Springs     |
-| 12951 Barker Cypress Rd, Cypress, TX 77429           | BEST Physical Therapy - Cypress              |
-| 9930 Gaston Rd, Katy, TX 77494                       | BEST Physical Therapy - Katy                 |
-| 13900 SW Meridian St, Beaverton, OR 97005            | BEST Physical Therapy - Beaverton            |
-| 4623 Enterprise Way, Caldwell, ID 83605              | BEST Physical Therapy - VS Caldwell          |
+| 101 Sample Road, Suite 100, Raleigh, NC 27616        | BEST Physical Therapy - Hargrove (dba group) |
+| 102 Sample Drive, Suite 110, Cary, NC 27519          | BEST Physical Therapy - Connemara            |
+| 103 Sample Court, Cary, NC 27513                     | BEST Physical Therapy - Towerview            |
+| 104 Sample Court, Suite A, Knightdale, NC 27545       | BEST Physical Therapy - Knightdale           |
+| 105 Sample Rd STE 129, Raleigh, NC 27613             | BEST Physical Therapy - Leesville Rd         |
+| 11694 Sample Highway W, Clayton NC, 27520            | BEST Physical Therapy - Clayton              |
+| 107 Sample Road, Raeford, NC 28376                   | BEST Physical Therapy - Raeford              |
+| 108 N Sample Road, Wilmington, NC 28405              | BEST Physical Therapy - Wilmington           |
+| 109 Sample Dr, Cary, NC 27511                       | BEST Physical Therapy - Convention           |
+| 110 Sample Drive East, Garner NC 27529               | BEST Physical Therapy - Garner               |
+| 111 Sample Dr, Fayetteville, NC 28304                 | BEST Physical Therapy - Fayetteville         |
+| 112 Sample Dr, Cary, NC 27519                       | BEST Physical Therapy - Cary                 |
+| 113 W Sample St #271, Durham, NC 27713               | BEST Physical Therapy - Durham               |
+| 114 Sample Drive, Greenville, SC 29607               | BEST Physical Therapy - Greenville           |
+| 115 Sample Rd, Suite 101, Madison, WI 53704          | BEST Physical Therapy - Madison              |
+| 116 Sample Rd, Fitchburg, WI 53719                   | BEST Physical Therapy - Fitchburg            |
+| 117 Sample St #200, Longmont, CO 80501               | BEST Physical Therapy - Longmont             |
+| 118 Sample Dr, Colorado Springs, CO 80923            | BEST Physical Therapy - Colorado Springs     |
+| 119 Sample Rd, Cypress, TX 77429                     | BEST Physical Therapy - Cypress              |
+| 120 Sample Rd, Katy, TX 77494                       | BEST Physical Therapy - Katy                 |
+| 121 SW Sample St, Beaverton, OR 97005                | BEST Physical Therapy - Beaverton            |
+| 122 Sample Way, Caldwell, ID 83605                   | BEST Physical Therapy - VS Caldwell          |
 
 Shapes in this file that a strict "same string as street, city, state zip"
 compare would drop, and the rule below still takes:
@@ -99,8 +99,8 @@ compare would drop, and the rule below still takes:
   happens to agree with the database; the rule still expands suffixes).
 
 Checked non-matches: `Nope Clinic` and `Hargrove` do not resolve. An unknown
-street in a known ZIP does not resolve. `Rd` vs `Road` on Hargrove does
-resolve. Omitting the suite on a street that exists once (Hargrove) still
+street in a known ZIP does not resolve. `Rd` vs `Road` on 101 Sample Road does
+resolve. Omitting the suite on a street that exists once (101 Sample Road) still
 resolves.
 
 ---
@@ -196,10 +196,10 @@ Not part of the address change, and not a reason to hold it. Recorded so the
 re-upload is not surprising.
 
 The sheet's group name is `B.E.S.T. Physical Therapy`. Neither live group is
-named that. TIN `85-1502637` matches both:
+named that. TIN `[REDACTED_TIN]` matches both:
 
-- `BEST Physical Therapy, LLC` (`ebfa7e6f-6f7a-46a7-9abe-e114508065fa`) — 26 of the 28 facilities, including every roster location except Hargrove
-- `BEST Physical Therapy, LLC (dba BEST Health Wellness Performance)` (`ff1358ce-dd0a-4244-9193-cb8f7b695d12`) — Hargrove only
+- `BEST Physical Therapy, LLC` (`[REDACTED_GROUP_UUID]`) — 26 of the 28 facilities, including every roster location except Hargrove
+- `BEST Physical Therapy, LLC (dba BEST Health Wellness Performance)` (`[REDACTED_GROUP_UUID]`) — Hargrove only
 
 `resolveGroup` returns the **first** TIN hit and no note. `getProviderGroups`
 orders by name, so the preview plan attaches every row to `BEST Physical Therapy, LLC`.
@@ -208,7 +208,7 @@ so a duplicate TIN keeps whichever row arrives last. Those two paths can
 disagree.
 
 Address matching still assigns Hargrove to the three Hargrove providers
-(Marc Douek, Megan Grable, Carlie Lenox). Their **group** assignment follows
+(Provider A, Provider B, Provider C). Their **group** assignment follows
 the TIN rule above, which may not be the dba group that owns that location.
 A later bite can fail a row closed when one TIN hits two groups and the name
 does not break the tie. Doing that in this bite would leave the file blocked.

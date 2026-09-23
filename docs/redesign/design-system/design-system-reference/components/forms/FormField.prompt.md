@@ -2,11 +2,11 @@
 
 ```jsx
 <FormField label="Last name">
-  <Input defaultValue="Hershberger" />
+  <Input defaultValue="Sample" />
 </FormField>
 
 <FormField label="NPI" error="Enter a valid 10-digit NPI">
-  <Input mono error defaultValue="18412" />
+  <Input mono error defaultValue="11111" />
 </FormField>
 
 <FormField label="Case status">

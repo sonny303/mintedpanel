@@ -589,12 +589,12 @@ describe("provider relationship columns (E6.4 F6.4.6)", () => {
 
   it("resolves facility_name from a street address and group_npi when a TIN is shared", () => {
     const groups = [
-      { id: "llc", name: "BEST Physical Therapy, LLC", tin: "851502637", npiType2: "1427674019" },
+      { id: "llc", name: "BEST Physical Therapy, LLC", tin: "001234567", npiType2: "1999999994" },
       {
         id: "dba",
         name: "BEST Health Wellness Performance",
-        tin: "851502637",
-        npiType2: "1225755416",
+        tin: "001234567",
+        npiType2: "1999999992",
       },
     ];
     const context: SectionScanContext = {
@@ -603,7 +603,7 @@ describe("provider relationship columns (E6.4 F6.4.6)", () => {
           {
             id: "f-hargrove",
             name: "BEST Physical Therapy - Hargrove",
-            street: "4801 Hargrove Road",
+            street: "101 Sample Road",
             suite: "Suite 100",
             city: "Raleigh",
             state: "NC",
@@ -619,8 +619,8 @@ describe("provider relationship columns (E6.4 F6.4.6)", () => {
       {
         ...PROVIDER_ROW,
         group_name: "B.E.S.T. Physical Therapy",
-        group_tin: "85-1502637",
-        facility_name: "4801 Hargrove Road, Suite 100, Raleigh, NC 27616",
+        group_tin: "00-1234567",
+        facility_name: "101 Sample Road, Suite 100, Raleigh, NC 27616",
       },
       context,
     );
@@ -632,9 +632,9 @@ describe("provider relationship columns (E6.4 F6.4.6)", () => {
       {
         ...PROVIDER_ROW,
         group_name: "B.E.S.T. Physical Therapy",
-        group_tin: "85-1502637",
-        group_npi: "1225755416",
-        facility_name: "4801 Hargrove Road, Suite 100, Raleigh, NC 27616",
+        group_tin: "00-1234567",
+        group_npi: "1999999992",
+        facility_name: "101 Sample Road, Suite 100, Raleigh, NC 27616",
       },
       context,
     );

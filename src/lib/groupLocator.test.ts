@@ -8,20 +8,20 @@ import {
 const LLC: GroupMatchCandidate = {
   id: "llc",
   name: "BEST Physical Therapy, LLC",
-  tin: "851502637",
-  npiType2: "1427674019",
+  tin: "001234567",
+  npiType2: "1999999994",
 };
 const DBA: GroupMatchCandidate = {
   id: "dba",
   name: "BEST Physical Therapy, LLC (dba BEST Health Wellness Performance)",
-  tin: "85-1502637",
-  npiType2: "1225755416",
+  tin: "00-1234567",
+  npiType2: "1999999992",
 };
 const OTHER: GroupMatchCandidate = {
   id: "other",
   name: "BEST Physical Therapy and Wellness Inc",
-  tin: "423077659",
-  npiType2: "1407771116",
+  tin: "007654321",
+  npiType2: "1999999993",
 };
 const GROUPS = [LLC, DBA, OTHER];
 
@@ -40,7 +40,7 @@ describe("matchGroupLocator", () => {
 
   it("falls through to a unique TIN when the name misses", () => {
     const result = matchGroupLocator(
-      { name: "B.E.S.T. Physical Therapy", tin: "42-3077659", npiType2: null },
+      { name: "B.E.S.T. Physical Therapy", tin: "00-7654321", npiType2: null },
       GROUPS,
     );
     expect(result).toMatchObject({ status: "matched", group: { id: "other" }, note: null });
@@ -48,11 +48,11 @@ describe("matchGroupLocator", () => {
 
   it("breaks a shared TIN with the group's Type 2 NPI", () => {
     const llc = matchGroupLocator(
-      { name: "B.E.S.T. Physical Therapy", tin: "85-1502637", npiType2: "1427674019" },
+      { name: "B.E.S.T. Physical Therapy", tin: "00-1234567", npiType2: "1999999994" },
       GROUPS,
     );
     const dba = matchGroupLocator(
-      { name: "B.E.S.T. Physical Therapy", tin: "851502637", npiType2: "1225-755-416" },
+      { name: "B.E.S.T. Physical Therapy", tin: "001234567", npiType2: "1999-999-992" },
       GROUPS,
     );
     expect(llc).toMatchObject({ status: "matched", group: { id: "llc" } });
@@ -61,7 +61,7 @@ describe("matchGroupLocator", () => {
 
   it("refuses to guess when a shared TIN has no group_npi or the NPI misses", () => {
     const open = matchGroupLocator(
-      { name: "B.E.S.T. Physical Therapy", tin: "851502637", npiType2: null },
+      { name: "B.E.S.T. Physical Therapy", tin: "001234567", npiType2: null },
       GROUPS,
     );
     expect(open).toEqual({
@@ -70,7 +70,7 @@ describe("matchGroupLocator", () => {
       reason: GROUP_AMBIGUOUS_TIN_REASON,
     });
     const miss = matchGroupLocator(
-      { name: "B.E.S.T. Physical Therapy", tin: "851502637", npiType2: "1111111111" },
+      { name: "B.E.S.T. Physical Therapy", tin: "001234567", npiType2: "1111111111" },
       GROUPS,
     );
     expect(miss.status).toBe("none");
@@ -79,7 +79,7 @@ describe("matchGroupLocator", () => {
 
   it("rejects a contradictory group_npi on an otherwise unique TIN", () => {
     const result = matchGroupLocator(
-      { name: "B.E.S.T. Physical Therapy", tin: "42-3077659", npiType2: "1427674019" },
+      { name: "B.E.S.T. Physical Therapy", tin: "00-7654321", npiType2: "1999999994" },
       GROUPS,
     );
     expect(result.status).toBe("none");

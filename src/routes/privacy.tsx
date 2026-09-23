@@ -145,8 +145,8 @@ function PrivacyPage() {
         <SectionTitle>Contact</SectionTitle>
         <Body>
           Questions about this policy:{" "}
-          <a href="mailto:surapurs@gmail.com" className="text-foreground underline">
-            surapurs@gmail.com
+          <a href="mailto:privacy@mintedpanel.com" className="text-foreground underline">
+            privacy@mintedpanel.com
           </a>
         </Body>
       </main>

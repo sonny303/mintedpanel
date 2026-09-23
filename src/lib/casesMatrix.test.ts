@@ -81,7 +81,7 @@ describe("buildCasesMatrix", () => {
         ],
         groups: [
           { id: "group-1", name: "BEST PT" },
-          { id: "group-2", name: "Mowery PT" },
+          { id: "group-2", name: "Summit PT" },
         ],
         targets: [
           { payerId: "payer-1", groupId: "group-1", state: "WI", status: "active" },
