@@ -147,6 +147,20 @@ test("successful ledger with missing schema objects cannot pass postcheck", asyn
   await assert.rejects(runMigrations(f), { code: "SCHEMA_POSTCHECK_FAILED" });
 });
 
+test("a partial ledger between baseline and head is not resumed", async () => {
+  const f = fixture();
+  const pending = {
+    id: "20260103000000",
+    path: "supabase/migrations/20260103000000_test.sql",
+    sha256: hash("pending"),
+  };
+  f.inventory.push(pending);
+  f.plan.inventory = structuredClone(f.inventory);
+  f.change({ versions: f.inventory.slice(0, 2).map((item) => item.id) });
+  await assert.rejects(runMigrations(f), { code: "MIGRATION_HISTORY_MISMATCH" });
+  assert.deepEqual(f.pushes, []);
+});
+
 test("no pending versions still requires schema parity", async () => {
   const f = fixture();
   f.change({ versions: f.inventory.map((i) => i.id) });
@@ -179,11 +193,14 @@ test("hosted destination rejects alternate projects, local hosts, proxies and un
   const ref = "vmznysvietfaddakkegt";
   const url = `postgresql://postgres:secret@db.${ref}.supabase.co:5432/postgres?sslmode=verify-full`;
   validateDestination(url, ref);
+  validateDestination(`${url}&sslrootcert=/etc/ssl/cert.pem`, ref);
   for (const bad of [
     url.replace(ref, "fkvuhfsqcmujywzgczmc"),
     url.replace("verify-full", "require"),
     url.replace(`db.${ref}.supabase.co`, "localhost"),
     `${url}&host=elsewhere`,
+    `${url}&sslmode=disable`,
+    `${url}&sslrootcert=/tmp/a.crt&sslrootcert=/tmp/b.crt`,
     undefined,
   ]) {
     assert.throws(() => validateDestination(bad, ref), { code: "DATABASE_URL_REJECTED" });

@@ -250,7 +250,10 @@ for (const fail of [false, true]) {
       },
     });
     if (fail) {
-      await assert.rejects(s.run, { code: "DELIVERY_STOPPED_LEASE_RETAINED" });
+      await assert.rejects(s.run, {
+        code: "DELIVERY_STOPPED_LEASE_RETAINED",
+        reason: "SCHEMA_POSTCHECK_FAILED",
+      });
       assert.equal(s.state.operations.includes("promote"), false);
       assert.equal(s.state.held, true);
     } else {

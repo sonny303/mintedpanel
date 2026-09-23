@@ -1,5 +1,6 @@
 import { canonicalDigest, releaseTarget } from "../release/contract.mjs";
-import { requireMigration, readInventory, checkHistory } from "./inventory.mjs";
+import { DeliveryError } from "../delivery/boundary.mjs";
+import { MigrationError, requireMigration, readInventory, checkHistory } from "./inventory.mjs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createDatabase, validateDestination } from "./database.mjs";
@@ -62,14 +63,24 @@ export function createMigrationExecutor({ bundle, reconciliation, inventory, dat
     "RECONCILIATION_BINDING_MISMATCH",
   );
   return async (request) => {
-    requireMigration(
-      request.releaseDigest === bound.releaseDigest &&
-        request.planDigest === bound.policy.migrationPlanDigest &&
-        request.planDigest === canonicalDigest(request.plan) &&
-        canonicalDigest(request.plan) === canonicalDigest(context.migrationPlan) &&
-        canonicalDigest(request.target) === canonicalDigest(context.target),
-      "MIGRATION_REQUEST_BINDING_MISMATCH",
-    );
-    return runMigrations({ plan, inventory: files, database, sourceSha: context.source.sha });
+    try {
+      requireMigration(
+        request.releaseDigest === bound.releaseDigest &&
+          request.planDigest === bound.policy.migrationPlanDigest &&
+          request.planDigest === canonicalDigest(request.plan) &&
+          canonicalDigest(request.plan) === canonicalDigest(context.migrationPlan) &&
+          canonicalDigest(request.target) === canonicalDigest(context.target),
+        "MIGRATION_REQUEST_BINDING_MISMATCH",
+      );
+      return await runMigrations({
+        plan,
+        inventory: files,
+        database,
+        sourceSha: context.source.sha,
+      });
+    } catch (error) {
+      if (error instanceof MigrationError) throw new DeliveryError(error.code);
+      throw error;
+    }
   };
 }

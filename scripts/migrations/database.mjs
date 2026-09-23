@@ -15,6 +15,10 @@ export function validateDestination(connectionString, projectRef) {
   } catch {
     throw new MigrationError("DATABASE_URL_REJECTED");
   }
+  const entries = [...url.searchParams.entries()];
+  const keys = entries.map(([key]) => key);
+  // libpq keeps the last repeated keyword. URLSearchParams.get keeps the first,
+  // so a second sslmode or sslrootcert must be rejected rather than ignored.
   requireMigration(
     url.protocol === "postgresql:" &&
       url.hostname === `db.${projectRef}.supabase.co` &&
@@ -22,8 +26,9 @@ export function validateDestination(connectionString, projectRef) {
       url.pathname === "/postgres" &&
       url.username === "postgres" &&
       !url.hash &&
+      entries.length === new Set(keys).size &&
       url.searchParams.get("sslmode") === "verify-full" &&
-      [...url.searchParams.keys()].every((key) => ["sslmode", "sslrootcert"].includes(key)),
+      keys.every((key) => key === "sslmode" || key === "sslrootcert"),
     "DATABASE_URL_REJECTED",
   );
 }
