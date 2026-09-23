@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdtemp, mkdir, writeFile, rm, chmod } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { checkHistory, hash } from "./inventory.mjs";
 import { CLI_VERSION, runMigrations } from "./runner.mjs";
-import { validateDestination } from "./database.mjs";
+import { createDatabase, validateDestination } from "./database.mjs";
 import { runCommand } from "./cli.mjs";
 import { createMigrationExecutor } from "./delivery.mjs";
 import { fixture as releaseFixture } from "../release/test-fixtures.mjs";
@@ -187,6 +189,44 @@ test("history lock rejects changed SQL, new duplicate versions and backdated add
       ),
     { code: "BACKDATED_MIGRATION" },
   );
+  assert.throws(
+    () =>
+      checkHistory(
+        [
+          ...inventory,
+          { ...inventory[1], id: "20260105000000", path: "b.sql" },
+          { ...inventory[1], id: "20260103000000", path: "c.sql" },
+        ],
+        inventory,
+      ),
+    { code: "BACKDATED_MIGRATION" },
+  );
+});
+
+test("database adapter tolerates CRLF line endings from psql", async () => {
+  const { inventory } = fixture();
+  const root = await mkdtemp(join(tmpdir(), "crlf-test-"));
+  try {
+    await mkdir(join(root, "supabase/migrations"), { recursive: true });
+    await writeFile(join(root, inventory[0].path), inventory[0].id);
+    const psqlScript = join(root, "mock-psql.sh");
+    await writeFile(
+      psqlScript,
+      "#!/bin/sh\nprintf \"1234567890123456789\\r\\n[\\\"20260101000000\\\"]\\r\\n{\\\"relations\\\":[],\\\"columns\\\":[],\\\"constraints\\\":[],\\\"indexes\\\":[],\\\"functions\\\":[],\\\"policies\\\":[],\\\"triggers\\\":[],\\\"views\\\":[],\\\"enums\\\":[],\\\"defaultAcls\\\":[]}\\r\\n\"\n",
+    );
+    await chmod(psqlScript, 0o755);
+    const db = await createDatabase({
+      root,
+      inventory: [inventory[0]],
+      connectionString: "postgresql://postgres:secret@127.0.0.1:5432/postgres",
+      binaries: { psql: psqlScript, supabase: "echo" },
+    });
+    const snapshot = await db.snapshot();
+    assert.equal(snapshot.systemIdentifier, "1234567890123456789");
+    await db.close();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("hosted destination rejects alternate projects, local hosts, proxies and unsafe TLS", () => {
@@ -212,6 +252,14 @@ test("committed reconciliation holds block release readiness", async () => {
     await assert.rejects(runCommand(["readiness", target]), { code: "RECONCILIATION_REQUIRED" });
   }
   assert.equal((await runCommand(["check"])).status, "INVENTORY_VALID");
+  assert.equal(
+    (await runCommand(["check"], { MINTED_MIGRATION_BASE_SHA: "0".repeat(40) })).status,
+    "INVENTORY_VALID",
+  );
+  await assert.rejects(
+    runCommand(["check"], { MINTED_MIGRATION_BASE_SHA: "1".repeat(40) }),
+    { code: "BASE_SHA_NOT_FOUND" },
+  );
   await assert.rejects(runCommand(["execute", "staging", "--force"]), { code: "COMMAND_REJECTED" });
 });
 

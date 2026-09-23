@@ -88,7 +88,7 @@ export async function createDatabase({ root, inventory, connectionString, binari
             "\nROLLBACK;\n",
         );
         try {
-          const [systemIdentifier, ledger, catalog, ...extra] = output.split("\n");
+          const [systemIdentifier, ledger, catalog, ...extra] = output.split(/\r?\n/);
           requireMigration(extra.length === 0, "INVALID_SNAPSHOT");
           const versions = JSON.parse(ledger);
           requireMigration(
