@@ -3,12 +3,88 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, staging]
 
 permissions:
   contents: read
 
 jobs:
+  vault-authorization:
+    name: P01 vault authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Prepare disposable PostgreSQL image
+        run: docker pull postgres:16
+      - name: Reproduce DB-01 and verify repaired role boundaries
+        run: node scripts/security/verify-ssn-vault.mjs
+
+  staging-uat-seed:
+    name: Deterministic staging UAT seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Restore Supabase built-in registry fallback
+        shell: bash
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Start and reset local Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          uat_workdir="$RUNNER_TEMP/mintedpanel-uat"
+          mkdir -p "$uat_workdir"
+          cp -R supabase "$uat_workdir/supabase"
+          printf '\n[db.seed]\nenabled = false\n' >> "$uat_workdir/supabase/config.toml"
+          # The repository has two historical migrations at 20260903210000.
+          # Supabase's ledger rejects duplicate versions, so the isolated CI
+          # copy gives the second file its next timestamp; source stays intact.
+          mv "$uat_workdir/supabase/migrations/20260903210000_delete_org_sop_template.sql" \
+             "$uat_workdir/supabase/migrations/20260903210001_delete_org_sop_template.sql"
+          echo "UAT_SUPABASE_WORKDIR=$uat_workdir" >> "$GITHUB_ENV"
+          supabase --workdir "$uat_workdir" start
+          # Legacy seed.sql predates the current assignment date constraint;
+          # this job owns and applies the dedicated UAT seed immediately after.
+          supabase --workdir "$uat_workdir" db reset --no-seed
+      - name: Seed twice, verify invariants, and reset deletion pool
+        shell: bash
+        run: |
+          set -euo pipefail
+          status_json="$(supabase --workdir "$UAT_SUPABASE_WORKDIR" status -o json)"
+          export SUPABASE_URL="$(jq -r '.API_URL' <<<"$status_json")"
+          export SUPABASE_SERVICE_ROLE_KEY="$(jq -r '.SERVICE_ROLE_KEY' <<<"$status_json")"
+          export UAT_SUPABASE_ANON_KEY="$(jq -r '.ANON_KEY' <<<"$status_json")"
+          export UAT_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          export UAT_SHARED_PASSWORD="$(openssl rand -base64 24)Aa1!"
+          npm run seed:staging-uat
+          npm run seed:staging-uat
+          npm run verify:staging-uat
+          deletion_ids="$(jq -r '.ownership.deletionCases | join(",")' scripts/uat/uat-fixture-manifest.json)"
+          before="$(psql "$UAT_DATABASE_URL" -Atc "select md5(string_agg(row_to_json(c)::text,',' order by c.id)) from credential_cases c where c.id::text <> all(string_to_array('$deletion_ids',','))")"
+          npm run verify:staging-uat:deletion
+          npm run seed:staging-uat -- --reset deletion-pool
+          npm run verify:staging-uat
+          after="$(psql "$UAT_DATABASE_URL" -Atc "select md5(string_agg(row_to_json(c)::text,',' order by c.id)) from credential_cases c where c.id::text <> all(string_to_array('$deletion_ids',','))")"
+          test "$before" = "$after"
+
   release-guardrails:
     name: Release guardrails
     runs-on: ubuntu-latest

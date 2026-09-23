@@ -3,11 +3,25 @@ import assert from "node:assert/strict";
 import { RecoveryError, STAGING } from "./contract.mjs";
 import {
   loadSupabaseAccessToken,
+  decodeKeychainToken,
   observeStagingProvider,
   withStagingLoginRole,
 } from "./provider.mjs";
 
 const token = `sbp_${"a".repeat(40)}`;
+test("decodes the official CLI macOS keyring wrappers without accepting malformed encoding", () => {
+  assert.equal(
+    decodeKeychainToken(`go-keyring-base64:${Buffer.from(token).toString("base64")}`),
+    token,
+  );
+  assert.equal(
+    decodeKeychainToken(`go-keyring-encoded:${Buffer.from(token).toString("hex")}`),
+    token,
+  );
+  assert.equal(decodeKeychainToken(token), token);
+  assert.throws(() => decodeKeychainToken("go-keyring-base64:%%%"));
+  assert.throws(() => decodeKeychainToken("go-keyring-encoded:abc"));
+});
 const now = "2026-09-19T04:00:00.000Z";
 const project = {
   id: STAGING.ref,
@@ -22,6 +36,22 @@ const project = {
     release_channel: "ga",
   },
 };
+const pooler = [
+  {
+    identifier: STAGING.ref,
+    database_type: "PRIMARY",
+    is_using_scram_auth: true,
+    db_user: `postgres.${STAGING.ref}`,
+    db_host: STAGING.host,
+    db_port: 6543,
+    db_name: "postgres",
+    connection_string: "private-connection-placeholder",
+    connectionString: "private-connection-placeholder",
+    default_pool_size: null,
+    max_client_conn: null,
+    pool_mode: "transaction",
+  },
+];
 const reply = (body, status = 200) => ({ status, json: async () => structuredClone(body) });
 const loginResponse = {
   role: "cli_login_h10",
@@ -59,9 +89,7 @@ test("provider observation is sanitized and pinned to staging", async () => {
     clock: () => now,
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
-      return reply(
-        url.endsWith("/pooler") ? { default_pool_size: 15, pool_mode: "transaction" } : project,
-      );
+      return reply(url.endsWith("/pooler") ? pooler : project);
     },
   });
   assert.equal(calls.length, 2);
@@ -73,6 +101,7 @@ test("provider observation is sanitized and pinned to staging", async () => {
   });
   assert.match(result.providerDigest, /^[a-f0-9]{64}$/);
   assert.ok(!JSON.stringify(result).includes(token));
+  assert.ok(!JSON.stringify(result).includes("private-connection-placeholder"));
 });
 
 for (const [label, mutate] of [
@@ -88,8 +117,7 @@ for (const [label, mutate] of [
       observeStagingProvider({
         token,
         clock: () => now,
-        fetchImpl: async (url) =>
-          reply(url.endsWith("/pooler") ? { default_pool_size: 15, pool_mode: "session" } : value),
+        fetchImpl: async (url) => reply(url.endsWith("/pooler") ? pooler : value),
       }),
       (error) => error instanceof RecoveryError && error.code === "RECOVERY_PROVIDER_REJECTED",
     );
@@ -321,5 +349,228 @@ test("unexpected preexisting CLI role fails before login-role POST", async () =>
   );
   assert.equal(calls.length, 1);
   assert.ok(calls[0].url.endsWith("/database/query/read-only"));
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, mutate] of [
+  [
+    "wrong project",
+    (rows) => {
+      rows[0].identifier = "fkvuhfsqcmujywzgczmc";
+    },
+  ],
+  [
+    "wrong host",
+    (rows) => {
+      rows[0].db_host = "production.invalid";
+    },
+  ],
+  [
+    "wrong user",
+    (rows) => {
+      rows[0].db_user = "postgres.production";
+    },
+  ],
+  [
+    "wrong database",
+    (rows) => {
+      rows[0].db_name = "other";
+    },
+  ],
+  [
+    "ambiguous primary",
+    (rows) => {
+      rows.push({ ...rows[0] });
+    },
+  ],
+  [
+    "missing primary",
+    (rows) => {
+      rows[0].database_type = "READ_REPLICA";
+    },
+  ],
+  [
+    "wrong port for mode",
+    (rows) => {
+      rows[0].db_port = 5432;
+    },
+  ],
+  [
+    "unsafe pool size",
+    (rows) => {
+      rows[0].default_pool_size = -1;
+    },
+  ],
+  [
+    "wrong project extra entry",
+    (rows) => {
+      rows.push({ ...rows[0], identifier: "production", database_type: "READ_REPLICA" });
+    },
+  ],
+]) {
+  test(`pooler observation rejects ${label}`, async () => {
+    const value = structuredClone(pooler);
+    mutate(value);
+    await assert.rejects(
+      observeStagingProvider({
+        token,
+        clock: () => now,
+        fetchImpl: async (url) => reply(url.endsWith("/pooler") ? value : project),
+      }),
+      (error) => error instanceof RecoveryError && error.code === "RECOVERY_PROVIDER_REJECTED",
+    );
+  });
+}
+
+test("pooler observation accepts explicit session endpoint and excludes connection strings", async () => {
+  const value = [{ ...pooler[0], db_port: 5432, pool_mode: "session", default_pool_size: 15 }];
+  const result = await observeStagingProvider({
+    token,
+    clock: () => now,
+    fetchImpl: async (url) => reply(url.endsWith("/pooler") ? value : project),
+  });
+  assert.match(result.providerDigest, /^[a-f0-9]{64}$/);
+  assert.ok(!JSON.stringify(result).includes("private-connection-placeholder"));
+});
+
+const maintenanceSteps = () => [
+  { body: [], status: 201 },
+  { body: loginResponse, status: 200 },
+  { body: [{ rolname: loginResponse.role }], status: 201 },
+  { body: [], status: 201 },
+  { body: [{ rolname: loginResponse.role }], status: 201 },
+  { body: [], status: 201 },
+  { body: null, status: 204 },
+  { body: [], status: 201 },
+];
+const maintenance = (operation = async () => "captured") => ({
+  token,
+  operation,
+  cleanupMode: "exclusive-staging-maintenance",
+});
+
+test("explicit staging maintenance uses pinned DELETE and requires empty verified poststate", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  const result = await withStagingLoginRole(maintenance(), {
+    clock: () => now,
+    fetchImpl: fetchSequence(steps, calls),
+  });
+  assert.equal(result.lifecycle.cleanupMode, "exclusive-staging-maintenance");
+  assert.equal(result.lifecycle.poststateRoleCount, 0);
+  assert.equal(result.lifecycle.exactRoleAbsent, true);
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 1);
+  assert.ok(
+    calls.every((c) => c.url.startsWith(`https://api.supabase.com/v1/projects/${STAGING.ref}/`)),
+  );
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, index, value] of [
+  ["extra role", 2, [{ rolname: loginResponse.role }, { rolname: "cli_login_other" }]],
+  ["replacement role", 4, [{ rolname: "cli_login_other" }]],
+  ["foreign session", 3, [{ pid: 123, usename: "cli_login_other" }]],
+  ["new session before delete", 5, [{ pid: 123, usename: loginResponse.role }]],
+]) {
+  test(`maintenance refuses ${label} without DELETE or foreign termination`, async () => {
+    const calls = [],
+      steps = maintenanceSteps();
+    steps[index].body = value;
+    await assert.rejects(
+      withStagingLoginRole(maintenance(), {
+        clock: () => now,
+        fetchImpl: fetchSequence(steps, calls),
+      }),
+      RecoveryError,
+    );
+    assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 0);
+    assert.ok(!calls.some((c) => c.options.body?.includes("pg_terminate_backend")));
+  });
+}
+
+test("maintenance terminates only its owned sessions, then rechecks before deleting", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  steps[3].body = [{ pid: 123, usename: loginResponse.role }];
+  steps.splice(4, 0, { body: [{ terminated: true }], status: 201 });
+  await withStagingLoginRole(maintenance(), {
+    clock: () => now,
+    fetchImpl: fetchSequence(steps, calls),
+  });
+  const termination = calls.find((c) => c.options.body?.includes("pg_terminate_backend"));
+  assert.match(
+    JSON.parse(termination.options.body).query,
+    new RegExp(`usename = '${loginResponse.role}'`),
+  );
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 1);
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, index, value, status] of [
+  ["provider delete failure", 6, null, 500],
+  ["remaining role", 7, [{ rolname: loginResponse.role }], 201],
+]) {
+  test(`maintenance rejects ${label} and reads poststate`, async () => {
+    const calls = [],
+      steps = maintenanceSteps();
+    steps[index] = { body: value, status };
+    await assert.rejects(
+      withStagingLoginRole(maintenance(), {
+        clock: () => now,
+        fetchImpl: fetchSequence(steps, calls),
+      }),
+      RecoveryError,
+    );
+    assert.ok(calls.at(-1).url.endsWith("/database/query/read-only"));
+    assert.equal(steps.length, 0);
+  });
+}
+
+test("maintenance cleans up after operation failure without claiming capture success", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  await assert.rejects(
+    withStagingLoginRole(
+      maintenance(async () => {
+        throw new Error("private failure");
+      }),
+      { clock: () => now, fetchImpl: fetchSequence(steps, calls) },
+    ),
+    RecoveryError,
+  );
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").length, 1);
+  assert.equal(steps.length, 0);
+});
+
+test("unknown maintenance mode fails before any provider call", async () => {
+  await assert.rejects(
+    withStagingLoginRole(
+      { ...maintenance(), cleanupMode: "production-maintenance" },
+      { fetchImpl: async () => assert.fail("no provider request allowed") },
+    ),
+    RecoveryError,
+  );
+});
+
+test("maintenance accepts 200 empty DELETE body only with verified empty poststate", async () => {
+  const calls = [],
+    steps = maintenanceSteps();
+  const sequence = fetchSequence(steps, calls);
+  const result = await withStagingLoginRole(maintenance(), {
+    clock: () => now,
+    fetchImpl: async (url, options) => {
+      const response = await sequence(url, options);
+      return options.method === "DELETE"
+        ? {
+            status: 200,
+            json: async () => {
+              throw new SyntaxError("Unexpected end of JSON input");
+            },
+          }
+        : response;
+    },
+  });
+  assert.equal(result.lifecycle.poststateRoleCount, 0);
+  assert.equal(result.lifecycle.exactRoleAbsent, true);
   assert.equal(steps.length, 0);
 });
