@@ -105,13 +105,13 @@ the extension (JWT + panel `/api` only).
 These are not agent-verifiable. Checklist:
 [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md).
 
-| Step                                                      | Why manual                                                                                   |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet                                             |
-| Provision Vault secret `ssn_vault_key`                    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed                                         |
-| Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op                                         |
-| Merge PRs / approve epics                                 | Governance: PM approval required (no autonomous self-merge; PM may delegate merge execution) |
-| Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat                                            |
+| Step                                      | Why manual                                                                                                                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reconcile and activate tracked migrations | CI runner and release readiness gates are implemented; hosted activation requires the [reconciliation plan](migration-tracking.md). SQL Editor schema changes are prohibited. |
+| Provision Vault secret `ssn_vault_key`    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed                                                                                                                          |
+| Confirm UAT portals seeded                | Empty registry ⇒ extension fill/capture silent no-op                                                                                                                          |
+| Merge PRs / approve epics                 | Governance: PM approval required (no autonomous self-merge; PM may delegate merge execution)                                                                                  |
+| Preview / UAT sign-off                    | AGENTS.md: no self-testing panel journeys in chat                                                                                                                             |
 
 ---
 

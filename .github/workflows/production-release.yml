@@ -33,6 +33,9 @@ jobs:
       - name: Verify delivery controls (simulation)
         run: node --test scripts/delivery/*.test.mjs
 
+      - name: Require reconciled production migration plan before approval
+        run: node scripts/migrations/cli.mjs readiness production
+
       # This step cannot succeed until authenticated collectors and the immutable
       # artifact-to-summary binding are connected. It has no production secrets.
       - name: Prepare immutable approval summary (activation blocked)
