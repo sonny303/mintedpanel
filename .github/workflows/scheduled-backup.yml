@@ -79,14 +79,20 @@ jobs:
 
       - name: Run Backup Coordinator
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.SUPABASE_NIGHTLYBACKUP_ACCESS_TOKEN }}
           BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           TARGET_ENV="${{ inputs.environment || 'production' }}"
           EXTRA_FLAGS=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            EXTRA_FLAGS="--dry-run"
+            EXTRA_FLAGS="${EXTRA_FLAGS} --dry-run"
+          fi
+          if [ "${{ inputs.backup_repo }}" = "false" ]; then
+            EXTRA_FLAGS="${EXTRA_FLAGS} --no-repo"
+          fi
+          if [ "${{ inputs.backup_db }}" = "false" ]; then
+            EXTRA_FLAGS="${EXTRA_FLAGS} --no-db"
           fi
 
           node scripts/backup/nightly-backup.mjs \
@@ -101,6 +107,7 @@ jobs:
           path: ${{ env.WORKSPACE }}
           destination: "${{ secrets.GCS_BACKUP_BUCKET }}/backups/${{ env.BACKUP_DATE }}"
           parent: false
+          process_gcloudignore: false
 
       - name: "Archive Fallback Artifacts (GitHub Retention: 7 Days)"
         uses: actions/upload-artifact@v4
