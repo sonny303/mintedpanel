@@ -41,7 +41,10 @@ jobs:
           cache: npm
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0
+      - name: Restore Supabase built-in registry fallback
+        shell: bash
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=" >> "$GITHUB_ENV"
       - run: npm ci
       - name: Start and reset local Supabase
         shell: bash
