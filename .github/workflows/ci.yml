@@ -36,6 +36,9 @@ jobs:
       - name: Check delivery controls and provider adapters with simulated data
         run: npm run test:delivery
 
+      - name: Check backup credential isolation and identity gates
+        run: npm run test:backup
+
   build:
     runs-on: ubuntu-latest
     steps:

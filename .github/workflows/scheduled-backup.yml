@@ -72,7 +72,7 @@ jobs:
 
       - name: Run Backup Coordinator
         env:
-          SUPABASE_PRODUCTION_BACKUP_ACCESS_TOKEN: ${{ secrets.SUPABASE_PRODUCTION_BACKUP_ACCESS_TOKEN }}
+          SUPABASE_PRODUCTION_BACKUP_DATABASE_URL: ${{ secrets.SUPABASE_PRODUCTION_BACKUP_DATABASE_URL }}
           BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
         run: |
           EXTRA_FLAGS=""
