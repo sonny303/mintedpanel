@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import process from "node:process";
-import { assertSafeTarget, fixtureUuid, ids } from "./uat-fixture.mjs";
+import { psqlEnvironment, assertSafeTarget, fixtureUuid, ids } from "./uat-fixture.mjs";
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -33,7 +33,7 @@ async function main() {
     COMMIT;`;
   await new Promise((resolve, reject) => {
     const child = spawn("psql", [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-c", sql], {
-      env: { ...process.env, PGPASSWORD: undefined },
+      env: psqlEnvironment(),
       stdio: "inherit",
     });
     child.once("error", reject);

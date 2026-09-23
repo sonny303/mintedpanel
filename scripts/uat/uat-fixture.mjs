@@ -89,24 +89,66 @@ export const ids = Object.freeze({
 export function assertSafeTarget({ supabaseUrl, databaseUrl }) {
   const api = new URL(supabaseUrl);
   const db = new URL(databaseUrl);
-  const localApi = ["127.0.0.1", "localhost", "::1"].includes(api.hostname);
-  const localDb = ["127.0.0.1", "localhost", "::1"].includes(db.hostname);
+  const loopback = ["127.0.0.1", "localhost", "[::1]"];
+  const localApi = loopback.includes(api.hostname);
+  const localDb = loopback.includes(db.hostname);
   const stagingApi =
-    api.protocol === "https:" && api.hostname === `${STAGING_PROJECT_REF}.supabase.co`;
+    api.protocol === "https:" && api.hostname === `${STAGING_PROJECT_REF}.supabase.co` && !api.port;
   const stagingDb =
-    db.hostname.includes(STAGING_PROJECT_REF) ||
-    (db.hostname.endsWith(".pooler.supabase.com") &&
-      decodeURIComponent(db.username).endsWith(`.${STAGING_PROJECT_REF}`));
+    (db.port === "" || db.port === "5432") &&
+    ((db.hostname === `db.${STAGING_PROJECT_REF}.supabase.co` &&
+      decodeURIComponent(db.username) === "postgres") ||
+      (db.hostname === "aws-0-ca-central-1.pooler.supabase.com" &&
+        decodeURIComponent(db.username) === `postgres.${STAGING_PROJECT_REF}`));
   if (!((localApi && localDb) || (stagingApi && stagingDb))) {
     throw new Error(
       "Refusing unsafe target: only the fixed staging project or loopback local Supabase is allowed",
     );
   }
-  if (api.username || api.password || !["http:", "https:"].includes(api.protocol)) {
+  if (
+    api.username ||
+    api.password ||
+    !["http:", "https:"].includes(api.protocol) ||
+    api.search ||
+    api.hash ||
+    !["", "/"].includes(api.pathname)
+  ) {
     throw new Error("Invalid Supabase URL");
   }
-  if (!db.protocol.startsWith("postgres")) throw new Error("UAT_DATABASE_URL must be PostgreSQL");
+  if (
+    !["postgres:", "postgresql:"].includes(db.protocol) ||
+    db.pathname !== "/postgres" ||
+    db.hash
+  ) {
+    throw new Error("UAT_DATABASE_URL must target the PostgreSQL postgres database");
+  }
+  const parameters = [...db.searchParams];
+  if (
+    parameters.length > 1 ||
+    parameters.some(
+      ([key, value]) => key !== "sslmode" || !["require", "verify-full"].includes(value),
+    )
+  ) {
+    throw new Error(
+      "Refusing database connection overrides: only sslmode=require or verify-full is allowed",
+    );
+  }
   return localApi ? "local" : "staging";
+}
+
+export function psqlEnvironment(environment = process.env) {
+  return Object.fromEntries(Object.entries(environment).filter(([key]) => !/^PG/i.test(key)));
+}
+
+export function assertSeedOptions(target, args) {
+  if (target === "staging" && args.skipAuth) {
+    throw new Error("--skip-auth is only allowed for local Supabase");
+  }
+  if (args.reset === "all" && args.confirm !== CONFIRMATION_TOKEN) {
+    throw new Error(
+      `Full reset owns organizations ${ids.organizations.join(", ")}. Re-run with --confirm "${CONFIRMATION_TOKEN}"`,
+    );
+  }
 }
 
 export function hasExactOwnershipMarker(user) {

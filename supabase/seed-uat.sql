@@ -1,5 +1,18 @@
 \set QUIET 1
 BEGIN;
+-- Fail before fixture writes, including when this file is invoked directly.
+-- The runner observes local identity through loopback, or verifies the pinned
+-- staging cluster. A hosted restore requires an explicit identity re-audit.
+SELECT set_config('minted.uat_expected_database_identity', :'expected_database_identity', true);
+DO $$
+DECLARE v_identity text := (SELECT system_identifier::text FROM pg_control_system());
+BEGIN
+  IF v_identity = '7642734024280108049'
+     OR v_identity IS DISTINCT FROM current_setting('minted.uat_expected_database_identity') THEN
+    RAISE EXCEPTION 'UAT fixture refused: database identity is production or does not match preflight';
+  END IF;
+END;
+$$;
 SELECT set_config('minted.uat_fixture_version', :'fixture_version', true);
 SELECT set_config('minted.uat_reset_mode', :'reset_mode', true);
 SELECT set_config('minted.uat_deletion_case_ids', :'deletion_case_ids', true);

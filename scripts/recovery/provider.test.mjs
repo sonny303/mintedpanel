@@ -3,11 +3,25 @@ import assert from "node:assert/strict";
 import { RecoveryError, STAGING } from "./contract.mjs";
 import {
   loadSupabaseAccessToken,
+  decodeKeychainToken,
   observeStagingProvider,
   withStagingLoginRole,
 } from "./provider.mjs";
 
 const token = `sbp_${"a".repeat(40)}`;
+test("decodes the official CLI macOS keyring wrappers without accepting malformed encoding", () => {
+  assert.equal(
+    decodeKeychainToken(`go-keyring-base64:${Buffer.from(token).toString("base64")}`),
+    token,
+  );
+  assert.equal(
+    decodeKeychainToken(`go-keyring-encoded:${Buffer.from(token).toString("hex")}`),
+    token,
+  );
+  assert.equal(decodeKeychainToken(token), token);
+  assert.throws(() => decodeKeychainToken("go-keyring-base64:%%%"));
+  assert.throws(() => decodeKeychainToken("go-keyring-encoded:abc"));
+});
 const now = "2026-09-19T04:00:00.000Z";
 const project = {
   id: STAGING.ref,
@@ -22,6 +36,22 @@ const project = {
     release_channel: "ga",
   },
 };
+const pooler = [
+  {
+    identifier: STAGING.ref,
+    database_type: "PRIMARY",
+    is_using_scram_auth: true,
+    db_user: `postgres.${STAGING.ref}`,
+    db_host: STAGING.host,
+    db_port: 6543,
+    db_name: "postgres",
+    connection_string: "private-connection-placeholder",
+    connectionString: "private-connection-placeholder",
+    default_pool_size: null,
+    max_client_conn: null,
+    pool_mode: "transaction",
+  },
+];
 const reply = (body, status = 200) => ({ status, json: async () => structuredClone(body) });
 const loginResponse = {
   role: "cli_login_h10",
@@ -59,9 +89,7 @@ test("provider observation is sanitized and pinned to staging", async () => {
     clock: () => now,
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
-      return reply(
-        url.endsWith("/pooler") ? { default_pool_size: 15, pool_mode: "transaction" } : project,
-      );
+      return reply(url.endsWith("/pooler") ? pooler : project);
     },
   });
   assert.equal(calls.length, 2);
@@ -73,6 +101,7 @@ test("provider observation is sanitized and pinned to staging", async () => {
   });
   assert.match(result.providerDigest, /^[a-f0-9]{64}$/);
   assert.ok(!JSON.stringify(result).includes(token));
+  assert.ok(!JSON.stringify(result).includes("private-connection-placeholder"));
 });
 
 for (const [label, mutate] of [
@@ -88,8 +117,7 @@ for (const [label, mutate] of [
       observeStagingProvider({
         token,
         clock: () => now,
-        fetchImpl: async (url) =>
-          reply(url.endsWith("/pooler") ? { default_pool_size: 15, pool_mode: "session" } : value),
+        fetchImpl: async (url) => reply(url.endsWith("/pooler") ? pooler : value),
       }),
       (error) => error instanceof RecoveryError && error.code === "RECOVERY_PROVIDER_REJECTED",
     );
@@ -322,4 +350,85 @@ test("unexpected preexisting CLI role fails before login-role POST", async () =>
   assert.equal(calls.length, 1);
   assert.ok(calls[0].url.endsWith("/database/query/read-only"));
   assert.equal(steps.length, 0);
+});
+
+for (const [label, mutate] of [
+  [
+    "wrong project",
+    (rows) => {
+      rows[0].identifier = "fkvuhfsqcmujywzgczmc";
+    },
+  ],
+  [
+    "wrong host",
+    (rows) => {
+      rows[0].db_host = "production.invalid";
+    },
+  ],
+  [
+    "wrong user",
+    (rows) => {
+      rows[0].db_user = "postgres.production";
+    },
+  ],
+  [
+    "wrong database",
+    (rows) => {
+      rows[0].db_name = "other";
+    },
+  ],
+  [
+    "ambiguous primary",
+    (rows) => {
+      rows.push({ ...rows[0] });
+    },
+  ],
+  [
+    "missing primary",
+    (rows) => {
+      rows[0].database_type = "READ_REPLICA";
+    },
+  ],
+  [
+    "wrong port for mode",
+    (rows) => {
+      rows[0].db_port = 5432;
+    },
+  ],
+  [
+    "unsafe pool size",
+    (rows) => {
+      rows[0].default_pool_size = -1;
+    },
+  ],
+  [
+    "wrong project extra entry",
+    (rows) => {
+      rows.push({ ...rows[0], identifier: "production", database_type: "READ_REPLICA" });
+    },
+  ],
+]) {
+  test(`pooler observation rejects ${label}`, async () => {
+    const value = structuredClone(pooler);
+    mutate(value);
+    await assert.rejects(
+      observeStagingProvider({
+        token,
+        clock: () => now,
+        fetchImpl: async (url) => reply(url.endsWith("/pooler") ? value : project),
+      }),
+      (error) => error instanceof RecoveryError && error.code === "RECOVERY_PROVIDER_REJECTED",
+    );
+  });
+}
+
+test("pooler observation accepts explicit session endpoint and excludes connection strings", async () => {
+  const value = [{ ...pooler[0], db_port: 5432, pool_mode: "session", default_pool_size: 15 }];
+  const result = await observeStagingProvider({
+    token,
+    clock: () => now,
+    fetchImpl: async (url) => reply(url.endsWith("/pooler") ? value : project),
+  });
+  assert.match(result.providerDigest, /^[a-f0-9]{64}$/);
+  assert.ok(!JSON.stringify(result).includes("private-connection-placeholder"));
 });

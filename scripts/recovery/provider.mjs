@@ -44,7 +44,26 @@ async function keychainToken(run) {
       env: { PATH: "/usr/bin:/bin", HOME: homedir(), LANG: "C" },
     },
   );
-  return stdout.trim();
+  return decodeKeychainToken(stdout.trim());
+}
+
+// Supabase CLI uses go-keyring, which wraps macOS passwords before storage.
+// Decode only its canonical encodings, then retain the token format check below.
+export function decodeKeychainToken(value) {
+  for (const [prefix, encoding, pattern] of [
+    [
+      "go-keyring-base64:",
+      "base64",
+      /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
+    ],
+    ["go-keyring-encoded:", "hex", /^(?:[a-fA-F0-9]{2})+$/],
+  ]) {
+    if (!value.startsWith(prefix)) continue;
+    const encoded = value.slice(prefix.length);
+    check(pattern.test(encoded));
+    return Buffer.from(encoded, encoding).toString("utf8");
+  }
+  return value;
 }
 
 // Match Supabase CLI's precedence without ever logging or serializing the token.
@@ -100,6 +119,28 @@ function exactTimestamp(value) {
       new Date(value).toISOString() === value,
   );
   return value;
+}
+
+// The Management API returns database-specific endpoint records, not the
+// two-field configuration object. Select one unambiguous, pinned primary and
+// discard connection strings before producing evidence.
+function normalizePooler(rows) {
+  check(Array.isArray(rows) && rows.length > 0);
+  check(rows.every((row) => plainObject(row) && row.identifier === STAGING.ref));
+  const primary = rows.filter((row) => row.database_type === "PRIMARY");
+  check(primary.length === 1);
+  const row = primary[0];
+  check(
+    row.db_host === STAGING.host &&
+      row.db_user === `postgres.${STAGING.ref}` &&
+      row.db_name === STAGING.database &&
+      row.is_using_scram_auth === true &&
+      ((row.pool_mode === "transaction" && row.db_port === 6543) ||
+        (row.pool_mode === "session" && row.db_port === 5432)) &&
+      (row.default_pool_size === null ||
+        (Number.isSafeInteger(row.default_pool_size) && row.default_pool_size > 0)),
+  );
+  return { default_pool_size: row.default_pool_size, pool_mode: row.pool_mode };
 }
 
 function projectObservation(project, pooler, capturedAt) {
@@ -171,9 +212,9 @@ export async function observeStagingProvider({
     check(new Date(capturedAt).toISOString() === capturedAt);
     const [project, pooler] = await Promise.all([
       jsonRequest(fetchImpl, token, `/v1/projects/${STAGING.ref}`),
-      jsonRequest(fetchImpl, token, `/v1/projects/${STAGING.ref}/config/database/pooler`),
+      request(fetchImpl, token, `/v1/projects/${STAGING.ref}/config/database/pooler`),
     ]);
-    return projectObservation(project, pooler, capturedAt);
+    return projectObservation(project, normalizePooler(pooler), capturedAt);
   } catch {
     throw fail();
   }

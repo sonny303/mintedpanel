@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { createClient } from "@supabase/supabase-js";
-import { assertSafeTarget, counts, ids, personas } from "./uat-fixture.mjs";
+import { psqlEnvironment, assertSafeTarget, counts, ids, personas } from "./uat-fixture.mjs";
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -17,7 +17,7 @@ async function query(databaseUrl, sql) {
       "psql",
       [databaseUrl, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", sql],
       {
-        env: { ...process.env, PGPASSWORD: undefined },
+        env: psqlEnvironment(),
         stdio: ["ignore", "pipe", "inherit"],
       },
     );
