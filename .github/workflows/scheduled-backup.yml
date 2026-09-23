@@ -6,14 +6,6 @@ on:
     - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Target Environment"
-        required: true
-        default: "production"
-        type: choice
-        options:
-          - production
-          - staging
       backup_repo:
         description: "Backup Git Repository"
         required: true
@@ -42,6 +34,7 @@ jobs:
   backup:
     name: Execute Nightly Backup
     runs-on: ubuntu-latest
+    environment: Production Backup
     timeout-minutes: 30
 
     steps:
@@ -79,11 +72,9 @@ jobs:
 
       - name: Run Backup Coordinator
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.SUPABASE_NIGHTLYBACKUP_ACCESS_TOKEN }}
+          SUPABASE_PRODUCTION_BACKUP_DATABASE_URL: ${{ secrets.SUPABASE_PRODUCTION_BACKUP_DATABASE_URL }}
           BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          TARGET_ENV="${{ inputs.environment || 'production' }}"
           EXTRA_FLAGS=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             EXTRA_FLAGS="${EXTRA_FLAGS} --dry-run"
@@ -97,7 +88,7 @@ jobs:
 
           node scripts/backup/nightly-backup.mjs \
             --workspace "${{ env.WORKSPACE }}" \
-            --target-env "${TARGET_ENV}" \
+            --target-env production \
             ${EXTRA_FLAGS}
 
       - name: Upload Artifacts to Google Cloud Storage
