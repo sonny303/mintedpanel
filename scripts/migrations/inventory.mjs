@@ -54,10 +54,11 @@ export function checkHistory(inventory, history) {
   }
   const paths = new Set(history.map((item) => item.path));
   const ids = new Set(history.map((item) => item.id));
-  const last = history.at(-1).id;
+  let last = history.at(-1).id;
   for (const item of inventory.filter((entry) => !paths.has(entry.path))) {
     requireMigration(!ids.has(item.id), "DUPLICATE_MIGRATION_VERSION");
     requireMigration(item.id > last, "BACKDATED_MIGRATION");
     ids.add(item.id);
+    last = item.id;
   }
 }
