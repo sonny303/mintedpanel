@@ -1,7 +1,39 @@
 # Staging alignment 1–5: September 24 rebind
 
-Status: **LOCAL_ALIGNMENT_REHEARSED_ONLY**. Hosted SQL has not run. Release
-admission remains **BLOCKED**. This is not production approval.
+Packet status: **BLOCKED_NATIVE_ACL_REGRESSION**. The five-transaction receipt
+remains **LOCAL_ALIGNMENT_REHEARSED_ONLY**, but the subsequent native authorization
+regression failed. Hosted SQL has not run. Release admission remains **BLOCKED**.
+This is not production approval.
+
+## Newly verified permission blocker
+
+`supabase/tests/capture-boundary-org-security.sql` failed on the qualified local
+rehearsal with four expected-denial assertions. Its synthetic fixtures rolled
+back. The tenant-boundary, success, replay and expiry assertions did not fail.
+
+Read-only comparison against the untouched baseline established that these
+permissions existed before this rebind and survive the five slices:
+
+| Signature                                          | Surviving unwanted privilege path         | Failed assertion                    |
+| -------------------------------------------------- | ----------------------------------------- | ----------------------------------- |
+| `submit_capture(text,jsonb)`                       | Explicit `service_role` EXECUTE           | `acl.service_role_submit_denied`    |
+| `validate_capture_token(text)`                     | Explicit `service_role` EXECUTE           | `acl.service_role_validate_denied`  |
+| `check_rpc_throttle(text,integer,integer,boolean)` | Both `PUBLIC` and explicit `anon` EXECUTE | `acl.anon_throttle_helper_denied`   |
+| `mark_rpc_attempt_valid(text)`                     | Both `PUBLIC` and explicit `anon` EXECUTE | `acl.anon_mark_valid_helper_denied` |
+
+All four functions are owned by `postgres` before and after the rehearsal. Slice
+5 removes `PUBLIC` from the two capture RPCs but leaves their explicit
+`service_role` grants. It does not reconcile the two throttle-helper ACLs.
+
+The existing native test and the internal-helper revokes in
+`20260710130000_public_rpc_rate_limiting.sql` establish the denied-access contract.
+Clean-database CI cannot substitute for this populated-staging ACL check.
+
+**Next approval scope:** revise the same packet to reconcile effective execution
+grants on these four signatures, add explicit postconditions, independently review
+the changed ACL contract, and rerun native tests on a fresh disposable restore.
+Do not issue a one-off hosted grant fix. A write pause alone does not clear this
+blocker. The five SQL files have not been changed to repair these permissions.
 
 ## Requirement and scope
 
