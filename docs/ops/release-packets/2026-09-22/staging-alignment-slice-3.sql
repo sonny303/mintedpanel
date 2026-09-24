@@ -32,8 +32,11 @@ BEGIN
     END IF;
   ELSIF target_kind = 'qualified_local_restore' THEN
     IF current_database() <> 'minted_recovery'
-       OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'QUALIFIED'
+       OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'LOCAL_APPLICATION_BASELINE_VERIFIED'
        OR current_setting('minted.restore_receipt_id', true) IS NULL
+       OR current_setting('minted.restore_receipt_id', true) !~ '^[a-f0-9]{16}$'
+       OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'
+       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7688850032395546663'
        OR current_setting('minted.restore_system_identifier', true) !~ '^[0-9]+$' THEN
       RAISE EXCEPTION 'ALIGNMENT_LOCAL_RECEIPT_REJECTED';
     END IF;
@@ -113,13 +116,13 @@ ALTER TABLE public.case_generation_run_rows DROP CONSTRAINT case_generation_run_
 ALTER TABLE public.case_generation_run_rows ADD CONSTRAINT case_generation_run_rows_reason_required_check CHECK (disposition NOT IN ('excluded','failed','skipped','enrolled') OR reason IS NOT NULL);
 ALTER TABLE public.import_runs DROP CONSTRAINT IF EXISTS import_runs_entity_kind_check;
 ALTER TABLE public.import_runs ADD CONSTRAINT import_runs_entity_kind_check CHECK (entity_kind IN ('provider_group','facility','provider','combined','payer_attach'));
-REVOKE ALL ON public.case_status_history FROM authenticated;
+REVOKE ALL ON public.case_status_history FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON public.case_status_history TO authenticated;
-REVOKE ALL ON public.case_generation_runs FROM authenticated;
+REVOKE ALL ON public.case_generation_runs FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON public.case_generation_runs TO authenticated;
-REVOKE ALL ON public.case_generation_run_rows FROM authenticated;
+REVOKE ALL ON public.case_generation_run_rows FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON public.case_generation_run_rows TO authenticated;
-REVOKE ALL ON public.payer_pipeline_history FROM authenticated;
+REVOKE ALL ON public.payer_pipeline_history FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON public.payer_pipeline_history TO authenticated;
 
 DO $poststate$
@@ -141,6 +144,41 @@ BEGIN
   ) THEN RAISE EXCEPTION 'ALIGNMENT_LEDGER_PRESERVATION_FAILED'; END IF;
 END
 $poststate$;
+DO $ledger_acl_poststate$
+DECLARE
+  v_table regclass;
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY[
+    'public.case_status_history'::regclass,
+    'public.case_generation_runs'::regclass,
+    'public.case_generation_run_rows'::regclass,
+    'public.payer_pipeline_history'::regclass,
+    'public.enrollment_facts'::regclass
+  ] LOOP
+    IF has_table_privilege('anon', v_table, 'SELECT')
+       OR has_table_privilege('anon', v_table, 'INSERT')
+       OR has_table_privilege('anon', v_table, 'UPDATE')
+       OR has_table_privilege('anon', v_table, 'DELETE')
+       OR has_table_privilege('anon', v_table, 'TRUNCATE') THEN
+      RAISE EXCEPTION 'ALIGNMENT_LEDGER_ANON_PRIVILEGE_DRIFT';
+    END IF;
+    IF NOT has_table_privilege('authenticated', v_table, 'SELECT')
+       OR NOT has_table_privilege('authenticated', v_table, 'INSERT')
+       OR (
+         v_table <> 'public.enrollment_facts'::regclass
+         AND has_table_privilege('authenticated', v_table, 'UPDATE')
+       )
+       OR (
+         v_table = 'public.enrollment_facts'::regclass
+         AND NOT has_table_privilege('authenticated', v_table, 'UPDATE')
+       )
+       OR has_table_privilege('authenticated', v_table, 'DELETE')
+       OR has_table_privilege('authenticated', v_table, 'TRUNCATE') THEN
+      RAISE EXCEPTION 'ALIGNMENT_LEDGER_AUTH_PRIVILEGE_DRIFT';
+    END IF;
+  END LOOP;
+END
+$ledger_acl_poststate$;
 DO $final_guard$
 BEGIN
   IF to_regclass('public.portal_field_maps_aetna_backup_20260904') IS NOT NULL

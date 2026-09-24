@@ -104,9 +104,36 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
   assert.equal(manifest.targetBinding.local.requiredDatabase, "minted_recovery");
   assert.equal(
     manifest.targetBinding.local.requiredPhysicalSystemIdentifier,
-    "supplied_by_qualified_restore_receipt",
+    "7688850032395546663",
   );
   assert.equal(manifest.targetBinding.local.requiredExternalReceiptBinding, true);
+  assert.equal(
+    manifest.targetBinding.local.expectedApplicationStatus,
+    "LOCAL_APPLICATION_BASELINE_VERIFIED",
+  );
+  assert.equal(manifest.targetBinding.local.applicationBinding.status, "BOUND");
+  assert.equal(
+    manifest.targetBinding.local.applicationBinding.baselineQualificationDigest,
+    "0feaecb6544f20a899cc169c472c5e668ef3d73f61f3e15a5ea170cb63abea7b",
+  );
+  assert.deepEqual(manifest.targetBinding.local.applicationBinding.baselineTarget, {
+    runId: "2e465ae49df2037d",
+    systemIdentifier: "7688816016043610151",
+  });
+  assert.equal(
+    manifest.targetBinding.local.applicationBinding.captureDigest,
+    "efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5",
+  );
+  assert.deepEqual(manifest.targetBinding.local.applicationBinding.rehearsalTarget, {
+    runId: "7dc905282a047aa2",
+    containerId: "d7ed97e0cb0baceab4ea2a9eb94a6357fad2a6ddb10fd536a9bd1b2731bfdb84",
+    systemIdentifier: "7688850032395546663",
+  });
+  assert.equal(
+    manifest.targetBinding.local.currentReceipt.status,
+    "LOCAL_APPLICATION_BASELINE_VERIFIED",
+  );
+  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "0feaecb6544f20a8");
   assert.equal(manifest.targetBinding.local.currentReceipt.eligibleForApply, false);
 
   for (const [relativePath, expectedDigest] of Object.entries(manifest.sourceFiles)) {
@@ -151,6 +178,22 @@ test("each alignment slice is serial, identity guarded, physical-restore guarded
     assert.match(
       sql,
       /actual_system_identifier IS DISTINCT FROM current_setting\('minted\.restore_system_identifier'\)::bigint/,
+    );
+    assert.match(
+      sql,
+      /current_setting\('minted\.restore_status', true\) IS DISTINCT FROM 'LOCAL_APPLICATION_BASELINE_VERIFIED'/,
+    );
+    assert.match(
+      sql,
+      /current_setting\('minted\.restore_capture_digest', true\) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'/,
+    );
+    assert.match(
+      sql,
+      /current_setting\('minted\.restore_receipt_id', true\) !~ '\^\[a-f0-9\]\{16\}\$'/,
+    );
+    assert.match(
+      sql,
+      /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7688850032395546663'/,
     );
     assert.match(sql, /ALIGNMENT_LOCAL_SYSTEM_ID_(?:UNAVAILABLE|REJECTED)/);
     assert.doesNotMatch(sql, /fkvuhfsqcmujywzgczmc/);
@@ -230,6 +273,34 @@ test("reviewed RPC ACLs are signature-specific and fail closed for public caller
   }
   assert.doesNotMatch(slice2, /GRANT EXECUTE ON FUNCTION [^;]+ TO [^;]*\bPUBLIC\b/);
   assert.doesNotMatch(slice2, /GRANT EXECUTE ON FUNCTION [^;]+ TO [^;]*\banon\b/);
+});
+
+test("slice 3 resets ledger table ACLs before granting only authenticated reads/inserts", async () => {
+  const slice3 = await readFile(resolve(PACKET, "staging-alignment-slice-3.sql"), "utf8");
+  for (const table of [
+    "case_status_history",
+    "case_generation_runs",
+    "case_generation_run_rows",
+    "payer_pipeline_history",
+    "enrollment_facts",
+  ]) {
+    assert.ok(
+      slice3.includes(`REVOKE ALL ON public.${table} FROM PUBLIC, anon, authenticated;`),
+      `${table} must clear inherited caller ACLs`,
+    );
+    const expectedGrant =
+      table === "enrollment_facts"
+        ? "GRANT SELECT, INSERT, UPDATE ON public.enrollment_facts TO authenticated;"
+        : `GRANT SELECT, INSERT ON public.${table} TO authenticated;`;
+    assert.ok(
+      slice3.includes(expectedGrant),
+      `${table} must keep the reviewed authenticated write floor`,
+    );
+  }
+  assert.match(slice3, /ALIGNMENT_LEDGER_ANON_PRIVILEGE_DRIFT/);
+  assert.match(slice3, /ALIGNMENT_LEDGER_AUTH_PRIVILEGE_DRIFT/);
+  assert.match(slice3, /has_table_privilege\('authenticated', v_table, 'TRUNCATE'\)/);
+  assert.match(slice3, /md5\(to_jsonb\(r\)::text\)/);
 });
 
 test("alignment preservation uses per-primary-key row hashes and the case guard", async () => {
