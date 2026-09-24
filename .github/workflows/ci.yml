@@ -26,6 +26,8 @@ jobs:
         run: docker pull postgres:16
       - name: Reproduce DB-01 and verify repaired role boundaries
         run: node scripts/security/verify-ssn-vault.mjs
+      - name: Verify capture-link tenant isolation and single-use submissions
+        run: node scripts/security/verify-capture-boundary.mjs
 
   staging-uat-seed:
     name: Deterministic staging UAT seed
@@ -111,6 +113,9 @@ jobs:
 
       - name: Check delivery controls and provider adapters with simulated data
         run: npm run test:delivery
+
+      - name: Check backup credential isolation and identity gates
+        run: npm run test:backup
 
   build:
     runs-on: ubuntu-latest
