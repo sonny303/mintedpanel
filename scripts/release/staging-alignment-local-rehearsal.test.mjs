@@ -46,10 +46,10 @@ test("the packet is bound to the independent baseline receipt while apply remain
     assert.equal(result.binding.status, "BOUND");
     assert.equal(
       result.binding.baselineQualificationDigest,
-      "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
+      "b4f73c3f4a37d349b4dc886b506e5f0520fa052dcf52ffaf5d80de63a5cfc5df",
     );
     assert.equal(manifest.targetBinding.local.currentReceipt.eligibleForApply, false);
-    assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "d0171353c3a1c18a");
+    assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "b4f73c3f4a37d349");
     assert.equal(
       manifest.targetBinding.local.requiredPhysicalSystemIdentifier,
       REHEARSAL_TARGET.systemIdentifier,

@@ -57,7 +57,7 @@ test("slice 5 manifest pins the reviewed base, source, packet, and target", asyn
   assert.equal(manifest.targetBinding.local.applicationBinding.status, "BOUND");
   assert.equal(
     manifest.targetBinding.local.applicationBinding.baselineQualificationDigest,
-    "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
+    "b4f73c3f4a37d349b4dc886b506e5f0520fa052dcf52ffaf5d80de63a5cfc5df",
   );
   assert.deepEqual(manifest.targetBinding.local.applicationBinding.baselineTarget, {
     runId: "775640d53985dcdc",
@@ -68,19 +68,19 @@ test("slice 5 manifest pins the reviewed base, source, packet, and target", asyn
     "9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de",
   );
   assert.deepEqual(manifest.targetBinding.local.applicationBinding.rehearsalTarget, {
-    runId: "6715aa4a0f245dc4",
-    containerId: "581afff54fa0479785d736848200a690b4d3b6c87d2b911c5bbb1e790c472c6e",
-    systemIdentifier: "7689124870789845031",
+    runId: "1e65c046d5fd0fec",
+    containerId: "9fb878f8776e684b8ce2c97f17fcb7d6c6e5d8cb1da797152686ba807ad4f88c",
+    systemIdentifier: "7689139001490436135",
   });
   assert.equal(
     manifest.targetBinding.local.requiredPhysicalSystemIdentifier,
-    "7689124870789845031",
+    "7689139001490436135",
   );
   assert.equal(
     manifest.targetBinding.local.currentReceipt.status,
     "LOCAL_APPLICATION_BASELINE_VERIFIED",
   );
-  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "d0171353c3a1c18a");
+  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "b4f73c3f4a37d349");
   assert.equal(manifest.targetBinding.local.currentReceipt.eligibleForApply, false);
   assert.deepEqual(manifest.packet.files, ["staging-alignment-slice-5.sql"]);
   assert.equal(
@@ -128,7 +128,7 @@ test("slice 5 is one guarded additive transaction", () => {
   );
   assert.match(
     sql,
-    /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7689124870789845031'/,
+    /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7689139001490436135'/,
   );
   assert.match(
     sql,
@@ -270,6 +270,40 @@ test("slice 5 proves effective ACLs after the final grants", () => {
   );
   assert.match(publicAcl, /NOT has_function_privilege\('anon', v_signature, 'EXECUTE'\)/);
   assert.match(publicAcl, /NOT has_function_privilege\('authenticated', v_signature, 'EXECUTE'\)/);
+});
+
+test("four-function ACL reconciliation closes captured grant paths without changing bodies", () => {
+  for (const signature of ["submit_capture(text, jsonb)", "validate_capture_token(text)"]) {
+    assert.ok(
+      sql.includes(
+        `REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC, anon, authenticated, service_role;`,
+      ),
+    );
+    assert.ok(
+      sql.includes(`GRANT EXECUTE ON FUNCTION public.${signature} TO anon, authenticated;`),
+    );
+  }
+  for (const signature of [
+    "check_rpc_throttle(text, integer, integer, boolean)",
+    "mark_rpc_attempt_valid(text)",
+  ]) {
+    assert.ok(
+      sql.includes(`REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC, anon, authenticated;`),
+    );
+    assert.ok(!sql.includes(`CREATE OR REPLACE FUNCTION public.${signature.split("(")[0]}(`));
+  }
+  const poststate = sql.slice(sql.lastIndexOf("DO $acl_poststate$"));
+  assert.match(poststate, /has_function_privilege\('service_role', v_signature, 'EXECUTE'\)/);
+  assert.match(poststate, /ALIGNMENT_CAPTURE_HELPER_ACL_EXPOSED/);
+  assert.match(poststate, /ALIGNMENT_CAPTURE_HELPER_OWNER_EXECUTE_MISSING/);
+  assert.match(poststate, /aclexplode/);
+  assert.match(poststate, /grantee = 0/);
+  assert.deepEqual(manifest.aclContracts.capturePermissionReconciliation.changedSignatures, [
+    "submit_capture(text, jsonb)",
+    "validate_capture_token(text)",
+    "check_rpc_throttle(text, integer, integer, boolean)",
+    "mark_rpc_attempt_valid(text)",
+  ]);
 });
 
 test("capture boundary repair is exact, ordered, and limited to the two RPCs", () => {

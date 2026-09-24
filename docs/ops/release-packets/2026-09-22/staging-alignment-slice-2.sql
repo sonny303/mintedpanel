@@ -36,7 +36,7 @@ BEGIN
        OR current_setting('minted.restore_receipt_id', true) IS NULL
        OR current_setting('minted.restore_receipt_id', true) !~ '^[a-f0-9]{16}$'
        OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM '9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de'
-       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7689124870789845031'
+       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7689139001490436135'
        OR current_setting('minted.restore_system_identifier', true) !~ '^[0-9]+$' THEN
       RAISE EXCEPTION 'ALIGNMENT_LOCAL_RECEIPT_REJECTED';
     END IF;

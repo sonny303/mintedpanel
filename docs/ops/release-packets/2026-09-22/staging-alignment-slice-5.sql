@@ -38,7 +38,7 @@ BEGIN
        OR current_setting('minted.restore_receipt_id', true) IS NULL
        OR current_setting('minted.restore_receipt_id', true) !~ '^[a-f0-9]{16}$'
        OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM '9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de'
-       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7689124870789845031'
+       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7689139001490436135'
        OR current_setting('minted.restore_system_identifier', true) !~ '^[0-9]+$' THEN
       RAISE EXCEPTION 'ALIGNMENT_LOCAL_RECEIPT_REJECTED';
     END IF;
@@ -1330,10 +1330,16 @@ REVOKE ALL ON FUNCTION public.create_organization(text, text, text) FROM PUBLIC,
 GRANT EXECUTE ON FUNCTION public.create_organization(text, text, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.create_capture_link(uuid, uuid, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_capture_link(uuid, uuid, text, text) TO authenticated;
-REVOKE ALL ON FUNCTION public.submit_capture(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.submit_capture(text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.submit_capture(text, jsonb) TO anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_capture_token(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.validate_capture_token(text) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.validate_capture_token(text) TO anon, authenticated;
+
+-- Reconcile the captured browser/PUBLIC grants on existing throttle helpers.
+-- SECURITY DEFINER callers retain owner access. Keep helper bodies, owners,
+-- argument defaults and the pre-existing service_role helper grants unchanged.
+REVOKE ALL ON FUNCTION public.check_rpc_throttle(text, integer, integer, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.mark_rpc_attempt_valid(text) FROM PUBLIC, anon, authenticated;
 
 -- Verify effective privileges after every final REVOKE/GRANT. has_function_privilege
 -- includes PUBLIC grants, so checking both browser roles proves the private
@@ -1341,6 +1347,7 @@ GRANT EXECUTE ON FUNCTION public.validate_capture_token(text) TO anon, authentic
 DO $acl_poststate$
 DECLARE
   v_signature text;
+  v_caller record;
 BEGIN
   FOREACH v_signature IN ARRAY ARRAY[
     'public._party_first_name(text)',
@@ -1372,8 +1379,44 @@ BEGIN
     'public.validate_capture_token(text)'
   ]::text[] LOOP
     IF NOT has_function_privilege('anon', v_signature, 'EXECUTE')
-       OR NOT has_function_privilege('authenticated', v_signature, 'EXECUTE') THEN
+       OR NOT has_function_privilege('authenticated', v_signature, 'EXECUTE')
+       OR has_function_privilege('service_role', v_signature, 'EXECUTE') THEN
       RAISE EXCEPTION 'ALIGNMENT_CONTACT_PUBLIC_RPC_ACL_INVALID: %', v_signature;
+    END IF;
+  END LOOP;
+
+  FOREACH v_signature IN ARRAY ARRAY[
+    'public.check_rpc_throttle(text, integer, integer, boolean)',
+    'public.mark_rpc_attempt_valid(text)'
+  ]::text[] LOOP
+    IF has_function_privilege('anon', v_signature, 'EXECUTE')
+       OR has_function_privilege('authenticated', v_signature, 'EXECUTE') THEN
+      RAISE EXCEPTION 'ALIGNMENT_CAPTURE_HELPER_ACL_EXPOSED: %', v_signature;
+    END IF;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    CROSS JOIN LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    WHERE p.oid IN ('public.submit_capture(text,jsonb)'::regprocedure,
+                    'public.validate_capture_token(text)'::regprocedure,
+                    'public.check_rpc_throttle(text,integer,integer,boolean)'::regprocedure,
+                    'public.mark_rpc_attempt_valid(text)'::regprocedure)
+      AND a.grantee = 0 AND a.privilege_type = 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'ALIGNMENT_CAPTURE_PUBLIC_EXECUTE_EXPOSED';
+  END IF;
+
+  -- These existing consumers call the helpers as their actual function owners.
+  FOR v_caller IN
+    SELECT p.proname, p.proowner FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.prokind = 'f'
+      AND p.proname IN ('submit_capture', 'validate_capture_token', 'validate_report_share',
+                       'submit_inbound_lead', 'validate_ssn_intake_token', 'submit_ssn_intake')
+  LOOP
+    IF NOT has_function_privilege(v_caller.proowner, 'public.check_rpc_throttle(text,integer,integer,boolean)'::regprocedure, 'EXECUTE')
+       OR (v_caller.proname <> 'submit_inbound_lead' AND NOT has_function_privilege(v_caller.proowner, 'public.mark_rpc_attempt_valid(text)'::regprocedure, 'EXECUTE')) THEN
+      RAISE EXCEPTION 'ALIGNMENT_CAPTURE_HELPER_OWNER_EXECUTE_MISSING: %', v_caller.proname;
     END IF;
   END LOOP;
 END

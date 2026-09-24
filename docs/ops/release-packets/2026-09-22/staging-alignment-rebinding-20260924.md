@@ -1,18 +1,20 @@
 # Staging alignment 1–5: September 24 rebind
 
-Packet status: **BLOCKED_NATIVE_ACL_REGRESSION**. The five-transaction receipt
-remains **LOCAL_ALIGNMENT_REHEARSED_ONLY**, but the subsequent native authorization
-regression failed. Hosted SQL has not run. Release admission remains **BLOCKED**.
-This is not production approval.
+Packet status: **LOCAL_ALIGNMENT_REHEARSED_ONLY**, with the approved four-function
+ACL revision and native authorization regression verified on a fresh disposable
+restore. Hosted SQL has not run. Release admission remains **BLOCKED**. This is
+not hosted or production approval.
 
-## Newly verified permission blocker
+## Resolved permission blocker and retained failure evidence
 
-`supabase/tests/capture-boundary-org-security.sql` failed on the qualified local
-rehearsal with four expected-denial assertions. Its synthetic fixtures rolled
-back. The tenant-boundary, success, replay and expiry assertions did not fail.
+Before the ACL revision, `supabase/tests/capture-boundary-org-security.sql` failed
+on the first qualified local rehearsal with four expected-denial assertions.
+The extended test also reproduced eight direct-call failures: anonymous and
+authenticated calls to both helpers (including the defaulted throttle argument),
+and service-role calls to both capture RPCs. Synthetic fixtures rolled back.
 
 Read-only comparison against the untouched baseline established that these
-permissions existed before this rebind and survive the five slices:
+permissions existed before this rebind and survived the original five slices:
 
 | Signature                                          | Surviving unwanted privilege path         | Failed assertion                    |
 | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- |
@@ -21,38 +23,46 @@ permissions existed before this rebind and survive the five slices:
 | `check_rpc_throttle(text,integer,integer,boolean)` | Both `PUBLIC` and explicit `anon` EXECUTE | `acl.anon_throttle_helper_denied`   |
 | `mark_rpc_attempt_valid(text)`                     | Both `PUBLIC` and explicit `anon` EXECUTE | `acl.anon_mark_valid_helper_denied` |
 
-All four functions are owned by `postgres` before and after the rehearsal. Slice
-5 removes `PUBLIC` from the two capture RPCs but leaves their explicit
-`service_role` grants. It does not reconcile the two throttle-helper ACLs.
+All four functions are owned by `postgres`. The original slice 5 removed `PUBLIC`
+from the two capture RPCs but left their explicit `service_role` grants, and did
+not reconcile the two throttle-helper ACLs.
 
 The existing native test and the internal-helper revokes in
 `20260710130000_public_rpc_rate_limiting.sql` establish the denied-access contract.
 Clean-database CI cannot substitute for this populated-staging ACL check.
 
-**Next approval scope:** revise the same packet to reconcile effective execution
-grants on these four signatures, add explicit postconditions, independently review
-the changed ACL contract, and rerun native tests on a fresh disposable restore.
-Do not issue a one-off hosted grant fix. A write pause alone does not clear this
-blocker. The five SQL files have not been changed to repair these permissions.
+The owner approved this four-function revision in the same PR:
+
+| Function pair    | Revised boundary                                                   | Preserved behavior                                                         |
+| ---------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Capture RPCs     | Deny `PUBLIC` and `service_role`; allow `anon` and `authenticated` | Existing token, payload, tenant, lock, replay and expiry behavior          |
+| Throttle helpers | Deny `PUBLIC`, `anon` and `authenticated`                          | Actual definer-owner execution and the existing service-role helper grants |
+
+The revised slice checks effective privileges, absence of `PUBLIC` grants and
+helper execution by existing definer callers' owners. No function body, owner,
+signature, security mode, search path, argument default, global default privilege
+or role membership changes. The full native regression now passes on fresh run
+`1e65c046d5fd0fec`; the failed run `6715aa4a0f245dc4` and its evidence remain intact.
 
 ## Requirement and scope
 
-The owner approved rebinding and applying the reviewed first five alignment
-slices to **staging only**. This change binds their existing SQL to the current
-source and newly qualified recovery capture, verifies source drift, and records
-the local rehearsal. It does not replace the original hosted acceptance gates.
+The current approval covers the four-function permission revision, independent
+review and local rehearsal. It does not authorize hosted application without the
+existing staging write-pause and operator gates. The captured source data is the
+same September 24 encrypted capture; this revision creates a new local restore,
+not a new hosted capture.
 
-| Requirement                                      | Implementation / evidence                                                                                          | Status                                                                 |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Use the current reviewed source                  | Base `ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b`; source migration checksums revalidated                            | Confirmed                                                              |
-| Keep the reviewed SQL behavior                   | Only declared source SHA, capture digest and physical local restore identifiers changed in the five SQL files      | Confirmed by independent diff review                                   |
-| Recover the actual staging data                  | Encrypted capture, local Auth/REST qualification and separate baseline/rehearsal restores                          | Confirmed locally; not hosted runtime evidence                         |
-| Reject stale source state                        | Read-only comparison of all 92 physical tables, catalog, migration lineage and two sequences                       | Matched at `2026-09-24T15:47:25.261Z`; refresh within the apply window |
-| Apply five slices in the reviewed order          | One persistent local session; five original SERIALIZABLE transactions                                              | All five committed locally                                             |
-| Preserve recovery and avoid duplicate execution  | Untouched baseline retained; committed receipt plus full live poststate digest produces a no-op resume             | Confirmed locally                                                      |
-| Exact final-head CI                              | Required on this PR, not inferred from base CI or local tests                                                      | Check PR checks for current result                                     |
-| Hosted application write pause                   | Must cover staging testers, imports, integrations and other writers affecting checked dependencies                 | Not established                                                        |
-| Hosted operator invocation and executor identity | Independently review pinned connection, durable role, final readbacks and temporary-login cleanup before execution | Not yet verified                                                       |
+| Requirement                                      | Implementation / evidence                                                                                          | Status                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Use the current reviewed source                  | Base `ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b`; source migration checksums revalidated                            | Confirmed                                                                  |
+| Limit the behavior change                        | Four function ACLs and their postconditions; fresh local bindings                                                  | All 54 public function definitions/owners unchanged; only four ACLs differ |
+| Recover the actual staging data                  | Encrypted capture, local Auth/REST qualification and separate baseline/rehearsal restores                          | Confirmed locally; not hosted runtime evidence                             |
+| Reject stale source state                        | Read-only comparison of all 92 physical tables, catalog, migration lineage and two sequences                       | Matched at `2026-09-24T15:47:25.261Z`; refresh within the apply window     |
+| Apply five slices in the reviewed order          | One persistent local session; five original SERIALIZABLE transactions                                              | All five committed locally                                                 |
+| Preserve recovery and avoid duplicate execution  | Untouched baseline retained; committed receipt plus full live poststate digest produces a no-op resume             | Confirmed locally                                                          |
+| Exact final-head CI                              | Required on this PR, not inferred from base CI or local tests                                                      | Check PR checks for current result                                         |
+| Hosted application write pause                   | Must cover staging testers, imports, integrations and other writers affecting checked dependencies                 | Not established                                                            |
+| Hosted operator invocation and executor identity | Independently review pinned connection, durable role, final readbacks and temporary-login cleanup before execution | Not yet verified                                                           |
 
 ## Bindings
 
@@ -63,21 +73,23 @@ the local rehearsal. It does not replace the original hosted acceptance gates.
 | Forbidden production project              | `fkvuhfsqcmujywzgczmc`                                             |
 | Capture time                              | `2026-09-24T15:25:23.402Z`                                         |
 | Capture digest                            | `9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de` |
-| Application-baseline qualification digest | `d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b` |
-| Qualification receipt ID                  | `d0171353c3a1c18a`                                                 |
+| Application-baseline qualification digest | `b4f73c3f4a37d349b4dc886b506e5f0520fa052dcf52ffaf5d80de63a5cfc5df` |
+| Qualification receipt ID                  | `b4f73c3f4a37d349`                                                 |
 | Untouched baseline run / physical cluster | `775640d53985dcdc` / `7689124825780498471`                         |
-| Rehearsal run / physical cluster          | `6715aa4a0f245dc4` / `7689124870789845031`                         |
-| Local poststate digest                    | `e81470e56069901627d8ef272cdd6e90d4ff7b692f03ffaf0566a97ec2e488f0` |
+| Rehearsal run / physical cluster          | `1e65c046d5fd0fec` / `7689139001490436135`                         |
+| Local poststate digest                    | `5092fe820aacb4a2c6c6b631d057f1d67bcc250e393a3a59488ecfc01e8323f3` |
 
-Private evidence remains in `staging-recovery-fresh-20260924-4oF4BR` outside
-Git. Do not publish raw data, the age identity, credentials or decrypted artifacts.
+Current private evidence is in `staging-recovery-acl-20260924-vD8bsl` outside Git.
+The original capture/readback and failed rehearsal evidence remain in
+`staging-recovery-fresh-20260924-4oF4BR`. Do not publish raw data, the age identity,
+credentials or decrypted artifacts.
 
-| Private receipt                              | Meaning                                                                              |
-| -------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `application-baseline.json`                  | Qualified pre-alignment local baseline; does not authorize release                   |
-| `auth-rest.json`                             | Local Auth/REST runtime verification and destroyed test resources                    |
-| `source-readback-1790264845272.json`         | Full live source comparison; zero drift and zero CLI login roles at observation time |
-| `alignment-slices-1-5-6715aa4a0f245dc4.json` | All five local commits, exact SQL digests and local poststate                        |
+| Private receipt                                           | Meaning                                                                                                                                |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `application-baseline.json`                               | Qualified pre-alignment local baseline; does not authorize release                                                                     |
+| `auth-rest.json`                                          | Local Auth/REST runtime verification and destroyed test resources                                                                      |
+| `source-readback-1790264845272.json` (original workspace) | Historical live source comparison; zero drift and zero CLI login roles at observation time; not refreshed for this local-only revision |
+| `alignment-slices-1-5-1e65c046d5fd0fec.json`              | Revised five local commits, exact SQL digests and local poststate                                                                      |
 
 The source comparison normalizes only the one captured temporary backup role and
 its memberships, after validating its exact capture and cleanup digests. It does
@@ -108,15 +120,23 @@ receipt always retains `eligibleForApply: false` and `releaseAdmission: BLOCKED`
 
 Fresh verification completed:
 
-- All five original transaction postconditions passed on the qualified local
+- All five revised transaction postconditions passed on the fresh qualified local
   restore, including the declared preservation and effective-ACL checks.
+- The native capture regression first reproduced the original four ACL failures
+  and eight new direct-call failures, then passed on the revised restore. Valid
+  capture, tenant denial, replay and expiry checks also passed.
+- All 54 public function definitions/owners match the prior rehearsal. Only the
+  four approved ACLs differ; both service-role helper grants remain unchanged.
 - A second invocation verified a no-op resume against the live local poststate.
-- A read-only recheck of the untouched baseline at `2026-09-24T15:58:31.407Z`
+- A read-only recheck of the untouched baseline at `2026-09-24T16:36:25.667Z`
   matched its original restore proof and sealed capture.
-- `node --test scripts/release/*.test.mjs`: 96 passed.
+- `node --test scripts/release/*.test.mjs`: 97 passed.
 - Recovery, delivery and backup unit/contract suites: 634 passed.
 - Whole-repository formatting and `git diff --check` passed.
-- Independent review approved the rebinding delta and local-only result.
+- A fresh independent boundary investigation and separate candidate review
+  completed. The candidate reviewer found no blocking bypass or regression;
+  executable PostgreSQL evidence was verified separately by the implementation
+  owner on the fresh restore.
 
 These checks do not establish all B1–B14 runtime acceptance, hosted Auth/REST/
 Storage/vault behavior, or production eligibility. The rehearsal's database role

@@ -12,10 +12,10 @@
       "staging-alignment-slice-4.sql"
     ],
     "checksums": {
-      "staging-alignment-slice-1.sql": "b3818367faf73892fe82cfe407a9c3bfc3f31fd51c09b953ff55628d6771d26f",
-      "staging-alignment-slice-2.sql": "546ba0717588a002a737246f4db172dc30cf1d5d7feb19d3df7cf11b3a9f5d0a",
-      "staging-alignment-slice-3.sql": "a79e42c7c90cae0d2080662b5da4559df2c1e691f451dc9746ec09cb55681cd3",
-      "staging-alignment-slice-4.sql": "e1bd851a27b5a2282042fdc5291bb7a6d18cbfec690eb8e29cadd2ecaee96233"
+      "staging-alignment-slice-1.sql": "3dc9f5819e1921d97a8afb4f2f120b4980d6b5430532485cc5340e61e5e8d64a",
+      "staging-alignment-slice-2.sql": "db88446608d8ba8b84c995187ab802f39778439abd5f0245f78d2d1f7d1e1828",
+      "staging-alignment-slice-3.sql": "7a2748c2b0b82299408a0e4eb91ea897c0709f34472ad4bf7e6a1814ff014734",
+      "staging-alignment-slice-4.sql": "9630bba717036fdea361a6d1c27d99d37e49974178e699945eaa646d6abdef9b"
     },
     "execution": "serial_same_session_after_restore_rehearsal",
     "hostedApply": "operator_only_after_recovery_qualification_and_review"
@@ -30,27 +30,27 @@
     "local": {
       "sessionKind": "qualified_local_restore",
       "requiredDatabase": "minted_recovery",
-      "requiredPhysicalSystemIdentifier": "7689124870789845031",
+      "requiredPhysicalSystemIdentifier": "7689139001490436135",
       "requiredExternalReceiptBinding": true,
       "expectedApplicationStatus": "LOCAL_APPLICATION_BASELINE_VERIFIED",
       "applicationBinding": {
         "status": "BOUND",
-        "baselineQualificationDigest": "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
+        "baselineQualificationDigest": "b4f73c3f4a37d349b4dc886b506e5f0520fa052dcf52ffaf5d80de63a5cfc5df",
         "captureDigest": "9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de",
         "baselineTarget": {
           "runId": "775640d53985dcdc",
           "systemIdentifier": "7689124825780498471"
         },
         "rehearsalTarget": {
-          "runId": "6715aa4a0f245dc4",
-          "containerId": "581afff54fa0479785d736848200a690b4d3b6c87d2b911c5bbb1e790c472c6e",
-          "systemIdentifier": "7689124870789845031"
+          "runId": "1e65c046d5fd0fec",
+          "containerId": "9fb878f8776e684b8ce2c97f17fcb7d6c6e5d8cb1da797152686ba807ad4f88c",
+          "systemIdentifier": "7689139001490436135"
         }
       },
       "currentReceipt": {
         "status": "LOCAL_APPLICATION_BASELINE_VERIFIED",
         "eligibleForApply": false,
-        "receiptId": "d0171353c3a1c18a"
+        "receiptId": "b4f73c3f4a37d349"
       }
     }
   },

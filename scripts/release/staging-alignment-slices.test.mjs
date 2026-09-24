@@ -104,7 +104,7 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
   assert.equal(manifest.targetBinding.local.requiredDatabase, "minted_recovery");
   assert.equal(
     manifest.targetBinding.local.requiredPhysicalSystemIdentifier,
-    "7689124870789845031",
+    "7689139001490436135",
   );
   assert.equal(manifest.targetBinding.local.requiredExternalReceiptBinding, true);
   assert.equal(
@@ -114,7 +114,7 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
   assert.equal(manifest.targetBinding.local.applicationBinding.status, "BOUND");
   assert.equal(
     manifest.targetBinding.local.applicationBinding.baselineQualificationDigest,
-    "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
+    "b4f73c3f4a37d349b4dc886b506e5f0520fa052dcf52ffaf5d80de63a5cfc5df",
   );
   assert.deepEqual(manifest.targetBinding.local.applicationBinding.baselineTarget, {
     runId: "775640d53985dcdc",
@@ -125,15 +125,15 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
     "9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de",
   );
   assert.deepEqual(manifest.targetBinding.local.applicationBinding.rehearsalTarget, {
-    runId: "6715aa4a0f245dc4",
-    containerId: "581afff54fa0479785d736848200a690b4d3b6c87d2b911c5bbb1e790c472c6e",
-    systemIdentifier: "7689124870789845031",
+    runId: "1e65c046d5fd0fec",
+    containerId: "9fb878f8776e684b8ce2c97f17fcb7d6c6e5d8cb1da797152686ba807ad4f88c",
+    systemIdentifier: "7689139001490436135",
   });
   assert.equal(
     manifest.targetBinding.local.currentReceipt.status,
     "LOCAL_APPLICATION_BASELINE_VERIFIED",
   );
-  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "d0171353c3a1c18a");
+  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "b4f73c3f4a37d349");
   assert.equal(manifest.targetBinding.local.currentReceipt.eligibleForApply, false);
 
   for (const [relativePath, expectedDigest] of Object.entries(manifest.sourceFiles)) {
@@ -193,7 +193,7 @@ test("each alignment slice is serial, identity guarded, physical-restore guarded
     );
     assert.match(
       sql,
-      /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7689124870789845031'/,
+      /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7689139001490436135'/,
     );
     assert.match(sql, /ALIGNMENT_LOCAL_SYSTEM_ID_(?:UNAVAILABLE|REJECTED)/);
     assert.doesNotMatch(sql, /fkvuhfsqcmujywzgczmc/);

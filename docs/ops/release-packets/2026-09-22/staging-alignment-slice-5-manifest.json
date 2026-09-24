@@ -8,7 +8,7 @@
   "packet": {
     "files": ["staging-alignment-slice-5.sql"],
     "checksums": {
-      "staging-alignment-slice-5.sql": "2dcdf22105ef26a64d8b0fa0d44432765121511b3aca76a7204320c246b44011"
+      "staging-alignment-slice-5.sql": "7b8d2675d9cfe3224990f005dee8eee36cbc5555a14193566d8febad12ec13a6"
     },
     "execution": "serial_same_session_after_fresh_qualified_restore_rehearsal",
     "hostedApply": "operator_only_after_recovery_qualification_and_review"
@@ -23,31 +23,32 @@
     "local": {
       "sessionKind": "qualified_local_restore",
       "requiredDatabase": "minted_recovery",
-      "requiredPhysicalSystemIdentifier": "7689124870789845031",
+      "requiredPhysicalSystemIdentifier": "7689139001490436135",
       "requiredExternalReceiptBinding": true,
       "expectedApplicationStatus": "LOCAL_APPLICATION_BASELINE_VERIFIED",
       "applicationBinding": {
         "status": "BOUND",
-        "baselineQualificationDigest": "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
+        "baselineQualificationDigest": "b4f73c3f4a37d349b4dc886b506e5f0520fa052dcf52ffaf5d80de63a5cfc5df",
         "captureDigest": "9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de",
         "baselineTarget": {
           "runId": "775640d53985dcdc",
           "systemIdentifier": "7689124825780498471"
         },
         "rehearsalTarget": {
-          "runId": "6715aa4a0f245dc4",
-          "containerId": "581afff54fa0479785d736848200a690b4d3b6c87d2b911c5bbb1e790c472c6e",
-          "systemIdentifier": "7689124870789845031"
+          "runId": "1e65c046d5fd0fec",
+          "containerId": "9fb878f8776e684b8ce2c97f17fcb7d6c6e5d8cb1da797152686ba807ad4f88c",
+          "systemIdentifier": "7689139001490436135"
         }
       },
       "currentReceipt": {
         "status": "LOCAL_APPLICATION_BASELINE_VERIFIED",
         "eligibleForApply": false,
-        "receiptId": "d0171353c3a1c18a"
+        "receiptId": "b4f73c3f4a37d349"
       }
     }
   },
   "sourceFiles": {
+    "supabase/migrations/20260710130000_public_rpc_rate_limiting.sql": "c42dfc716cb690d3c5a7f69e37ae1f988408a4466e832dd9e1dbb754f7cdd37a",
     "supabase/migrations/20260721120000_party_role_label_terminology.sql": "c298e496a17b7ec978baeae60c124142d2bfb194819feb4cf11bfdc2e841543a",
     "supabase/migrations/20260807130000_people_contact_roles.sql": "5185702ddc5b889cd2df57db94ab6612e5f011de482285700d6a35a0751ae57a",
     "supabase/migrations/20260807130100_people_contact_role_rpcs.sql": "e6c9d39c4b5680f21de0e78f7d2b7e1a938333a4bca359efadf98507ebc6dc4d",
@@ -87,6 +88,27 @@
     "allowedRoleTypeColumns": ["label", "is_active"]
   },
   "aclContracts": {
+    "capturePermissionReconciliation": {
+      "changedSignatures": [
+        "submit_capture(text, jsonb)",
+        "validate_capture_token(text)",
+        "check_rpc_throttle(text, integer, integer, boolean)",
+        "mark_rpc_attempt_valid(text)"
+      ],
+      "captureAllowed": ["anon", "authenticated"],
+      "captureDenied": ["PUBLIC", "service_role"],
+      "helperDenied": ["PUBLIC", "anon", "authenticated"],
+      "helperServiceRole": "preserve existing grant; not part of the reported browser exposure",
+      "ownerExecution": "each existing definer caller owner must retain its helper execution privileges",
+      "preserved": [
+        "function bodies",
+        "owners",
+        "signatures",
+        "security modes",
+        "search paths",
+        "argument defaults"
+      ]
+    },
     "privateHelpers": [
       "_party_first_name(text)",
       "_party_last_name(text)",

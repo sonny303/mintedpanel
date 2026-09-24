@@ -337,6 +337,72 @@ BEGIN
 END
 $$;
 
+-- Prove the permission boundary through actual calls, including the helper's
+-- defaulted fourth argument; a PUBLIC grant must not rescue a denied role.
+DO $$
+DECLARE
+  caller_role text;
+  statement_sql text;
+  probe_number integer;
+  denied boolean;
+  caller record;
+BEGIN
+  FOREACH caller_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    probe_number := 0;
+    FOREACH statement_sql IN ARRAY ARRAY[
+      $probe$SELECT public.check_rpc_throttle('cb-permission-probe', 20, 15)$probe$,
+      $probe$SELECT public.check_rpc_throttle('cb-permission-probe', 20, 15, false)$probe$,
+      $probe$SELECT public.mark_rpc_attempt_valid('cb-permission-probe')$probe$
+    ] LOOP
+      probe_number := probe_number + 1;
+      denied := false;
+      BEGIN
+        PERFORM set_config('role', caller_role, true);
+        EXECUTE statement_sql;
+      EXCEPTION WHEN insufficient_privilege THEN
+        denied := true;
+      END;
+      RESET ROLE;
+      PERFORM pg_temp.cb_assert('acl.direct_' || caller_role || '_helper_' || probe_number, denied);
+    END LOOP;
+  END LOOP;
+
+  probe_number := 0;
+  FOREACH statement_sql IN ARRAY ARRAY[
+    $probe$SELECT public.submit_capture(NULL, '{}'::jsonb)$probe$,
+    $probe$SELECT public.validate_capture_token(NULL)$probe$
+  ] LOOP
+    probe_number := probe_number + 1;
+    denied := false;
+    BEGIN
+      SET LOCAL ROLE service_role;
+      EXECUTE statement_sql;
+    EXCEPTION WHEN insufficient_privilege THEN
+      denied := true;
+    END;
+    RESET ROLE;
+    PERFORM pg_temp.cb_assert('acl.direct_service_capture_' || probe_number, denied);
+  END LOOP;
+
+  -- Existing SECURITY DEFINER consumers must retain helper access through their
+  -- actual owners; do not require a caller-facing browser grant for nested calls.
+  FOR caller IN
+    SELECT p.proname, p.proowner
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.prokind = 'f'
+      AND p.proname IN ('submit_capture', 'validate_capture_token', 'validate_report_share',
+                       'submit_inbound_lead', 'validate_ssn_intake_token', 'submit_ssn_intake')
+  LOOP
+    PERFORM pg_temp.cb_assert('acl.owner_throttle_' || caller.proname,
+      has_function_privilege(caller.proowner, 'public.check_rpc_throttle(text,integer,integer,boolean)'::regprocedure, 'EXECUTE'));
+    IF caller.proname <> 'submit_inbound_lead' THEN
+      PERFORM pg_temp.cb_assert('acl.owner_mark_valid_' || caller.proname,
+        has_function_privilege(caller.proowner, 'public.mark_rpc_attempt_valid(text)'::regprocedure, 'EXECUTE'));
+    END IF;
+  END LOOP;
+END
+$$;
+
 DO $$
 DECLARE
   failed bigint;
