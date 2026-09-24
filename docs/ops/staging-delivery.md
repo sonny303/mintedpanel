@@ -2,7 +2,21 @@
 
 **Status: local control implementation; hosted activation is blocked.** Run `node scripts/delivery/cli.mjs status` for the explicit capability gaps. Its exit status is 2. Neither a green simulator test nor supplied JSON authorizes deployment.
 
-The `staging-delivery.yml` workflow is manually dispatched from main while private-repository branch and environment reviewer controls remain unenforced. The operator supplies the current successful main push CI run ID and exact source SHA. The job checks out the immutable trusted workflow revision and verifies both inputs against GitHub's run and current main. It rejects automatic events, reruns, forks, non-push CI runs, failed/skipped CI, wrong workflow paths and mismatched or stale source. The hosted delivery entrypoint then stops before acquiring a lease or calling Vercel/Supabase. Existing product checks and defects retain their outcomes. Production remains blocked.
+**Agreed release sequence:** PR → CI → merge to main → manually initiated staging deployment and verification → owner-approved production release.
+
+Once hosted execution is qualified, an operator starts `staging-delivery.yml`
+with the exact successful main CI run and source SHA. It uses the existing
+dedicated staging project and synthetic staging database. Verification must
+establish database binding, data preservation, affected application workflows,
+and installed-extension compatibility, including an explicitly selected secondary
+facility, before staging aliases move. Human UAT sign-off precedes production.
+
+This is a deliberate release start, not automatic PR previews. Keep
+`git.deploymentEnabled: false` for all branches and verify included usage before
+hosted work. The current workflow cannot yet perform these deployment steps.
+See the [release decision and change summary](release-controls.md#release-process-decision-2026-09-23).
+
+The `staging-delivery.yml` workflow is manually dispatched from main. Verify hosted branch and environment controls through fresh readbacks before release; workflow definitions alone do not establish enforcement. The operator supplies the current successful main push CI run ID and exact source SHA. The job checks out the immutable trusted workflow revision and verifies both inputs against GitHub's run and current main. It rejects automatic events, reruns, forks, non-push CI runs, failed/skipped CI, wrong workflow paths and mismatched or stale source. The hosted delivery entrypoint then stops before acquiring a lease or calling Vercel/Supabase. Existing product checks and defects retain their outcomes. Production remains blocked.
 
 ## What is implemented
 

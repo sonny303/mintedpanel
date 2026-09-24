@@ -6,6 +6,17 @@ epic lifecycle detail stays in [`docs/redesign/README.md`](../redesign/README.md
 This file is the short map of **who writes what, how it merges, and what is
 manual today**.
 
+**Agreed release sequence:** PR → CI → merge to main → manually initiated staging deployment and verification → owner-approved production release.
+
+All feature, repair, and documentation PRs target `main`. `staging` is only an
+ancestry-enforced, fast-forward deployment pointer to an admitted main SHA; it
+does not accept independent feature development. Successful CI and a merge are
+integration evidence, not deployment or UAT evidence.
+
+Both hosted release entrypoints remain blocked pending implementation and real
+verification. Keep `git.deploymentEnabled: false` for all branches; automatic PR
+previews are disabled. See the [release decision and change summary](release-controls.md#release-process-decision-2026-09-23).
+
 ---
 
 ## Two lanes

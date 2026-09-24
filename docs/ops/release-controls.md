@@ -1,9 +1,11 @@
 # Release controls — G1
 
-This slice adds source controls for the release process. CI runs the release
+**Agreed release sequence:** PR → CI → merge to main → manually initiated staging deployment and verification → owner-approved production release.
+
+**Current status:** source controls and manual workflow definitions exist;
+hosted staging and production execution remain blocked. CI runs release
 contract tests, Vercel Git deployment is disabled in source, and the old hosted
-isolation workflow is retired. It does not configure GitHub or Vercel, create
-staging or production deployment workflows, or authorize a customer release.
+isolation workflow is retired. These controls do not authorize a customer release.
 The release record remains defined in [release-contract.md](release-contract.md).
 
 ## Source controls
@@ -168,3 +170,30 @@ npx prettier --check .github/workflows/ci.yml vercel.json docs/ops/release-contr
 Also run the repository's required static checks from
 [VERIFY.md](../VERIFY.md). No hosted isolation, native extension test,
 deployment, migration or approval outcome is implied by these commands.
+
+## Release process decision (2026-09-23)
+
+The owner approved a documentation-only simplification of the release sequence.
+The following changes are recorded together; implementation gates remain in place.
+
+| Documents                                      | Change                                                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `README.md`, `repo-workflow.md`                | State the common sequence, main-only integration, and deliberate staging start. Remove the README instruction to connect Vercel Git. |
+| `release-controls.md`                          | Keep all automatic Git deployments disabled and record the cost constraint and this change summary.                                  |
+| `environment-architecture.md`                  | Simplify the promotion diagram; distinguish intended flow from blocked execution and separate projects from credential isolation.    |
+| `staging-delivery.md`, `production-release.md` | Explain operator and owner actions without claiming an active hosted pipeline.                                                       |
+
+Acceptance criteria: all six documents use the same sequence; staging verification
+precedes production approval; `HOSTED_ACTIVATION_BLOCKED` stays explicit; no
+workflow, application code, database, credential, deployment, or alias is changed.
+
+**Cost constraint:** use existing resources, local checks, and deliberate release
+starts. Add no paid service, team/account, recurring release job, or automatic PR
+preview. Before hosted work, verify that expected usage fits included allowances;
+manual initiation is not a zero-cost guarantee. This documentation update neither
+changes the existing backup schedule nor certifies its cost.
+
+**Unresolved boundary:** a separate project in the existing Vercel team does not
+prove its credential cannot access production. The owner has not waived that
+requirement. Keep it blocked until a reviewed, cost-compatible solution or an
+explicit owner decision resolves it; this documentation is not such a waiver.
