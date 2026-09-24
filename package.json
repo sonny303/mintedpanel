@@ -16,7 +16,13 @@
     "test": "vitest run",
     "test:release": "node --test scripts/release/*.test.mjs",
     "test:recovery": "node --test scripts/recovery/*.test.mjs",
+    "test:backup": "node --test scripts/backup/*.test.mjs",
     "test:delivery": "node --test scripts/delivery/*.test.mjs",
+    "seed:staging-uat": "node scripts/uat/seed-staging-uat.mjs",
+    "seed:staging-uat:ci": "node scripts/uat/seed-staging-uat.mjs && node scripts/uat/verify-uat-fixture.mjs",
+    "test:staging-uat": "node --test scripts/uat/*.test.mjs",
+    "verify:staging-uat": "node scripts/uat/verify-uat-fixture.mjs",
+    "verify:staging-uat:deletion": "node scripts/uat/verify-delete-case.mjs",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "wiki:build": "node scripts/build-wiki-site.mjs"

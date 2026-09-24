@@ -108,11 +108,13 @@ function KpiCard({
 
 function TemplateStatusCell({
   row,
+  readinessUnavailable,
   isAdmin,
   reactivatingId,
   onReactivate,
 }: {
   row: PayerSetupViewRow;
+  readinessUnavailable: boolean;
   isAdmin: boolean;
   reactivatingId: string | null;
   onReactivate: (row: PayerSetupViewRow) => void;
@@ -133,6 +135,9 @@ function TemplateStatusCell({
         ) : null}
       </span>
     );
+  }
+  if (readinessUnavailable) {
+    return <span className="text-[12.5px] text-muted-foreground">Unavailable</span>;
   }
   return row.templateStatus === "published" ? (
     <StatusPill status="green" label="Published" />
@@ -253,15 +258,20 @@ function NextActionCell({
   row,
   funnel,
   inNetwork,
+  readinessUnavailable,
 }: {
   row: PayerSetupViewRow;
   funnel: FunnelRow | null;
   inNetwork: boolean;
+  readinessUnavailable: boolean;
 }) {
   if (row.archived) {
     // Badge lives under Template status — do not repeat "Archived" here
     // (strict-mode e2e and visual noise).
     return <span className="text-[12.5px] text-muted-foreground">—</span>;
+  }
+  if (readinessUnavailable) {
+    return <span className="text-[12.5px] text-muted-foreground">Unavailable</span>;
   }
   const action = resolvePayerNextAction({ funnel, inNetwork, archived: false });
 
@@ -355,7 +365,8 @@ export function PayerSetupPage() {
 
   const totalCount = rows.length;
   const isLoading = funnel.isLoading || payersQ.isLoading;
-  const isError = funnel.isError || payersQ.isError;
+  const catalogError = payersQ.isError;
+  const readinessUnavailable = funnel.isError;
 
   const handleReactivate = (row: PayerSetupViewRow) => {
     reactivateMut.mutate(row.payerId, {
@@ -383,7 +394,7 @@ export function PayerSetupPage() {
         }
       />
 
-      {isError ? (
+      {catalogError ? (
         <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] p-4 text-[13px] text-[#B91C1C]">
           Couldn&apos;t load payers. Refresh the page to retry.
         </div>
@@ -399,14 +410,24 @@ export function PayerSetupPage() {
         </div>
       ) : (
         <>
+          {readinessUnavailable ? (
+            <div className="rounded-md border border-[#F4C978] bg-[#FFF8E7] p-4 text-[13px] text-[#7A4B00]">
+              Payers loaded, but readiness details couldn&apos;t load
+              {funnel.errorSources.length > 0 ? ` (${funnel.errorSources.join(", ")})` : ""}.
+              Refresh to retry; payer names and catalog details remain available.
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {KPI_CARDS.map((card) => (
               <KpiCard
                 key={card.key}
                 label={card.label}
-                count={kpiCounts[card.key]}
+                count={readinessUnavailable && card.key !== "all" ? 0 : kpiCounts[card.key]}
                 selected={filters.kpi === card.key}
-                onToggle={() => setFilter({ kpi: filters.kpi === card.key ? "all" : card.key })}
+                onToggle={() => {
+                  if (readinessUnavailable && card.key !== "all") return;
+                  setFilter({ kpi: filters.kpi === card.key ? "all" : card.key });
+                }}
               />
             ))}
           </div>
@@ -521,6 +542,7 @@ export function PayerSetupPage() {
                       <td className="px-4 py-3">
                         <TemplateStatusCell
                           row={row}
+                          readinessUnavailable={readinessUnavailable}
                           isAdmin={isAdmin}
                           reactivatingId={reactivatingId ?? null}
                           onReactivate={handleReactivate}
@@ -531,6 +553,7 @@ export function PayerSetupPage() {
                           row={row}
                           funnel={funnelByPayer.get(row.payerId) ?? null}
                           inNetwork={networkIds.has(row.payerId)}
+                          readinessUnavailable={readinessUnavailable}
                         />
                       </td>
                     </tr>

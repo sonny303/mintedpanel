@@ -1,0 +1,28 @@
+{
+  "status": "PREPARED_NOT_APPROVED_NOT_APPLIED",
+  "productionProject": "fkvuhfsqcmujywzgczmc",
+  "sourceCandidate": "5eff7499f71b6e9f55d06f9a43e5fc1849ffaa0d",
+  "uatDataRequired": false,
+  "dataBackfillRequired": false,
+  "vaultKeyRotationRequired": false,
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260918172142_p01_vault_authorization.sql",
+      "sha256": "1bf7c2d9e5ad5e2c8c855a3cf8ba07012e8b02f1776d8c5bfa9bf9f0f8bde8d0"
+    },
+    {
+      "path": "supabase/migrations/20260919033009_provider_csv_add_provider_parity.sql",
+      "sha256": "f23989450277e449e33d7eecf436000aeeefa78c4f97dc869b090085db598279"
+    }
+  ],
+  "excluded": [
+    "supabase/seed.sql",
+    "supabase/seed-uat.sql",
+    "scripts/uat/",
+    "staging schema alignment",
+    "operator backup tables",
+    "Auth users",
+    "Storage objects",
+    "Vault secrets"
+  ]
+}

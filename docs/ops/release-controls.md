@@ -130,7 +130,8 @@ Use a PR-review rule with `required_approving_review_count: 0`,
 `require_code_owner_reviews: false` and `require_last_push_approval: false`.
 This preserves the PR/check gate without requiring a second person to approve
 the sole operator's own PR. The PM makes the merge decision; agents do not
-self-merge. Keep the existing [repository workflow](repo-workflow.md) process.
+merge autonomously, but may execute the merge when explicitly authorized by the PM.
+Keep the existing [repository workflow](repo-workflow.md) process.
 [GitHub PR-review settings](https://docs.github.com/en/rest/branches/branch-protection#update-pull-request-review-protection)
 
 ## Hosting and activation boundary

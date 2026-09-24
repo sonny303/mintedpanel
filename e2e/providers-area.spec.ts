@@ -720,6 +720,9 @@ test("TS-130: PHI sweep — the roster list read selects no DOB/SSN/home-address
 
   await page.goto("/providers");
   await expect(page.getByRole("heading", { name: "Providers" })).toBeVisible({ timeout: 30000 });
+  // The static heading can render before the active-org provider query starts.
+  // Wait for its roster result before inspecting the requests it made.
+  await expect(page.getByRole("link", { name: /Ostrander, Brooke/ })).toBeVisible();
 
   // The list projection is PHI-safe AT THE WIRE: the providers select never
   // names ssn_last4, date_of_birth, or home street/city/zip.
