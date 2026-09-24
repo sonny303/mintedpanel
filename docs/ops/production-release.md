@@ -2,21 +2,6 @@
 
 **Status: the controller and denial tests are implemented locally; the hosted release pipeline is deliberately blocked.** This setup does not authorize a customer release. `production-release.yml` has a preparation job and exactly one job referencing the protected **Production** environment. Preparation cannot succeed until the real evidence/adapter wiring is complete, so no empty or synthetic release summary reaches an approval request.
 
-**Agreed release sequence:** PR → CI → merge to main → manually initiated staging deployment and verification → owner-approved production release.
-
-After staging verification and human UAT sign-off, the operator presents the
-tested source SHA, database changes, known issues, and recovery plan. Once hosted
-execution is qualified, the operator starts `production-release.yml` with the
-successful staging run ID. Its preparation job validates the release evidence;
-the owner (`sonny303`) then approves the protected GitHub **Production** job.
-Production changes and live postchecks run inside that approved job. A chat
-request or merge to main does not substitute for this approval.
-
-Keep automatic Git deployment disabled on every branch. Use existing resources
-and verify included usage before hosted work; manual initiation does not guarantee
-zero cost. This documentation adds no paid service or recurring release job.
-See the [release decision and change summary](release-controls.md#release-process-decision-2026-09-23).
-
 ## One approval contract
 
 The preparation path must consume stage-only qualification and previously recorded production expectations. The new `loadStagingQualification` authenticates a successful staging producer, the exact `minted-staging-qualification-<run>-<attempt>` artifact and archive digest, originating successful main CI, current main, a historical stage-only G0 preflight, and a distinct delivered-candidate/served-check receipt. It never reads Production credentials or claims production eligibility.

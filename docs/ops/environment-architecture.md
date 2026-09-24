@@ -8,8 +8,6 @@ Release guardrails and activation status live in
 [`staging-delivery.md`](staging-delivery.md), and
 [`production-release.md`](production-release.md).
 
-**Agreed release sequence:** PR → CI → merge to main → manually initiated staging deployment and verification → owner-approved production release.
-
 **As of this document:** hosted staging/production _control code_ exists in
 repo, but **hosted delivery activation is blocked** (`HOSTED_ACTIVATION_BLOCKED`
 in `scripts/delivery/boundary.mjs`). Identity below is from the reviewed G0
@@ -138,14 +136,10 @@ Controls that matter:
 - `vercel.json` sets `git.deploymentEnabled: false` — automatic Git pushes must
   **not** publish. Intended delivery is an explicit upload/promote path under
   lease (see §4).
-- Staging and production are **separate projects** with separate runtime
-  configuration. This alone does not restrict a team credential's access to
-  production; credential isolation remains an unresolved activation requirement.
+- Staging and production are **separate projects** so staging credentials cannot
+  reach the production project by configuration inheritance.
 - Staging uses **all-Preview** variable scope (no branch selector); the workflow
   is responsible for enforcing the `staging` application branch.
-- Automatic PR previews remain disabled. Use existing resources without new paid
-  services, accounts/teams, or recurring release jobs. Verify included allowances
-  before hosted work; manual initiation does not itself prevent usage charges.
 
 ### 3.3 Supabase
 
@@ -186,17 +180,15 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  DEV["Feature branch<br/>cursor/* or epic branch"] --> PR["PR targeting main"]
-  PR --> GREEN["Required CI checks green"]
-  GREEN -->|"PM merge or authorized agent merge"| MAIN["main: integrated code"]
+  DEV["Feature branch<br/>cursor/* or epic branch"] -->|"PR"| MAIN["main"]
+  MAIN -->|"CI: lint / typecheck / test / build"| GREEN["Required checks green"]
+  GREEN -->|"PM merge (or PM-authorized agent merge)"| MAIN
 ```
 
 - Panel CI: format, typecheck, lint, unit tests, build, migration dry-run,
   release-contract tests (`npm run test:release`).
 - Extension CI: typecheck, lint, vitest.
 - Dual-repo API changes: **two PRs** (panel first, then extension).
-- All development targets `main`. `staging` is only a fast-forward deployment
-  pointer to an admitted main SHA, not a second feature integration branch.
 
 ### 4.2 Intended webapp promotion (controlled delivery)
 
@@ -205,14 +197,25 @@ Source of truth for identities:
 
 ```mermaid
 flowchart TB
-  PR["PR"] --> CI["Required CI"]
-  CI --> MAIN["Owner-authorized merge to main<br/>successful main CI pins exact SHA"]
-  MAIN --> STAGE["Manual staging start<br/>staging-delivery.yml"]
-  STAGE --> VERIFY["Approved database changes + candidate<br/>verify runtime, data, extension"]
-  VERIFY --> READY["Move staging aliases after checks<br/>human UAT sign-off"]
-  READY --> PREP["Manual production start<br/>validate staging release evidence"]
-  PREP --> APPROVE["GitHub Production approval<br/>owner: sonny303"]
-  APPROVE --> PROD["Approved production release<br/>live checks + applicable recovery"]
+  PUSH["Push / merge to main"] --> CI["ci.yml on main<br/>admits exact SHA"]
+  CI --> DISP_S["Manual: staging-delivery.yml<br/>inputs: ci_run_id + source_sha"]
+  DISP_S --> ADMIT["Admit successful main CI<br/>fast-forward refs/heads/staging"]
+  ADMIT --> LEASE_S["Acquire staging lease<br/>refs/tags/minted-delivery-lock-staging"]
+  LEASE_S --> PRE["G0 staging-preflight<br/>rehearse additive migrations<br/>against matching baseline"]
+  PRE --> BUILD_S["Build Preview candidate<br/>dedicated staging Vercel project"]
+  BUILD_S --> MIG_S["Apply approved additive plan<br/>to vmznysvietfaddakkegt"]
+  MIG_S --> ALIAS_S["Assign staging aliases<br/>secondary then staging.mintedpanel.com"]
+  ALIAS_S --> QUAL["Emit staging-qualification artifact"]
+
+  QUAL --> DISP_P["Manual: production-release.yml<br/>input: staging_run_id"]
+  DISP_P --> PREP["prepare job<br/>stage qualification + historical prod baseline"]
+  PREP --> APPR["GitHub Environment: Production<br/>sole reviewer sonny303"]
+  APPR --> LEASE_P["Acquire production lease"]
+  LEASE_P --> G0P["Full production G0<br/>fresh matching backup after approval"]
+  G0P --> CAND["Build production candidate<br/>vercel deploy --prod --skip-domain"]
+  CAND --> MIG_P["Apply same additive plan<br/>to fkvuhfsqcmujywzgczmc"]
+  MIG_P --> PROMOTE["Promote exact candidate<br/>to production aliases"]
+  PROMOTE --> POST["Postchecks + optional<br/>compatible-app-only rollback"]
 ```
 
 **Status:** controller, adapters, and workflows exist in source; the hosted
@@ -220,12 +223,6 @@ entrypoint still throws `HOSTED_ACTIVATION_BLOCKED` until collectors, scoped
 credentials, Git-disconnect readbacks, and recovery evidence are wired. Until
 then, do not treat a green simulation test as authorization to mutate staging
 or production.
-
-This diagram summarizes the agreed process, not a currently executable shortcut.
-Detailed database, approval, backup, and recovery requirements remain in
-[`staging-delivery.md`](staging-delivery.md) and
-[`production-release.md`](production-release.md). See the
-[release decision and change summary](release-controls.md#release-process-decision-2026-09-23).
 
 ### 4.3 Extension promotion (separate from web/DB)
 
@@ -248,7 +245,7 @@ flowchart LR
 
 | Path                                         | Why not                                                                                            |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Auto-deploy on a push, including PR branches | Disabled for all branches by `vercel.json` `git.deploymentEnabled: false`                          |
+| Auto-deploy on every `main` push             | Disabled by `vercel.json` `git.deploymentEnabled: false`                                           |
 | Promote a Preview URL directly to Production | Creates a different production build; contract requires an explicit production candidate + promote |
 | Extension writing to Supabase tables         | Forbidden — JWT + panel `/api` only                                                                |
 | Autonomous agent self-merge to `main`        | Governance — PM approval required (PM merges or explicitly authorizes agent merge)                 |
