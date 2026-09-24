@@ -34,8 +34,11 @@ BEGIN
     END IF;
   ELSIF target_kind = 'qualified_local_restore' THEN
     IF current_database() <> 'minted_recovery'
-       OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'QUALIFIED'
+       OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'LOCAL_APPLICATION_BASELINE_VERIFIED'
        OR current_setting('minted.restore_receipt_id', true) IS NULL
+       OR current_setting('minted.restore_receipt_id', true) !~ '^[a-f0-9]{16}$'
+       OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'
+       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7688850032395546663'
        OR current_setting('minted.restore_system_identifier', true) !~ '^[0-9]+$' THEN
       RAISE EXCEPTION 'ALIGNMENT_LOCAL_RECEIPT_REJECTED';
     END IF;
@@ -103,6 +106,19 @@ BEGIN
      WHERE a.org_id IS NULL
   ) THEN
     RAISE EXCEPTION 'ALIGNMENT_CONTACT_PRESTATE_NULL_ORG';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM public.party_capture_links l
+     WHERE l.state = 'active'
+       AND NOT EXISTS (
+         SELECT 1
+           FROM public.party_role_assignments a
+          WHERE a.party_id = l.party_id
+            AND a.org_id = l.org_id
+       )
+  ) THEN
+    RAISE EXCEPTION 'ALIGNMENT_CONTACT_ACTIVE_CAPTURE_LINK_ORG_UNRESOLVED';
   END IF;
   IF to_regprocedure('public.insert_contact_party(jsonb,uuid)') IS NULL THEN
     RAISE EXCEPTION 'ALIGNMENT_CONTACT_LEGACY_HELPER_SIGNATURE_MISSING';
@@ -809,7 +825,21 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'state', 'invalid');
   END IF;
   v_hash := encode(sha256(convert_to(p_token, 'UTF8')), 'hex');
-  SELECT * INTO v_link FROM public.party_capture_links WHERE token_hash = v_hash;
+  SELECT * INTO v_link
+    FROM public.party_capture_links
+   WHERE token_hash = v_hash
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'state', 'invalid');
+  END IF;
+
+  -- Lock the party row before marking the token valid or inspecting state.
+  -- D8 makes org_id immutable; the lock closes the delete/change race.
+  PERFORM 1
+    FROM public.parties p
+   WHERE p.id = v_link.party_id
+     AND p.org_id = v_link.org_id
+   FOR KEY SHARE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'state', 'invalid');
   END IF;
@@ -820,7 +850,10 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'state', v_link.state);
   END IF;
   IF v_link.expires_at <= now() THEN
-    UPDATE public.party_capture_links SET state = 'expired' WHERE id = v_link.id;
+    UPDATE public.party_capture_links
+       SET state = 'expired'
+     WHERE id = v_link.id
+       AND org_id = v_link.org_id;
     RETURN jsonb_build_object('ok', false, 'state', 'expired');
   END IF;
 
@@ -845,11 +878,19 @@ BEGIN
     state = nullif(btrim(coalesce(p_payload->>'state', '')), ''),
     postal_code = nullif(btrim(coalesce(p_payload->>'postal_code', '')), ''),
     country = nullif(btrim(coalesce(p_payload->>'country', '')), '')
-  WHERE id = v_link.party_id;
+  WHERE id = v_link.party_id
+    AND org_id = v_link.org_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'state', 'invalid');
+  END IF;
 
   UPDATE public.party_capture_links
-    SET state = 'used', used_at = now()
-    WHERE id = v_link.id;
+     SET state = 'used', used_at = now()
+   WHERE id = v_link.id
+     AND org_id = v_link.org_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'state', 'invalid');
+  END IF;
 
   INSERT INTO public.audit_log (org_id, user_id, action_type, entity_type, entity_id, description)
     VALUES (v_link.org_id, v_link.created_by, 'UPDATE', 'party', v_link.party_id,
@@ -884,7 +925,19 @@ BEGIN
     RETURN jsonb_build_object('state', 'invalid');
   END IF;
   v_hash := encode(sha256(convert_to(p_token, 'UTF8')), 'hex');
-  SELECT * INTO v_link FROM public.party_capture_links WHERE token_hash = v_hash;
+  SELECT * INTO v_link
+    FROM public.party_capture_links
+   WHERE token_hash = v_hash
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('state', 'invalid');
+  END IF;
+
+  PERFORM 1
+    FROM public.parties p
+   WHERE p.id = v_link.party_id
+     AND p.org_id = v_link.org_id
+   FOR KEY SHARE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('state', 'invalid');
   END IF;
@@ -893,12 +946,15 @@ BEGIN
 
   v_state := v_link.state;
   IF v_state = 'active' AND v_link.expires_at <= now() THEN
-    UPDATE public.party_capture_links SET state = 'expired' WHERE id = v_link.id;
+    UPDATE public.party_capture_links
+       SET state = 'expired'
+     WHERE id = v_link.id
+       AND org_id = v_link.org_id;
     v_state := 'expired';
   END IF;
 
   SELECT name INTO v_org_name FROM public.organizations WHERE id = v_link.org_id;
-  SELECT * INTO v_party FROM public.parties WHERE id = v_link.party_id;
+  SELECT * INTO v_party FROM public.parties WHERE id = v_link.party_id AND org_id = v_link.org_id;
 
   IF v_state <> 'active' THEN
     RETURN jsonb_build_object(
@@ -1138,9 +1194,27 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.party_capture_links l
     JOIN public.parties p ON p.id = l.party_id
-    WHERE l.org_id IS DISTINCT FROM p.org_id
+    WHERE l.state = 'active'
+      AND l.org_id IS DISTINCT FROM p.org_id
   ) THEN
     RAISE EXCEPTION 'ALIGNMENT_CONTACT_CAPTURE_LINK_CROSS_ORG';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM public.party_capture_links l
+     WHERE l.state = 'active'
+       AND NOT EXISTS (
+         SELECT 1
+           FROM public.parties p
+           JOIN public.party_role_assignments a
+             ON a.party_id = p.id
+            AND a.org_id = p.org_id
+          WHERE p.id = l.party_id
+            AND p.org_id = l.org_id
+            AND a.org_id = l.org_id
+       )
+  ) THEN
+    RAISE EXCEPTION 'ALIGNMENT_CONTACT_ACTIVE_CAPTURE_LINK_ORG_UNRESOLVED_POSTSTATE';
   END IF;
 
   SELECT count(*) INTO v_bad
@@ -1256,9 +1330,9 @@ REVOKE ALL ON FUNCTION public.create_organization(text, text, text) FROM PUBLIC,
 GRANT EXECUTE ON FUNCTION public.create_organization(text, text, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.create_capture_link(uuid, uuid, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_capture_link(uuid, uuid, text, text) TO authenticated;
-REVOKE ALL ON FUNCTION public.submit_capture(text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.submit_capture(text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.submit_capture(text, jsonb) TO anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_capture_token(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.validate_capture_token(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.validate_capture_token(text) TO anon, authenticated;
 
 -- Verify effective privileges after every final REVOKE/GRANT. has_function_privilege

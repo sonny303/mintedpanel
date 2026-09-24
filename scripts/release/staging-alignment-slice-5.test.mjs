@@ -11,6 +11,11 @@ const MANIFEST_PATH = resolve(PACKET, "staging-alignment-slice-5-manifest.json")
 const manifest = JSON.parse(await readFile(MANIFEST_PATH, "utf8"));
 const SQL_PATH = resolve(PACKET, manifest.packet.files[0]);
 const sql = await readFile(SQL_PATH, "utf8");
+const REPAIR_MIGRATION_PATH = resolve(
+  ROOT,
+  "supabase/migrations/20260923214607_repair_party_capture_link_org_guard.sql",
+);
+const repairSql = await readFile(REPAIR_MIGRATION_PATH, "utf8");
 
 function stripDollarQuotedBodies(source) {
   let output = "";
@@ -45,6 +50,37 @@ test("slice 5 manifest pins the reviewed base, source, packet, and target", asyn
   );
   assert.equal(manifest.targetBinding.local.requiredDatabase, "minted_recovery");
   assert.equal(manifest.targetBinding.local.requiredExternalReceiptBinding, true);
+  assert.equal(
+    manifest.targetBinding.local.expectedApplicationStatus,
+    "LOCAL_APPLICATION_BASELINE_VERIFIED",
+  );
+  assert.equal(manifest.targetBinding.local.applicationBinding.status, "BOUND");
+  assert.equal(
+    manifest.targetBinding.local.applicationBinding.baselineQualificationDigest,
+    "0feaecb6544f20a899cc169c472c5e668ef3d73f61f3e15a5ea170cb63abea7b",
+  );
+  assert.deepEqual(manifest.targetBinding.local.applicationBinding.baselineTarget, {
+    runId: "2e465ae49df2037d",
+    systemIdentifier: "7688816016043610151",
+  });
+  assert.equal(
+    manifest.targetBinding.local.applicationBinding.captureDigest,
+    "efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5",
+  );
+  assert.deepEqual(manifest.targetBinding.local.applicationBinding.rehearsalTarget, {
+    runId: "7dc905282a047aa2",
+    containerId: "d7ed97e0cb0baceab4ea2a9eb94a6357fad2a6ddb10fd536a9bd1b2731bfdb84",
+    systemIdentifier: "7688850032395546663",
+  });
+  assert.equal(
+    manifest.targetBinding.local.requiredPhysicalSystemIdentifier,
+    "7688850032395546663",
+  );
+  assert.equal(
+    manifest.targetBinding.local.currentReceipt.status,
+    "LOCAL_APPLICATION_BASELINE_VERIFIED",
+  );
+  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "0feaecb6544f20a8");
   assert.equal(manifest.targetBinding.local.currentReceipt.eligibleForApply, false);
   assert.deepEqual(manifest.packet.files, ["staging-alignment-slice-5.sql"]);
   assert.equal(
@@ -79,9 +115,21 @@ test("slice 5 is one guarded additive transaction", () => {
   assert.match(sql, /current_database\(\) <> 'minted_recovery'/);
   assert.match(
     sql,
-    /current_setting\('minted\.restore_status', true\) IS DISTINCT FROM 'QUALIFIED'/,
+    /current_setting\('minted\.restore_status', true\) IS DISTINCT FROM 'LOCAL_APPLICATION_BASELINE_VERIFIED'/,
   );
   assert.match(sql, /current_setting\('minted\.restore_receipt_id', true\) IS NULL/);
+  assert.match(
+    sql,
+    /current_setting\('minted\.restore_receipt_id', true\) !~ '\^\[a-f0-9\]\{16\}\$'/,
+  );
+  assert.match(
+    sql,
+    /current_setting\('minted\.restore_capture_digest', true\) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'/,
+  );
+  assert.match(
+    sql,
+    /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7688850032395546663'/,
+  );
   assert.match(
     sql,
     /current_setting\('minted\.restore_system_identifier', true\) !~ '\^\[0-9\]\+\$'/,
@@ -222,4 +270,93 @@ test("slice 5 proves effective ACLs after the final grants", () => {
   );
   assert.match(publicAcl, /NOT has_function_privilege\('anon', v_signature, 'EXECUTE'\)/);
   assert.match(publicAcl, /NOT has_function_privilege\('authenticated', v_signature, 'EXECUTE'\)/);
+});
+
+test("capture boundary repair is exact, ordered, and limited to the two RPCs", () => {
+  const functionBody = (source, name) => {
+    const start = source.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+    assert.ok(start >= 0, `${name} definition is present`);
+    const end = source.indexOf("\n$$;", start);
+    assert.ok(end > start, `${name} definition is terminated`);
+    return source.slice(start, end + 4);
+  };
+  const submitRepair = functionBody(repairSql, "submit_capture");
+  const validateRepair = functionBody(repairSql, "validate_capture_token");
+  const submitSlice = functionBody(sql, "submit_capture");
+  const validateSlice = functionBody(sql, "validate_capture_token");
+
+  assert.equal(submitRepair, submitSlice, "slice 5 carries the reviewed submit_capture definition");
+  assert.equal(
+    validateRepair,
+    validateSlice,
+    "slice 5 carries the reviewed validate_capture_token definition",
+  );
+
+  for (const [name, body, invalidShape] of [
+    ["submit_capture", submitRepair, "jsonb_build_object('ok', false, 'state', 'invalid')"],
+    ["validate_capture_token", validateRepair, "jsonb_build_object('state', 'invalid')"],
+  ]) {
+    const tokenLookup = body.indexOf("SELECT * INTO v_link");
+    const tokenLock = body.indexOf("FOR UPDATE;", tokenLookup);
+    const lock = body.indexOf("FOR KEY SHARE;", tokenLookup);
+    const markValid = body.indexOf("mark_rpc_attempt_valid", tokenLookup);
+    assert.ok(tokenLookup >= 0, `${name} looks up the token`);
+    assert.ok(tokenLock > tokenLookup, `${name} locks the link after token lookup`);
+    assert.ok(lock > tokenLock, `${name} locks the party after the link`);
+    assert.ok(markValid > lock, `${name} marks the attempt valid after the party lock`);
+    assert.ok(body.indexOf(invalidShape, lock) > lock, `${name} has a uniform invalid result`);
+    assert.match(
+      body.slice(tokenLookup, markValid),
+      /PERFORM 1\s+FROM public\.parties p[\s\S]*?p\.id = v_link\.party_id[\s\S]*?p\.org_id = v_link\.org_id[\s\S]*?FOR KEY SHARE;[\s\S]*?IF NOT FOUND THEN[\s\S]*?state', 'invalid'/,
+      `${name} checks the same-org party under lock before any valid-token work`,
+    );
+  }
+
+  assert.match(
+    submitRepair,
+    /UPDATE public\.parties[\s\S]*?WHERE id = v_link\.party_id\s+AND org_id = v_link\.org_id;[\s\S]*?IF NOT FOUND THEN[\s\S]*?state', 'invalid'/,
+  );
+  assert.match(
+    submitRepair,
+    /UPDATE public\.party_capture_links[\s\S]*?WHERE id = v_link\.id\s+AND org_id = v_link\.org_id;[\s\S]*?IF NOT FOUND THEN[\s\S]*?state', 'invalid'/,
+  );
+  assert.match(
+    validateRepair,
+    /SELECT \* INTO v_party FROM public\.parties WHERE id = v_link\.party_id AND org_id = v_link\.org_id;/,
+  );
+  assert.match(
+    repairSql,
+    /REVOKE ALL ON FUNCTION public\.submit_capture\(text, jsonb\) FROM PUBLIC, anon, authenticated;/,
+  );
+  assert.match(
+    repairSql,
+    /GRANT EXECUTE ON FUNCTION public\.validate_capture_token\(text\) TO anon, authenticated;/,
+  );
+  assert.doesNotMatch(repairSql, /FOREIGN KEY[^;]*party_capture_links/i);
+  assert.doesNotMatch(repairSql, /CREATE\s+(?:TABLE|INDEX|TRIGGER)\b/i);
+});
+
+test("slice 5 rejects unresolved active links while preserving inactive rows", () => {
+  const prestate = sql.slice(
+    sql.indexOf("DO $prestate$"),
+    sql.indexOf("$prestate$;", sql.indexOf("DO $prestate$")),
+  );
+  const poststate = sql.slice(sql.indexOf("DO $poststate$"));
+  assert.match(
+    prestate,
+    /l\.state = 'active'[\s\S]*?a\.party_id = l\.party_id[\s\S]*?a\.org_id = l\.org_id/,
+  );
+  assert.match(prestate, /ALIGNMENT_CONTACT_ACTIVE_CAPTURE_LINK_ORG_UNRESOLVED/);
+  assert.doesNotMatch(
+    prestate,
+    /p\.org_id/,
+    "prestate cannot read the party column before it is added",
+  );
+  assert.match(poststate, /l\.state = 'active'[\s\S]*?l\.org_id IS DISTINCT FROM p\.org_id/);
+  assert.match(poststate, /ALIGNMENT_CONTACT_ACTIVE_CAPTURE_LINK_ORG_UNRESOLVED_POSTSTATE/);
+  assert.match(sql, /minted_alignment_capture_link_guard/);
+  assert.match(sql, /md5\(to_jsonb\(l\)::text\)/);
+  assert.match(sql, /FULL JOIN public\.party_capture_links l ON l\.id = g\.id/);
+  assert.match(sql, /ALIGNMENT_CONTACT_CAPTURE_LINK_PRESERVATION_FAILED/);
+  assert.doesNotMatch(sql, /CREATE\s+.*FOREIGN KEY[^;]*party_capture_links/i);
 });
