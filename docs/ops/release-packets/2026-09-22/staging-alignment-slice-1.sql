@@ -32,8 +32,11 @@ BEGIN
     END IF;
   ELSIF target_kind = 'qualified_local_restore' THEN
     IF current_database() <> 'minted_recovery'
-       OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'QUALIFIED'
+       OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'LOCAL_APPLICATION_BASELINE_VERIFIED'
        OR current_setting('minted.restore_receipt_id', true) IS NULL
+       OR current_setting('minted.restore_receipt_id', true) !~ '^[a-f0-9]{16}$'
+       OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'
+       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7688850032395546663'
        OR current_setting('minted.restore_system_identifier', true) !~ '^[0-9]+$' THEN
       RAISE EXCEPTION 'ALIGNMENT_LOCAL_RECEIPT_REJECTED';
     END IF;

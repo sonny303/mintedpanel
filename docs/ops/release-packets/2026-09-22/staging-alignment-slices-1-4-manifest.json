@@ -12,10 +12,10 @@
       "staging-alignment-slice-4.sql"
     ],
     "checksums": {
-      "staging-alignment-slice-1.sql": "df226ac7cefeb644ac30535fa3866e6466e0892273e37582a38d6488e5d0d881",
-      "staging-alignment-slice-2.sql": "2dc9abb0a1e6d41384542098568bfaaade15a7515f44dd338ec24fe70b979d6b",
-      "staging-alignment-slice-3.sql": "7e4fb47695208649b6a40608cc58cef95456ea321b4e7f01dfaaa17bbf196a4c",
-      "staging-alignment-slice-4.sql": "4ff47000793f3969f8a9c3abb5239a527d71f427a6faa80cf2c51e6727e0c05b"
+      "staging-alignment-slice-1.sql": "b7d48cb5065a648370acaa3e8d57aa57d8820156adb5f75c16383a54a0eb1fb3",
+      "staging-alignment-slice-2.sql": "c78b792d7cfdc7d2fa93f838033d54bd877d02516891274c3818db2854eac848",
+      "staging-alignment-slice-3.sql": "a5450f603fb200c7b08916b22054d5622753fd805dc5adc802d2536070b8fced",
+      "staging-alignment-slice-4.sql": "7b9fe7d76c5bfdd913d6fad15dfc2e9db8d0b451004f045b1e4d5db9b00a392d"
     },
     "execution": "serial_same_session_after_restore_rehearsal",
     "hostedApply": "operator_only_after_recovery_qualification_and_review"
@@ -30,13 +30,27 @@
     "local": {
       "sessionKind": "qualified_local_restore",
       "requiredDatabase": "minted_recovery",
-      "requiredPhysicalSystemIdentifier": "supplied_by_qualified_restore_receipt",
+      "requiredPhysicalSystemIdentifier": "7688850032395546663",
       "requiredExternalReceiptBinding": true,
+      "expectedApplicationStatus": "LOCAL_APPLICATION_BASELINE_VERIFIED",
+      "applicationBinding": {
+        "status": "BOUND",
+        "baselineQualificationDigest": "0feaecb6544f20a899cc169c472c5e668ef3d73f61f3e15a5ea170cb63abea7b",
+        "captureDigest": "efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5",
+        "baselineTarget": {
+          "runId": "2e465ae49df2037d",
+          "systemIdentifier": "7688816016043610151"
+        },
+        "rehearsalTarget": {
+          "runId": "7dc905282a047aa2",
+          "containerId": "d7ed97e0cb0baceab4ea2a9eb94a6357fad2a6ddb10fd536a9bd1b2731bfdb84",
+          "systemIdentifier": "7688850032395546663"
+        }
+      },
       "currentReceipt": {
-        "runId": "db698c2326fe3f03",
-        "status": "REHEARSED_ONLY",
-        "releaseAdmission": "BLOCKED",
-        "eligibleForApply": false
+        "status": "LOCAL_APPLICATION_BASELINE_VERIFIED",
+        "eligibleForApply": false,
+        "receiptId": "0feaecb6544f20a8"
       }
     }
   },
