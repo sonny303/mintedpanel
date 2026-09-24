@@ -2,7 +2,7 @@
 -- Required session settings are external so the identity guard cannot self-pass:
 --   SET minted.release_target_kind = 'hosted_staging';
 --   SET minted.release_project_ref = 'vmznysvietfaddakkegt';
---   SET minted.release_source_sha = '7a40fc7876c4b53810e1391426afbed865176c3b';
+--   SET minted.release_source_sha = 'ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b';
 -- A local adapter may use qualified_local_restore only after independently
 -- checking current_database=minted_recovery, the exact qualified receipt and
 -- its pg_control_system identifier, then setting restore_* session values.
@@ -35,8 +35,8 @@ BEGIN
        OR current_setting('minted.restore_status', true) IS DISTINCT FROM 'LOCAL_APPLICATION_BASELINE_VERIFIED'
        OR current_setting('minted.restore_receipt_id', true) IS NULL
        OR current_setting('minted.restore_receipt_id', true) !~ '^[a-f0-9]{16}$'
-       OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'
-       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7688850032395546663'
+       OR current_setting('minted.restore_capture_digest', true) IS DISTINCT FROM '9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de'
+       OR current_setting('minted.restore_system_identifier', true) IS DISTINCT FROM '7689124870789845031'
        OR current_setting('minted.restore_system_identifier', true) !~ '^[0-9]+$' THEN
       RAISE EXCEPTION 'ALIGNMENT_LOCAL_RECEIPT_REJECTED';
     END IF;
@@ -54,7 +54,7 @@ BEGIN
     RAISE EXCEPTION 'ALIGNMENT_TARGET_KIND_REJECTED';
   END IF;
   IF current_setting('minted.release_project_ref', true) IS DISTINCT FROM 'vmznysvietfaddakkegt'
-     OR current_setting('minted.release_source_sha', true) IS DISTINCT FROM '7a40fc7876c4b53810e1391426afbed865176c3b' THEN
+     OR current_setting('minted.release_source_sha', true) IS DISTINCT FROM 'ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b' THEN
     RAISE EXCEPTION 'ALIGNMENT_IDENTITY_REJECTED';
   END IF;
   IF current_setting('transaction_read_only') = 'on' THEN

@@ -56,7 +56,7 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
   assert.equal(manifest.version, 1);
   assert.equal(manifest.status, "AUTHOR_ONLY_NOT_APPLIED");
   assert.match(manifest.sourceSha, /^[a-f0-9]{40}$/);
-  assert.equal(manifest.sourceSha, "7a40fc7876c4b53810e1391426afbed865176c3b");
+  assert.equal(manifest.sourceSha, "ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b");
   assert.equal(manifest.stagingProjectRef, "vmznysvietfaddakkegt");
   assert.equal(manifest.forbiddenProductionProjectRef, "fkvuhfsqcmujywzgczmc");
   assert.equal(
@@ -104,7 +104,7 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
   assert.equal(manifest.targetBinding.local.requiredDatabase, "minted_recovery");
   assert.equal(
     manifest.targetBinding.local.requiredPhysicalSystemIdentifier,
-    "7688850032395546663",
+    "7689124870789845031",
   );
   assert.equal(manifest.targetBinding.local.requiredExternalReceiptBinding, true);
   assert.equal(
@@ -114,26 +114,26 @@ test("alignment manifest pins the reviewed source and exact target counts", asyn
   assert.equal(manifest.targetBinding.local.applicationBinding.status, "BOUND");
   assert.equal(
     manifest.targetBinding.local.applicationBinding.baselineQualificationDigest,
-    "0feaecb6544f20a899cc169c472c5e668ef3d73f61f3e15a5ea170cb63abea7b",
+    "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
   );
   assert.deepEqual(manifest.targetBinding.local.applicationBinding.baselineTarget, {
-    runId: "2e465ae49df2037d",
-    systemIdentifier: "7688816016043610151",
+    runId: "775640d53985dcdc",
+    systemIdentifier: "7689124825780498471",
   });
   assert.equal(
     manifest.targetBinding.local.applicationBinding.captureDigest,
-    "efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5",
+    "9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de",
   );
   assert.deepEqual(manifest.targetBinding.local.applicationBinding.rehearsalTarget, {
-    runId: "7dc905282a047aa2",
-    containerId: "d7ed97e0cb0baceab4ea2a9eb94a6357fad2a6ddb10fd536a9bd1b2731bfdb84",
-    systemIdentifier: "7688850032395546663",
+    runId: "6715aa4a0f245dc4",
+    containerId: "581afff54fa0479785d736848200a690b4d3b6c87d2b911c5bbb1e790c472c6e",
+    systemIdentifier: "7689124870789845031",
   });
   assert.equal(
     manifest.targetBinding.local.currentReceipt.status,
     "LOCAL_APPLICATION_BASELINE_VERIFIED",
   );
-  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "0feaecb6544f20a8");
+  assert.equal(manifest.targetBinding.local.currentReceipt.receiptId, "d0171353c3a1c18a");
   assert.equal(manifest.targetBinding.local.currentReceipt.eligibleForApply, false);
 
   for (const [relativePath, expectedDigest] of Object.entries(manifest.sourceFiles)) {
@@ -161,7 +161,7 @@ test("each alignment slice is serial, identity guarded, physical-restore guarded
     );
     assert.match(
       sql,
-      /current_setting\('minted\.release_source_sha', true\) IS DISTINCT FROM '7a40fc7876c4b53810e1391426afbed865176c3b'/,
+      /current_setting\('minted\.release_source_sha', true\) IS DISTINCT FROM 'ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b'/,
     );
     assert.match(sql, /current_setting\('transaction_read_only'\) = 'on'/);
     assert.match(sql, /current_database\(\) <> 'minted_recovery'/);
@@ -185,7 +185,7 @@ test("each alignment slice is serial, identity guarded, physical-restore guarded
     );
     assert.match(
       sql,
-      /current_setting\('minted\.restore_capture_digest', true\) IS DISTINCT FROM 'efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5'/,
+      /current_setting\('minted\.restore_capture_digest', true\) IS DISTINCT FROM '9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de'/,
     );
     assert.match(
       sql,
@@ -193,7 +193,7 @@ test("each alignment slice is serial, identity guarded, physical-restore guarded
     );
     assert.match(
       sql,
-      /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7688850032395546663'/,
+      /current_setting\('minted\.restore_system_identifier', true\) IS DISTINCT FROM '7689124870789845031'/,
     );
     assert.match(sql, /ALIGNMENT_LOCAL_SYSTEM_ID_(?:UNAVAILABLE|REJECTED)/);
     assert.doesNotMatch(sql, /fkvuhfsqcmujywzgczmc/);

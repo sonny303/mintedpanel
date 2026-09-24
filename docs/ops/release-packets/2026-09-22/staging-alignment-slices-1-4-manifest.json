@@ -1,7 +1,7 @@
 {
   "version": 1,
   "status": "AUTHOR_ONLY_NOT_APPLIED",
-  "sourceSha": "7a40fc7876c4b53810e1391426afbed865176c3b",
+  "sourceSha": "ae7aff60cac28ee9e2ac5a7a30a8bb7bce6c5c3b",
   "stagingProjectRef": "vmznysvietfaddakkegt",
   "forbiddenProductionProjectRef": "fkvuhfsqcmujywzgczmc",
   "packet": {
@@ -12,10 +12,10 @@
       "staging-alignment-slice-4.sql"
     ],
     "checksums": {
-      "staging-alignment-slice-1.sql": "b7d48cb5065a648370acaa3e8d57aa57d8820156adb5f75c16383a54a0eb1fb3",
-      "staging-alignment-slice-2.sql": "c78b792d7cfdc7d2fa93f838033d54bd877d02516891274c3818db2854eac848",
-      "staging-alignment-slice-3.sql": "a5450f603fb200c7b08916b22054d5622753fd805dc5adc802d2536070b8fced",
-      "staging-alignment-slice-4.sql": "7b9fe7d76c5bfdd913d6fad15dfc2e9db8d0b451004f045b1e4d5db9b00a392d"
+      "staging-alignment-slice-1.sql": "b3818367faf73892fe82cfe407a9c3bfc3f31fd51c09b953ff55628d6771d26f",
+      "staging-alignment-slice-2.sql": "546ba0717588a002a737246f4db172dc30cf1d5d7feb19d3df7cf11b3a9f5d0a",
+      "staging-alignment-slice-3.sql": "a79e42c7c90cae0d2080662b5da4559df2c1e691f451dc9746ec09cb55681cd3",
+      "staging-alignment-slice-4.sql": "e1bd851a27b5a2282042fdc5291bb7a6d18cbfec690eb8e29cadd2ecaee96233"
     },
     "execution": "serial_same_session_after_restore_rehearsal",
     "hostedApply": "operator_only_after_recovery_qualification_and_review"
@@ -30,27 +30,27 @@
     "local": {
       "sessionKind": "qualified_local_restore",
       "requiredDatabase": "minted_recovery",
-      "requiredPhysicalSystemIdentifier": "7688850032395546663",
+      "requiredPhysicalSystemIdentifier": "7689124870789845031",
       "requiredExternalReceiptBinding": true,
       "expectedApplicationStatus": "LOCAL_APPLICATION_BASELINE_VERIFIED",
       "applicationBinding": {
         "status": "BOUND",
-        "baselineQualificationDigest": "0feaecb6544f20a899cc169c472c5e668ef3d73f61f3e15a5ea170cb63abea7b",
-        "captureDigest": "efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5",
+        "baselineQualificationDigest": "d0171353c3a1c18a832f8b81b639d79d13f210f9a3c34095d8d7b9488c84506b",
+        "captureDigest": "9cd07f296ce4eab010bfa1391094c02e7299e4edc8872965e0e08b9eefb8e0de",
         "baselineTarget": {
-          "runId": "2e465ae49df2037d",
-          "systemIdentifier": "7688816016043610151"
+          "runId": "775640d53985dcdc",
+          "systemIdentifier": "7689124825780498471"
         },
         "rehearsalTarget": {
-          "runId": "7dc905282a047aa2",
-          "containerId": "d7ed97e0cb0baceab4ea2a9eb94a6357fad2a6ddb10fd536a9bd1b2731bfdb84",
-          "systemIdentifier": "7688850032395546663"
+          "runId": "6715aa4a0f245dc4",
+          "containerId": "581afff54fa0479785d736848200a690b4d3b6c87d2b911c5bbb1e790c472c6e",
+          "systemIdentifier": "7689124870789845031"
         }
       },
       "currentReceipt": {
         "status": "LOCAL_APPLICATION_BASELINE_VERIFIED",
         "eligibleForApply": false,
-        "receiptId": "0feaecb6544f20a8"
+        "receiptId": "d0171353c3a1c18a"
       }
     }
   },
