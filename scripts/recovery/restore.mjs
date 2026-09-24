@@ -221,6 +221,11 @@ export async function prepareIsolatedTarget(
         "postgres",
         "-c",
         "cron.launch_active_jobs=off",
+        // The restored disposable target is reached only over its owned
+        // internal Docker network; bind PostgreSQL to that network interface
+        // without publishing any host port.
+        "-c",
+        "listen_addresses=*",
       ),
     );
     let ready = false;

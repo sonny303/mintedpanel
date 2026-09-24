@@ -9,7 +9,9 @@ This runbook covers the architecture, one-time setup, secrets configuration, ver
 | Property                | Value                                                                                                                                      |
 | :---------------------- | :----------------------------------------------------------------------------------------------------------------------------------------- |
 | **Schedule**            | Every night at **04:00 UTC** (off-peak hours)                                                                                              |
-| **Trigger**             | GitHub Actions Cron + Manual Dispatch                                                                                                      |
+| **Trigger**             | GitHub Actions Cron + Manual Dispatch (production only)                                                                                    |
+| **GitHub Environment**  | `Production Backup`                                                                                                                        |
+| **Target Environment**  | `production` (fixed in the workflow; staging is not a hosted workflow target)                                                              |
 | **Workflow**            | [`.github/workflows/scheduled-backup.yml`](file:///Users/ar/gemini/antigravity/scratch/mintedpanel/.github/workflows/scheduled-backup.yml) |
 | **Coordinator Script**  | [`scripts/backup/nightly-backup.mjs`](file:///Users/ar/gemini/antigravity/scratch/mintedpanel/scripts/backup/nightly-backup.mjs)           |
 | **Provisioning Script** | [`scripts/backup/provision-gcs-backup.sh`](file:///Users/ar/gemini/antigravity/scratch/mintedpanel/scripts/backup/provision-gcs-backup.sh) |
@@ -71,17 +73,28 @@ Database dumps are encrypted client-side using `age` so that plaintext database 
 
 ## 4. Required GitHub Secrets
 
-Navigate to **GitHub Repository Settings > Secrets and variables > Actions** (`https://github.com/sonny303/mintedpanel/settings/secrets/actions`) and add:
+Add the repository-level values in **GitHub Repository Settings > Secrets and variables > Actions** (`https://github.com/sonny303/mintedpanel/settings/secrets/actions`). Add `SUPABASE_PRODUCTION_BACKUP_DATABASE_URL` under **Settings > Environments > Production Backup** so the scheduled job can read it only after that environment's protection rules pass:
 
-| Secret Name                      | Source / Description                                                                                         |
-| :------------------------------- | :----------------------------------------------------------------------------------------------------------- |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Output by provisioning script (e.g. `projects/.../locations/global/workloadIdentityPools/.../providers/...`) |
-| `GCP_SERVICE_ACCOUNT`            | Output by provisioning script (`sa-github-backups@<PROJECT>.iam.gserviceaccount.com`)                        |
-| `GCS_BACKUP_BUCKET`              | Output by provisioning script (e.g. `mintedpanel-backups-<PROJECT>`)                                         |
-| `BACKUP_AGE_RECIPIENT`           | The public age key (`age1...`)                                                                               |
-| `SUPABASE_ACCESS_TOKEN`          | Supabase personal access token (`sbp_...`) for creating ephemeral login roles                                |
+| Secret Name                               | Source / Description                                                                                                           |
+| :---------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------- |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER`          | Output by provisioning script (e.g. `projects/.../locations/global/workloadIdentityPools/.../providers/...`)                   |
+| `GCP_SERVICE_ACCOUNT`                     | Output by provisioning script (`sa-github-backups@<PROJECT>.iam.gserviceaccount.com`)                                          |
+| `GCS_BACKUP_BUCKET`                       | Output by provisioning script (e.g. `mintedpanel-backups-<PROJECT>`)                                                           |
+| `BACKUP_AGE_RECIPIENT`                    | The public age key (`age1...`)                                                                                                 |
+| `SUPABASE_PRODUCTION_BACKUP_DATABASE_URL` | The existing production PostgreSQL URL for the fixed `postgres` database, supplied only in the `Production Backup` environment |
 
-_(Optional fallback: If you prefer direct pooler connection over the Management API, set `DATABASE_URL`)_.
+The scheduled workflow reads only `SUPABASE_PRODUCTION_BACKUP_DATABASE_URL` from the protected `Production Backup` GitHub Environment. The workflow has no staging target and does not read a repository-level Supabase token, `SUPABASE_NIGHTLYBACKUP_ACCESS_TOKEN`, or `DATABASE_URL`. Local or staging tooling may pass an explicit database URL or management token to the coordinator function; the production environment URL is never used for staging.
+
+### Owner-controlled activation order
+
+Complete these steps in order:
+
+1. Configure the `Production Backup` GitHub Environment with the `main` branch as its only selected deployment branch. Set required reviewers to none and the wait timer to zero minutes.
+2. Before the owner merges this change, re-enter the existing production database URL once as the uniquely named environment secret `SUPABASE_PRODUCTION_BACKUP_DATABASE_URL`.
+3. Merge the approved branch to `main`.
+4. From the actual merged `main` commit, run one non-dry production backup with repository and database backup enabled.
+5. Confirm the run succeeds against the production ref, uploads one encrypted database artifact to the expected GCS path, and records the target identity and ciphertext SHA-256 digest in `capture.json` and the workflow summary.
+6. Only after that proof, delete the legacy repository secrets `DATABASE_URL` and `SUPABASE_NIGHTLYBACKUP_ACCESS_TOKEN`, then verify both repository secrets are absent.
 
 ---
 
