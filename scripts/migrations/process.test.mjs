@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDatabase } from "./database.mjs";
+import { createDatabase, databaseCommand } from "./database.mjs";
 
 async function probeDatabase(t, script, connectionString) {
   const root = await mkdtemp(join(tmpdir(), "minted-migration-process-"));
@@ -90,6 +90,17 @@ test("child exit before reading SQL yields a sanitized error instead of uncaught
     assert.equal(error.cause, undefined);
     return true;
   });
+});
+
+test("zero-exit child rejecting oversized stdin cannot report command success", async () => {
+  await assert.rejects(
+    databaseCommand(
+      process.execPath,
+      ["-e", 'process.stdin.destroy(); process.stdout.write("success"); process.exit(0);'],
+      { input: "synthetic-input".repeat(1_000_000), env: {}, cwd: tmpdir() },
+    ),
+    { code: "MIGRATION_COMMAND_FAILED", message: "MIGRATION_COMMAND_FAILED" },
+  );
 });
 
 test("unusable password bytes fail before a credential file or command is created", async () => {

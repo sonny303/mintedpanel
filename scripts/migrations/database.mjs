@@ -8,6 +8,30 @@ import { MigrationError, hash, requireMigration } from "./inventory.mjs";
 
 const execute = promisify(execFile);
 
+export async function databaseCommand(binary, args, { input, env, cwd }) {
+  let child;
+  try {
+    child = execute(binary, args, {
+      env,
+      cwd,
+      timeout: 120_000,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const written = new Promise((resolve, reject) => {
+      // stdin errors are separate from execFile's completion callback.
+      // Reject safely if the subprocess exits before accepting the SQL.
+      child.child.stdin.on("error", reject);
+      child.child.stdin.end(input, (error) => (error ? reject(error) : resolve()));
+    });
+    const [result] = await Promise.all([child, written]);
+    return result.stdout.trim();
+  } catch {
+    child?.child.kill();
+    // SQL can contain private literals; never forward child stdout/stderr.
+    throw new MigrationError("MIGRATION_COMMAND_FAILED");
+  }
+}
+
 export function validateDestination(connectionString, projectRef) {
   let url;
   try {
@@ -55,29 +79,9 @@ export async function createDatabase({ root, inventory, connectionString, binari
     SUPABASE_TELEMETRY_DISABLED: "true",
     PGCONNECT_TIMEOUT: "15",
   };
-  async function command(binary, args, input, credentials = {}) {
-    let child;
-    try {
-      child = execute(binary, args, {
-        env: { ...processEnv, ...credentials },
-        cwd: workdir,
-        timeout: 120_000,
-        maxBuffer: 16 * 1024 * 1024,
-      });
-      const written = new Promise((resolve, reject) => {
-        // stdin errors are separate from execFile's completion callback.
-        // Reject safely if the subprocess exits before accepting the SQL.
-        child.child.stdin.on("error", reject);
-        child.child.stdin.end(input, resolve);
-      });
-      const [result] = await Promise.all([child, written]);
-      return result.stdout.trim();
-    } catch {
-      child?.child.kill();
-      // SQL can contain private literals; never forward child stdout/stderr.
-      throw new MigrationError("MIGRATION_COMMAND_FAILED");
-    }
-  }
+  const command = (binary, args, input, credentials = {}) =>
+    databaseCommand(binary, args, { input, env: { ...processEnv, ...credentials }, cwd: workdir });
+
   try {
     const escape = (value) => value.replace(/[:\\]/g, "\\$&");
     const fields = [
