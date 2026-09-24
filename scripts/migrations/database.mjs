@@ -37,29 +37,61 @@ export function validateDestination(connectionString, projectRef) {
  * The caller must validate the destination; integration tests use loopback only.
  */
 export async function createDatabase({ root, inventory, connectionString, binaries = {} }) {
+  let destination;
+  let password;
+  try {
+    destination = new URL(connectionString);
+    password = decodeURIComponent(destination.password);
+    requireMigration(!/[\r\n\0]/.test(password), "DATABASE_URL_REJECTED");
+    destination.password = "";
+  } catch {
+    throw new MigrationError("DATABASE_URL_REJECTED");
+  }
   const workdir = await mkdtemp(join(tmpdir(), "minted-migrations-"));
+  const passfile = join(workdir, "pgpass");
   const processEnv = {
     PATH: process.env.PATH,
     ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
     SUPABASE_TELEMETRY_DISABLED: "true",
     PGCONNECT_TIMEOUT: "15",
   };
-  async function command(binary, args, input) {
+  async function command(binary, args, input, credentials = {}) {
+    let child;
     try {
-      const child = execute(binary, args, {
-        env: processEnv,
+      child = execute(binary, args, {
+        env: { ...processEnv, ...credentials },
         cwd: workdir,
         timeout: 120_000,
         maxBuffer: 16 * 1024 * 1024,
       });
-      child.child.stdin.end(input);
-      return (await child).stdout.trim();
+      const written = new Promise((resolve, reject) => {
+        // stdin errors are separate from execFile's completion callback.
+        // Reject safely if the subprocess exits before accepting the SQL.
+        child.child.stdin.on("error", reject);
+        child.child.stdin.end(input, resolve);
+      });
+      const [result] = await Promise.all([child, written]);
+      return result.stdout.trim();
     } catch {
+      child?.child.kill();
       // SQL can contain private literals; never forward child stdout/stderr.
       throw new MigrationError("MIGRATION_COMMAND_FAILED");
     }
   }
   try {
+    const escape = (value) => value.replace(/[:\\]/g, "\\$&");
+    const fields = [
+      destination.hostname,
+      destination.port || "5432",
+      decodeURIComponent(destination.pathname.slice(1)),
+      decodeURIComponent(destination.username),
+      password,
+    ];
+    requireMigration(
+      fields.every((value) => !/[\r\n\0]/.test(value)),
+      "DATABASE_URL_REJECTED",
+    );
+    await writeFile(passfile, `${fields.map(escape).join(":")}\n`, { mode: 0o600 });
     await mkdir(join(workdir, "supabase/migrations"), { recursive: true });
     await writeFile(
       join(workdir, "supabase/config.toml"),
@@ -80,12 +112,13 @@ export async function createDatabase({ root, inventory, connectionString, binari
       async snapshot() {
         const output = await command(
           binaries.psql ?? "psql",
-          ["-X", "-qAt", "-v", "ON_ERROR_STOP=1", connectionString],
+          ["-X", "-w", "-qAt", "-v", "ON_ERROR_STOP=1", destination.href],
           `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\nSET LOCAL statement_timeout='30s';\nSET LOCAL search_path=pg_catalog;\n` +
             `SELECT system_identifier::text FROM pg_catalog.pg_control_system();\n` +
             `SELECT coalesce(jsonb_agg(version ORDER BY version),'[]') FROM supabase_migrations.schema_migrations;\n` +
             catalogSql +
             "\nROLLBACK;\n",
+          { PGPASSFILE: passfile },
         );
         try {
           const [systemIdentifier, ledger, catalog, ...extra] = output.split(/\r?\n/);
@@ -101,17 +134,22 @@ export async function createDatabase({ root, inventory, connectionString, binari
         }
       },
       async push({ dryRun }) {
-        await command(binaries.supabase ?? "supabase", [
-          "db",
-          "push",
-          "--db-url",
-          connectionString,
-          "--workdir",
-          workdir,
-          "--skip-vault",
-          "--yes",
-          ...(dryRun ? ["--dry-run"] : []),
-        ]);
+        await command(
+          binaries.supabase ?? "supabase",
+          [
+            "db",
+            "push",
+            "--db-url",
+            destination.href,
+            "--workdir",
+            workdir,
+            "--skip-vault",
+            "--yes",
+            ...(dryRun ? ["--dry-run"] : []),
+          ],
+          undefined,
+          { PGPASSFILE: passfile },
+        );
       },
       close: () => rm(workdir, { recursive: true, force: true }),
     };

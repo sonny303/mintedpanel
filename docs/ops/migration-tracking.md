@@ -92,6 +92,10 @@ Environment. The adapter accepts only the fixed project's direct Postgres host,
 port 5432, database/user `postgres`, and `sslmode=verify-full` with an approved
 root certificate where required. Pooler/arbitrary endpoints are rejected. Do
 not log URLs, SQL output or credentials; subprocess errors emit a fixed code.
+Subprocess arguments contain a password-free URL. Both the pinned CLI and psql
+read a mode-0600 `PGPASSFILE` inside the mode-0700 temporary directory; no password
+is placed in child arguments or environment variables. Closing the adapter removes that directory.
+Neither child inherits the operator's PostgreSQL or Supabase credentials.
 
 GitHub concurrency uses `cancel-in-progress: false`; the existing controller's
 lease covers mutation and verification. All schema writers must use this lane.
@@ -128,4 +132,5 @@ without it report a skip, not database verification. Test-only binary path
 overrides are `MIGRATION_TEST_SUPABASE` and `MIGRATION_TEST_PSQL`.
 
 References: [Supabase migration policy](https://supabase.com/docs/guides/deployment/database-migrations),
-[CI/CD environments](https://supabase.com/docs/guides/deployment/managing-environments).
+[CI/CD environments](https://supabase.com/docs/guides/deployment/managing-environments),
+[libpq password files](https://www.postgresql.org/docs/current/libpq-pgpass.html).

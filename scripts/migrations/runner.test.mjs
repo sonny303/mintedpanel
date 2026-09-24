@@ -212,7 +212,7 @@ test("database adapter tolerates CRLF line endings from psql", async () => {
     const psqlScript = join(root, "mock-psql.sh");
     await writeFile(
       psqlScript,
-      "#!/bin/sh\nprintf \"1234567890123456789\\r\\n[\\\"20260101000000\\\"]\\r\\n{\\\"relations\\\":[],\\\"columns\\\":[],\\\"constraints\\\":[],\\\"indexes\\\":[],\\\"functions\\\":[],\\\"policies\\\":[],\\\"triggers\\\":[],\\\"views\\\":[],\\\"enums\\\":[],\\\"defaultAcls\\\":[]}\\r\\n\"\n",
+      '#!/bin/sh\ncat >/dev/null\nprintf "1234567890123456789\\r\\n[\\"20260101000000\\"]\\r\\n{\\"relations\\":[],\\"columns\\":[],\\"constraints\\":[],\\"indexes\\":[],\\"functions\\":[],\\"policies\\":[],\\"triggers\\":[],\\"views\\":[],\\"enums\\":[],\\"defaultAcls\\":[]}\\r\\n"\n',
     );
     await chmod(psqlScript, 0o755);
     const db = await createDatabase({
@@ -256,10 +256,9 @@ test("committed reconciliation holds block release readiness", async () => {
     (await runCommand(["check"], { MINTED_MIGRATION_BASE_SHA: "0".repeat(40) })).status,
     "INVENTORY_VALID",
   );
-  await assert.rejects(
-    runCommand(["check"], { MINTED_MIGRATION_BASE_SHA: "1".repeat(40) }),
-    { code: "BASE_SHA_NOT_FOUND" },
-  );
+  await assert.rejects(runCommand(["check"], { MINTED_MIGRATION_BASE_SHA: "1".repeat(40) }), {
+    code: "BASE_SHA_NOT_FOUND",
+  });
   await assert.rejects(runCommand(["execute", "staging", "--force"]), { code: "COMMAND_REJECTED" });
 });
 

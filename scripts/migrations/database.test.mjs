@@ -21,8 +21,11 @@ test(
     assert.equal(url.pathname, "/postgres");
     const psql = process.env.MIGRATION_TEST_PSQL ?? "psql";
     const supabase = process.env.MIGRATION_TEST_SUPABASE ?? "supabase";
+    const password = decodeURIComponent(url.password);
+    url.password = "";
     const sql = (input) =>
-      execFileSync(psql, ["-X", "-qAt", "-v", "ON_ERROR_STOP=1", connectionString], {
+      execFileSync(psql, ["-X", "-w", "-qAt", "-v", "ON_ERROR_STOP=1", url.href], {
+        env: { PATH: process.env.PATH, PGPASSWORD: password },
         input,
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
