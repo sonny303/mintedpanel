@@ -2117,10 +2117,10 @@ function benchmarkDistinctSources(productId) {
     SELECT '${E612.orgA}', source.provider_id, '${E612.groupA1}', true, '2025-01-01'
     FROM e613_bench_sources source;
     INSERT INTO public.provider_facility_assignments (org_id, provider_id, facility_id, is_primary, start_date)
-    SELECT '${E612.orgA}', source.provider_id, '${FIX.facilityA1}', true, '2025-01-01'
+    SELECT '${E612.orgA}'::uuid, source.provider_id, '${FIX.facilityA1}'::uuid, true, '2025-01-01'::date
     FROM e613_bench_sources source
     UNION ALL
-    SELECT '${E612.orgA}', source.provider_id, '${FIX.facilityA2}', false, '2025-01-01'
+    SELECT '${E612.orgA}'::uuid, source.provider_id, '${FIX.facilityA2}'::uuid, false, '2025-01-01'::date
     FROM e613_bench_sources source WHERE source.provider_no <= 3000;
     INSERT INTO public.credential_cases
       (id, org_id, provider_id, group_id, facility_id, payer_id, state, case_status,
@@ -2139,9 +2139,10 @@ function benchmarkDistinctSources(productId) {
       date '2024-03-01' + (source.provider_no % 365), '${E612.admin}'
     FROM e613_bench_sources source;
     INSERT INTO public.case_facilities (org_id, case_id, facility_id, is_primary, created_by)
-    SELECT '${E612.orgA}', source.case_id, '${FIX.facilityA1}', true, '${E612.admin}' FROM e613_bench_sources source
+    SELECT '${E612.orgA}'::uuid, source.case_id, '${FIX.facilityA1}'::uuid, true, '${E612.admin}'::uuid
+    FROM e613_bench_sources source
     UNION ALL
-    SELECT '${E612.orgA}', source.case_id, '${FIX.facilityA2}', false, '${E612.admin}'
+    SELECT '${E612.orgA}'::uuid, source.case_id, '${FIX.facilityA2}'::uuid, false, '${E612.admin}'::uuid
     FROM e613_bench_sources source WHERE source.provider_no <= 3000;
 
     CREATE TEMP TABLE e613_bench_revisions ON COMMIT PRESERVE ROWS AS
