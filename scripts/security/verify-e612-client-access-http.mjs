@@ -286,6 +286,11 @@ function runInternalDriver() {
     `${root}scripts/security/e612-http-driver.mjs`,
     `${names.gateway}:/tmp/e612-http-driver.mjs`,
   ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e613-http-probes.mjs`,
+    `${names.gateway}:/tmp/e613-http-probes.mjs`,
+  ]);
   try {
     const expiredToken = jwt({
       sub: E612.clientActive,
@@ -311,6 +316,7 @@ function runInternalDriver() {
     ]);
     process.stdout.write(output);
     if (!output.includes("E612|HTTP|PASS")) fail("E612_HTTP_DRIVER_PASS_MARKER_MISSING");
+    if (!output.includes("E613|HTTP|PASS")) fail("E613_HTTP_PROBE_PASS_MARKER_MISSING");
   } catch (error) {
     if (error.stdout) process.stdout.write(String(error.stdout));
     fail("E612_HTTP_DRIVER_FAILED");
@@ -484,7 +490,15 @@ GRANT SELECT ON auth.users TO service_role;
   ];
   for (const [index, statement] of statements.entries()) {
     emit(`E612|HTTP|BOOTSTRAP|${index + 1}`);
-    dbExec(statement);
+    try {
+      dbExec(statement);
+    } catch (error) {
+      const diagnostic = String(error?.stderr ?? error?.message ?? "");
+      const sqlState =
+        diagnostic.match(/(?:SQL state: |\[)([0-9A-Z]{5})(?:\]|\b)/)?.[1] ?? "unknown";
+      emit(`E612|HTTP|BOOTSTRAP_FAILED|step=${index + 1}|sqlstate=${sqlState}`);
+      throw new Error(`E612_HTTP_SQL_BOOTSTRAP_FAILED_${index + 1}`);
+    }
   }
 }
 
@@ -534,6 +548,20 @@ VALUES
   ('${E612.orgPortal}', '${E612.orgA}', 'e612-org-portal', 'E612 Org Portal',
    '60000000-0000-4000-8000-000000000001', 'https://org.e612.test/form')
 ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.facilities
+  (id, org_id, group_id, name, city, state, zip, is_active)
+VALUES
+  ('70000000-0000-4000-8000-000000000002', '${E612.orgA}', '${E612.groupA1}',
+   'E613 Synthetic Facility', 'Topeka', 'KS', '66603', TRUE)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.provider_group_assignments
+  (org_id, provider_id, group_id, is_primary, start_date)
+VALUES ('${E612.orgA}', '${E612.provider}', '${E612.groupA1}', TRUE, DATE '2026-01-01')
+ON CONFLICT (provider_id, group_id) DO NOTHING;
+INSERT INTO public.provider_facility_assignments
+  (org_id, provider_id, facility_id, is_primary, start_date)
+VALUES ('${E612.orgA}', '${E612.provider}', '70000000-0000-4000-8000-000000000002', FALSE, DATE '2026-01-01')
+ON CONFLICT (provider_id, facility_id) DO NOTHING;
 INSERT INTO public.inbound_leads
   (id, org_name, contact_name, contact_email, contact_phone, city, state, postal_code, country, status)
 VALUES
@@ -547,8 +575,10 @@ ON CONFLICT (id) DO NOTHING;
 
 const created = new Set();
 let networkCreated = false;
+let stage = "docker_context";
 try {
   validateDockerContext();
+  stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));
   platforms = Object.fromEntries(
     Object.entries(images).map(([kind, image]) => [kind, imagePlatform(image)]),
@@ -559,6 +589,7 @@ try {
   emit(
     `E612|HTTP|PLATFORM|db=${platforms.db}|auth=${platforms.auth}|rest=${platforms.rest}|storage=${platforms.storage}|node=${platforms.node}`,
   );
+  stage = "build_manifest";
   const manifestPath = `${root}.output/server/.e612-build-manifest.json`;
   if (!existsSync(manifestPath)) fail("E612_HTTP_BUILD_MANIFEST_MISSING");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -576,6 +607,7 @@ try {
   );
   docker(["network", "create", "--internal", "--label", label, network]);
   networkCreated = true;
+  stage = "isolated_database";
   start(
     "db",
     [
@@ -629,8 +661,10 @@ try {
     if (attempt === 119) fail("E612_HTTP_DB_RESTART_NOT_STABLE");
     await pause(500);
   }
+  stage = "sql_bootstrap";
   sqlBootstrap();
 
+  stage = "supabase_http_services";
   start("gateway", [], ids.node, [
     "node",
     "-e",
@@ -774,7 +808,9 @@ try {
   docker(["cp", output, `${names.app}:/tmp`]);
   docker(["start", names.app]);
   await internalReady("http://app:3000", "/api/health");
+  stage = "e612_e613_http_driver";
   runInternalDriver();
+  stage = "authority_read_race";
   await runInternalAuthorityReadRace();
 } catch (error) {
   const code =
@@ -782,6 +818,9 @@ try {
       ? error.message
       : "E612_HTTP_VERIFICATION_FAILED";
   process.stderr.write(`${code}\n`);
+  if (code === "E612_HTTP_VERIFICATION_FAILED") {
+    process.stderr.write(`E612|HTTP|STAGE_FAILED|${stage}\n`);
+  }
   process.exitCode = 1;
 } finally {
   let cleanupFailed = false;

@@ -29,7 +29,7 @@ describe("handlePreflight", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe(EXT_ORIGIN);
     expect(res.headers.get("access-control-allow-methods")).toBe("GET, POST, PATCH, OPTIONS");
     expect(res.headers.get("access-control-allow-headers")).toBe(
-      "authorization, content-type, x-org-id",
+      "authorization, content-type, x-org-id, x-enrollment-audience, x-minted-context-revision",
     );
     expect(res.headers.get("access-control-max-age")).toBe("86400");
     expect(res.headers.get("vary")).toBe("Origin");

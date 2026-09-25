@@ -8,6 +8,7 @@ const id = {
   groupA2: "20000000-0000-4000-8000-000000000002",
   groupB1: "20000000-0000-4000-8000-000000000003",
   provider: "70000000-0000-4000-8000-000000000001",
+  facilityA: "70000000-0000-4000-8000-000000000002",
   orgPortal: "80000000-0000-4000-8000-000000000001",
   clientActive: "30000000-0000-4000-8000-000000000007",
   clientPending: "30000000-0000-4000-8000-000000000006",
@@ -1001,6 +1002,7 @@ async function main() {
       .replaceAll(/[^A-Za-z0-9._-]+/g, "-")}`,
   );
   const pdf = "%PDF-1.4\nE612 synthetic storage fixture\n%%EOF\n";
+  const licensePdf = "%PDF-1.4\nE612 synthetic state license fixture\n%%EOF\n";
   const upload = await request(storage, `/object/${bucketId}/e612-fixture.pdf`, {
     method: "POST",
     headers: headers(adminToken, { "content-type": "application/pdf", "x-upsert": "true" }),
@@ -1247,8 +1249,8 @@ async function main() {
       ownerType: "provider",
       ownerId: id.provider,
       kind: "state_license",
-      fileName: "e612-provider-app.pdf",
-      fileSize: Buffer.byteLength(pdf),
+      fileName: "e612-provider-state-license.pdf",
+      fileSize: Buffer.byteLength(licensePdf),
       mimeType: "application/pdf",
     }),
   });
@@ -1261,7 +1263,7 @@ async function main() {
   const documentUpload = await requestAbsolute(documentIntent.body.data.uploadUrl, {
     method: "PUT",
     headers: { "content-type": "application/pdf", "x-upsert": "true" },
-    body: pdf,
+    body: licensePdf,
   });
   assert("app.provider_document_signed_upload_positive", documentUpload.response.ok);
   const documentFinalize = await request(app, "/api/documents/finalize", {
@@ -1273,7 +1275,7 @@ async function main() {
       kind: "state_license",
       familyId: documentIntent.body.data.familyId,
       versionNumber: documentIntent.body.data.versionNumber,
-      fileName: "e612-provider-app.pdf",
+      fileName: "e612-provider-state-license.pdf",
       mimeType: "application/pdf",
       effectiveDate: "2026-01-01",
       expirationDate: "2030-01-01",
@@ -1286,6 +1288,20 @@ async function main() {
     `status_${documentFinalize.response.status}`,
   );
   const documentId = documentFinalize.body.data.id;
+  const { runE613HttpProbes } = await import("/tmp/e613-http-probes.mjs");
+  await runE613HttpProbes({
+    id,
+    tokens,
+    request,
+    headers,
+    assert,
+    app,
+    rest,
+    anonKey,
+    documentId,
+    licensePdf,
+    globalPayerId,
+  });
   const documentDownload = await request(app, `/api/documents/${documentId}/download`, {
     headers: headers(tokens.billing, { "x-org-id": id.orgA }),
   });
@@ -1299,7 +1315,7 @@ async function main() {
   });
   assert(
     "app.provider_document_download_bytes",
-    documentBytes.response.ok && documentBytes.text === pdf,
+    documentBytes.response.ok && documentBytes.text === licensePdf,
   );
   for (const [label, token, orgId] of [
     ["document_anon", anonKey, null],

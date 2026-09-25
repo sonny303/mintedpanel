@@ -1,6 +1,10 @@
 # Schema
 
-All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RLS-scoped to the caller's memberships. Every table has explicit `GRANT`s for `authenticated` and `service_role`. Append-only tables have no UPDATE/DELETE policies.
+Most application tables live in `public` and use organization membership RLS.
+Global catalogs and the service-only private authorization/enrollment relations
+documented below are explicit exceptions. Grants are declared per relation;
+private relations grant no anonymous or authenticated access. Append-only
+tables have no ordinary UPDATE/DELETE path.
 
 ## Core rules
 
@@ -583,3 +587,38 @@ C6 push) via `src/services/fieldVerifications.ts`; freshness is derived by the
 pure `src/lib/fieldVerification.ts`, whose window is `CAQH_CURRENT_DAYS` — the
 SAME 120 days attestation uses, so the Details card and the readiness matrix
 can never disagree about one field.
+
+## E6.13 scoped enrollment and proof publication (repository-only)
+
+The additive migration
+`supabase/migrations/20260925190537_enrollment_explorer_scope_contract.sql`
+implements the grains registered in
+[`docs/data-model/table-register.md`](docs/data-model/table-register.md) and
+the [E6.13 contract](docs/redesign/E6.13-enrollment-explorer-scope-contract.md).
+
+- `private.payer_products` is a curated global `(payer_id, product_key)`
+  identity. `private.group_product_targets` records org/group/product/state
+  intent only. Neither creates an approval assertion.
+- `private.enrollment_scopes` has a unique, non-null six-part
+  org/provider/group/product/facility/state identity. Composite same-org FKs
+  and a deferred composite current-revision FK protect scope coherence.
+- `private.enrollment_scope_revisions` and `private.enrollment_scope_sources`
+  are append-only capture/provenance. Scope, revision, sources, current pointer
+  and existing audit event commit atomically. Expected-revision conflicts
+  reject stale writers. Source IDs deliberately have no case/fact FK: purge
+  preserves lineage, while missing/changed/expired canonical sources invalidate
+  assurance.
+- `private.enrollment_summary_publications`,
+  `private.enrollment_proof_publications` and `private.publication_events`
+  retain separate immutable summary/evidence publication and revocation.
+  Proof pins an existing `provider_documents` version and stored-byte SHA-256;
+  it does not introduce a document storage model.
+
+All eight tables force RLS and deny anonymous/authenticated table access.
+New public gateways are service-only `SECURITY INVOKER` functions with explicit
+verified actor, org and selected audience; each rechecks E6.12 authority.
+Internal admins curate/publish/revoke; specialists draft; clients read only
+authorized publications. The proof proxy reauthorizes before bytes, checks
+the pinned version/digest and writes identifiers-only read audit. No report
+operation changes the four-part case key, case status/history or source facts.
+Hosted application and activation remain separately approval-gated.

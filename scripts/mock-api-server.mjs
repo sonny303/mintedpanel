@@ -99,6 +99,7 @@ export const LEAK_MODES = [
   "documentupload",
   "providergroups",
   "payerformwrite",
+  "e613isolation",
 ];
 
 const USERS = {
@@ -685,6 +686,54 @@ export async function createMockApiServer(options = {}) {
         return envelope(res, 200, { fields });
       }
       return envelope(res, 405, null, "Method not allowed");
+    }
+
+    // E6.13 explicit-audience contract used by the local isolation harness.
+    // This is a synthetic response only; live DB authorization is covered by
+    // the disposable native verifier and the application route tests.
+    if (url.pathname.startsWith("/api/enrollment-explorer/")) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => url.searchParams.has(key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      const audience = req.headers["x-enrollment-audience"];
+      const revision = req.headers["x-minted-context-revision"];
+      const selectedOrg = req.headers["x-org-id"];
+      if (audience !== "staff" && audience !== "client") {
+        return envelope(res, 400, null, "Choose an explicit enrollment audience");
+      }
+      if (!revision)
+        return envelope(res, 409, null, "Access context is missing; refresh before retrying");
+      const expectedRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      if (revision !== expectedRevision) {
+        return envelope(res, 409, null, "Access context changed; retry the request");
+      }
+      if (!selectedOrg) return envelope(res, 400, null, "A valid x-org-id header is required");
+      if (selectedOrg !== user.orgId && leak !== "e613isolation") {
+        return envelope(res, 403, null, "Selected enrollment access is no longer available");
+      }
+      if (audience !== "staff" || user.role === "billing") {
+        return envelope(res, 403, null, "Selected enrollment access is no longer available");
+      }
+      res.setHeader("cache-control", "no-store, max-age=0");
+      res.setHeader("x-minted-context-revision", expectedRevision);
+      return envelope(res, 200, {
+        products: [
+          { productId: "mock-product", payerId: "mock-payer", displayName: "Mock Product" },
+        ],
+        targets: [
+          {
+            targetId: "mock-target",
+            groupId: "mock-group",
+            payerProductId: "mock-product",
+            state: "KS",
+            ...(leak === "e613isolation" && selectedOrg !== user.orgId
+              ? { orgId: FIXTURES.SOUTHPARK_ORG }
+              : {}),
+          },
+        ],
+      });
     }
 
     const requestedOrg = req.headers["x-org-id"] ?? url.searchParams.get("orgId");

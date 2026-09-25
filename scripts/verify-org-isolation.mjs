@@ -109,10 +109,11 @@ async function signIn(email, password) {
 // Vercel protection-bypass header when a secret is configured. Returns the
 // parsed JSON body when possible plus the raw text (so a non-JSON SSO gate is
 // visible in the logs).
-async function apiGet(path, { token, orgId } = {}) {
+async function apiGet(path, { token, orgId, extraHeaders = {} } = {}) {
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
   if (orgId) headers["x-org-id"] = orgId;
+  Object.assign(headers, extraHeaders);
   if (BYPASS) {
     headers["x-vercel-protection-bypass"] = BYPASS;
     headers["x-vercel-set-bypass-cookie"] = "true";
@@ -129,10 +130,11 @@ async function apiGet(path, { token, orgId } = {}) {
 }
 
 // One POST against the deploy. Same header handling as apiGet.
-async function apiPost(path, payload, { token, orgId } = {}) {
+async function apiPost(path, payload, { token, orgId, extraHeaders = {} } = {}) {
   const headers = { "content-type": "application/json" };
   if (token) headers.authorization = `Bearer ${token}`;
   if (orgId) headers["x-org-id"] = orgId;
+  Object.assign(headers, extraHeaders);
   if (BYPASS) {
     headers["x-vercel-protection-bypass"] = BYPASS;
     headers["x-vercel-set-bypass-cookie"] = "true";
@@ -510,6 +512,61 @@ function looksLikeVercelGate(r) {
     `southParkOrgPresent=${accessForeignLeak}`,
     { leak: true },
   );
+
+  // Local-only synthetic dispatcher checks for the E6.13 explicit audience
+  // boundary. Hosted database authorization is covered by the disposable
+  // native verifier; these assertions keep the app route boundary in the
+  // existing mock-and-run matrix without requiring hosted fixture writes.
+  if (env.E613_VERIFY === "1") {
+    const selectedHeaders = {
+      "x-enrollment-audience": "staff",
+      "x-minted-context-revision": kAccessData?.contextRevision ?? "",
+    };
+    const e613Own = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: selectedHeaders,
+    });
+    check(
+      "31. E6.13 own-org explicit staff catalog is reachable",
+      e613Own.status === 200 && Array.isArray(e613Own.body?.data?.products),
+      `status=${e613Own.status}`,
+    );
+    const e613NoAudience = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: { "x-minted-context-revision": selectedHeaders["x-minted-context-revision"] },
+    });
+    check(
+      "31b. E6.13 requires an explicit audience",
+      e613NoAudience.status === 400,
+      `status=${e613NoAudience.status}`,
+    );
+    const e613CrossOrg = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.SOUTHPARK_ORG,
+      extraHeaders: selectedHeaders,
+    });
+    check(
+      "31c. E6.13 selected org must be in the verified actor scope",
+      e613CrossOrg.status === 403 && e613CrossOrg.body?.data == null,
+      `status=${e613CrossOrg.status} dataPresent=${e613CrossOrg.body?.data != null}`,
+      { leak: true },
+    );
+    const e613ClientAudience = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: {
+        "x-enrollment-audience": "client",
+        "x-minted-context-revision": selectedHeaders["x-minted-context-revision"],
+      },
+    });
+    check(
+      "31d. E6.13 does not infer client capability from a staff session",
+      e613ClientAudience.status === 403 && e613ClientAudience.body?.data == null,
+      `status=${e613ClientAudience.status} dataPresent=${e613ClientAudience.body?.data != null}`,
+    );
+  }
 
   // 30c/30d pin the actor and stale-revision request rules. The actor query
   // must be rejected before any context data is returned, and a stale chooser
