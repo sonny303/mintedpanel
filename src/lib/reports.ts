@@ -62,6 +62,14 @@ export const REPORTS: ReportDef[] = [
     path: "/reporting/denials",
     group: "credentialing",
   },
+  {
+    key: "billing-readiness",
+    title: "Billing Readiness",
+    description:
+      "Current enrollment prerequisites and the credentialing changes that affect billing.",
+    path: "/reporting/billing-readiness",
+    group: "credentialing",
+  },
   // E4.5 F4.5.2 — the expiring-credentials table (org-scoped; the report
   // renders a select-an-organization state without an active org).
   {
