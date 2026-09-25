@@ -72,6 +72,14 @@ export const REPORTS: ReportDef[] = [
     path: "/reporting/expiring-credentials",
     group: "credentialing",
   },
+  {
+    key: "roster-engine",
+    title: "Roster Engine",
+    description:
+      "Map provider records to payer roster templates, resolve validation issues, and export audited files.",
+    path: "/reporting/rosters/templates",
+    group: "credentialing",
+  },
   // E6.6 F6.6.4 — the Audit Log admin page, relocated (same read surface).
   {
     key: "audit-log",

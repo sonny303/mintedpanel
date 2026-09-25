@@ -47,6 +47,9 @@ function runGate(baseUrl) {
         // optional in the real gate until the operator seeds fixture documents.
         KANSAS_DOCUMENT_ID: FIXTURES.KANSAS_DOCUMENT_ID,
         SOUTHPARK_DOCUMENT_ID: FIXTURES.SOUTHPARK_DOCUMENT_ID,
+        KANSAS_ROSTER_MAPPING_ID: FIXTURES.KANSAS_ROSTER_MAPPING_ID,
+        SOUTHPARK_ROSTER_MAPPING_ID: FIXTURES.SOUTHPARK_ROSTER_MAPPING_ID,
+        SOUTHPARK_ROSTER_EXPORT_ID: FIXTURES.SOUTHPARK_ROSTER_EXPORT_ID,
         // Assertions 28/28b/28c/29 (Payer PDF) — always set here; optional in
         // the real gate until the operator pins a global template + form.
         PAYER_FORM_TEMPLATE_ID: FIXTURES.PAYER_FORM_TEMPLATE_ID,
@@ -108,6 +111,9 @@ const EXPECTED_FAILS = {
   // registry read hands back a private org row (22), or the shared propose
   // writes under the caller's org (23).
   sharedtier: ["22", "22b", "23", "24"],
+  // WP1.3: roster mapping lists/details, export history, and original bytes
+  // remain private to each organization.
+  rosters: ["30", "31", "32", "33", "34"],
   // ASD BITE-ASD-04: a cross-org owner is honored on BOTH document write
   // endpoints — a signed upload target (25b) and a finalized metadata insert
   // (26) — instead of 404ing before anything is signed or written.

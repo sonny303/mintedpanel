@@ -109,6 +109,15 @@ routes, lib). RPC-mediated tables note the RPC.
 | sop_template_drafts | work | support | 0 | **E4.2 F4.2.1** SOP wizard save-as-draft WIP (`org_id`, optional `template_id → sop_templates`, `payload jsonb`, `updated_by`, timestamps); admin-member RLS; NEVER resolved by `pickTemplate` or readiness; deleted on successful publish |
 | field_dictionary | extension | support | 1 | |
 
+## WP 1.3 — Provider Roster Engine
+
+| Table                   | Layer  | Status  | Usage                | Notes / replacement                                                                                                                                                                         |
+| ----------------------- | ------ | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| roster_templates        | party  | support | roster services/RPCs | Organization-scoped, versioned ordered schemas; BCBS NC, Humana, and Medicare reassignment starters remain explicitly unverified. No full SSN fields.                                       |
+| roster_mappings         | work   | support | roster services/RPCs | Organization/template-bound field assignments and explicit provider/location/group scope; revision checks prevent lost edits and invalidate prior validation.                               |
+| roster_export_overrides | ledger | support | roster services/RPCs | Append-only validation exceptions recorded immediately, with verified actor, timestamp, reason, row/rule/field, mapping revision and source fingerprint.                                    |
+| roster_export_snapshots | ledger | support | roster services/RPCs | Immutable original CSV/XLSX bytes, database-computed SHA-256, frozen inputs and applied overrides, actor/time/counts; atomic and idempotent export commit; authorized historical retrieval. |
+
 ## Design rules (defended by this register)
 
 1. **Grain rule.** Every table has exactly one grain (case = provider×group×

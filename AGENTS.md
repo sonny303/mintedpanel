@@ -63,7 +63,7 @@ tenant isolation there is enforced in code, not by the database.
 - Reuse the service via DI (pass a server ctx); never write a second copy of a query in a route handler.
 - List payloads use narrowed column sets (no PHI); PHI-bearing responses set `Cache-Control: no-store` and are never logged.
 - Every new resource route adds assertions to `scripts/verify-org-isolation.mjs` and coverage in `scripts/mock-api-server.mjs` before merge. A red isolation gate is stop-ship.
-- Browser hooks do not call `/api` — the one sanctioned exception is the `/api/documents/*` signing endpoints (a signed Storage URL cannot be minted client-side).
+- Browser hooks use services. The sanctioned browser API surfaces are `/api/documents/*` signing endpoints and `/api/rosters/*` (WP 1.3): authenticated roster mapping, validation, audited overrides, server-generated exports, and original-artifact retrieval. The roster exception was explicitly approved with WP 1.3; all handlers use `guard.ts`, service DI, membership-derived organization/actor, and `Cache-Control: no-store`. Other browser services retain their existing Supabase/RLS path.
 
 ## Database rules
 

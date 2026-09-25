@@ -51,6 +51,12 @@
 //                          when unset (the real gate waits for the operator to
 //                          seed + pin fixture documents); the in-sandbox mock
 //                          run always sets both.
+//   KANSAS_ROSTER_MAPPING_ID + SOUTHPARK_ROSTER_MAPPING_ID
+//                          Optional WP1.3 roster mapping fixtures. When set,
+//                          the gate verifies cross-org mapping GET returns 404.
+//   SOUTHPARK_ROSTER_EXPORT_ID
+//                          Optional South Park roster export fixture; the gate
+//                          verifies a Kansas caller cannot download its bytes.
 //   (no new env needed for 25/25b/26 — the document upload-intent + finalize
 //   write-path pair, ASD BITE-ASD-04, closing the TD-53 gap; they reuse
 //   KANSAS_PROVIDER_ID/SOUTHPARK_PROVIDER_ID as the owner ids.)
@@ -188,6 +194,10 @@ function idsOf(body) {
   return new Set((body?.data ?? []).map((r) => r.id));
 }
 
+function rowsOf(body) {
+  return Array.isArray(body?.data) ? body.data : [];
+}
+
 function looksLikeVercelGate(r) {
   // Vercel Authentication returns an HTML interstitial, not our JSON envelope.
   const s = (r.raw || "").toLowerCase();
@@ -266,6 +276,83 @@ function looksLikeVercelGate(r) {
     `overlap=${overlap.length}${overlap.length ? " " + overlap.slice(0, 3).join(",") : ""}`,
     { leak: true },
   );
+
+  // WP1.3 roster mappings and export history are read-only in this gate. The
+  // billing member may read its own organization, while all returned mapping
+  // metadata and snapshot references stay inside that tenant.
+  const kansasMembership = env.KANSAS_ORG
+    ? { status: 200, body: { data: [{ orgId: env.KANSAS_ORG }] } }
+    : await apiGet("/api/me/orgs", { token: kansasTok });
+  const kansasOrgId = kansasMembership.body?.data?.[0]?.orgId;
+  const kRosterMappingsResult = await apiGet("/api/rosters/mappings", { token: kansasTok });
+  const sRosterMappingsResult = await apiGet("/api/rosters/mappings", { token: spTok });
+  const kRosterMappings = rowsOf(kRosterMappingsResult.body);
+  const sRosterMappings = rowsOf(sRosterMappingsResult.body);
+  check(
+    "30. Roster mapping listings contain only each caller's organization",
+    Boolean(kansasOrgId) &&
+      kRosterMappingsResult.status === 200 &&
+      sRosterMappingsResult.status === 200 &&
+      kRosterMappings.every((r) => r.orgId === kansasOrgId) &&
+      sRosterMappings.every((r) => r.orgId === env.SOUTHPARK_ORG),
+    `kansasStatus=${kRosterMappingsResult.status} kansasRows=${kRosterMappings.length} ` +
+      `southParkStatus=${sRosterMappingsResult.status} southParkRows=${sRosterMappings.length}`,
+    { leak: true },
+  );
+  const kRosterIds = new Set(kRosterMappings.map((r) => r.id));
+  const sRosterIds = new Set(sRosterMappings.map((r) => r.id));
+  const sharedRosterIds = [...kRosterIds].filter((id) => sRosterIds.has(id));
+  check(
+    "31. Kansas and South Park roster mapping id sets are disjoint",
+    sharedRosterIds.length === 0,
+    `shared=${sharedRosterIds.length}`,
+    { leak: true },
+  );
+  const kRosterHistoryResult = await apiGet("/api/rosters/history", { token: kansasTok });
+  const sRosterHistoryResult = await apiGet("/api/rosters/history", { token: spTok });
+  const kRosterHistory = rowsOf(kRosterHistoryResult.body);
+  const sRosterHistory = rowsOf(sRosterHistoryResult.body);
+  const foreignHistoryVisible =
+    kRosterHistory.some((snapshot) => sRosterIds.has(snapshot.mappingId)) ||
+    sRosterHistory.some((snapshot) => kRosterIds.has(snapshot.mappingId));
+  check(
+    "32. Roster export history contains no other organization's mapping rows",
+    kRosterHistoryResult.status === 200 &&
+      sRosterHistoryResult.status === 200 &&
+      !foreignHistoryVisible,
+    `kansasStatus=${kRosterHistoryResult.status} kansasSnapshots=${kRosterHistory.length} ` +
+      `southParkStatus=${sRosterHistoryResult.status} southParkSnapshots=${sRosterHistory.length} ` +
+      `foreignMappingVisible=${foreignHistoryVisible}`,
+    { leak: true },
+  );
+  if (env.SOUTHPARK_ROSTER_MAPPING_ID) {
+    const crossOrgMapping = await apiGet(
+      `/api/rosters/mappings/${encodeURIComponent(env.SOUTHPARK_ROSTER_MAPPING_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "33. Kansas cannot read a South Park roster mapping by id",
+      crossOrgMapping.status === 404,
+      `status=${crossOrgMapping.status}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  33. Cross-org roster mapping GET — SOUTHPARK_ROSTER_MAPPING_ID not set");
+  }
+  if (env.SOUTHPARK_ROSTER_EXPORT_ID) {
+    const crossOrgRosterFile = await apiGet(
+      `/api/rosters/exports/${encodeURIComponent(env.SOUTHPARK_ROSTER_EXPORT_ID)}/download`,
+      { token: kansasTok },
+    );
+    check(
+      "34. Kansas cannot download South Park's stored roster bytes",
+      crossOrgRosterFile.status === 404,
+      `status=${crossOrgRosterFile.status}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  34. Cross-org roster export download — SOUTHPARK_ROSTER_EXPORT_ID not set");
+  }
 
   // 3. Kansas view: GET a South Park provider by id -> 404, no row leaked.
   const x = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}`, { token: kansasTok });
