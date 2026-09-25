@@ -82,7 +82,10 @@ const psqlArgs = [
   "-v",
   "VERBOSITY=verbose",
 ];
+const psqlAs = (role) =>
+  psqlArgs.map((arg, index) => (index === psqlArgs.indexOf("postgres") ? role : arg));
 const sql = (input) => docker(psqlArgs, input);
+const adminSql = (input) => docker(psqlAs("e612_native_superuser"), input);
 
 function migrations() {
   const files = readdirSync(`${root}supabase/migrations`)
@@ -140,13 +143,94 @@ ON CONFLICT (id) DO NOTHING;
 }
 
 function runMigrations(files) {
-  for (const name of files) {
+  const restrictedIndex = files.indexOf(e612Migration);
+  const beforeRestricted = restrictedIndex === -1 ? files : files.slice(0, restrictedIndex);
+  const afterRestricted = restrictedIndex === -1 ? [] : files.slice(restrictedIndex + 1);
+  for (const name of beforeRestricted) {
     try {
       sql(readFileSync(`${root}supabase/migrations/${name}`, "utf8"));
     } catch {
       fail(`E612_MIGRATION_FAILED_${name.replaceAll(/[^A-Za-z0-9]+/g, "_")}`);
     }
   }
+  if (restrictedIndex !== -1) {
+    // Supabase's hosted migration executor is a restricted CREATEROLE role,
+    // not a superuser. Reassign the disposable baseline to the same kind of
+    // executor before applying E6.12. The inherited membership preserves
+    // disposable baseline ownership while keeping the executor itself
+    // non-superuser and unable to SET ROLE into the helper owner by default.
+    adminSql(`
+      CREATE ROLE e612_restricted_migrator LOGIN CREATEROLE NOSUPERUSER BYPASSRLS;
+      GRANT postgres TO e612_restricted_migrator WITH INHERIT TRUE, SET FALSE;
+    `);
+    try {
+      const source = readFileSync(`${root}supabase/migrations/${e612Migration}`, "utf8");
+      try {
+        docker(psqlAs("e612_restricted_migrator"), source);
+      } catch {
+        fail(`E612_MIGRATION_FAILED_${e612Migration.replaceAll(/[^A-Za-z0-9]+/g, "_")}`);
+      }
+      restrictedMigrationChecks();
+    } finally {
+      adminSql(`
+        REASSIGN OWNED BY e612_restricted_migrator TO postgres;
+        DROP OWNED BY e612_restricted_migrator;
+        REVOKE postgres FROM e612_restricted_migrator;
+        DROP ROLE e612_restricted_migrator;
+      `);
+    }
+  }
+  for (const name of afterRestricted) {
+    try {
+      sql(readFileSync(`${root}supabase/migrations/${name}`, "utf8"));
+    } catch {
+      fail(`E612_MIGRATION_FAILED_${name.replaceAll(/[^A-Za-z0-9]+/g, "_")}`);
+    }
+  }
+}
+
+function restrictedMigrationChecks() {
+  const helper = query(`
+    SELECT pg_get_userbyid(p.proowner) || '|' ||
+           has_function_privilege('public', p.oid, 'EXECUTE') || '|' ||
+           has_function_privilege('anon', p.oid, 'EXECUTE') || '|' ||
+           has_function_privilege('authenticated', p.oid, 'EXECUTE') || '|' ||
+           has_function_privilege('service_role', p.oid, 'EXECUTE')
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'app_authz' AND p.proname = 'is_restricted_external';
+  `);
+  assertEqual(
+    "restricted_migrator.helper_owner_acl",
+    helper,
+    "minted_e612_authz_owner|false|false|true|true",
+  );
+
+  const capabilities = query(`
+    SELECT has_schema_privilege('minted_e612_authz_owner', 'app_authz', 'CREATE') || '|' ||
+           pg_has_role('e612_restricted_migrator', 'minted_e612_authz_owner', 'SET') || '|' ||
+           pg_has_role('e612_restricted_migrator', 'minted_e612_authz_owner', 'USAGE');
+  `);
+  assertEqual(
+    "restricted_migrator.temporary_capabilities_removed",
+    capabilities,
+    "false|false|false",
+  );
+
+  const membership = query(`
+    SELECT count(*) FILTER (
+             WHERE m.grantor = 'e612_restricted_migrator'::regrole
+           )::text || '|' ||
+           count(*) FILTER (
+             WHERE m.admin_option AND NOT m.inherit_option AND NOT m.set_option
+           )::text || '|' || count(*)::text
+      FROM pg_auth_members m
+     WHERE m.roleid = 'minted_e612_authz_owner'::regrole
+       AND m.member = 'e612_restricted_migrator'::regrole;
+  `);
+  if (!/^0\|[1-9][0-9]*\|[1-9][0-9]*$/.test(membership))
+    fail(`E612_RESTRICTED_MIGRATOR_MEMBERSHIP_DRIFT_${membership.replaceAll("|", "_")}`);
+  emit("E612|PASS|restricted_migrator.final_owner_acl_membership");
 }
 
 function expectedDeny(label, statement) {
@@ -210,6 +294,127 @@ function expectedServiceError(label, statement, message) {
 
 function query(statement) {
   return sql(statement).trim();
+}
+
+function roleSqlResult(role, statement) {
+  try {
+    return {
+      ok: true,
+      stdout: execFileSync("docker", ["--context", context, ...psqlAs(role)], {
+        ...options,
+        input: statement,
+      }),
+      stderr: "",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      stdout: String(error.stdout ?? ""),
+      stderr: String(error.stderr ?? ""),
+    };
+  }
+}
+
+function ownerHandoffProbeSql(injectFailure) {
+  const source = readFileSync(`${root}supabase/migrations/${e612Migration}`, "utf8");
+  const match = source.match(
+    /DO \$\$\nDECLARE\n  v_executor_name name := current_user;[\s\S]*?\nEND\n\$\$;/,
+  );
+  if (!match) fail("E612_OWNER_HANDOFF_BLOCK_MISSING");
+  let block = match[0]
+    .replaceAll("minted_e612_authz_owner", "e612_probe_owner")
+    .replaceAll("app_authz", "e612_owner_probe")
+    .replaceAll("is_restricted_external", "helper");
+  if (injectFailure) {
+    block = block.replace(
+      "EXECUTE 'ALTER FUNCTION e612_owner_probe.helper() OWNER TO e612_probe_owner';",
+      "EXECUTE 'ALTER FUNCTION e612_owner_probe.helper() OWNER TO e612_probe_owner';\n  RAISE EXCEPTION 'e612_owner_handoff_injected_failure';",
+    );
+  }
+  return `BEGIN;\n${block}\nCOMMIT;`;
+}
+
+function restrictedMigratorOwnershipRollbackCheck() {
+  adminSql(`
+    DROP SCHEMA IF EXISTS e612_owner_probe CASCADE;
+    DROP ROLE IF EXISTS e612_probe_owner;
+    DROP ROLE IF EXISTS e612_probe_migrator;
+    CREATE ROLE e612_probe_migrator LOGIN CREATEROLE NOSUPERUSER BYPASSRLS;
+    CREATE SCHEMA e612_owner_probe AUTHORIZATION e612_probe_migrator;
+    REVOKE CREATE ON SCHEMA e612_owner_probe FROM PUBLIC;
+  `);
+
+  const setup = roleSqlResult(
+    "e612_probe_migrator",
+    `
+      CREATE ROLE e612_probe_owner NOLOGIN NOBYPASSRLS;
+      CREATE FUNCTION e612_owner_probe.helper()
+      RETURNS boolean
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog
+      AS $$ SELECT true $$;
+      REVOKE ALL ON FUNCTION e612_owner_probe.helper() FROM PUBLIC, anon, authenticated;
+      GRANT EXECUTE ON FUNCTION e612_owner_probe.helper() TO authenticated, service_role;
+    `,
+  );
+  if (!setup.ok) fail("E612_RESTRICTED_MIGRATOR_PROBE_SETUP_FAILED");
+
+  const rollback = roleSqlResult("e612_probe_migrator", ownerHandoffProbeSql(true));
+  if (rollback.ok || !rollback.stderr.includes("e612_owner_handoff_injected_failure"))
+    fail("E612_RESTRICTED_MIGRATOR_ROLLBACK_NOT_TRIGGERED");
+  const rollbackState = query(`
+    SELECT (SELECT pg_get_userbyid(p.proowner)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'e612_owner_probe' AND p.proname = 'helper') || '|' ||
+           has_schema_privilege('e612_probe_owner', 'e612_owner_probe', 'CREATE') || '|' ||
+           pg_has_role('e612_probe_migrator', 'e612_probe_owner', 'SET') || '|' ||
+           (SELECT count(*)::text
+              FROM pg_auth_members m
+             WHERE m.roleid = 'e612_probe_owner'::regrole
+               AND m.member = 'e612_probe_migrator'::regrole
+               AND m.grantor = 'e612_probe_migrator'::regrole);
+  `);
+  assertEqual(
+    "restricted_migrator.rollback_state",
+    rollbackState,
+    "e612_probe_migrator|false|false|0",
+  );
+  emit("E612|PASS|restricted_migrator.rollback_restores_temp_privileges");
+
+  const commit = roleSqlResult("e612_probe_migrator", ownerHandoffProbeSql(false));
+  if (!commit.ok) fail("E612_RESTRICTED_MIGRATOR_COMMIT_FAILED");
+  const committedState = query(`
+    SELECT (SELECT pg_get_userbyid(p.proowner)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'e612_owner_probe' AND p.proname = 'helper') || '|' ||
+           has_schema_privilege('e612_probe_owner', 'e612_owner_probe', 'CREATE') || '|' ||
+           pg_has_role('e612_probe_migrator', 'e612_probe_owner', 'SET') || '|' ||
+           (SELECT count(*)::text
+              FROM pg_auth_members m
+             WHERE m.roleid = 'e612_probe_owner'::regrole
+               AND m.member = 'e612_probe_migrator'::regrole
+               AND m.grantor = 'e612_probe_migrator'::regrole) || '|' ||
+           has_function_privilege('public', 'e612_owner_probe.helper()'::regprocedure, 'EXECUTE') || '|' ||
+           has_function_privilege('anon', 'e612_owner_probe.helper()'::regprocedure, 'EXECUTE') || '|' ||
+           has_function_privilege('authenticated', 'e612_owner_probe.helper()'::regprocedure, 'EXECUTE') || '|' ||
+           has_function_privilege('service_role', 'e612_owner_probe.helper()'::regprocedure, 'EXECUTE');
+  `);
+  assertEqual(
+    "restricted_migrator.committed_state",
+    committedState,
+    "e612_probe_owner|false|false|0|false|false|true|true",
+  );
+  emit("E612|PASS|restricted_migrator.commit_owner_acl");
+
+  adminSql(`
+    DROP SCHEMA e612_owner_probe CASCADE;
+    DROP ROLE e612_probe_owner;
+    DROP ROLE e612_probe_migrator;
+  `);
 }
 
 function runSqlChild(input, timeoutMs = 20_000) {
@@ -2631,6 +2836,7 @@ try {
   emit(`E612|IMAGE|${imageId}`);
   emit(`E612|POSTGRES|${query("SHOW server_version;")}`);
   sql(bootstrap);
+  sql("CREATE ROLE e612_native_superuser LOGIN SUPERUSER;");
   const files = migrations();
   runMigrations(files);
   emit(`E612|MIGRATIONS|${files.length}`);
@@ -2657,6 +2863,8 @@ try {
   await concurrencyCheck();
   replacementRevocationCheck();
   await controlledLifecycleRaces();
+  restrictedMigratorOwnershipRollbackCheck();
+  sql("DROP ROLE e612_native_superuser;");
   emit("E612|NATIVE|PASS");
 } catch (error) {
   const code =

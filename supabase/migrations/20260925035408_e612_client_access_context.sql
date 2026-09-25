@@ -327,9 +327,78 @@ AS $$
   );
 $$;
 
-ALTER FUNCTION app_authz.is_restricted_external() OWNER TO minted_e612_authz_owner;
 REVOKE ALL ON FUNCTION app_authz.is_restricted_external() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION app_authz.is_restricted_external() TO authenticated, service_role;
+
+-- A hosted migration executor may be a non-superuser CREATEROLE role. PostgreSQL
+-- requires both SET ROLE capability for the new owner and CREATE on the owning
+-- schema before an ownership transfer. Grant only those capabilities for this
+-- transfer, then restore the exact pre-migration membership/schema state before
+-- the transaction commits. The helper ACL is finalized while this executor is
+-- still the function owner; membership rows granted by bootstrap are preserved.
+DO $$
+DECLARE
+  v_executor_name name := current_user;
+  v_executor_oid oid := v_executor_name::regrole;
+  v_owner_name constant name := 'minted_e612_authz_owner';
+  v_owner_oid oid := v_owner_name::regrole;
+  v_had_effective_set boolean := pg_has_role(v_executor_name, v_owner_name, 'SET');
+  v_had_effective_create boolean := has_schema_privilege(v_owner_name, 'app_authz', 'CREATE');
+  v_had_direct_selfgrant boolean := false;
+  v_admin_option boolean;
+  v_inherit_option boolean;
+  v_set_option boolean;
+  v_bool_admin text;
+  v_bool_inherit text;
+  v_bool_set text;
+BEGIN
+  IF NOT v_had_effective_set THEN
+    SELECT m.admin_option, m.inherit_option, m.set_option
+      INTO v_admin_option, v_inherit_option, v_set_option
+      FROM pg_auth_members m
+     WHERE m.roleid = v_owner_oid
+       AND m.member = v_executor_oid
+       AND m.grantor = v_executor_oid;
+    v_had_direct_selfgrant := FOUND;
+
+    -- Explicit options are required here: INHERIT is deliberately false, while
+    -- SET is the only capability needed for the ownership handoff.
+    EXECUTE format(
+      'GRANT %I TO %I WITH ADMIN FALSE, INHERIT FALSE, SET TRUE GRANTED BY CURRENT_USER',
+      v_owner_name,
+      v_executor_name
+    );
+  END IF;
+
+  IF NOT v_had_effective_create THEN
+    EXECUTE format('GRANT CREATE ON SCHEMA app_authz TO %I', v_owner_name);
+  END IF;
+
+  EXECUTE 'ALTER FUNCTION app_authz.is_restricted_external() OWNER TO minted_e612_authz_owner';
+
+  IF NOT v_had_effective_create THEN
+    EXECUTE format('REVOKE CREATE ON SCHEMA app_authz FROM %I', v_owner_name);
+  END IF;
+
+  IF NOT v_had_effective_set THEN
+    IF v_had_direct_selfgrant THEN
+      v_bool_admin := CASE WHEN v_admin_option THEN 'TRUE' ELSE 'FALSE' END;
+      v_bool_inherit := CASE WHEN v_inherit_option THEN 'TRUE' ELSE 'FALSE' END;
+      v_bool_set := CASE WHEN v_set_option THEN 'TRUE' ELSE 'FALSE' END;
+      EXECUTE format(
+        'GRANT %I TO %I WITH ADMIN %s, INHERIT %s, SET %s GRANTED BY CURRENT_USER',
+        v_owner_name,
+        v_executor_name,
+        v_bool_admin,
+        v_bool_inherit,
+        v_bool_set
+      );
+    ELSE
+      EXECUTE format('REVOKE %I FROM %I GRANTED BY CURRENT_USER', v_owner_name, v_executor_name);
+    END IF;
+  END IF;
+END
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Shared direct-surface hardening. Non-restricted signed-in behavior remains;
