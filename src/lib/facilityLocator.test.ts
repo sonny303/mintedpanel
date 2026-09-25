@@ -22,7 +22,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "hargrove",
     "BEST Physical Therapy - Hargrove",
-    "4801 Hargrove Road",
+    "101 Sample Road",
     "Raleigh",
     "NC",
     "27616",
@@ -31,7 +31,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "connemara",
     "BEST Physical Therapy - Connemara",
-    "100 Connemara Drive",
+    "102 Sample Drive",
     "Cary",
     "NC",
     "27519",
@@ -40,7 +40,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "towerview",
     "BEST Physical Therapy - Towerview",
-    "280 Towerview Court",
+    "103 Sample Court",
     "Cary",
     "NC",
     "27513",
@@ -48,7 +48,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "knightdale",
     "BEST Physical Therapy - Knightdale",
-    "1008 Big Oak Court",
+    "104 Sample Court",
     "Knightdale",
     "NC",
     "27545",
@@ -57,7 +57,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "leesville",
     "BEST Physical Therapy - Leesville Rd",
-    "9101 Leesville Rd",
+    "105 Sample Rd",
     "Raleigh",
     "NC",
     "27613",
@@ -66,7 +66,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "clayton",
     "BEST Physical Therapy - Clayton",
-    "11694 US-70 Business W",
+    "11694 Sample Highway W",
     "Clayton",
     "NC",
     "27520",
@@ -74,7 +74,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "raeford",
     "BEST Physical Therapy - Raeford",
-    "4550 Fayetteville Road",
+    "107 Sample Road",
     "Raeford",
     "NC",
     "28376",
@@ -82,7 +82,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "wilmington",
     "BEST Physical Therapy - Wilmington",
-    "2307 N College Road",
+    "108 N Sample Road",
     "Wilmington",
     "NC",
     "28405",
@@ -90,7 +90,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "convention",
     "BEST Physical Therapy - Convention",
-    "275 Convention Dr",
+    "109 Sample Dr",
     "Cary",
     "NC",
     "27511",
@@ -98,7 +98,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "garner",
     "BEST Physical Therapy - Garner",
-    "1400 Timber Drive East",
+    "110 Sample Drive East",
     "Garner",
     "NC",
     "27529",
@@ -106,16 +106,16 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "fayetteville",
     "BEST Physical Therapy - Fayetteville",
-    "210 Owen Dr",
+    "111 Sample Dr",
     "Fayetteville",
     "NC",
     "28304",
   ),
-  facility("cary", "BEST Physical Therapy - Cary", "607 Mills Park Dr", "Cary", "NC", "27519"),
+  facility("cary", "BEST Physical Therapy - Cary", "112 Sample Dr", "Cary", "NC", "27519"),
   facility(
     "durham",
     "BEST Physical Therapy - Durham",
-    "105 W North Carolina 54",
+    "113 W Sample St",
     "Durham",
     "NC",
     "27713",
@@ -124,7 +124,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "greenville",
     "BEST Physical Therapy - Greenville",
-    "19 Gladys Drive",
+    "114 Sample Drive",
     "Greenville",
     "SC",
     "29607",
@@ -132,7 +132,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "madison",
     "BEST Physical Therapy - Madison",
-    "1726 Eagan Rd",
+    "115 Sample Rd",
     "Madison",
     "WI",
     "53704",
@@ -141,7 +141,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "fitchburg",
     "BEST Physical Therapy - Fitchburg",
-    "2920 Hardrock Rd",
+    "116 Sample Rd",
     "Fitchburg",
     "WI",
     "53719",
@@ -149,7 +149,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "longmont",
     "BEST Physical Therapy - Longmont",
-    "1240 Hover St",
+    "117 Sample St",
     "Longmont",
     "CO",
     "80501",
@@ -158,7 +158,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "springs",
     "BEST Physical Therapy - Colorado Springs",
-    "5904 Prairie Schooner Dr",
+    "118 Sample Dr",
     "Colorado Springs",
     "CO",
     "80923",
@@ -166,16 +166,16 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "cypress",
     "BEST Physical Therapy - Cypress",
-    "12951 Barker Cypress Rd",
+    "119 Sample Rd",
     "Cypress",
     "TX",
     "77429",
   ),
-  facility("katy", "BEST Physical Therapy - Katy", "9930 Gaston Rd", "Katy", "TX", "77494"),
+  facility("katy", "BEST Physical Therapy - Katy", "120 Sample Rd", "Katy", "TX", "77494"),
   facility(
     "beaverton",
     "BEST Physical Therapy - Beaverton",
-    "13900 SW Meridian St",
+    "121 SW Sample St",
     "Beaverton",
     "OR",
     "97005",
@@ -183,7 +183,7 @@ const BEST: FacilityLocatorRecord[] = [
   facility(
     "caldwell",
     "BEST Physical Therapy - VS Caldwell",
-    "4623 Enterprise Way",
+    "122 Sample Way",
     "Caldwell",
     "ID",
     "83605",
@@ -191,28 +191,28 @@ const BEST: FacilityLocatorRecord[] = [
 ];
 
 const ROSTER: Array<[string, string]> = [
-  ["4801 Hargrove Road, Suite 100, Raleigh, NC 27616", "hargrove"],
-  ["100 Connemara Drive, Suite 110, Cary, NC 27519", "connemara"],
-  ["280 Towerview Court, Cary, NC 27513", "towerview"],
-  ["1008 Big Oak Court, Suite A, Knightdale, NC 27545", "knightdale"],
-  ["9101 Leesville Rd STE 129, Raleigh, NC 27613", "leesville"],
-  ["11694 US-70 Business W, Clayton NC, 27520", "clayton"],
-  ["4550 Fayetteville Road, Raeford, NC 28376", "raeford"],
-  ["2307 N College Road, Wilmington, NC 28405", "wilmington"],
-  ["275 Convention Dr, Cary, NC 27511", "convention"],
-  ["1400 Timber Drive East, Garner NC 27529", "garner"],
-  ["210 Owen Dr, Fayetteville, NC 28304", "fayetteville"],
-  ["607 Mills Park Dr, Cary, NC 27519", "cary"],
-  ["105 W North Carolina 54 #271, Durham, NC 27713", "durham"],
-  ["19 Gladys Drive, Greenville, SC 29607", "greenville"],
-  ["1726 Eagan Rd, Suite 101, Madison, WI 53704", "madison"],
-  ["2920 Hardrock Rd, Fitchburg, WI 53719", "fitchburg"],
-  ["1240 Hover St #200, Longmont, CO 80501", "longmont"],
-  ["5904 Prairie Schooner Dr, Colorado Springs, CO 80923", "springs"],
-  ["12951 Barker Cypress Rd, Cypress, TX 77429", "cypress"],
-  ["9930 Gaston Rd, Katy, TX 77494", "katy"],
-  ["13900 SW Meridian St, Beaverton, OR 97005", "beaverton"],
-  ["4623 Enterprise Way, Caldwell, ID 83605", "caldwell"],
+  ["101 Sample Road, Suite 100, Raleigh, NC 27616", "hargrove"],
+  ["102 Sample Drive, Suite 110, Cary, NC 27519", "connemara"],
+  ["103 Sample Court, Cary, NC 27513", "towerview"],
+  ["104 Sample Court, Suite A, Knightdale, NC 27545", "knightdale"],
+  ["105 Sample Rd STE 129, Raleigh, NC 27613", "leesville"],
+  ["11694 Sample Highway W, Clayton NC, 27520", "clayton"],
+  ["107 Sample Road, Raeford, NC 28376", "raeford"],
+  ["108 N Sample Road, Wilmington, NC 28405", "wilmington"],
+  ["109 Sample Dr, Cary, NC 27511", "convention"],
+  ["110 Sample Drive East, Garner NC 27529", "garner"],
+  ["111 Sample Dr, Fayetteville, NC 28304", "fayetteville"],
+  ["112 Sample Dr, Cary, NC 27519", "cary"],
+  ["113 W Sample St #271, Durham, NC 27713", "durham"],
+  ["114 Sample Drive, Greenville, SC 29607", "greenville"],
+  ["115 Sample Rd, Suite 101, Madison, WI 53704", "madison"],
+  ["116 Sample Rd, Fitchburg, WI 53719", "fitchburg"],
+  ["117 Sample St #200, Longmont, CO 80501", "longmont"],
+  ["118 Sample Dr, Colorado Springs, CO 80923", "springs"],
+  ["119 Sample Rd, Cypress, TX 77429", "cypress"],
+  ["120 Sample Rd, Katy, TX 77494", "katy"],
+  ["121 SW Sample St, Beaverton, OR 97005", "beaverton"],
+  ["122 Sample Way, Caldwell, ID 83605", "caldwell"],
 ];
 
 describe("matchFacilityLocator", () => {
@@ -230,7 +230,7 @@ describe("matchFacilityLocator", () => {
   });
 
   it("expands street suffixes and still matches when the suite is omitted on a unique street", () => {
-    expect(matchFacilityLocator("4801 Hargrove Rd, Raleigh, NC 27616", BEST)).toEqual({
+    expect(matchFacilityLocator("101 Sample Rd, Raleigh, NC 27616", BEST)).toEqual({
       status: "matched",
       facilityId: "hargrove",
     });

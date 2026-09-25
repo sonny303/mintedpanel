@@ -46,4 +46,4 @@ If we make material changes, we will update this page and the effective date abo
 
 ## Contact
 
-Questions about this policy: surapurs@gmail.com
+Questions about this policy: privacy@mintedpanel.com
