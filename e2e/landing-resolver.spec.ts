@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.7 F0.7.4 TE-5 — Regression coverage for the landing resolver states (E0.4):
 //   1. first-run (zero orgs) → NoOrgScreen

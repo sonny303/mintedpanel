@@ -14,7 +14,7 @@
 // grain by importSections.test.ts and the staged pipeline by
 // roster-import.spec.ts — the commit relationship pass is pinned here at the
 // wire in TS-113's harness (write-through fact POST).
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

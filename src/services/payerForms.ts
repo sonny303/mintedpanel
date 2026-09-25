@@ -13,6 +13,10 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { currentPayerForms } from "@/lib/payerForms";
+import {
+  getContextRevisionSnapshot,
+  observeContextRevisionForRequest,
+} from "@/lib/contextRevision";
 import type { PayerForm } from "@/types";
 
 const PAYER_FORM_COLUMNS =
@@ -100,8 +104,16 @@ interface ApiEnvelope<T> {
   error: string | null;
 }
 
-async function authedApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function authedApiFetch<T>(
+  path: string,
+  init?: RequestInit,
+  options: { rejectStale?: boolean } = {},
+): Promise<T> {
   const orgId = requireActiveOrg();
+  // Bind the request before the first async auth read and validate again only
+  // after the response body is accepted. This closes transitions during
+  // getSession() and JSON parsing without discarding committed upload results.
+  const before = getContextRevisionSnapshot();
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
   const token = sessionData.session?.access_token;
@@ -116,6 +128,9 @@ async function authedApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   const envelope = (await response.json()) as ApiEnvelope<T>;
+  if (observeContextRevisionForRequest(response, before, options)) {
+    throw new Error("Access context changed; retry the request");
+  }
   if (!response.ok || envelope.data === null) {
     throw new Error(envelope.error ?? `Request failed (${response.status})`);
   }
@@ -142,17 +157,21 @@ export interface UploadPayerFormInput {
 /** intent → signed PUT (browser → Storage direct) → finalize. A finalize retry
  * is idempotent server-side. */
 export async function uploadPayerForm(input: UploadPayerFormInput): Promise<PayerForm> {
-  const intent = await authedApiFetch<PayerFormUploadIntent>("/api/payer-forms/upload-intent", {
-    method: "POST",
-    body: JSON.stringify({
-      templateId: input.templateId,
-      label: input.label,
-      fileName: input.file.name,
-      fileSize: input.file.size,
-      mimeType: input.file.type,
-      familyId: input.familyId ?? null,
-    }),
-  });
+  const intent = await authedApiFetch<PayerFormUploadIntent>(
+    "/api/payer-forms/upload-intent",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        templateId: input.templateId,
+        label: input.label,
+        fileName: input.file.name,
+        fileSize: input.file.size,
+        mimeType: input.file.type,
+        familyId: input.familyId ?? null,
+      }),
+    },
+    { rejectStale: false },
+  );
 
   const put = await fetch(intent.uploadUrl, {
     method: "PUT",
@@ -161,18 +180,22 @@ export async function uploadPayerForm(input: UploadPayerFormInput): Promise<Paye
   });
   if (!put.ok) throw new Error(`Upload failed (${put.status})`);
 
-  return authedApiFetch<PayerForm>("/api/payer-forms/finalize", {
-    method: "POST",
-    body: JSON.stringify({
-      templateId: input.templateId,
-      familyId: intent.familyId,
-      version: intent.version,
-      label: input.label,
-      fileName: input.file.name,
-      mimeType: input.file.type,
-      fileSize: input.file.size,
-    }),
-  });
+  return authedApiFetch<PayerForm>(
+    "/api/payer-forms/finalize",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        templateId: input.templateId,
+        familyId: intent.familyId,
+        version: intent.version,
+        label: input.label,
+        fileName: input.file.name,
+        mimeType: input.file.type,
+        fileSize: input.file.size,
+      }),
+    },
+    { rejectStale: false },
+  );
 }
 
 export interface SignedPayerFormDownload {

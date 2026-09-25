@@ -109,6 +109,23 @@ routes, lib). RPC-mediated tables note the RPC.
 | sop_template_drafts | work | support | 0 | **E4.2 F4.2.1** SOP wizard save-as-draft WIP (`org_id`, optional `template_id → sop_templates`, `payload jsonb`, `updated_by`, timestamps); admin-member RLS; NEVER resolved by `pickTemplate` or readiness; deleted on successful publish |
 | field_dictionary | extension | support | 1 | |
 
+## E6.12 private authorization relations (2026-09-25)
+
+These relations are intentionally outside the public table register's browser
+surface. They are service-only, `FORCE ROW LEVEL SECURITY`, and have no
+authenticated or anonymous table grants. The `app_authz.is_restricted_external()`
+helper reads only the two classification/manifest relations through its narrow
+owner policy; it exposes a boolean and never returns private rows.
+
+| Relation                                  | Grain                                          | Lifecycle / boundary                                                                                                                                   |
+| ----------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `private.internal_staff`                  | verified auth user × org × staff role          | Owner-approved manifest; active rows require matching current membership for report staff and client management.                                       |
+| `private.client_identity_classifications` | verified auth user × org                       | Durable pending/active/expired/revoked restricted identity bound at invite issuance; retained through email changes, no-grant, expiry, and revocation. |
+| `private.client_invites`                  | one hashed invite token × bound classification | Single-use, seven-day pending token; claim/replacement/revocation are transactional and store no plaintext token.                                      |
+| `private.client_invite_group_grants`      | invite × provider group                        | Pending group snapshot with composite org/group coherence; revoked/replaced with its invite.                                                           |
+| `private.client_access`                   | verified auth user × org                       | Canonical active/revoked access; `auth_user_id` and classification are non-null and composite-bound. No membership row is created.                     |
+| `private.client_group_grants`             | client access × provider group                 | Explicit client report scope; composite org/group foreign keys prevent cross-org wiring.                                                               |
+
 ## Design rules (defended by this register)
 
 1. **Grain rule.** Every table has exactly one grain (case = provider×group×

@@ -4061,6 +4061,10 @@ export type Database = {
         Returns: boolean;
       };
       claim_invites: { Args: never; Returns: number };
+      claim_client_invite: {
+        Args: { p_actor_user_id: string; p_token: string };
+        Returns: Json;
+      };
       commit_import_run: {
         Args: { p_plan: Json; p_run_id: string };
         Returns: Json;
@@ -4071,6 +4075,15 @@ export type Database = {
           p_party_id: string;
           p_recipient_email: string;
           p_recipient_name?: string;
+        };
+        Returns: Json;
+      };
+      create_client_invite: {
+        Args: {
+          p_actor_user_id: string;
+          p_group_ids: string[];
+          p_org_id: string;
+          p_recipient_email: string;
         };
         Returns: Json;
       };
@@ -4320,6 +4333,10 @@ export type Database = {
         Args: { p_case_id: string; p_org_id: string; p_provider_id: string };
         Returns: Json;
       };
+      resolve_enrollment_context: {
+        Args: { p_actor_user_id: string; p_audience?: string; p_org_id?: string };
+        Returns: Json;
+      };
       reveal_ssn: {
         Args: { p_justification: string; p_provider_id: string };
         Returns: Json;
@@ -4327,6 +4344,10 @@ export type Database = {
       review_payer_catalog_change: {
         Args: { p_accept: boolean; p_change_id: string };
         Returns: undefined;
+      };
+      revoke_client_access: {
+        Args: { p_access_id: string; p_actor_user_id: string };
+        Returns: Json;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
       set_case_status: {
@@ -4347,9 +4368,24 @@ export type Database = {
         };
         Returns: Json;
       };
+      set_client_group_grants: {
+        Args: { p_access_id: string; p_actor_user_id: string; p_group_ids: string[] };
+        Returns: Json;
+      };
       set_default_party_role: {
         Args: { p_org_id: string; p_party_id: string; p_role_key: string };
         Returns: undefined;
+      };
+      set_internal_staff_manifest: {
+        Args: {
+          p_active: boolean;
+          p_auth_user_id: string;
+          p_manifest_version: string;
+          p_operator_user_id: string;
+          p_org_id: string;
+          p_staff_role: string;
+        };
+        Returns: Json;
       };
       set_global_portal_flags: {
         Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };

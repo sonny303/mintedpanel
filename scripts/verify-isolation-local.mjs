@@ -97,6 +97,9 @@ const EXPECTED_FAILS = {
   // The leaked extra membership row breaks both the exact-count shape check
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],
+  // E6.12: a foreign org in the pre-shell access context is the only intended
+  // failure for this leak; forged actor and stale-revision denials stay intact.
+  accesscontext: ["30b"],
   facility: ["11"],
   // The SSN-release leak serves a cross-org provider's full SSN (assertion 16).
   ssnrelease: ["16"],

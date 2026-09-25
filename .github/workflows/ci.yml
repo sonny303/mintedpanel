@@ -145,7 +145,75 @@ jobs:
         run: npm test
 
       - name: Build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: e612-build-synthetic-anon-key
         run: npm run build
+
+  e612-http-boundary:
+    name: E6.12 native and HTTP boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pull pinned disposable verification images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull postgres@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
+          docker pull supabase/postgres@sha256:ac581882596ed0e46937ea6dd53a627d09f53e005d7264c2082a7ff7b62eaaca
+          docker pull supabase/gotrue@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f
+          docker pull postgrest/postgrest@sha256:1791139f50b4939d738c5b0009329aa9e9d4be0a960b6b580c4944b16e157b95
+          docker pull supabase/storage-api@sha256:f1546fac6d1c7e345428ac904bfaa7be7cecd50a1f549fe1cf38c628a7b15c85
+          docker pull node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e
+
+      - name: Verify linux amd64 image resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in \
+            postgres@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6 \
+            supabase/postgres@sha256:ac581882596ed0e46937ea6dd53a627d09f53e005d7264c2082a7ff7b62eaaca \
+            supabase/gotrue@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f \
+            postgrest/postgrest@sha256:1791139f50b4939d738c5b0009329aa9e9d4be0a960b6b580c4944b16e157b95 \
+            supabase/storage-api@sha256:f1546fac6d1c7e345428ac904bfaa7be7cecd50a1f549fe1cf38c628a7b15c85 \
+            node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e; do
+            platform="$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')"
+            test "$platform" = linux/amd64
+            echo "E612|CI|IMAGE|$image|$platform"
+          done
+
+      - name: Build disposable Node server and bind source manifest
+        env:
+          NITRO_PRESET: node_server
+          VITE_SUPABASE_URL: http://gateway:8787
+          VITE_SUPABASE_ANON_KEY: e612-build-synthetic-anon-key
+        run: |
+          npm run build
+          node scripts/security/e612-build-manifest.mjs --write
+
+      - name: Verify E6.12 native and HTTP boundaries
+        env:
+          E612_DOCKER_CONTEXT: default
+          E612_POSTGRES_IMAGE: postgres@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
+          E612_HTTP_AUTH_IMAGE: supabase/gotrue@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f
+          E612_HTTP_REST_IMAGE: postgrest/postgrest@sha256:1791139f50b4939d738c5b0009329aa9e9d4be0a960b6b580c4944b16e157b95
+        run: |
+          node scripts/security/verify-e612-client-access.mjs
+          node scripts/security/verify-e612-client-access-http.mjs
 
   # Gate 0.4 — migration dry-run against a throwaway Postgres (never a Supabase
   # branch or prod). Applies every file in supabase/migrations/ in filename order
@@ -200,7 +268,14 @@ jobs:
           CREATE TABLE auth.users (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             email text,
-            raw_user_meta_data jsonb
+            email_confirmed_at timestamptz,
+            banned_until timestamptz,
+            deleted_at timestamptz,
+            is_anonymous boolean NOT NULL DEFAULT false,
+            raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+            raw_app_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now()
           );
           CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
             SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;

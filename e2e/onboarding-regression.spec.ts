@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.7 F0.7.4 TE-5 — Regression coverage for the org-create flow reachable from
 // the sidebar's "Add organization" dropdown item. REWRITTEN for E0.8 TE-2: Add

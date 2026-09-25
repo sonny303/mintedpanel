@@ -5,7 +5,7 @@
 // org_payer_assignments upsert, and no UI surfaces enablement/subscription.
 // The CSV rides the staged-import machine: exact-header gate, per-row
 // eligibility errors named at scan time, idempotent skip-on-match commit.
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
