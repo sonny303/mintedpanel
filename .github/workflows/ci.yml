@@ -9,6 +9,43 @@ permissions:
   contents: read
 
 jobs:
+  migration-runner:
+    name: Migration runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: synthetic-migration-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Reject historical SQL rewrites against the event base
+        env:
+          MINTED_MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: npm run check:migrations
+      - name: Verify real ledger, rerun, failure and schema drift behavior
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:synthetic-migration-test@127.0.0.1:5432/postgres?sslmode=disable
+        run: npm run test:migrations
+
   vault-authorization:
     name: P01 vault authorization
     runs-on: ubuntu-latest

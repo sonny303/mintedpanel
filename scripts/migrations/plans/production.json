@@ -1,0 +1,9 @@
+{
+  "status": "reconciliation-required",
+  "blockers": [
+    "Capture production identity, catalog and ledger independently",
+    "Reconcile historical baseline and duplicate version 20260903210000",
+    "Verify production backup and isolated populated upgrade rehearsal",
+    "Bind qualified staging release and production approval before execution"
+  ]
+}
