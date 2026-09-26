@@ -48,6 +48,7 @@ import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launch
 import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
 import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
 import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
+import { Route as ReportingBillingReadinessRouteImport } from './routes/reporting.billing-readiness'
 import { Route as ReportingAuditLogRouteImport } from './routes/reporting.audit-log'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
@@ -298,6 +299,12 @@ const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
   path: '/reporting/denials',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingBillingReadinessRoute =
+  ReportingBillingReadinessRouteImport.update({
+    id: '/reporting/billing-readiness',
+    path: '/reporting/billing-readiness',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ReportingAuditLogRoute = ReportingAuditLogRouteImport.update({
   id: '/reporting/audit-log',
   path: '/reporting/audit-log',
@@ -608,6 +615,7 @@ export interface FileRoutesByFullPath {
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
@@ -691,6 +699,7 @@ export interface FileRoutesByTo {
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
@@ -784,6 +793,7 @@ export interface FileRoutesById {
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
@@ -878,6 +888,7 @@ export interface FileRouteTypes {
     | '/providers/$id'
     | '/providers/new'
     | '/reporting/audit-log'
+    | '/reporting/billing-readiness'
     | '/reporting/denials'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
@@ -961,6 +972,7 @@ export interface FileRouteTypes {
     | '/onboarding/wizard'
     | '/providers/new'
     | '/reporting/audit-log'
+    | '/reporting/billing-readiness'
     | '/reporting/denials'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
@@ -1053,6 +1065,7 @@ export interface FileRouteTypes {
     | '/providers/$id'
     | '/providers/new'
     | '/reporting/audit-log'
+    | '/reporting/billing-readiness'
     | '/reporting/denials'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
@@ -1142,6 +1155,7 @@ export interface RootRouteChildren {
   ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingAuditLogRoute: typeof ReportingAuditLogRoute
+  ReportingBillingReadinessRoute: typeof ReportingBillingReadinessRoute
   ReportingDenialsRoute: typeof ReportingDenialsRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
   ReportingFacilitiesWithoutProvidersRoute: typeof ReportingFacilitiesWithoutProvidersRoute
@@ -1440,6 +1454,13 @@ declare module '@tanstack/react-router' {
       path: '/reporting/denials'
       fullPath: '/reporting/denials'
       preLoaderRoute: typeof ReportingDenialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/billing-readiness': {
+      id: '/reporting/billing-readiness'
+      path: '/reporting/billing-readiness'
+      fullPath: '/reporting/billing-readiness'
+      preLoaderRoute: typeof ReportingBillingReadinessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reporting/audit-log': {
@@ -1984,6 +2005,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingAuditLogRoute: ReportingAuditLogRoute,
+  ReportingBillingReadinessRoute: ReportingBillingReadinessRoute,
   ReportingDenialsRoute: ReportingDenialsRoute,
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
   ReportingFacilitiesWithoutProvidersRoute:
