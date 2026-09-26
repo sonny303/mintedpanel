@@ -75,6 +75,24 @@ const PROVIDER_ID = "99999999-8888-4777-8666-121212121212";
 const TASK_ID = "31313131-4242-4535-8686-797979797979";
 
 const baseInput: FillEventInput = { id: FILL_ID, caseId: CASE_ID, portalKey: "availity" };
+const V2_FIELD = {
+  mapId: "12121212-3434-4567-8899-aabbccddeeff",
+  targetKey: "t_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  frameKey: "f_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  stepKey: "s_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  attempted: true,
+  outcome: "verified",
+  reasonCode: null,
+};
+const V2_INPUT: FillEventInput = {
+  ...baseInput,
+  schemaVersion: 2,
+  fieldsAttempted: 1,
+  fieldsVerified: 1,
+  fieldsRejected: 0,
+  fieldOutcomes: [V2_FIELD],
+  fieldsFilled: 1,
+};
 
 // The row the DB hands back from insert()/the idempotency lookup.
 const storedRow = {
@@ -111,6 +129,13 @@ describe("recordFillEvent — shape validation rejects before any DB call", () =
     ["fieldsFilled beyond int4", { ...baseInput, fieldsFilled: 2147483648 }],
     ["garbage startedAt", { ...baseInput, startedAt: "yesterday-ish" }],
     ["garbage completedAt", { ...baseInput, completedAt: "not-a-timestamp" }],
+    ["unknown schema version", { ...baseInput, schemaVersion: 3 }],
+    ["incomplete V2 metadata", { ...baseInput, schemaVersion: 2, fieldsVerified: 1 }],
+    ["V2 task completion", { ...V2_INPUT, taskId: TASK_ID }],
+    [
+      "arbitrary attachment metadata",
+      { ...baseInput, docsAttached: { secret: "synthetic-value" } },
+    ],
   ];
 
   it.each(badInputs)("%s is a 422 with zero queries", async (_name, input) => {
@@ -342,18 +367,180 @@ describe("recordFillEvent — idempotency", () => {
     expect(writeAudit).not.toHaveBeenCalled();
   });
 
-  it("echoes client jsonb payloads verbatim (keys inside fields_skipped are not camelized)", async () => {
-    const skipped = [{ field_selector: "#fax", reason_code: "no_value" }];
-    const rowWithJson = { ...storedRow, fields_skipped: skipped, docs_attached: { doc_ids: [1] } };
-    const { db } = makeFakeDb([{ data: { id: CASE_ID } }, { data: null }, { data: rowWithJson }]);
+  it("sanitizes v1 fields_skipped before insertion and rejects value-bearing attachments", async () => {
+    const skipped = [
+      { selector: "#fax", label: "Fax Number", reason: "secret actual value", kind: "no_value" },
+    ];
+    const rowWithJson = {
+      ...storedRow,
+      fields_skipped: [{ label: "", reason: "missing_value", kind: "no_value", mapId: null }],
+      docs_attached: null,
+    };
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: null },
+      { data: rowWithJson },
+    ]);
     const { ctx } = ctxWith(db);
 
     const result = await recordFillEvent(ctx, { ...baseInput, fieldsSkipped: skipped });
 
     expect(result.kind).toBe("created");
     if (result.kind !== "created") throw new Error("expected a created result");
-    expect(result.session.fieldsSkipped).toEqual(skipped);
-    expect(result.session.docsAttached).toEqual({ doc_ids: [1] });
+    expect(result.session.fieldsSkipped).toEqual([
+      { label: "", reason: "missing_value", kind: "no_value", mapId: null },
+    ]);
+    expect(
+      result.session.fieldsSkipped?.some((entry) => JSON.stringify(entry).includes("secret")),
+    ).toBe(false);
+    expect(result.session.docsAttached).toBeNull();
+    const inserted = captures.find(
+      (capture) => capture.table === "fill_sessions" && capture.op === "insert",
+    );
+    expect(inserted?.payload?.fields_skipped).toEqual([
+      { label: "", reason: "missing_value", kind: "no_value", mapId: null },
+    ]);
+    expect(JSON.stringify(inserted?.payload).includes("Fax Number")).toBe(false);
+    expect(JSON.stringify(inserted?.payload).includes("secret actual value")).toBe(false);
+  });
+
+  it("accepts an identical v2 retry and returns the stored row", async () => {
+    const stored = {
+      ...storedRow,
+      fields_filled: 1,
+      fields_skipped: [],
+      docs_attached: null,
+      performed_by: "user-1",
+      event_schema_version: 2,
+      fields_attempted: 1,
+      fields_verified: 1,
+      fields_rejected: 0,
+      field_outcomes: [V2_FIELD],
+    };
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: stored }]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, V2_INPUT);
+
+    expect(result.kind).toBe("duplicate");
+    expect(captures.some((capture) => capture.op === "insert")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("writes v2 counters, outcomes, and safe skips without a second audit", async () => {
+    const safeSkipped = [{ label: "", reason: "missing_value", kind: "needs_value", mapId: null }];
+    const row = {
+      ...storedRow,
+      fields_filled: 1,
+      fields_skipped: safeSkipped,
+      docs_attached: null,
+      performed_by: "user-1",
+      event_schema_version: 2,
+      fields_attempted: 1,
+      fields_verified: 1,
+      fields_rejected: 0,
+      field_outcomes: [V2_FIELD],
+    };
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: null }, { data: row }]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, {
+      ...V2_INPUT,
+      fieldOutcomes: [
+        V2_FIELD,
+        {
+          ...V2_FIELD,
+          mapId: null,
+          targetKey: "t_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeefe",
+          frameKey: null,
+          stepKey: null,
+          attempted: false,
+          outcome: "needs_value",
+          reasonCode: "missing_value",
+        },
+      ],
+      fieldsAttempted: 1,
+      fieldsVerified: 1,
+      fieldsRejected: 0,
+    });
+
+    expect(result.kind).toBe("created");
+    expect(
+      captures.find((capture) => capture.table === "fill_sessions" && capture.op === "insert")
+        ?.payload,
+    ).toMatchObject({
+      event_schema_version: 2,
+      fields_attempted: 1,
+      fields_verified: 1,
+      fields_rejected: 0,
+      fields_filled: 1,
+      docs_attached: null,
+    });
+    const inserted = captures.find(
+      (capture) => capture.table === "fill_sessions" && capture.op === "insert",
+    );
+    expect(inserted?.payload?.field_outcomes).toHaveLength(2);
+    expect(inserted?.payload?.fields_skipped).toEqual([
+      { label: "", reason: "missing_value", kind: "needs_value", mapId: null },
+    ]);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("rejects changed v2 payloads on replay using the same id", async () => {
+    const stored = {
+      ...storedRow,
+      fields_filled: 1,
+      fields_skipped: [],
+      docs_attached: null,
+      performed_by: "user-1",
+      event_schema_version: 2,
+      fields_attempted: 1,
+      fields_verified: 1,
+      fields_rejected: 0,
+      field_outcomes: [V2_FIELD],
+    };
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: stored }]);
+    const { ctx, writeAudit } = ctxWith(db);
+    const changedInput = {
+      ...V2_INPUT,
+      fieldOutcomes: [{ ...V2_FIELD, targetKey: "t_bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee" }],
+    };
+
+    const result = await recordFillEvent(ctx, changedInput);
+
+    expectRejected(result, 409);
+    expect(captures.some((capture) => capture.op === "insert")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a v1 task retry against a stored V2 fill before completing the task", async () => {
+    const stored = {
+      ...storedRow,
+      fields_filled: 1,
+      fields_skipped: [],
+      docs_attached: null,
+      performed_by: "user-1",
+      event_schema_version: 2,
+      fields_attempted: 1,
+      fields_verified: 1,
+      fields_rejected: 0,
+      field_outcomes: [V2_FIELD],
+    };
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: { id: TASK_ID } },
+      { data: stored },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, { ...baseInput, taskId: TASK_ID });
+
+    expectRejected(result, 409);
+    expect(captures.some((capture) => capture.table === "tasks" && capture.op === "update")).toBe(
+      false,
+    );
+    expect(captures.some((capture) => capture.op === "insert")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
   });
 });
 

@@ -9,7 +9,7 @@ import {
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
 import { listPortalsForApi, listSharedPortals } from "@/services/portals";
-import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
+import { recordFillEvent, supportsFillEventV2, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
@@ -45,7 +45,6 @@ function todayIso(): string {
 
 const STATE_RE = /^[A-Za-z]{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // GET /api/me/orgs — the caller's own org memberships (org id, name, role),
 // derived from the JWT-verified user id and nothing else. This is the org
 // discovery endpoint a multi-org caller needs BEFORE it can send x-org-id, so
@@ -273,7 +272,11 @@ export async function handleListSharedPortals(user: UserContext): Promise<Respon
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
-  return ok(rows, { total: rows.length });
+  const v2Supported = await supportsFillEventV2({ db: ctx.db });
+  return ok(rows, {
+    total: rows.length,
+    ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
+  });
 }
 
 // POST /api/portal-field-maps — the extension reports an unmapped field it saw
@@ -306,7 +309,11 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listSharedFieldMaps(user.db, portalKey);
-  return ok(rows, { total: rows.length });
+  const v2Supported = await supportsFillEventV2({ db: user.db });
+  return ok(rows, {
+    total: rows.length,
+    ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
+  });
 }
 
 export async function handleProposeSharedFieldMap(
@@ -347,6 +354,31 @@ export async function handleRecordSharedTestFill(
         : typeof raw.mock_profile_version === "number"
           ? raw.mock_profile_version
           : null,
+    schemaVersion:
+      raw.schemaVersion == null && raw.schema_version == null
+        ? undefined
+        : typeof (raw.schemaVersion ?? raw.schema_version) === "number"
+          ? ((raw.schemaVersion ?? raw.schema_version) as number)
+          : Number.NaN,
+    fieldsAttempted:
+      typeof (raw.fieldsAttempted ?? raw.fields_attempted) === "number"
+        ? ((raw.fieldsAttempted ?? raw.fields_attempted) as number)
+        : raw.fieldsAttempted == null && raw.fields_attempted == null
+          ? undefined
+          : Number.NaN,
+    fieldsVerified:
+      typeof (raw.fieldsVerified ?? raw.fields_verified) === "number"
+        ? ((raw.fieldsVerified ?? raw.fields_verified) as number)
+        : raw.fieldsVerified == null && raw.fields_verified == null
+          ? undefined
+          : Number.NaN,
+    fieldsRejected:
+      typeof (raw.fieldsRejected ?? raw.fields_rejected) === "number"
+        ? ((raw.fieldsRejected ?? raw.fields_rejected) as number)
+        : raw.fieldsRejected == null && raw.fields_rejected == null
+          ? undefined
+          : Number.NaN,
+    fieldOutcomes: raw.fieldOutcomes ?? raw.field_outcomes,
   };
   const result = await recordSharedTestFill({ db: user.db, userId: user.userId }, input);
   if (result.kind === "rejected") return fail(result.status, result.message);

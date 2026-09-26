@@ -13,7 +13,9 @@ import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { listUserOrgMemberships } from "./orgMemberships";
-import type { FillSession, FillSkippedField, Portal } from "@/types";
+import { sanitizeLegacyFieldsSkipped, v2SkippedProjection } from "@/lib/fillEventSanitizers";
+import { isFillEventV2Metadata } from "@/types/fillEventV2";
+import type { FillSession, Portal } from "@/types";
 
 export interface SharedDryRunCtx {
   db: SupabaseClient<Database>;
@@ -27,7 +29,7 @@ export type SharedDryRunReject = {
 };
 
 const FILL_SESSION_COLUMNS =
-  "id, org_id, case_id, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test";
+  "id, org_id, case_id, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 
 function isValidTimestamp(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && !Number.isNaN(Date.parse(value));
@@ -73,11 +75,16 @@ export interface SharedTestFillInput {
   id: string;
   portalKey: string;
   fieldsFilled: number;
-  fieldsSkipped?: FillSkippedField[] | null;
+  fieldsSkipped?: unknown;
   startedAt?: string | null;
   completedAt?: string | null;
   orgId?: string | null;
   mockProfileVersion?: number | null;
+  schemaVersion?: number;
+  fieldsAttempted?: number;
+  fieldsVerified?: number;
+  fieldsRejected?: number;
+  fieldOutcomes?: unknown;
 }
 
 function toFillSession(row: Record<string, unknown>): FillSession {
@@ -100,6 +107,51 @@ export async function recordSharedTestFill(
   if (typeof input.fieldsFilled !== "number" || !Number.isFinite(input.fieldsFilled)) {
     return { kind: "rejected", status: 422, message: "fieldsFilled must be a number" };
   }
+  if (
+    !Number.isInteger(input.fieldsFilled) ||
+    input.fieldsFilled < 0 ||
+    input.fieldsFilled > 2147483647
+  ) {
+    return {
+      kind: "rejected",
+      status: 422,
+      message: "fieldsFilled must be a non-negative 32-bit integer",
+    };
+  }
+  if (input.schemaVersion != null && input.schemaVersion !== 1 && input.schemaVersion !== 2) {
+    return { kind: "rejected", status: 422, message: "schemaVersion must be 1 or 2" };
+  }
+  const v2KeysPresent =
+    input.fieldsAttempted !== undefined ||
+    input.fieldsVerified !== undefined ||
+    input.fieldsRejected !== undefined ||
+    input.fieldOutcomes !== undefined;
+  const metadataValue = {
+    schemaVersion: input.schemaVersion,
+    fieldsAttempted: input.fieldsAttempted,
+    fieldsVerified: input.fieldsVerified,
+    fieldsRejected: input.fieldsRejected,
+    fieldOutcomes: input.fieldOutcomes,
+  };
+  const metadata =
+    input.schemaVersion === 2 && isFillEventV2Metadata(metadataValue) ? metadataValue : null;
+  if (
+    (input.schemaVersion === 2 && metadata === null) ||
+    (input.schemaVersion !== 2 && v2KeysPresent)
+  ) {
+    return {
+      kind: "rejected",
+      status: 422,
+      message: "V2 metadata is invalid or schemaVersion is missing",
+    };
+  }
+  if (metadata && input.fieldsFilled !== metadata.fieldsVerified) {
+    return {
+      kind: "rejected",
+      status: 422,
+      message: "fieldsFilled must equal fieldsVerified for V2",
+    };
+  }
   if (input.startedAt != null && !isValidTimestamp(input.startedAt)) {
     return { kind: "rejected", status: 422, message: "startedAt must be an ISO timestamp" };
   }
@@ -110,6 +162,37 @@ export async function recordSharedTestFill(
   const org = await resolveTelemetryOrgId(ctx, input.orgId);
   if (org.kind === "rejected") return org;
 
+  const fieldsFilled = metadata?.fieldsVerified ?? input.fieldsFilled;
+  const fieldsSkipped = metadata
+    ? v2SkippedProjection(metadata)
+    : sanitizeLegacyFieldsSkipped(input.fieldsSkipped);
+  const existingMatchesV2 = (row: Record<string, unknown>): boolean => {
+    // V1-to-V1 retains legacy replay semantics. A v1 request cannot reuse a
+    // V2 idempotency key and erase the immutable outcome identity.
+    if (!metadata) return row.event_schema_version !== 2;
+    return (
+      row.org_id === org.orgId &&
+      row.case_id == null &&
+      row.provider_id == null &&
+      row.portal_key === portalKey &&
+      row.fill_mode === "web" &&
+      row.fields_filled === fieldsFilled &&
+      Boolean(row.is_test) &&
+      row.performed_by === ctx.userId &&
+      row.docs_attached == null &&
+      row.event_schema_version === 2 &&
+      row.fields_attempted === metadata.fieldsAttempted &&
+      row.fields_verified === metadata.fieldsVerified &&
+      row.fields_rejected === metadata.fieldsRejected &&
+      canonicalJson(row.field_outcomes) === canonicalJson(metadata.fieldOutcomes) &&
+      canonicalJson(row.fields_skipped ?? null) === canonicalJson(fieldsSkipped) &&
+      (input.startedAt == null ||
+        Date.parse(String(row.started_at)) === Date.parse(input.startedAt)) &&
+      (input.completedAt == null ||
+        Date.parse(String(row.completed_at)) === Date.parse(input.completedAt))
+    );
+  };
+
   const { data: existing, error: existingErr } = await ctx.db
     .from("fill_sessions")
     .select(FILL_SESSION_COLUMNS)
@@ -118,6 +201,13 @@ export async function recordSharedTestFill(
     .maybeSingle();
   if (existingErr) throw existingErr;
   if (existing) {
+    if (!existingMatchesV2(existing as Record<string, unknown>)) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "Idempotency id was already used with a different fill event",
+      };
+    }
     return { kind: "duplicate", session: toFillSession(existing as Record<string, unknown>) };
   }
 
@@ -129,11 +219,20 @@ export async function recordSharedTestFill(
     portal_key: portalKey,
     fill_mode: "web",
     completed_at: input.completedAt ?? new Date().toISOString(),
-    fields_filled: input.fieldsFilled,
-    fields_skipped: input.fieldsSkipped ?? null,
+    fields_filled: fieldsFilled,
+    fields_skipped: fieldsSkipped,
+    docs_attached: null,
     performed_by: ctx.userId,
     is_test: true,
+    event_schema_version: input.schemaVersion ?? null,
   };
+  if (metadata) {
+    row.event_schema_version = 2;
+    row.fields_attempted = metadata.fieldsAttempted;
+    row.fields_verified = metadata.fieldsVerified;
+    row.fields_rejected = metadata.fieldsRejected;
+    row.field_outcomes = metadata.fieldOutcomes;
+  }
   if (input.startedAt != null) row.started_at = input.startedAt;
 
   const { data, error } = await ctx.db
@@ -151,6 +250,13 @@ export async function recordSharedTestFill(
         .maybeSingle();
       if (racedErr) throw racedErr;
       if (raced) {
+        if (!existingMatchesV2(raced as Record<string, unknown>)) {
+          return {
+            kind: "rejected",
+            status: 409,
+            message: "Idempotency id was already used with a different fill event",
+          };
+        }
         return { kind: "duplicate", session: toFillSession(raced as Record<string, unknown>) };
       }
       return { kind: "rejected", status: 409, message: "Idempotency id already used" };
@@ -159,23 +265,37 @@ export async function recordSharedTestFill(
   }
 
   const session = toFillSession(data as Record<string, unknown>);
-  await ctx.db.from("audit_log").insert({
-    org_id: org.orgId,
-    user_id: ctx.userId,
-    action_type: "CREATE",
-    entity_type: "fill_session",
-    entity_id: session.id,
-    after: {
-      portalKey: session.portalKey,
-      fieldsFilled: session.fieldsFilled,
-      isTest: true,
-      mockProfileVersion: input.mockProfileVersion ?? null,
-      source: "extension_train",
-    },
-    description: `Shared train mock dry run (${session.portalKey})`,
-  } as never);
+  if (!metadata) {
+    await ctx.db.from("audit_log").insert({
+      org_id: org.orgId,
+      user_id: ctx.userId,
+      action_type: "CREATE",
+      entity_type: "fill_session",
+      entity_id: session.id,
+      after: {
+        portalKey: session.portalKey,
+        fieldsFilled: session.fieldsFilled,
+        isTest: true,
+        mockProfileVersion: input.mockProfileVersion ?? null,
+        source: "extension_train",
+      },
+      description: `Shared train mock dry run (${session.portalKey})`,
+    } as never);
+  }
 
   return { kind: "created", session };
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 export interface ProveSharedPortalInput {

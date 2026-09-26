@@ -991,6 +991,11 @@ export type Database = {
           case_id: string | null;
           completed_at: string | null;
           docs_attached: Json | null;
+          event_schema_version: number | null;
+          field_outcomes: Json | null;
+          fields_attempted: number | null;
+          fields_rejected: number | null;
+          fields_verified: number | null;
           fields_filled: number;
           fields_skipped: Json | null;
           fill_mode: string;
@@ -1006,6 +1011,11 @@ export type Database = {
           case_id?: string | null;
           completed_at?: string | null;
           docs_attached?: Json | null;
+          event_schema_version?: number | null;
+          field_outcomes?: Json | null;
+          fields_attempted?: number | null;
+          fields_rejected?: number | null;
+          fields_verified?: number | null;
           fields_filled?: number;
           fields_skipped?: Json | null;
           fill_mode?: string;
@@ -1021,6 +1031,11 @@ export type Database = {
           case_id?: string | null;
           completed_at?: string | null;
           docs_attached?: Json | null;
+          event_schema_version?: number | null;
+          field_outcomes?: Json | null;
+          fields_attempted?: number | null;
+          fields_rejected?: number | null;
+          fields_verified?: number | null;
           fields_filled?: number;
           fields_skipped?: Json | null;
           fill_mode?: string;

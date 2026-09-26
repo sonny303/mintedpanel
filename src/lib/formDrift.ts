@@ -15,6 +15,7 @@
 // (`{ selector, label, reason: "unmapped" | "empty_token" }`) shares the
 // column but never matches either predicate.
 import type { FillSession, PortalFieldMap } from "@/types";
+import { isFillEventV2FieldOutcome, type FillEventV2FieldOutcome } from "@/types/fillEventV2";
 
 // The extension content script's EXACT wording when a trained selector matched
 // nothing on the live page — the one signal that a mapping no longer fits the
@@ -68,7 +69,41 @@ export function isHiddenSkip(entry: Pick<SkippedEntry, "kind" | "reason">): bool
  * treating either as success would date a break to a fill that never tested
  * the selector. */
 export function isNoEvidenceSkip(entry: Pick<SkippedEntry, "kind" | "reason">): boolean {
-  return isOtherPageSkip(entry) || isHiddenSkip(entry);
+  return (
+    isOtherPageSkip(entry) ||
+    isHiddenSkip(entry) ||
+    [
+      "page_unknown",
+      "unverified",
+      "needs_value",
+      "needs_mapping",
+      "manual",
+      "file",
+      "review",
+      "no_value",
+      "no_mapping",
+      "option_mismatch",
+      "unsupported",
+      "write_rejected",
+      "unchanged",
+      "unmapped",
+      "empty_token",
+    ].includes(entry.kind) ||
+    [
+      "page_unknown",
+      "readback_unavailable",
+      "frame_inaccessible",
+      "context_changed",
+      "missing_value",
+      "mapping_required",
+      "manual_required",
+      "option_missing",
+      "unsupported_control",
+      "setter_unavailable",
+      "unmapped",
+      "empty_token",
+    ].includes(entry.reason)
+  );
 }
 
 // fields_skipped is client-supplied jsonb — parse defensively, dropping anything
@@ -105,6 +140,8 @@ export interface DriftFill {
   portalKey: string;
   // The stored fill_sessions.fields_skipped jsonb, verbatim — parsed defensively.
   fieldsSkipped: unknown;
+  eventSchemaVersion?: 1 | 2 | null;
+  fieldOutcomes?: FillEventV2FieldOutcome[] | null;
   /** When the reporting fill started — the repaired-since boundary below. */
   startedAt?: string | null;
 }
@@ -112,14 +149,23 @@ export interface DriftFill {
 /** Reduce a newest-first fill list to one DriftFill per portal, excluding
  * dry-run rows. Input order is trusted (the service orders started_at desc). */
 export function latestRealFillPerPortal(
-  fills: readonly Pick<FillSession, "portalKey" | "fieldsSkipped" | "isTest" | "startedAt">[],
+  fills: readonly Pick<
+    FillSession,
+    "portalKey" | "fieldsSkipped" | "isTest" | "startedAt" | "eventSchemaVersion" | "fieldOutcomes"
+  >[],
 ): DriftFill[] {
   const seen = new Set<string>();
   const out: DriftFill[] = [];
   for (const f of fills) {
     if (f.isTest || seen.has(f.portalKey)) continue;
     seen.add(f.portalKey);
-    out.push({ portalKey: f.portalKey, fieldsSkipped: f.fieldsSkipped, startedAt: f.startedAt });
+    out.push({
+      portalKey: f.portalKey,
+      fieldsSkipped: f.fieldsSkipped,
+      eventSchemaVersion: f.eventSchemaVersion,
+      fieldOutcomes: f.fieldOutcomes,
+      startedAt: f.startedAt,
+    });
   }
   return out;
 }
@@ -139,6 +185,25 @@ export function brokenMapsForFill(
   fill: DriftFill,
   fieldMaps: readonly PortalFieldMap[],
 ): PortalFieldMap[] {
+  if (fill.eventSchemaVersion === 2) {
+    const brokenIds = new Set(
+      (fill.fieldOutcomes ?? [])
+        .filter(
+          (outcome) =>
+            isFillEventV2FieldOutcome(outcome) &&
+            outcome.outcome === "not_found" &&
+            outcome.mapId !== null,
+        )
+        .map((outcome) => (outcome.mapId as string).toLowerCase()),
+    );
+    return fieldMaps.filter(
+      (map) =>
+        brokenIds.has(map.id.toLowerCase()) &&
+        map.portalKey === fill.portalKey &&
+        map.status !== "retired" &&
+        !(fill.startedAt && map.updatedAt > fill.startedAt),
+    );
+  }
   const notFound = parseSkippedEntries(fill.fieldsSkipped).filter(isOnPageNotFound);
   if (notFound.length === 0) return [];
 
@@ -202,6 +267,8 @@ export interface FillHistoryEntry {
   /** fill_sessions.fields_skipped — the per-field skip reports, verbatim. */
   fieldsSkipped: unknown;
   isTest?: boolean | null;
+  eventSchemaVersion?: 1 | 2 | null;
+  fieldOutcomes?: FillEventV2FieldOutcome[] | null;
 }
 
 /** Join a skip report to a mapping: mapId first, report label for pre-mapId
@@ -213,6 +280,10 @@ function skippedEntryMatchesMap(
   return entry.mapId ? entry.mapId === map.id : entry.label === reportLabelOf(map);
 }
 
+function v2MapIdentityMatches(outcomeMapId: string | null, mapId: string): boolean {
+  return outcomeMapId !== null && outcomeMapId.toLowerCase() === mapId.toLowerCase();
+}
+
 /** Did this fill report THIS mapping as not-found? Same join as
  * brokenMapsForFill (mapId first, report label for pre-mapId telemetry), but
  * without the repaired-since filter: here we are asking a historical question
@@ -221,20 +292,35 @@ function fillReportsBroken(
   fill: FillHistoryEntry,
   map: Pick<PortalFieldMap, "id" | "selector">,
 ): boolean {
+  if (fill.eventSchemaVersion === 2) {
+    return (fill.fieldOutcomes ?? []).some(
+      (outcome) =>
+        isFillEventV2FieldOutcome(outcome) &&
+        outcome.outcome === "not_found" &&
+        v2MapIdentityMatches(outcome.mapId, map.id),
+    );
+  }
   return parseSkippedEntries(fill.fieldsSkipped).some(
     (e) => isOnPageNotFound(e) && skippedEntryMatchesMap(e, map),
   );
 }
 
-/** Did this fill report THIS mapping as off-page or hidden? Either is no
- * evidence it worked and no evidence it broke — off-page means the page was
- * not the one being filled, hidden means the control was there but inert. */
+/** Did this fill report THIS mapping without positive success evidence? Any V1
+ * skip and every V2 outcome except `verified` prevents inferred success. */
 function fillReportsNoEvidence(
   fill: FillHistoryEntry,
   map: Pick<PortalFieldMap, "id" | "selector">,
 ): boolean {
+  if (fill.eventSchemaVersion === 2) {
+    return (fill.fieldOutcomes ?? []).some(
+      (outcome) =>
+        isFillEventV2FieldOutcome(outcome) &&
+        v2MapIdentityMatches(outcome.mapId, map.id) &&
+        outcome.outcome !== "verified",
+    );
+  }
   return parseSkippedEntries(fill.fieldsSkipped).some(
-    (e) => isNoEvidenceSkip(e) && skippedEntryMatchesMap(e, map),
+    (e) => skippedEntryMatchesMap(e, map) && (isNoEvidenceSkip(e) || !isOnPageNotFound(e)),
   );
 }
 
@@ -247,14 +333,13 @@ function isBefore(a: string, b: string): boolean {
   return ta < tb;
 }
 
-/** When this mapping last filled successfully. null when we have never seen it
- * work, which is itself worth saying: a selector that never worked is a bad
- * mapping, not drift.
+/** When this mapping last filled successfully. V2 requires an explicit
+ * `verified` outcome for the map. Legacy V1 is inferred from the historical
+ * count/skip shape because those rows did not store positive per-map outcomes.
+ * A null value means there is no evidence the mapping ever worked.
  *
- * This is INFERRED, and it has to be. `fields_filled` is a count, and the
- * extension never reports which selectors succeeded — only which were skipped
- * (fields_skipped). So a mapping counts as having worked in a fill when all of
- * these hold:
+ * For V1 only, a mapping counts as having worked in a fill when all of these
+ * hold:
  *   - the fill is a REAL one on this mapping's portal (dry runs never touched
  *     the live DOM, same reason drift excludes them);
  *   - the fill landed at least one field, so "no skip report" means something;
@@ -266,9 +351,10 @@ function isBefore(a: string, b: string): boolean {
  * fill. Do not treat "not reported broken" as success when the fill said the
  * field belonged to another page, or that its control sat in an inactive panel.
  *
- * The remaining weak link is a mapping that existed but was never attempted
- * and never reported off-page or hidden. That would still read as "worked", so
- * this is a floor on staleness, not a precise last-success timestamp. */
+ * V1 retains a remaining weak link: a mapping may have existed but never been
+ * attempted or reported as skipped. That legacy silence can still look like
+ * success, so historical V1 dates remain approximate. V2 does not use that
+ * inference. */
 export function lastWorkingAt(
   map: Pick<PortalFieldMap, "id" | "portalKey" | "selector" | "createdAt">,
   history: readonly FillHistoryEntry[],
@@ -276,6 +362,17 @@ export function lastWorkingAt(
   for (const fill of history) {
     if (fill.isTest || fill.portalKey !== map.portalKey) continue;
     if (!fill.startedAt) continue;
+    if (fill.eventSchemaVersion === 2) {
+      if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
+      const explicitlyVerified = (fill.fieldOutcomes ?? []).some(
+        (outcome) =>
+          isFillEventV2FieldOutcome(outcome) &&
+          outcome.outcome === "verified" &&
+          v2MapIdentityMatches(outcome.mapId, map.id),
+      );
+      if (explicitlyVerified) return fill.startedAt;
+      continue;
+    }
     if ((fill.fieldsFilled ?? 0) <= 0) continue;
     if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
     if (fillReportsBroken(fill, map)) continue;

@@ -32,6 +32,10 @@ jobs:
         env:
           P01_DOCKER_CONTEXT: default
         run: node scripts/security/verify-roster-engine.mjs
+      - name: Verify V1/V2 fill outcome integrity and tenant boundaries
+        env:
+          FILLER_OUTCOMES_DOCKER_CONTEXT: default
+        run: node scripts/security/verify-filler-outcomes.mjs
 
   staging-uat-seed:
     name: Deterministic staging UAT seed

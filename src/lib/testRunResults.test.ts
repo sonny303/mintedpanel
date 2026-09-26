@@ -46,4 +46,9 @@ describe("computeTestRun", () => {
     expect(s.unmapped).toHaveLength(1);
     expect(s.emptyToken).toHaveLength(1);
   });
+
+  it("uses explicit V2 verified count and does not reinterpret V2 skip projections as legacy buckets", () => {
+    const summary = summarizeTestFill(8, [], { eventSchemaVersion: 2, fieldsVerified: 3 });
+    expect(summary).toEqual({ filled: 3, unmapped: [], emptyToken: [] });
+  });
 });

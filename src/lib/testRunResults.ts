@@ -84,16 +84,23 @@ export interface TestFillSummary {
   emptyToken: FillSkippedField[];
 }
 
+export interface TestFillSummaryEvidence {
+  eventSchemaVersion?: 1 | 2 | null;
+  fieldsVerified?: number | null;
+}
+
 /** Reduce a fill session's counts + skipped list into the runner's display
  * summary (filled count + the two fix-list buckets). */
 export function summarizeTestFill(
   fieldsFilled: number,
   fieldsSkipped: readonly FillSkippedField[] | null,
+  evidence: TestFillSummaryEvidence = {},
 ): TestFillSummary {
   const skipped = fieldsSkipped ?? [];
+  const v2 = evidence.eventSchemaVersion === 2;
   return {
-    filled: fieldsFilled,
-    unmapped: skipped.filter((f) => f.reason === "unmapped"),
-    emptyToken: skipped.filter((f) => f.reason === "empty_token"),
+    filled: v2 ? (evidence.fieldsVerified ?? 0) : fieldsFilled,
+    unmapped: v2 ? [] : skipped.filter((f) => f.reason === "unmapped"),
+    emptyToken: v2 ? [] : skipped.filter((f) => f.reason === "empty_token"),
   };
 }
