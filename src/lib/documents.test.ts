@@ -18,7 +18,10 @@ import {
   expirationDateError,
   expiringCredentialRows,
   familyHistory,
+  formatUploadDocumentFileName,
+  formatCaseDocumentDownloadName,
   isOrphanExpired,
+  normalizeDocumentFileName,
   nextVersionNumber,
   orphanVersionFolders,
   parseDocumentKind,
@@ -27,9 +30,13 @@ import {
   resolvableStepArtifactKind,
   resolveDocumentOwnerTarget,
   safeFileName,
+  signedDateAge,
+  signedDateError,
+  signedDocumentUrlWithFileName,
   stepArtifactRows,
   uploadOwnerTargetForCheck,
   uploadableKinds,
+  utcTodayIso,
   vaultPickerKinds,
 } from "./documents";
 import type { SOPStep, SOPStepAttachment } from "@/types";
@@ -108,6 +115,169 @@ describe("kind metadata (TE-5)", () => {
     expect(expirationDateError("state_license", null)).toMatch(/expiration date/);
     expect(expirationDateError("state_license", "2027-01-01")).toBeNull();
     expect(expirationDateError("w9", null)).toBeNull();
+  });
+
+  it("marks W-9 as a signed-date kind with no required expiration", () => {
+    expect(DOCUMENT_KIND_META.w9).toMatchObject({ expirationRequired: false, dateKind: "signed" });
+    expect(expirationDateError("w9", null)).toBeNull();
+  });
+});
+
+describe("W-9 signed dates (MP-22)", () => {
+  it("requires a valid date-only value no later than the shared UTC calendar day", () => {
+    expect(signedDateError(null, "2026-07-17")).toBe("W-9 requires a signed date");
+    expect(signedDateError("2026-02-29", "2026-07-17")).toBe(
+      "Signed date must be a valid calendar date",
+    );
+    expect(signedDateError("2026-07-18", "2026-07-17")).toBe("Signed date cannot be in the future");
+    expect(signedDateError("2026-07-17", "2026-07-17")).toBeNull();
+    expect(signedDateError("2024-02-29", "2026-07-17")).toBeNull();
+    expect(signedDateError("1900-02-29", "2026-07-17")).toBe(
+      "Signed date must be a valid calendar date",
+    );
+    expect(signedDateError(undefined, "2026-07-17")).toBe("W-9 requires a signed date");
+    expect(utcTodayIso(new Date("2026-07-17T23:30:00-07:00"))).toBe("2026-07-18");
+    expect(signedDateAge(null, "2026-07-17")).toBeNull();
+    expect(signedDateAge("2026-07-18", "2026-07-17")).toBeNull();
+  });
+
+  it("formats calendar-month age and applies freshness thresholds at 12 and 36 months", () => {
+    expect(signedDateAge("2025-08-01", "2026-07-01")).toMatchObject({
+      label: "Signed Aug 2025 · 11 mo old",
+      monthsOld: 11,
+      tone: "gray",
+    });
+    expect(signedDateAge("2025-07-01", "2026-07-01")).toMatchObject({
+      monthsOld: 12,
+      tone: "amber",
+    });
+    expect(signedDateAge("2023-07-01", "2026-07-01")).toMatchObject({
+      monthsOld: 36,
+      tone: "amber",
+    });
+    expect(signedDateAge("2023-06-01", "2026-07-01")).toMatchObject({
+      monthsOld: 37,
+      tone: "red",
+    });
+  });
+
+  it("counts a month-end anniversary on the target month’s last day", () => {
+    expect(signedDateAge("2026-01-31", "2026-02-28")).toMatchObject({
+      monthsOld: 1,
+      tone: "gray",
+    });
+    expect(signedDateAge("2026-01-30", "2026-02-27")?.monthsOld).toBe(0);
+    expect(signedDateAge("2026-02-29", "2026-03-01")).toBeNull();
+  });
+});
+
+describe("document filenames (MP-17/MP-15)", () => {
+  it("formats provider downloads with sanitized labels and preserves extension case", () => {
+    expect(
+      formatCaseDocumentDownloadName(
+        "Dr. Marcus Welby, Jr.",
+        {
+          docType: "state_license",
+          fileName: "scan.final.PDF",
+        },
+        { payerName: "Aetna Health / East", state: "NC" },
+      ),
+    ).toBe("Dr._Marcus_Welby_Jr_Aetna_Health_East_NC_State_License.PDF");
+  });
+
+  it("uses an owner id fallback when provider name is missing and omits unknown payer/state", () => {
+    expect(
+      formatCaseDocumentDownloadName(null, {
+        id: "9f8b2c1a-5555-4444-3333-222211110000",
+        docType: "w9",
+        fileName: "irs_form.pdf",
+      }),
+    ).toBe("Provider_9f8b2c1a_W-9.pdf");
+  });
+
+  it("keeps the document label and extension under the filename cap for long case names", () => {
+    const name = formatCaseDocumentDownloadName(
+      "Provider Name That Is Much Longer Than Any Normal Provider Name".repeat(4),
+      { docType: "board_cert", fileName: "scan.final.PDF" },
+      { payerName: "An Extremely Long Payer Name ".repeat(5), state: "NC" },
+    );
+    expect(name.length).toBeLessThanOrEqual(100);
+    expect(name.startsWith("Provider_Name_That_Is")).toBe(true);
+    expect(name).toContain("_An_Extremely_Long_Payer");
+    expect(name.endsWith("_NC_Board_Certification.PDF")).toBe(true);
+  });
+
+  it("defaults upload names to the real provider or group name and actual extension", () => {
+    expect(
+      formatUploadDocumentFileName(
+        "Brooke Ostrander",
+        "provider",
+        "provider-1",
+        "state_license",
+        "scan.final.PDF",
+        "application/pdf",
+      ),
+    ).toBe("Brooke Ostrander - State License.PDF");
+    expect(
+      formatUploadDocumentFileName(
+        "Meridian Group",
+        "group",
+        "group-123456789",
+        "w9",
+        "irs-form.pdf",
+        "application/pdf",
+      ),
+    ).toBe("Meridian Group - W-9.pdf");
+    expect(
+      formatUploadDocumentFileName(
+        "this provider",
+        "provider",
+        "provider-12345678",
+        "dea",
+        "dea.jpg",
+        "image/jpeg",
+      ),
+    ).toBe("Provider 12345678 - DEA.jpg");
+  });
+
+  it("normalizes the custom name to the selected file's extension", () => {
+    expect(normalizeDocumentFileName("Jane's Packet", "upload.scan.PDF", "application/pdf")).toBe(
+      "Jane's Packet.PDF",
+    );
+    expect(
+      normalizeDocumentFileName("Jane's Packet.png", "upload.scan.PDF", "application/pdf"),
+    ).toBe("Jane's Packet.PDF");
+    expect(
+      normalizeDocumentFileName("../../Jane Lee/W-9 draft", "upload.scan.PDF", "application/pdf"),
+    ).toBe("Jane Lee W-9 draft.PDF");
+    expect(normalizeDocumentFileName(null, "upload.scan.PDF", "application/pdf")).toBe(
+      "upload.scan.PDF",
+    );
+    expect(normalizeDocumentFileName("receipt", "image", "image/jpeg")).toBe("receipt.jpg");
+    expect(
+      normalizeDocumentFileName("X".repeat(150), "scan.multi.part.PDF", "application/pdf"),
+    ).toHaveLength(100);
+    const longDefault = formatUploadDocumentFileName(
+      "Owner Name ".repeat(15),
+      "group",
+      "group-1",
+      "w9",
+      "irs-form.PDF",
+      "application/pdf",
+    );
+    expect(longDefault.length).toBeLessThanOrEqual(100);
+    expect(longDefault.endsWith(" - W-9.PDF")).toBe(true);
+  });
+
+  it("overrides the signed download name while retaining the Storage token and path", () => {
+    expect(
+      signedDocumentUrlWithFileName(
+        "https://storage.example.test/object/sign/bucket/a.pdf?token=signed&download=stored.pdf",
+        "Jane_Doe_W-9.pdf",
+      ),
+    ).toBe(
+      "https://storage.example.test/object/sign/bucket/a.pdf?token=signed&download=Jane_Doe_W-9.pdf",
+    );
   });
 });
 
@@ -209,6 +379,19 @@ describe("expiration classification boundaries (TE-6/TE-12)", () => {
 
   it("a dateless row classifies to null (no tracking)", () => {
     expect(classifyExpiration("w9", null, TODAY)).toBeNull();
+  });
+
+  it("ignores legacy W-9 expiration dates in reports and case status", () => {
+    const legacyExpiredW9 = row({
+      id: "legacy-w9",
+      docType: "w9",
+      expirationDate: "2020-01-01",
+    });
+    expect(classifyExpiration("w9", legacyExpiredW9.expirationDate, TODAY)).toBeNull();
+    expect(expiringCredentialRows([legacyExpiredW9], TODAY)).toEqual([]);
+    expect(caseDocumentStatus(["w9"], [], [legacyExpiredW9], TODAY)).toMatchObject([
+      { state: "present", expiringSoon: false, document: legacyExpiredW9 },
+    ]);
   });
 });
 

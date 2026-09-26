@@ -23,6 +23,7 @@ export interface ProviderFormState {
   firstName: string;
   lastName: string;
   credentials: string;
+  gender: string;
   dateOfBirth: string;
   ssnLast4: string;
   email: string;
@@ -46,6 +47,7 @@ export const emptyProviderFormState: ProviderFormState = {
   firstName: "",
   lastName: "",
   credentials: "",
+  gender: "",
   dateOfBirth: "",
   ssnLast4: "",
   email: "",
