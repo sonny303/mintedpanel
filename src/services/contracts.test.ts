@@ -35,7 +35,7 @@ describe("contracts service", () => {
   });
 
   it("lists contracts with org scoping and applied filters", async () => {
-    const chain: Record<string, any> = {
+    const chain: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({
@@ -80,7 +80,7 @@ describe("contracts service", () => {
       },
       error: null,
     });
-    const chain: Record<string, any> = {
+    const chain: Record<string, unknown> = {
       insert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
       single: singleMock,
@@ -115,7 +115,7 @@ describe("contracts service", () => {
 
   it("updates an existing contract and records status changes", async () => {
     // 1st call for getContract before
-    const getChain: Record<string, any> = {
+    const getChain: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({
@@ -131,7 +131,7 @@ describe("contracts service", () => {
       }),
     };
     // 2nd call for update
-    const updateChain: Record<string, any> = {
+    const updateChain: Record<string, unknown> = {
       update: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
@@ -175,7 +175,7 @@ describe("contracts service", () => {
 
   it("upsertContract updates when contract exists and inserts when new", async () => {
     // 1st lookup in upsertContract
-    const lookupChain: Record<string, any> = {
+    const lookupChain: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({
@@ -184,7 +184,7 @@ describe("contracts service", () => {
       }),
     };
     // getContract inside updateContract
-    const getChain: Record<string, any> = {
+    const getChain: Record<string, unknown> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({
@@ -193,7 +193,7 @@ describe("contracts service", () => {
       }),
     };
     // update inside updateContract
-    const updateChain: Record<string, any> = {
+    const updateChain: Record<string, unknown> = {
       update: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),

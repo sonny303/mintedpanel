@@ -37,7 +37,7 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
     { authKey: AUTH_KEY, session: SESSION, orgId: ORG_ID },
   );
 
-  const fixtures: Record<string, any[]> = {
+  const fixtures: Record<string, unknown[]> = {
     organizations: [{ id: ORG_ID, name: "Acme Health", lifecycle_state: "active" }],
     memberships: [
       {
