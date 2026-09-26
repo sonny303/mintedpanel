@@ -58,6 +58,9 @@ export const FIXTURES = {
   KANSAS_CASE_ID: "b7a90000-0000-4000-a000-0000000000c1",
   KANSAS_FACILITY_ID: "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
   SOUTHPARK_FACILITY_ID: "d0e40000-0000-4000-a000-000000000011",
+  KANSAS_ROSTER_MAPPING_ID: "b7a90000-0000-4000-a000-000000000301",
+  SOUTHPARK_ROSTER_MAPPING_ID: "d0e40000-0000-4000-a000-000000000301",
+  SOUTHPARK_ROSTER_EXPORT_ID: "d0e40000-0000-4000-a000-000000000302",
   // Tasks for the submission-touch task-ownership assertion (13). The South
   // Park task is the cross-org task_id a Kansas caller must be denied.
   KANSAS_TASK_ID: "b7a90000-0000-4000-a000-0000000000d1",
@@ -79,6 +82,7 @@ export const FIXTURES = {
 
 export const LEAK_MODES = [
   "sharedtier",
+  "rosters",
   "providers",
   "spoof",
   "fieldmaps",
@@ -333,6 +337,93 @@ const PORTALS = [
     formUrl: "https://example.test/sp",
     isVerified: false,
     provenAt: null,
+  },
+];
+
+// WP1.3 fixtures: synthetic, PHI-free mapping metadata and snapshots for the
+// org-isolation gate. The deliberate "rosters" leak exposes both orgs' rows.
+const ROSTER_MAPPINGS = [
+  {
+    id: FIXTURES.KANSAS_ROSTER_MAPPING_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    templateId: "k-roster-template",
+    name: "Kansas test roster",
+    grain: "provider",
+    selectedProviderIds: [FIXTURES.KANSAS_PROVIDER_ID],
+    selectedFacilityIds: [],
+    selectedGroupIds: [],
+    columnAssignments: [],
+    revision: 1,
+    updatedAt: "2026-09-20T00:00:00Z",
+  },
+  {
+    id: FIXTURES.SOUTHPARK_ROSTER_MAPPING_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    templateId: "sp-roster-template",
+    name: "South Park test roster",
+    grain: "provider",
+    selectedProviderIds: [FIXTURES.SOUTHPARK_PROVIDER_ID],
+    selectedFacilityIds: [],
+    selectedGroupIds: [],
+    columnAssignments: [],
+    revision: 1,
+    updatedAt: "2026-09-21T00:00:00Z",
+  },
+];
+const ROSTER_EXPORTS = [
+  {
+    id: FIXTURES.SOUTHPARK_ROSTER_EXPORT_ID,
+    mappingId: FIXTURES.SOUTHPARK_ROSTER_MAPPING_ID,
+    templateId: "sp-roster-template",
+    templateName: "South Park test template",
+    mappingName: "South Park test roster",
+    format: "csv",
+    exportedAt: "2026-09-21T00:00:00Z",
+    totalRows: 1,
+    checksum: "a".repeat(64),
+    appliedOverrides: 0,
+    exportedBy: "user-southpark",
+    fileName: "south-park-test.csv",
+    downloadPath: `/api/rosters/exports/${FIXTURES.SOUTHPARK_ROSTER_EXPORT_ID}/download`,
+  },
+  {
+    id: "b7a90000-0000-4000-a000-000000000302",
+    mappingId: FIXTURES.KANSAS_ROSTER_MAPPING_ID,
+    templateId: "k-roster-template",
+    templateName: "Kansas test template",
+    mappingName: "Kansas test roster",
+    format: "csv",
+    exportedAt: "2026-09-20T00:00:00Z",
+    totalRows: 1,
+    checksum: "b".repeat(64),
+    appliedOverrides: 0,
+    exportedBy: "user-kansas",
+    fileName: "kansas-test.csv",
+    downloadPath: "/api/rosters/exports/b7a90000-0000-4000-a000-000000000302/download",
+  },
+];
+const ROSTER_TEMPLATES = [
+  {
+    id: "k-roster-template",
+    slug: "mock-kansas-roster",
+    payerName: "Kansas Health",
+    name: "Kansas provider roster",
+    schemaVersion: 1,
+    verified: false,
+    verificationStatus: "draft_pending_payer_spec",
+    grains: ["provider"],
+    columns: [{ key: "npi", header: "NPI", required: true, targetType: "npi" }],
+  },
+  {
+    id: "sp-roster-template",
+    slug: "mock-southpark-roster",
+    payerName: "South Park Health",
+    name: "South Park provider roster",
+    schemaVersion: 1,
+    verified: false,
+    verificationStatus: "draft_pending_payer_spec",
+    grains: ["provider"],
+    columns: [{ key: "npi", header: "NPI", required: true, targetType: "npi" }],
   },
 ];
 
@@ -743,6 +834,96 @@ export async function createMockApiServer(options = {}) {
         return envelope(res, 403, null, "Not a member of that org");
       }
       orgId = requestedOrg; // leak "spoof": honored without a membership check
+    }
+
+    // --- WP1.3 roster engine read contract. Fixtures contain identifiers and
+    // synthetic labels only; the "rosters" leak makes each tenant see both
+    // mappings/history rows and allows cross-org mapping/artifact reads.
+    if (url.pathname === "/api/rosters/templates" && method === "GET") {
+      const templates = ROSTER_TEMPLATES.filter((template) =>
+        orgId === FIXTURES.KANSAS_ORG
+          ? template.id === "k-roster-template"
+          : template.id === "sp-roster-template",
+      );
+      return envelope(res, 200, templates, null, { total: templates.length });
+    }
+    if (url.pathname === "/api/rosters/mappings" && method === "GET") {
+      const mappings = ROSTER_MAPPINGS.filter(
+        (mapping) => mapping.orgId === orgId || leak === "rosters",
+      );
+      return envelope(res, 200, mappings, null, { total: mappings.length });
+    }
+    const rosterMappingMatch = url.pathname.match(/^\/api\/rosters\/mappings\/([^/]+)\/?$/);
+    if (rosterMappingMatch && method === "GET") {
+      const mapping = ROSTER_MAPPINGS.find((row) => row.id === rosterMappingMatch[1]);
+      if (!mapping || (mapping.orgId !== orgId && leak !== "rosters")) {
+        return envelope(res, 404, null, "Roster mapping not found");
+      }
+      const template = ROSTER_TEMPLATES.find((row) => row.id === mapping.templateId);
+      const sourceOptions =
+        mapping.orgId === FIXTURES.KANSAS_ORG
+          ? {
+              providers: [
+                { id: FIXTURES.KANSAS_PROVIDER_ID, label: "One, Kay", npi: "1234567890" },
+              ],
+              facilities: [
+                {
+                  id: FIXTURES.KANSAS_FACILITY_ID,
+                  label: "Fitness Physio - Leavenworth",
+                  state: "KS",
+                  groupId: "k-group-1",
+                  groupLabel: "Kansas Group",
+                },
+              ],
+              groups: [
+                { id: "k-group-1", label: "Kansas Group", tin: "000000000", npi: "1234567893" },
+              ],
+            }
+          : {
+              providers: [
+                { id: FIXTURES.SOUTHPARK_PROVIDER_ID, label: "Cartman, Eric", npi: "9876543210" },
+              ],
+              facilities: [
+                {
+                  id: FIXTURES.SOUTHPARK_FACILITY_ID,
+                  label: "Casa Bonita Clinic",
+                  state: "CO",
+                  groupId: "sp-group-1",
+                  groupLabel: "South Park Group",
+                },
+              ],
+              groups: [
+                {
+                  id: "sp-group-1",
+                  label: "South Park Group",
+                  tin: "999999999",
+                  npi: "9876543212",
+                },
+              ],
+            };
+      return envelope(res, 200, { mapping, template, sourceOptions });
+    }
+    if (url.pathname === "/api/rosters/history" && method === "GET") {
+      const snapshots = ROSTER_EXPORTS.filter((snapshot) => {
+        const mapping = ROSTER_MAPPINGS.find((row) => row.id === snapshot.mappingId);
+        return mapping?.orgId === orgId || leak === "rosters";
+      });
+      return envelope(res, 200, snapshots, null, { total: snapshots.length });
+    }
+    const rosterExportMatch = url.pathname.match(/^\/api\/rosters\/exports\/([^/]+)\/download\/?$/);
+    if (rosterExportMatch && method === "GET") {
+      const snapshot = ROSTER_EXPORTS.find((row) => row.id === rosterExportMatch[1]);
+      const mapping = snapshot && ROSTER_MAPPINGS.find((row) => row.id === snapshot.mappingId);
+      if (!snapshot || ((!mapping || mapping.orgId !== orgId) && leak !== "rosters")) {
+        return envelope(res, 404, null, "Roster export not found");
+      }
+      res.writeHead(200, {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename=\"${snapshot.fileName}\"`,
+        "cache-control": "no-store",
+      });
+      res.end("NPI\r\n1234567890\r\n");
+      return;
     }
 
     // --- /api/providers/:id/profile ---
