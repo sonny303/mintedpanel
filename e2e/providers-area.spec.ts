@@ -790,6 +790,9 @@ test("MP-20/34: create and edit gender while preserving an existing legacy value
   await page.getByRole("combobox", { name: "Gender" }).click();
   await page.getByRole("option", { name: "Nonbinary" }).click();
   await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
   await expect(page.getByText("Nonbinary", { exact: true })).toBeVisible({ timeout: 15000 });
   const genderPatches = requests.filter(
     (request) =>
@@ -808,10 +811,13 @@ test("MP-20/34: create and edit gender while preserving an existing legacy value
   await expect(page.getByText(legacyGender, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit details" }).click();
   await page.getByRole("combobox", { name: "Gender" }).click();
-  await expect(page.getByRole("option", { name: legacyGender })).toBeVisible();
+  await expect(page.getByRole("option", { name: "F", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByLabel("Phone", { exact: true }).fill("252-555-0199");
   await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
 
   const phonePatches = requests.filter(
     (request) =>
@@ -829,6 +835,9 @@ test("MP-20/34: create and edit gender while preserving an existing legacy value
   await page.getByRole("combobox", { name: "Gender" }).click();
   await page.getByRole("option", { name: "Not set" }).click();
   await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
   await expect(page.getByText("Not set", { exact: true })).toBeVisible({ timeout: 15000 });
   const clearGenderPatches = requests.filter(
     (request) =>

@@ -24,12 +24,15 @@ import {
   downloadableCaseDocuments,
   formatCaseDocumentDownloadName,
   requiredDocumentKinds,
-  signedDocumentUrlWithFileName,
   uploadOwnerTargetForCheck,
   type CaseDocumentCheck,
 } from "@/lib/documents";
 import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
-import { useDocumentDownload, useGroupDocuments, useProviderDocuments } from "@/hooks/useDocuments";
+import {
+  useDownloadDocumentFile,
+  useGroupDocuments,
+  useProviderDocuments,
+} from "@/hooks/useDocuments";
 import { useCanWrite } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import type { DocumentKind, ProviderDocument, Task } from "@/types";
@@ -45,32 +48,43 @@ interface CaseRequiredDocumentsProps {
   tasks: Task[];
 }
 
-// D-ASD-8 — sequential anchor-click downloads, never `window.open` in a loop:
-// a loop of new-tab opens is exactly what trips a browser's popup blocker,
-// and a signed URL is single-use-short-lived anyway, so each file gets its
-// own signed URL fetched and clicked one at a time.
+// D-ASD-8 — fetch each audited signed object fully before starting its local
+// Blob download. This keeps downloads separate, avoids cross-origin navigation
+// races, and never opens a popup for every document.
 async function downloadSequentially(
   documents: ProviderDocument[],
-  getSignedUrl: (documentId: string) => Promise<{ url: string; fileName: string }>,
+  getDownloadFile: (
+    documentId: string,
+    downloadName: string,
+  ) => Promise<{ blob: Blob; fileName: string }>,
   getDownloadName: (document: ProviderDocument) => string,
 ): Promise<{ failed: number }> {
   let failed = 0;
   for (const doc of documents) {
+    let objectUrl: string | null = null;
     try {
-      const signed = await getSignedUrl(doc.id);
       const downloadName = getDownloadName(doc);
+      const downloaded = await getDownloadFile(doc.id, downloadName);
+      objectUrl = URL.createObjectURL(downloaded.blob);
       const a = window.document.createElement("a");
-      // The anchor download attribute is ignored for cross-origin URLs in
-      // several browsers. Supabase Storage supports this query override on
-      // the existing signed URL while preserving its token and path.
-      a.href = signedDocumentUrlWithFileName(signed.url, downloadName || signed.fileName);
-      a.download = downloadName || signed.fileName;
+      a.href = objectUrl;
+      a.download = downloaded.fileName;
       a.rel = "noopener";
-      window.document.body.appendChild(a);
-      a.click();
-      a.remove();
+      try {
+        window.document.body.appendChild(a);
+        a.click();
+      } finally {
+        a.remove();
+      }
     } catch {
       failed += 1;
+    } finally {
+      if (objectUrl) {
+        // Let the browser consume the Blob URL, then release it on a bounded
+        // timer even if the user keeps this task open.
+        const createdObjectUrl = objectUrl;
+        window.setTimeout(() => URL.revokeObjectURL(createdObjectUrl), 30_000);
+      }
     }
   }
   return { failed };
@@ -89,7 +103,7 @@ export function CaseRequiredDocuments({
   const providerDocsQ = useProviderDocuments(requiredKinds.length > 0 ? providerId : "");
   const groupDocsQ = useGroupDocuments(requiredKinds.length > 0 && groupId ? groupId : "");
   const today = localTodayIso();
-  const downloadM = useDocumentDownload();
+  const downloadM = useDownloadDocumentFile();
   const [uploadTarget, setUploadTarget] = useState<CaseDocumentCheck<ProviderDocument> | null>(
     null,
   );
@@ -117,7 +131,7 @@ export function CaseRequiredDocuments({
     try {
       const { failed } = await downloadSequentially(
         downloadable,
-        (id) => downloadM.mutateAsync(id),
+        (documentId, fileName) => downloadM.mutateAsync({ documentId, fileName }),
         (doc) =>
           formatCaseDocumentDownloadName(
             providerName.trim().toLowerCase() === "this provider" ? null : providerName,
@@ -132,6 +146,9 @@ export function CaseRequiredDocuments({
         );
       }
     } finally {
+      // The mutation result contains the file bytes; clear the final result as
+      // soon as all object URLs have been handed to the browser.
+      downloadM.reset();
       setDownloadingAll(false);
     }
   };

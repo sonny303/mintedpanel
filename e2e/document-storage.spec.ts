@@ -5,7 +5,7 @@ import {
   type BrowserContext,
   type Page,
 } from "./fixtures/legacy-access-context";
-import type { Download } from "@playwright/test";
+import type { Download, Frame, Request } from "@playwright/test";
 
 // E4.5 Document Storage — TS-88/89/90 over the mock harness. The browser's
 // metadata reads ride /rest/v1 under RLS (mocked here with filter-honoring
@@ -21,7 +21,7 @@ import type { Download } from "@playwright/test";
 //   TS-89  expiring-credentials table sorts by expiration with derived
 //          expired / expiring-soon / current states; the group's readiness
 //          view carries the advisory COI warning (never a gap)
-//   TS-90  case-side required-document verification (present / missing /
+//   TS-90  active TaskDrawer required-document verification (present / missing /
 //          expired) + one-click short-lived signed download
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -439,7 +439,10 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
     return route.fulfill({
       status: 200,
       contentType: "application/pdf",
-      headers: fileName ? { "content-disposition": `attachment; filename="${fileName}"` } : {},
+      headers: {
+        "access-control-allow-origin": "*",
+        ...(fileName ? { "content-disposition": `attachment; filename="${fileName}"` } : {}),
+      },
       body: "FAKEPDF",
     });
   });
@@ -461,7 +464,7 @@ function collectDownloads(
   page: Page,
   expectedCount: number,
   timeoutMs = 15_000,
-): { promise: Promise<string[]>; cleanup: () => void } {
+): { promise: Promise<string[]>; fileNames: () => string[]; cleanup: () => void } {
   const fileNames: string[] = [];
   let resolveDownloads!: (names: string[]) => void;
   let rejectDownloads!: (error: Error) => void;
@@ -480,6 +483,7 @@ function collectDownloads(
   page.on("download", onDownload);
   return {
     promise,
+    fileNames: () => [...fileNames],
     cleanup: () => {
       clearTimeout(timeout);
       page.off("download", onDownload);
@@ -798,13 +802,11 @@ test("TS-89: the expiring-credentials table sorts by expiration with derived sta
 });
 
 // TS-90 (Slice E retarget, payer-and-cases screen 6 / handoff §2.7): the
-// required-documents card is REMOVED from case detail — documents are not a
-// product capability there, per the product owner, and the E4.5 surface is out
-// of the design rather than relocated. What the epic actually needs pinned is
-// the audited short-lived signed download, so this test now asserts the
-// removal on the case screen AND exercises the same download endpoint from the
-// provider record's Documents tab, where document work lives.
-test("TS-90: case detail renders no required-documents card; the current version downloads via a short-lived signed URL from the provider record", async ({
+// required-documents card is REMOVED from case detail. This test asserts that
+// removal, verifies the audited single-file download on the provider's
+// Documents tab, then exercises active required-document work in the case's
+// TaskDrawer.
+test("TS-90: case detail has no document card; active TaskDrawer downloads use short-lived signed URLs", async ({
   context,
   page,
 }) => {
@@ -935,11 +937,17 @@ test("TS-90: case detail renders no required-documents card; the current version
   const download = rec.apiCalls.find((c) => c.path.endsWith("/doc-lic/download"));
   expect(download).toBeTruthy();
 
-  // The task's active document rail uses individually audited signed URLs.
-  // Its legacy W-9 expiration must not make the W-9 appear expired, and the
+  // Open the task from its owning case, following the product's current
+  // TaskDrawer journey. The full task route does not render the active document
+  // rail. Its legacy W-9 expiration must not make it appear expired, and the
   // actual cross-origin download response must carry the standardized name.
-  await page.goto("/tasks/task-1");
-  const requiredDocuments = page.locator("section", { hasText: "Required documents" }).last();
+  await page.goto(`/cases/${CASE_ID}`);
+  const openStep = page.getByRole("button", { name: "Open step" });
+  await expect(openStep).toBeVisible({ timeout: 30000 });
+  await openStep.click();
+  const taskDrawer = page.getByRole("dialog", { name: "Submit enrollment packet" });
+  await expect(taskDrawer).toBeVisible();
+  const requiredDocuments = taskDrawer.locator("section", { hasText: "Required documents" }).last();
   await expect(requiredDocuments).toBeVisible({ timeout: 30000 });
   const w9Check = requiredDocuments.locator("li", { hasText: "W-9" });
   await expect(w9Check).toContainText("Present");
@@ -948,25 +956,55 @@ test("TS-90: case detail renders no required-documents card; the current version
   const stepArtifacts = page.getByText("Documents for this step").locator("xpath=../..");
   const w9Artifact = stepArtifacts.getByText("W-9", { exact: true }).locator("xpath=../..");
   await w9Artifact.getByRole("button", { name: "Attach" }).click();
-  const attachDialog = page.getByRole("dialog");
+  const attachDialog = page.getByRole("dialog", { name: "Attach a document" });
   await attachDialog.getByRole("button", { name: "Upload new" }).click();
   await expect(attachDialog.getByRole("button", { name: "Signed date" })).toBeVisible();
   await expect(attachDialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
   await attachDialog.getByRole("button", { name: "Cancel" }).click();
 
   await stepArtifacts.getByRole("button", { name: "Replace irs-form.PDF" }).click();
-  const replaceDialog = page.getByRole("dialog");
+  const replaceDialog = page.getByRole("dialog", { name: "Replace W-9" });
   await expect(replaceDialog.getByRole("button", { name: "Signed date" })).toBeVisible();
   await expect(replaceDialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
   await replaceDialog.getByRole("button", { name: "Cancel" }).click();
 
   const downloads = collectDownloads(page, 3);
+  const bulkAuditStart = rec.apiCalls.length;
+  const storageDownloadStart = rec.storageDownloads.length;
+  const failedRequests: string[] = [];
+  const mainFrameNavigations: string[] = [];
+  const onRequestFailed = (request: Request) => {
+    failedRequests.push(
+      `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "unknown failure"}`,
+    );
+  };
+  const onFrameNavigated = (frame: Frame) => {
+    if (frame === page.mainFrame()) mainFrameNavigations.push(frame.url());
+  };
   let fileNames: string[] = [];
+  context.on("requestfailed", onRequestFailed);
+  page.on("framenavigated", onFrameNavigated);
   try {
     await requiredDocuments.getByRole("button", { name: /Download all/ }).click();
-    fileNames = await downloads.promise;
+    fileNames = await downloads.promise.catch((error: Error) => {
+      const bulkAuditRequests = rec.apiCalls
+        .slice(bulkAuditStart)
+        .filter((call) => call.method === "GET" && call.path.endsWith("/download"));
+      throw new Error(
+        [
+          error.message,
+          `collected filenames: ${JSON.stringify(downloads.fileNames())}`,
+          `bulk audit calls: ${bulkAuditRequests.length}`,
+          `storage requests: ${JSON.stringify(rec.storageDownloads.slice(storageDownloadStart))}`,
+          `request failures: ${JSON.stringify(failedRequests)}`,
+          `main-frame navigations: ${JSON.stringify(mainFrameNavigations)}`,
+        ].join("; "),
+      );
+    });
   } finally {
     downloads.cleanup();
+    context.off("requestfailed", onRequestFailed);
+    page.off("framenavigated", onFrameNavigated);
   }
   expect(fileNames.sort()).toEqual(
     [

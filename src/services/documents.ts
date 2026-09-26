@@ -13,7 +13,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
-import { normalizeDocumentFileName } from "@/lib/documents";
+import { normalizeDocumentFileName, signedDocumentUrlWithFileName } from "@/lib/documents";
 import {
   getContextRevisionSnapshot,
   observeContextRevisionForRequest,
@@ -217,4 +217,30 @@ export async function getDocumentDownload(documentId: string): Promise<SignedDow
   return authedApiFetch<SignedDownload>(`/api/documents/${documentId}/download`, {
     method: "GET",
   });
+}
+
+export interface DownloadedDocumentFile {
+  blob: Blob;
+  fileName: string;
+}
+
+/** Fetch the bytes behind one audited signed URL before asking the browser to
+ * download them. Waiting for the response prevents consecutive cross-origin
+ * anchor navigations from cancelling one another in the browser. The signed
+ * URL is still minted per file and never cached; the object fetch sends no
+ * application cookies and bypasses the HTTP cache. */
+export async function downloadDocumentFile(
+  documentId: string,
+  downloadName?: string,
+): Promise<DownloadedDocumentFile> {
+  const signed = await getDocumentDownload(documentId);
+  const fileName = downloadName ?? signed.fileName;
+  const url = signedDocumentUrlWithFileName(signed.url, fileName);
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    credentials: "omit",
+  });
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  return { blob: await response.blob(), fileName };
 }

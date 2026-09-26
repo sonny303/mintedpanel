@@ -62,10 +62,12 @@ CSV import requires a separate migration and persistence verification; it is
 not shipped or advertised by this sprint. This preserves the handoff's
 operational acceptance criteria: Add Provider and Personal information.
 
-Bulk filenames use the existing audited signing action and replace only the
-Storage URL's `download` query parameter. The installed Storage client applies
-that parameter after signing; authorization, token, object path and expiry are
-unchanged. No API endpoint or database migration is added.
+Bulk filenames use the existing audited signing action and the Storage URL's
+`download` query parameter. The installed Storage client applies that parameter
+after signing; authorization, token, object path and expiry are unchanged.
+Bulk transfers retrieve each signed file sequentially before starting a local
+Blob download, avoiding overlapping cross-origin navigations that dropped files
+in repeated browser tests. No API endpoint or database migration is added.
 
 ## Verification record
 
@@ -81,9 +83,27 @@ A fresh UTC-browser run of TS-112 passed. Sprint browser evidence uses an
 explicit UTC timezone and synthetic fixtures; this does not repair or certify
 the unrelated date-formatting behavior.
 
-Implementation verification in progress: 195 unit files / 2,433 tests pass.
-TypeScript, lint (the same 14 baseline warnings), format, and epic hygiene
-pass. Independent review corrections cover exact legacy gender preservation
-and collecting distinct browser download events. Build and the combined
-automated browser run with synthetic fixtures are pending. Hosted runtime/UAT is outside this
-source-only delivery and must not be represented as verified.
+Implementation verification: 196 unit files / 2,435 tests passed. TypeScript,
+lint (the same 14 baseline warnings), formatting, and epic hygiene passed.
+Independent Astra/high review reran 162 focused tests and reviewed corrections
+for exact legacy gender preservation and collecting distinct download events.
+
+The implementation commit passed the GitHub build, release guardrails, vault
+authorization, native/HTTP boundary, deterministic seed, and migration dry-run
+jobs. A duplicate local build was stopped after the CI build passed. The first
+full browser CI run passed 326 scenarios. Correcting the active TaskDrawer
+journey enabled repeated bulk-download verification, which exposed intermittent
+missing browser downloads despite three successful signing and Storage requests.
+The sequential byte-transfer change addresses that failure. Provider-edit tests
+also wait for save completion before inspecting their exact patch assertions.
+
+The final commit's CI results and automated browser evidence are recorded in
+[draft PR #422](https://github.com/sonny303/mintedpanel/pull/422). Browser checks
+use synthetic fixtures. Hosted runtime/UAT remains outside this source-only
+delivery and must not be represented as verified. Merge and release remain
+separate approval gates.
+
+Before an approved release, verify the signed Storage GET responses allow the
+application origin through CORS and that real case downloads save every expected
+file. Synthetic browser fixtures model that response contract but do not prove
+the hosted Storage configuration.
