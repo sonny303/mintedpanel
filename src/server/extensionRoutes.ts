@@ -8,6 +8,7 @@ import {
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
+import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
 import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -388,6 +389,23 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
     null,
     result.kind === "created" ? 201 : 200,
   );
+}
+
+// POST /api/portal-field-maps/batch-learn — only accepted, high-confidence,
+// value-free AI suggestions after a successful portal submission are eligible.
+// Actor and tenant are always taken from the authenticated context. The RPC
+// repeats evidence and ownership checks and commits maps + audit atomically.
+export async function handleBatchLearnPortalFieldMaps(
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot save AI field mappings");
+  const result = await batchLearnPortalFieldMaps(
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },
+    body,
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok(result.response, { total: result.response.confirmed_saved_count });
 }
 
 // GET /api/cases — two additive modes over the same org-scoped route:

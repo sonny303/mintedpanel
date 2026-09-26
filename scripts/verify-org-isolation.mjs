@@ -978,8 +978,51 @@ function looksLikeVercelGate(r) {
         `status=${proposedRow?.status ?? "-"} token=${proposedRow?.token ?? "null"}`,
       { leak: true },
     );
+
+    // These synthetic IDs cannot write in production: learning requires a
+    // same-org completed fill plus a matching immutable submitted-touch audit.
+    const learningProbe = {
+      case_id: env.SOUTHPARK_CASE_ID,
+      provider_id: env.SOUTHPARK_PROVIDER_ID,
+      fill_session_id: "f1a70000-0000-4000-a000-0000000000f1",
+      portal_key: "gate_probe_portal",
+      page_url: "https://portal.example/forms/gate",
+      mappings: [
+        {
+          selector: "#gate-learning-probe",
+          token: "provider.npi",
+          confidence: 0.91,
+          field_type: "text",
+        },
+      ],
+    };
+    const learnedForeign = await apiPost("/api/portal-field-maps/batch-learn", learningProbe, {
+      token: kansasTok,
+    });
+    check(
+      "20b. Kansas cannot promote AI mappings from another org's case",
+      learnedForeign.status === 404 && learnedForeign.body?.data == null,
+      `status=${learnedForeign.status} dataPresent=${learnedForeign.body?.data != null}`,
+      { leak: true },
+    );
+
+    const billingLearn = await apiPost(
+      "/api/portal-field-maps/batch-learn",
+      {
+        ...learningProbe,
+        case_id: "f1a70000-0000-4000-a000-0000000000f2",
+        provider_id: "f1a70000-0000-4000-a000-0000000000f3",
+      },
+      { token: spTok },
+    );
+    check(
+      "20c. Billing cannot promote AI field mappings",
+      billingLearn.status === 403 && billingLearn.body?.data == null,
+      `status=${billingLearn.status} dataPresent=${billingLearn.body?.data != null}`,
+      { leak: true },
+    );
   } else {
-    console.log("SKIP  20/20a. propose-only field-map write — KANSAS_ORG not set");
+    console.log("SKIP  20/20a/20b/20c. field-map writes — KANSAS_ORG not set");
   }
 
   // 21. Task-step WRITE isolation (S4.3): a Kansas writer ticking a step on a
