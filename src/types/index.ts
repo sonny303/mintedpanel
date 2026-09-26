@@ -1899,3 +1899,189 @@ export interface ResolvedPayerFormPointer extends AuthoredPayerFormPointer {
   removedBy?: string | null;
   removedReason?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Provider Roster Engine (WP 1.3)
+// ---------------------------------------------------------------------------
+
+export type RosterGrain = "provider" | "provider_location" | "provider_location_tin";
+export type RosterValueType = "text" | "date" | "phone" | "npi" | "zip_plus_4";
+export type RosterTransform =
+  "uppercase" | "date_yyyy_mm_dd" | "date_mm_dd_yyyy" | "phone_strip" | "npi_check";
+export type RosterExportFormat = "csv" | "xlsx";
+export type RosterIssueSeverity = "hard_error" | "warning";
+
+export interface RosterTemplateColumn {
+  key: string;
+  header: string;
+  required: boolean;
+  targetType: RosterValueType;
+}
+
+export interface RosterTemplate {
+  id: string;
+  slug: string;
+  payerName: string;
+  name: string;
+  schemaVersion: number;
+  verified: boolean;
+  verificationStatus: "verified" | "draft_pending_payer_spec";
+  grains: RosterGrain[];
+  columns: RosterTemplateColumn[];
+}
+
+export type RosterSourceField =
+  | "provider.first_name"
+  | "provider.last_name"
+  | "provider.npi"
+  | "provider.taxonomy_code"
+  | "provider.date_of_birth"
+  | "provider.ssn_last4"
+  | "facility.name"
+  | "facility.street"
+  | "facility.suite"
+  | "facility.city"
+  | "facility.state"
+  | "facility.zip"
+  | "facility.phone"
+  | "group.name"
+  | "group.npi_type2"
+  | "group.tin"
+  | "license.license_number"
+  | "license.issue_date"
+  | "license.expiration_date";
+
+export interface RosterColumnAssignment {
+  columnKey: string;
+  sourceField: RosterSourceField | null;
+  transform: RosterTransform | null;
+}
+
+export interface RosterMapping {
+  id: string;
+  orgId: string;
+  templateId: string;
+  name: string;
+  grain: RosterGrain;
+  selectedProviderIds: string[];
+  selectedFacilityIds: string[];
+  /** Restricts locations by their facilities.group_id and the provider's group assignment. */
+  selectedGroupIds: string[];
+  columnAssignments: RosterColumnAssignment[];
+  revision: number;
+  updatedAt: string;
+}
+
+export interface RosterSourceOptions {
+  providers: Array<{ id: string; label: string; npi: string | null }>;
+  facilities: Array<{
+    id: string;
+    label: string;
+    state: string | null;
+    groupId: string | null;
+    groupLabel: string | null;
+  }>;
+  groups: Array<{ id: string; label: string; tin: string | null; npi: string | null }>;
+}
+
+export interface RosterMappingDetail {
+  mapping: RosterMapping;
+  template: RosterTemplate;
+  sourceOptions: RosterSourceOptions;
+}
+
+export interface CreateRosterMappingInput {
+  templateId: string;
+  name: string;
+  grain: RosterGrain;
+  selectedProviderIds: string[];
+  selectedFacilityIds?: string[];
+  selectedGroupIds?: string[];
+}
+
+export interface UpdateRosterMappingInput {
+  expectedRevision: number;
+  name?: string;
+  grain?: RosterGrain;
+  selectedProviderIds?: string[];
+  selectedFacilityIds?: string[];
+  selectedGroupIds?: string[];
+  columnAssignments?: RosterColumnAssignment[];
+}
+
+export interface RosterPreviewRow {
+  rowKey: string;
+  providerLabel: string;
+  facilityLabel: string | null;
+  groupLabel: string | null;
+  values: Record<string, string | null>;
+}
+
+export interface RosterPreview {
+  mappingId: string;
+  revision: number;
+  inputFingerprint: string;
+  rowCount: number;
+  rows: RosterPreviewRow[];
+}
+
+export interface RosterValidationIssue {
+  rowKey: string;
+  ruleCode: string;
+  fieldKey: string;
+  severity: RosterIssueSeverity;
+  message: string;
+  overrideable: boolean;
+  overrideId: string | null;
+  overrideReason: string | null;
+}
+
+export interface RosterValidationResult {
+  mappingId: string;
+  revision: number;
+  inputFingerprint: string;
+  rowCount: number;
+  issues: RosterValidationIssue[];
+  hardErrorCount: number;
+  overriddenErrorCount: number;
+  exportable: boolean;
+}
+
+export interface SaveRosterOverrideInput {
+  expectedRevision: number;
+  inputFingerprint: string;
+  rowKey: string;
+  ruleCode: string;
+  fieldKey: string;
+  reason: string;
+}
+
+export interface RosterOverride {
+  id: string;
+  mappingId: string;
+  revision: number;
+  inputFingerprint: string;
+  rowKey: string;
+  ruleCode: string;
+  fieldKey: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface RosterExportSnapshot {
+  id: string;
+  mappingId: string;
+  templateId: string;
+  templateName: string;
+  mappingName: string;
+  templateVerified: boolean;
+  templateVerificationStatus: "verified" | "draft_pending_payer_spec";
+  format: RosterExportFormat;
+  exportedAt: string;
+  exportedBy: string;
+  totalRows: number;
+  checksum: string;
+  appliedOverrides: number;
+  fileName: string;
+  downloadPath: string;
+}

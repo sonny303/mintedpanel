@@ -28,6 +28,10 @@ jobs:
         run: node scripts/security/verify-ssn-vault.mjs
       - name: Verify capture-link tenant isolation and single-use submissions
         run: node scripts/security/verify-capture-boundary.mjs
+      - name: Verify provider roster tenant, audit, and immutable-ledger boundaries
+        env:
+          P01_DOCKER_CONTEXT: default
+        run: node scripts/security/verify-roster-engine.mjs
 
   staging-uat-seed:
     name: Deterministic staging UAT seed
