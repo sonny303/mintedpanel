@@ -1,73 +1,65 @@
-# Group–Payer Network Decision Report — 3M Scope
+# Group Contracts Matrix Specification — Payer × State Operational Workflow
 
-**Date:** 2026-09-26
-
-**Status:** Report plan for PM review; no application or schema changes in this PR
-
+**Date:** 2026-09-26  
+**Status:** Approved Implementation Specification (updating PR #427 spike)  
 **Base:** `sonny303/mintedpanel` `main` at `06261a400261203bbb2b03e40a9b73adc7e0c2fc`
 
-## Decision
+---
 
-Give internal staff one Reporting Center report at **group × payer** grain. Start with every payer attached to a group, including those without a payer decision. Staff can record a **validated group-level payer decision** on that relationship. A payer's denial of the group must be visible even if no provider case exists. A provider denial remains on its provider case and never becomes a group denial by inference.
+## 1. Decision & Background
 
-“Contract” here means the group's payer-network relationship and its confirmed outcome. Staff should not create or save a separate contract object. This replaces the earlier proposal for agreement versions, a contract ledger, client publication, and extension work.
+Operators manage group contract execution using a **Payer × State Group Contracting Matrix**. This replaces manual spreadsheets with a first-class, interactive report in the Reporting Center: **`/reporting/contracts-matrix`**.
 
-| 3M | Waste or burden removed | User outcome |
-| --- | --- | --- |
-| Muda | A separate agreement system and six dependent slices for one report | One small report slice can reach the screen |
-| Mura | The current board's denial marker is derived from provider cases | Group decisions and provider cases have separate, clear meanings |
-| Muri | Staff must attach a payer to generate cases but cannot record that the payer denied the group | Staff can record and find the payer's group decision in one workflow |
+The matrix represents a **single Provider Group's (TIN)** contracting footprint at a time, displaying all targeted/contracted payers across states, tracking 8 governed contracting statuses, tentative/confirmed dates, and cross-payer dependencies.
 
-## What exists
+| 3M Dimension | Waste or Burden Eliminated                                                    | Operational Outcome                                                    |
+| :----------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------------- |
+| **Muda**     | Redundant manual spreadsheets disconnected from panel operations              | One unified, interactive Payer × State matrix inside Minted Panel      |
+| **Mura**     | Ambiguous status labels and conflation with individual provider credentialing | 8 governed contracting statuses distinct from provider case lifecycles |
+| **Muri**     | Blind spots on tentative effective dates and cross-payer prerequisites        | Explicit tentative dates and pinned cross-payer dependency notes       |
 
-| Surface | Verified source behavior | Consequence |
-| --- | --- | --- |
-| `payer_network_targets` | One row per group × payer × state; `status` means active or archived target. Active targets feed provider-case generation. | Keep target intent separate from a payer decision. Do not rename `status` to Denied. |
-| Group Payer Network board | Shows one payer row per group. Its Targeted/In Progress/Active pill derives from provider cases and enrollment facts; “Denial on file” comes from provider-case history. | This board cannot establish whether the group itself was accepted or denied. |
-| `contracts` and old reports tabs | The legacy contract status editor and matrix remain in source but are not mounted; `/reports` redirects to `/reporting`. The earlier read-only spike counted zero contract rows in staging and production on September 26. | Do not revive the old Add contract flow or use provider cases to populate contract records. Recheck live counts before implementation. |
-| Reporting Center | Its registry at `src/lib/reports.ts` and `/reporting` are the active report entry. | Add one internal report card and route using the existing shell. |
+---
 
-## Small operator workflow
+## 2. Governed Contracting Statuses
 
-| Step | Staff action | Screen result |
-| --- | --- | --- |
-| 1 | Attach a payer to the group for the relevant state(s), using the existing group Payer Network flow. | The group × payer pair appears in the report as **No confirmed decision**. |
-| 2 | When the payer responds, record its group-level decision for each applicable state, response date, reason when denied, and a payer communication or document reference. | The report shows the confirmed state outcome. An unsupported verbal assumption does not become Accepted or Denied. |
-| 3 | If the payer changes its decision, correct the same relationship with a new dated, sourced outcome. | The current outcome is visible; the existing audit trail retains who changed it and when. |
-| 4 | Review the report from Reporting Center. | One row per group × payer; state outcomes appear within that row. Provider cases can be opened separately and do not determine the group outcome. |
+The `contracting` track in `public.status_configs` enforces the following 8 canonical statuses:
 
-The first screen is **internal staff only**. Existing organization access and target-write permissions remain the starting point; do not add a client publication flow.
+1. **Not Started** (`#9CA3AF`, Step 10, Bucket: `ours`) — Initial uncontracted or prospective state (renders as blank / `—` in grid).
+2. **Application Submitted** (`#2563EB`, Step 20, Bucket: `waiting_payer`) — Group contracting packet submitted to payer.
+3. **In Progress (Contract Signed)** (`#EAB308`, Step 30, Bucket: `waiting_payer`) — Group has signed the agreement; awaiting payer countersignature/loading (`x = signed` in sheet).
+4. **In-Network** (`#059669`, Step 40, Bucket: `complete`) — Countersigned and actively effective.
+5. **Denied** (`#DC2626`, Step 50, Bucket: `ours`) — Payer rejected group application or panel closed.
+6. **Denied - Appealed** (`#EA580C`, Step 60, Bucket: `waiting_payer`) — Group submitted formal appeal following denial.
+7. **Denied - Reapplied** (`#8B5CF6`, Step 70, Bucket: `waiting_payer`) — Group submitted reapplication under a new cycle.
+8. **Out of Network** (`#64748B`, Step 80, Bucket: `complete`) — Group non-participating, opted out, or contract terminated.
 
-## Report contract
+---
 
-- **Row key:** organization + group + payer. Never multiply a row by provider, case, product, or state.
-- **Row set:** distinct group × payer pairs with a payer-network target; a target with no decision remains visible.
-- **Columns:** group, payer, targeted states with each state's current decision and response date, denial reason where applicable, and an edit action for an authorized target writer.
-- **State handling:** several states remain in one group × payer row. Show each state's outcome explicitly; do not collapse mixed states into one misleading “Contracted” or “Denied” label.
-- **Filters:** organization, group, payer, state, and group decision. Empty/loading/error behavior follows existing Reporting Center reports.
-- **Source:** the group's target relationship plus its recorded payer decision. Provider-case denial, approval, and enrollment facts do not set a group decision.
-- **Meaning:** “Accepted” means a sourced payer decision for the group in that state; it does not by itself certify every provider's enrollment or billing eligibility.
+## 3. Scope Boundaries
 
-## Minimal implementation proposal — one slice after PM review
+- **Single-Group Grain**: Contracts are scoped to a single `group_id` (TIN). The report provides a prominent Group selector at the top so operators switch easily between provider groups.
+- **Multi-Specialty Support**: Contracts carry an optional `specialty` text field (e.g., _Physical Therapy_, _Occupational Therapy_, or default _Multi-Specialty / All_).
+- **No Document Storage**: Contract PDF uploads and file storage infrastructure are excluded from scope. Focus is strictly on operational status, dates, and dependencies.
+- **Dates**:
+  - `tentative_effective_date`: e.g. `x (tent eff 10/1)`.
+  - `effective_date`: Confirmed effective date (`Eff MM/DD/YYYY`).
+  - `expiration_date`: Renewal or termination date.
+- **Cross-Payer Dependencies**: Contract-level notes surface in an expandable footer card (e.g., _"Humana: effective only after Medicare enrollment complete to load contract"_).
 
-| Field | Scope |
-| --- | --- |
-| Objective | Record a sourced group-level payer decision and show the group × payer report. |
-| Model | Add only the needed decision, decision date, reason, and source-reference fields to the existing group × payer × state target. Keep active/archived target status and legacy `contracts` untouched. Reuse existing audit behavior and org-scoped write permissions. |
-| UI | Add a small outcome editor on the existing group payer relationship and a report route/card in Reporting Center. Use one shared source; do not make staff enter the same decision twice. |
-| Likely files | Additive migration and table register; `payerNetworkTargets` service/hook; group payer board; one report route/component and registry entry; narrow tests for group isolation, mixed-state display, and provider-denial separation. |
-| Verify | Typecheck, lint, focused tests, build, migration checks, and an internal preview walkthrough of a targeted pair, denied group, and mixed-state pair. PM verifies the screen. |
-| Rollback | Hide the report/editor and stop writing additive fields; retain recorded data and audit history. |
-| Done | Staff can attach a payer, record a sourced group decision, see exactly one group × payer row, and distinguish group denial from provider denial. |
-| Outside this slice | Separate contract records, agreement versioning, product coverage, client report, export, form fill, portal submission, and billing clearance. |
+---
 
-### Open behavior decision before build
+## 4. Architecture & Implementation Components
 
-Should a **confirmed group denial** prevent *new* provider-case generation for that exact group × payer × state until staff records a new group decision? Existing provider cases would remain intact. This choice changes case-generation behavior and is not implied by the report request.
-
-## Source pointers
-
-- [`payer_network_targets` schema](../../supabase/migrations/20260712190000_payer_network_targets.sql) and [`target service`](../../src/services/payerNetworkTargets.ts)
-- [`group payer board`](../../src/components/groups/PayerNetworkBoardContent.tsx) and [`case-derived rollup`](../../src/lib/caseRollups.ts)
-- [`generation preview`](../../src/lib/generationPreview.ts) and [`Reporting Center registry`](../../src/lib/reports.ts)
-- [`/reports` redirect](../../src/routes/reports.tsx) and dormant [`ContractsTab`](../../src/components/reports/ContractsTab.tsx)
+1. **Database Schema (`supabase/migrations/`)**:
+   - Additive migration `20260926160000_group_contracts_matrix_fields.sql`:
+     - Add `tentative_effective_date date` and `specialty text` to `public.contracts`.
+     - Seed and synchronize the 8 canonical contracting statuses in `public.status_configs`.
+2. **Data Layer (`src/services/` & `src/hooks/`)**:
+   - `src/services/contracts.ts`: Add `upsertContract` and `updateContract` handling tentative dates and specialty.
+   - `src/hooks/useContracts.ts`: Add `useUpsertContract` and `useUpdateContract` mutations.
+3. **Reporting Center Registration (`src/lib/reports.ts`)**:
+   - Register `contracts-matrix` under the `credentialing` group.
+4. **Routing & UI Components**:
+   - Route `src/routes/reporting.contracts-matrix.tsx`.
+   - Component `src/components/reports/GroupContractsMatrix.tsx` (Payer × State grid, group selector, legend, and footer notes).
+   - Component `src/components/reports/ContractDetailDrawer.tsx` (interactive slide-over drawer to update status, dates, specialty, and notes).
