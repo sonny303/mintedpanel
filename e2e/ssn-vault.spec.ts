@@ -1,4 +1,10 @@
-import { test, expect, type Route, type Page, type BrowserContext } from "@playwright/test";
+import {
+  test,
+  expect,
+  type Route,
+  type Page,
+  type BrowserContext,
+} from "./fixtures/legacy-access-context";
 
 // E4.4 Sensitive Identifiers Vault — the full SSN lives ONLY in the server-only
 // vault (no client SELECT grant, encrypted at rest); every app surface renders

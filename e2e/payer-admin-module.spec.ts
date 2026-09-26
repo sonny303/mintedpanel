@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1, E6.6 F6.6.6, and the
 // payer-and-cases Slice A retarget, finished by Slice G — the module head at

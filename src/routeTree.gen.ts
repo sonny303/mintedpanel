@@ -48,6 +48,7 @@ import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launch
 import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
 import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
 import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
+import { Route as ReportingBillingReadinessRouteImport } from './routes/reporting.billing-readiness'
 import { Route as ReportingAuditLogRouteImport } from './routes/reporting.audit-log'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
@@ -76,11 +77,14 @@ import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.ru
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
 import { Route as AdminPayerAdminIndexRouteImport } from './routes/admin.payer-admin.index'
+import { Route as ReportingRostersTemplatesRouteImport } from './routes/reporting.rosters.templates'
+import { Route as ReportingRostersHistoryRouteImport } from './routes/reporting.rosters.history'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
 import { Route as GroupsGroupIdPayerNetworkRouteImport } from './routes/groups.$groupId.payer-network'
 import { Route as GroupsGroupIdFacilitiesRouteImport } from './routes/groups.$groupId.facilities'
 import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
+import { Route as ClientInvitesClaimTokenRouteImport } from './routes/client-invites.claim.$token'
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
@@ -88,6 +92,9 @@ import { Route as AdminPayersNewRouteImport } from './routes/admin.payers_.new'
 import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
 import { Route as AdminPayerAdminSetupRouteImport } from './routes/admin.payer-admin.setup'
 import { Route as AdminPayerAdminCatalogRouteImport } from './routes/admin.payer-admin.catalog'
+import { Route as ReportingRostersValidationIdRouteImport } from './routes/reporting.rosters.validation.$id'
+import { Route as ReportingRostersMappingIdRouteImport } from './routes/reporting.rosters.mapping.$id'
+import { Route as ReportingRostersExportIdRouteImport } from './routes/reporting.rosters.export.$id'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
 import { Route as AdminPayersIdEditRouteImport } from './routes/admin.payers_.$id.edit'
 import { Route as AdminPayerAdminSetupPayerIdRouteImport } from './routes/admin.payer-admin.setup_.$payerId'
@@ -292,6 +299,12 @@ const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
   path: '/reporting/denials',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingBillingReadinessRoute =
+  ReportingBillingReadinessRouteImport.update({
+    id: '/reporting/billing-readiness',
+    path: '/reporting/billing-readiness',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ReportingAuditLogRoute = ReportingAuditLogRouteImport.update({
   id: '/reporting/audit-log',
   path: '/reporting/audit-log',
@@ -432,6 +445,17 @@ const AdminPayerAdminIndexRoute = AdminPayerAdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminPayerAdminRoute,
 } as any)
+const ReportingRostersTemplatesRoute =
+  ReportingRostersTemplatesRouteImport.update({
+    id: '/reporting/rosters/templates',
+    path: '/reporting/rosters/templates',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingRostersHistoryRoute = ReportingRostersHistoryRouteImport.update({
+  id: '/reporting/rosters/history',
+  path: '/reporting/rosters/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
@@ -457,6 +481,11 @@ const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
   id: '/$runId',
   path: '/$runId',
   getParentRoute: () => GenerationRunsRoute,
+} as any)
+const ClientInvitesClaimTokenRoute = ClientInvitesClaimTokenRouteImport.update({
+  id: '/client-invites/claim/$token',
+  path: '/client-invites/claim/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
   id: '/new',
@@ -493,6 +522,24 @@ const AdminPayerAdminCatalogRoute = AdminPayerAdminCatalogRouteImport.update({
   path: '/catalog',
   getParentRoute: () => AdminPayerAdminRoute,
 } as any)
+const ReportingRostersValidationIdRoute =
+  ReportingRostersValidationIdRouteImport.update({
+    id: '/reporting/rosters/validation/$id',
+    path: '/reporting/rosters/validation/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingRostersMappingIdRoute =
+  ReportingRostersMappingIdRouteImport.update({
+    id: '/reporting/rosters/mapping/$id',
+    path: '/reporting/rosters/mapping/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingRostersExportIdRoute =
+  ReportingRostersExportIdRouteImport.update({
+    id: '/reporting/rosters/export/$id',
+    path: '/reporting/rosters/export/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
   id: '/admin/payers_/$id/scorecard',
   path: '/admin/payers/$id/scorecard',
@@ -568,6 +615,7 @@ export interface FileRoutesByFullPath {
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
@@ -591,11 +639,14 @@ export interface FileRoutesByFullPath {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/client-invites/claim/$token': typeof ClientInvitesClaimTokenRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
   '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/reporting/rosters/history': typeof ReportingRostersHistoryRoute
+  '/reporting/rosters/templates': typeof ReportingRostersTemplatesRoute
   '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
@@ -607,6 +658,9 @@ export interface FileRoutesByFullPath {
   '/admin/payer-admin/setup/$payerId': typeof AdminPayerAdminSetupPayerIdRoute
   '/admin/payers/$id/edit': typeof AdminPayersIdEditRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
+  '/reporting/rosters/export/$id': typeof ReportingRostersExportIdRoute
+  '/reporting/rosters/mapping/$id': typeof ReportingRostersMappingIdRoute
+  '/reporting/rosters/validation/$id': typeof ReportingRostersValidationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -645,6 +699,7 @@ export interface FileRoutesByTo {
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
@@ -668,11 +723,14 @@ export interface FileRoutesByTo {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/client-invites/claim/$token': typeof ClientInvitesClaimTokenRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
   '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/reporting/rosters/history': typeof ReportingRostersHistoryRoute
+  '/reporting/rosters/templates': typeof ReportingRostersTemplatesRoute
   '/admin/payer-admin': typeof AdminPayerAdminIndexRoute
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
@@ -684,6 +742,9 @@ export interface FileRoutesByTo {
   '/admin/payer-admin/setup/$payerId': typeof AdminPayerAdminSetupPayerIdRoute
   '/admin/payers/$id/edit': typeof AdminPayersIdEditRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
+  '/reporting/rosters/export/$id': typeof ReportingRostersExportIdRoute
+  '/reporting/rosters/mapping/$id': typeof ReportingRostersMappingIdRoute
+  '/reporting/rosters/validation/$id': typeof ReportingRostersValidationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -732,6 +793,7 @@ export interface FileRoutesById {
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
@@ -755,11 +817,14 @@ export interface FileRoutesById {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/client-invites/claim/$token': typeof ClientInvitesClaimTokenRoute
   '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
   '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
   '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/reporting/rosters/history': typeof ReportingRostersHistoryRoute
+  '/reporting/rosters/templates': typeof ReportingRostersTemplatesRoute
   '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
@@ -771,6 +836,9 @@ export interface FileRoutesById {
   '/admin/payer-admin/setup_/$payerId': typeof AdminPayerAdminSetupPayerIdRoute
   '/admin/payers_/$id/edit': typeof AdminPayersIdEditRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
+  '/reporting/rosters/export/$id': typeof ReportingRostersExportIdRoute
+  '/reporting/rosters/mapping/$id': typeof ReportingRostersMappingIdRoute
+  '/reporting/rosters/validation/$id': typeof ReportingRostersValidationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -820,6 +888,7 @@ export interface FileRouteTypes {
     | '/providers/$id'
     | '/providers/new'
     | '/reporting/audit-log'
+    | '/reporting/billing-readiness'
     | '/reporting/denials'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
@@ -843,11 +912,14 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/client-invites/claim/$token'
     | '/generation/runs/$runId'
     | '/groups/$groupId/facilities'
     | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/reporting/rosters/history'
+    | '/reporting/rosters/templates'
     | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
@@ -859,6 +931,9 @@ export interface FileRouteTypes {
     | '/admin/payer-admin/setup/$payerId'
     | '/admin/payers/$id/edit'
     | '/admin/payers/$id/scorecard'
+    | '/reporting/rosters/export/$id'
+    | '/reporting/rosters/mapping/$id'
+    | '/reporting/rosters/validation/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -897,6 +972,7 @@ export interface FileRouteTypes {
     | '/onboarding/wizard'
     | '/providers/new'
     | '/reporting/audit-log'
+    | '/reporting/billing-readiness'
     | '/reporting/denials'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
@@ -920,11 +996,14 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/client-invites/claim/$token'
     | '/generation/runs/$runId'
     | '/groups/$groupId/facilities'
     | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/reporting/rosters/history'
+    | '/reporting/rosters/templates'
     | '/admin/payer-admin'
     | '/admin/sops'
     | '/admin/templates'
@@ -936,6 +1015,9 @@ export interface FileRouteTypes {
     | '/admin/payer-admin/setup/$payerId'
     | '/admin/payers/$id/edit'
     | '/admin/payers/$id/scorecard'
+    | '/reporting/rosters/export/$id'
+    | '/reporting/rosters/mapping/$id'
+    | '/reporting/rosters/validation/$id'
   id:
     | '__root__'
     | '/'
@@ -983,6 +1065,7 @@ export interface FileRouteTypes {
     | '/providers/$id'
     | '/providers/new'
     | '/reporting/audit-log'
+    | '/reporting/billing-readiness'
     | '/reporting/denials'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
@@ -1006,11 +1089,14 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/client-invites/claim/$token'
     | '/generation_/runs/$runId'
     | '/groups/$groupId/facilities'
     | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/reporting/rosters/history'
+    | '/reporting/rosters/templates'
     | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
@@ -1022,6 +1108,9 @@ export interface FileRouteTypes {
     | '/admin/payer-admin/setup_/$payerId'
     | '/admin/payers_/$id/edit'
     | '/admin/payers_/$id/scorecard'
+    | '/reporting/rosters/export/$id'
+    | '/reporting/rosters/mapping/$id'
+    | '/reporting/rosters/validation/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1066,6 +1155,7 @@ export interface RootRouteChildren {
   ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingAuditLogRoute: typeof ReportingAuditLogRoute
+  ReportingBillingReadinessRoute: typeof ReportingBillingReadinessRoute
   ReportingDenialsRoute: typeof ReportingDenialsRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
   ReportingFacilitiesWithoutProvidersRoute: typeof ReportingFacilitiesWithoutProvidersRoute
@@ -1080,9 +1170,15 @@ export interface RootRouteChildren {
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
   AdminPayersNewRoute: typeof AdminPayersNewRoute
+  ClientInvitesClaimTokenRoute: typeof ClientInvitesClaimTokenRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
+  ReportingRostersHistoryRoute: typeof ReportingRostersHistoryRoute
+  ReportingRostersTemplatesRoute: typeof ReportingRostersTemplatesRoute
   AdminPayersIdEditRoute: typeof AdminPayersIdEditRoute
   AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
+  ReportingRostersExportIdRoute: typeof ReportingRostersExportIdRoute
+  ReportingRostersMappingIdRoute: typeof ReportingRostersMappingIdRoute
+  ReportingRostersValidationIdRoute: typeof ReportingRostersValidationIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1360,6 +1456,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingDenialsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/billing-readiness': {
+      id: '/reporting/billing-readiness'
+      path: '/reporting/billing-readiness'
+      fullPath: '/reporting/billing-readiness'
+      preLoaderRoute: typeof ReportingBillingReadinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reporting/audit-log': {
       id: '/reporting/audit-log'
       path: '/reporting/audit-log'
@@ -1556,6 +1659,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayerAdminIndexRouteImport
       parentRoute: typeof AdminPayerAdminRoute
     }
+    '/reporting/rosters/templates': {
+      id: '/reporting/rosters/templates'
+      path: '/reporting/rosters/templates'
+      fullPath: '/reporting/rosters/templates'
+      preLoaderRoute: typeof ReportingRostersTemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/rosters/history': {
+      id: '/reporting/rosters/history'
+      path: '/reporting/rosters/history'
+      fullPath: '/reporting/rosters/history'
+      preLoaderRoute: typeof ReportingRostersHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/providers/$id/edit': {
       id: '/providers/$id/edit'
       path: '/edit'
@@ -1590,6 +1707,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/generation/runs/$runId'
       preLoaderRoute: typeof GenerationRunsRunIdRouteImport
       parentRoute: typeof GenerationRunsRoute
+    }
+    '/client-invites/claim/$token': {
+      id: '/client-invites/claim/$token'
+      path: '/client-invites/claim/$token'
+      fullPath: '/client-invites/claim/$token'
+      preLoaderRoute: typeof ClientInvitesClaimTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/templates/new': {
       id: '/admin/templates/new'
@@ -1639,6 +1763,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/payer-admin/catalog'
       preLoaderRoute: typeof AdminPayerAdminCatalogRouteImport
       parentRoute: typeof AdminPayerAdminRoute
+    }
+    '/reporting/rosters/validation/$id': {
+      id: '/reporting/rosters/validation/$id'
+      path: '/reporting/rosters/validation/$id'
+      fullPath: '/reporting/rosters/validation/$id'
+      preLoaderRoute: typeof ReportingRostersValidationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/rosters/mapping/$id': {
+      id: '/reporting/rosters/mapping/$id'
+      path: '/reporting/rosters/mapping/$id'
+      fullPath: '/reporting/rosters/mapping/$id'
+      preLoaderRoute: typeof ReportingRostersMappingIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/rosters/export/$id': {
+      id: '/reporting/rosters/export/$id'
+      path: '/reporting/rosters/export/$id'
+      fullPath: '/reporting/rosters/export/$id'
+      preLoaderRoute: typeof ReportingRostersExportIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/payers_/$id/scorecard': {
       id: '/admin/payers_/$id/scorecard'
@@ -1860,6 +2005,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingAuditLogRoute: ReportingAuditLogRoute,
+  ReportingBillingReadinessRoute: ReportingBillingReadinessRoute,
   ReportingDenialsRoute: ReportingDenialsRoute,
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
   ReportingFacilitiesWithoutProvidersRoute:
@@ -1875,9 +2021,15 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
   AdminPayersNewRoute: AdminPayersNewRoute,
+  ClientInvitesClaimTokenRoute: ClientInvitesClaimTokenRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
+  ReportingRostersHistoryRoute: ReportingRostersHistoryRoute,
+  ReportingRostersTemplatesRoute: ReportingRostersTemplatesRoute,
   AdminPayersIdEditRoute: AdminPayersIdEditRoute,
   AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,
+  ReportingRostersExportIdRoute: ReportingRostersExportIdRoute,
+  ReportingRostersMappingIdRoute: ReportingRostersMappingIdRoute,
+  ReportingRostersValidationIdRoute: ReportingRostersValidationIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

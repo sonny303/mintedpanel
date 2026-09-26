@@ -6,7 +6,7 @@
 // appended case_status_history row) and the touches-INSERT auto-transition
 // trigger (first recorded work → In Progress, attributed system with the
 // touch as evidence). Assertions run on the recorded wire writes AND the UI.
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

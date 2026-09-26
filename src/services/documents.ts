@@ -13,6 +13,10 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import {
+  getContextRevisionSnapshot,
+  observeContextRevisionForRequest,
+} from "@/lib/contextRevision";
 import type { DocumentKind, DocumentOwnerType, ProviderDocument } from "@/types";
 
 const DOCUMENT_COLUMNS =
@@ -91,8 +95,15 @@ interface ApiEnvelope<T> {
   error: string | null;
 }
 
-async function authedApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function authedApiFetch<T>(
+  path: string,
+  init?: RequestInit,
+  options: { rejectStale?: boolean } = {},
+): Promise<T> {
   const orgId = requireActiveOrg();
+  // Capture before any asynchronous auth/session work. An auth transition
+  // during getSession or response parsing must invalidate this response.
+  const before = getContextRevisionSnapshot();
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
   const token = sessionData.session?.access_token;
@@ -107,6 +118,9 @@ async function authedApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   const envelope = (await response.json()) as ApiEnvelope<T>;
+  if (observeContextRevisionForRequest(response, before, options)) {
+    throw new Error("Access context changed; retry the request");
+  }
   if (!response.ok || envelope.data === null) {
     throw new Error(envelope.error ?? `Request failed (${response.status})`);
   }
@@ -139,19 +153,23 @@ export interface UploadDocumentInput {
  * idempotent server-side; a failed PUT leaves an orphan the server's bounded
  * sweep cleans on the next intent (TE-4). */
 export async function uploadDocument(input: UploadDocumentInput): Promise<ProviderDocument> {
-  const intent = await authedApiFetch<DocumentUploadIntent>("/api/documents/upload-intent", {
-    method: "POST",
-    body: JSON.stringify({
-      ownerType: input.ownerType,
-      ownerId: input.ownerId,
-      kind: input.kind,
-      fileName: input.file.name,
-      fileSize: input.file.size,
-      mimeType: input.file.type,
-      familyId: input.familyId ?? null,
-      caseId: input.caseId ?? null,
-    }),
-  });
+  const intent = await authedApiFetch<DocumentUploadIntent>(
+    "/api/documents/upload-intent",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ownerType: input.ownerType,
+        ownerId: input.ownerId,
+        kind: input.kind,
+        fileName: input.file.name,
+        fileSize: input.file.size,
+        mimeType: input.file.type,
+        familyId: input.familyId ?? null,
+        caseId: input.caseId ?? null,
+      }),
+    },
+    { rejectStale: false },
+  );
 
   const put = await fetch(intent.uploadUrl, {
     method: "PUT",
@@ -160,21 +178,25 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
   });
   if (!put.ok) throw new Error(`Upload failed (${put.status})`);
 
-  return authedApiFetch<ProviderDocument>("/api/documents/finalize", {
-    method: "POST",
-    body: JSON.stringify({
-      ownerType: input.ownerType,
-      ownerId: input.ownerId,
-      kind: input.kind,
-      familyId: intent.familyId,
-      versionNumber: intent.versionNumber,
-      fileName: input.file.name,
-      mimeType: input.file.type,
-      effectiveDate: input.effectiveDate ?? null,
-      expirationDate: input.expirationDate ?? null,
-      caseId: input.caseId ?? null,
-    }),
-  });
+  return authedApiFetch<ProviderDocument>(
+    "/api/documents/finalize",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ownerType: input.ownerType,
+        ownerId: input.ownerId,
+        kind: input.kind,
+        familyId: intent.familyId,
+        versionNumber: intent.versionNumber,
+        fileName: input.file.name,
+        mimeType: input.file.type,
+        effectiveDate: input.effectiveDate ?? null,
+        expirationDate: input.expirationDate ?? null,
+        caseId: input.caseId ?? null,
+      }),
+    },
+    { rejectStale: false },
+  );
 }
 
 export interface SignedDownload {

@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E1.0 TE-10 — wizard scope-section coverage over the mock harness (CLAUDE.md
 // recipe):

@@ -3946,6 +3946,267 @@ export type Database = {
         };
         Relationships: [];
       };
+      roster_templates: {
+        Row: {
+          columns: Json;
+          created_at: string;
+          grains: string[];
+          id: string;
+          is_verified: boolean;
+          name: string;
+          org_id: string;
+          payer_name: string;
+          schema_version: number;
+          slug: string;
+          updated_at: string;
+          verification_status: string;
+        };
+        Insert: {
+          columns: Json;
+          created_at?: string;
+          grains: string[];
+          id?: string;
+          is_verified?: boolean;
+          name: string;
+          org_id: string;
+          payer_name: string;
+          schema_version?: number;
+          slug: string;
+          updated_at?: string;
+          verification_status?: string;
+        };
+        Update: {
+          columns?: Json;
+          created_at?: string;
+          grains?: string[];
+          id?: string;
+          is_verified?: boolean;
+          name?: string;
+          org_id?: string;
+          payer_name?: string;
+          schema_version?: number;
+          slug?: string;
+          updated_at?: string;
+          verification_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_templates_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      roster_mappings: {
+        Row: {
+          column_assignments: Json;
+          created_at: string;
+          created_by: string;
+          grain: string;
+          id: string;
+          name: string;
+          org_id: string;
+          revision: number;
+          selected_facility_ids: string[];
+          selected_group_ids: string[];
+          selected_provider_ids: string[];
+          template_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          column_assignments?: Json;
+          created_at?: string;
+          created_by: string;
+          grain: string;
+          id?: string;
+          name: string;
+          org_id: string;
+          revision?: number;
+          selected_facility_ids?: string[];
+          selected_group_ids?: string[];
+          selected_provider_ids?: string[];
+          template_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          column_assignments?: Json;
+          created_at?: string;
+          created_by?: string;
+          grain?: string;
+          id?: string;
+          name?: string;
+          org_id?: string;
+          revision?: number;
+          selected_facility_ids?: string[];
+          selected_group_ids?: string[];
+          selected_provider_ids?: string[];
+          template_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_mappings_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "roster_mappings_org_id_template_id_fkey";
+            columns: ["org_id", "template_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_templates";
+            referencedColumns: ["org_id", "id"];
+          },
+        ];
+      };
+      roster_export_snapshots: {
+        Row: {
+          applied_overrides: Json;
+          expected_input_fingerprint: string;
+          exported_at: string;
+          exported_by: string;
+          file_bytes: string;
+          file_name: string;
+          format: string;
+          frozen_snapshot: Json;
+          id: string;
+          idempotency_key: string;
+          mapping_id: string;
+          mapping_name: string;
+          org_id: string;
+          sha256: string;
+          template_id: string;
+          template_name: string;
+          template_is_verified: boolean;
+          template_verification_status: string;
+          total_rows: number;
+        };
+        Insert: {
+          applied_overrides?: Json;
+          expected_input_fingerprint: string;
+          exported_at?: string;
+          exported_by: string;
+          file_bytes: string;
+          file_name: string;
+          format: string;
+          frozen_snapshot: Json;
+          id?: string;
+          idempotency_key: string;
+          mapping_id: string;
+          mapping_name: string;
+          org_id: string;
+          sha256: string;
+          template_id: string;
+          template_name: string;
+          template_is_verified?: boolean;
+          template_verification_status?: string;
+          total_rows: number;
+        };
+        Update: {
+          applied_overrides?: Json;
+          expected_input_fingerprint?: string;
+          exported_at?: string;
+          exported_by?: string;
+          file_bytes?: string;
+          file_name?: string;
+          format?: string;
+          frozen_snapshot?: Json;
+          id?: string;
+          idempotency_key?: string;
+          mapping_id?: string;
+          mapping_name?: string;
+          org_id?: string;
+          sha256?: string;
+          template_id?: string;
+          template_name?: string;
+          template_is_verified?: boolean;
+          template_verification_status?: string;
+          total_rows?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_export_snapshots_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "roster_export_snapshots_org_id_mapping_id_fkey";
+            columns: ["org_id", "mapping_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_mappings";
+            referencedColumns: ["org_id", "id"];
+          },
+          {
+            foreignKeyName: "roster_export_snapshots_org_id_template_id_fkey";
+            columns: ["org_id", "template_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_templates";
+            referencedColumns: ["org_id", "id"];
+          },
+        ];
+      };
+      roster_export_overrides: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          field_key: string;
+          id: string;
+          input_fingerprint: string;
+          mapping_id: string;
+          mapping_revision: number;
+          org_id: string;
+          reason: string;
+          row_key: string;
+          rule_code: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          field_key: string;
+          id?: string;
+          input_fingerprint: string;
+          mapping_id: string;
+          mapping_revision: number;
+          org_id: string;
+          reason: string;
+          row_key: string;
+          rule_code: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          field_key?: string;
+          id?: string;
+          input_fingerprint?: string;
+          mapping_id?: string;
+          mapping_revision?: number;
+          org_id?: string;
+          reason?: string;
+          row_key?: string;
+          rule_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_export_overrides_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "roster_export_overrides_org_id_mapping_id_fkey";
+            columns: ["org_id", "mapping_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_mappings";
+            referencedColumns: ["org_id", "id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -4061,6 +4322,10 @@ export type Database = {
         Returns: boolean;
       };
       claim_invites: { Args: never; Returns: number };
+      claim_client_invite: {
+        Args: { p_actor_user_id: string; p_token: string };
+        Returns: Json;
+      };
       commit_import_run: {
         Args: { p_plan: Json; p_run_id: string };
         Returns: Json;
@@ -4071,6 +4336,151 @@ export type Database = {
           p_party_id: string;
           p_recipient_email: string;
           p_recipient_name?: string;
+        };
+        Returns: Json;
+      };
+      create_client_invite: {
+        Args: {
+          p_actor_user_id: string;
+          p_group_ids: string[];
+          p_org_id: string;
+          p_recipient_email: string;
+        };
+        Returns: Json;
+      };
+      authorize_enrollment_proof_download: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_publication_id: string;
+        };
+        Returns: Json;
+      };
+      curate_enrollment_payer_product: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_display_name: string;
+          p_is_active: boolean;
+          p_org_id: string;
+          p_payer_id: string;
+          p_product_key: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_catalog: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_group_id: string | null;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_proof_capture_target: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_document_version_id: string;
+          p_org_id: string;
+          p_revision_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_scope_detail: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_unresolved_page: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_cursor: Json;
+          p_group_id: string | null;
+          p_limit: number;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
+      publish_enrollment_proof: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_document_version_id: string;
+          p_evidence_kind: string;
+          p_org_id: string;
+          p_reason: string;
+          p_scope_id: string;
+          p_sha256: string;
+          p_supported_fields: string[];
+          p_revision_id: string;
+        };
+        Returns: Json;
+      };
+      publish_enrollment_summary: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_revision_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      record_enrollment_proof_download: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_document_version_id: string;
+          p_org_id: string;
+          p_publication_id: string;
+          p_sha256: string;
+        };
+        Returns: Json;
+      };
+      revoke_enrollment_publication: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_publication_id: string;
+          p_reason: string;
+        };
+        Returns: Json;
+      };
+      save_enrollment_revision: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_expected_revision_id: string | null;
+          p_facility_id: string;
+          p_group_id: string;
+          p_org_id: string;
+          p_payer_product_id: string;
+          p_provider_id: string;
+          p_revision: Json;
+          p_scope_id: string | null;
+          p_sources: Json;
+          p_state: string;
+        };
+        Returns: Json;
+      };
+      set_enrollment_group_product_target: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_group_id: string;
+          p_is_active: boolean;
+          p_org_id: string;
+          p_payer_product_id: string;
+          p_state: string;
         };
         Returns: Json;
       };
@@ -4320,6 +4730,10 @@ export type Database = {
         Args: { p_case_id: string; p_org_id: string; p_provider_id: string };
         Returns: Json;
       };
+      resolve_enrollment_context: {
+        Args: { p_actor_user_id: string; p_audience?: string; p_org_id?: string };
+        Returns: Json;
+      };
       reveal_ssn: {
         Args: { p_justification: string; p_provider_id: string };
         Returns: Json;
@@ -4327,6 +4741,10 @@ export type Database = {
       review_payer_catalog_change: {
         Args: { p_accept: boolean; p_change_id: string };
         Returns: undefined;
+      };
+      revoke_client_access: {
+        Args: { p_access_id: string; p_actor_user_id: string };
+        Returns: Json;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
       set_case_status: {
@@ -4347,9 +4765,24 @@ export type Database = {
         };
         Returns: Json;
       };
+      set_client_group_grants: {
+        Args: { p_access_id: string; p_actor_user_id: string; p_group_ids: string[] };
+        Returns: Json;
+      };
       set_default_party_role: {
         Args: { p_org_id: string; p_party_id: string; p_role_key: string };
         Returns: undefined;
+      };
+      set_internal_staff_manifest: {
+        Args: {
+          p_active: boolean;
+          p_auth_user_id: string;
+          p_manifest_version: string;
+          p_operator_user_id: string;
+          p_org_id: string;
+          p_staff_role: string;
+        };
+        Returns: Json;
       };
       set_global_portal_flags: {
         Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };
@@ -4584,6 +5017,58 @@ export type Database = {
       user_is_admin_anywhere: { Args: never; Returns: boolean };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
+      roster_engine_read_source: {
+        Args: { p_actor_id: string; p_mapping_id: string; p_org_id: string };
+        Returns: Json;
+      };
+      roster_engine_save_mapping: {
+        Args: {
+          p_actor_id: string;
+          p_column_assignments: Json;
+          p_expected_revision: number;
+          p_grain: string;
+          p_mapping_id: string | null;
+          p_name: string;
+          p_org_id: string;
+          p_selected_facility_ids: string[];
+          p_selected_group_ids: string[];
+          p_selected_provider_ids: string[];
+          p_template_id: string;
+        };
+        Returns: Json;
+      };
+      roster_engine_record_override: {
+        Args: {
+          p_actor_id: string;
+          p_field_key: string;
+          p_input_fingerprint: string;
+          p_mapping_id: string;
+          p_mapping_revision: number;
+          p_org_id: string;
+          p_reason: string;
+          p_row_key: string;
+          p_rule_code: string;
+        };
+        Returns: Json;
+      };
+      roster_engine_commit_export: {
+        Args: {
+          p_actor_id: string;
+          p_applied_overrides: Json;
+          p_expected_input_fingerprint: string;
+          p_file_bytes_b64: string;
+          p_file_name: string;
+          p_format: string;
+          p_frozen_snapshot: Json;
+          p_idempotency_key: string;
+          p_mapping_id: string;
+          p_mapping_revision: number;
+          p_org_id: string;
+          p_template_id: string;
+          p_total_rows: number;
+        };
+        Returns: Json;
+      };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
       validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };
