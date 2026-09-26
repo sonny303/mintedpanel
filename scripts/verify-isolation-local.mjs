@@ -93,6 +93,7 @@ const EXPECTED_FAILS = {
   // propose-only write's org scoping (20a).
   fieldmaps: ["20a", "5b", "5c"],
   profile: ["6"],
+  caseprofile: ["6b"],
   fillevents: ["7", "7b"],
   cases: ["8b", "8d"],
   // The case-search leak surfaces a cross-org case row in ?q= results (15b).

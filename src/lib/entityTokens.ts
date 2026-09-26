@@ -106,3 +106,77 @@ export function composeAddressToken(
     .join(", ");
   return joined || null;
 }
+
+function cleanPart(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
+ * Canonical provider name composites shared by web profile and PDF fills.
+ * Required names stay unresolved when either first or last name is missing.
+ */
+export function composeProviderNameTokens(
+  provider:
+    | {
+        firstName?: string | null;
+        lastName?: string | null;
+        credentials?: string | null;
+      }
+    | null
+    | undefined,
+): Record<string, string> {
+  const first = cleanPart(provider?.firstName);
+  const last = cleanPart(provider?.lastName);
+  if (!first || !last) return {};
+
+  const fullName = `${first} ${last}`;
+  const tokens: Record<string, string> = {
+    "provider.fullName": fullName,
+    "provider.lastFirst": `${last}, ${first}`,
+  };
+  const credentials = cleanPart(provider?.credentials);
+  tokens["provider.fullNameWithCredentials"] = credentials
+    ? `${fullName}, ${credentials}`
+    : fullName;
+  return tokens;
+}
+
+/**
+ * Canonical facility address composites. Full address is deliberately strict:
+ * a partial address is not represented as a complete payer-facing value.
+ */
+export function composeFacilityAddressTokens(
+  facility:
+    | {
+        street?: string | null;
+        suite?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zip?: string | null;
+      }
+    | null
+    | undefined,
+): Record<string, string> {
+  const street = cleanPart(facility?.street);
+  const legacyAddress = composeAddressToken([
+    facility?.street,
+    facility?.city,
+    facility?.state,
+    facility?.zip,
+  ]);
+  const tokens: Record<string, string> = legacyAddress ? { "facility.address": legacyAddress } : {};
+  if (!street) return tokens;
+
+  const suite = cleanPart(facility?.suite);
+  const streetAddress = suite ? `${street}, ${suite}` : street;
+  tokens["facility.streetAddress"] = streetAddress;
+  const city = cleanPart(facility?.city);
+  const state = cleanPart(facility?.state);
+  const zip = cleanPart(facility?.zip);
+  if (city && state && zip) {
+    tokens["facility.fullAddress"] = `${streetAddress}, ${city}, ${state} ${zip}`;
+  }
+  return tokens;
+}

@@ -3,6 +3,8 @@ import {
   NON_TOKEN_ENTITY_KEYS,
   buildEntityTokenValues,
   composeAddressToken,
+  composeFacilityAddressTokens,
+  composeProviderNameTokens,
   entityTokenValues,
 } from "./entityTokens";
 
@@ -84,5 +86,50 @@ describe("composeAddressToken", () => {
 
   it("is null when no part is populated", () => {
     expect(composeAddressToken([null, undefined, ""])).toBeNull();
+  });
+});
+
+describe("canonical computed entity tokens", () => {
+  it("composes the frozen provider name forms and preserves credential text", () => {
+    expect(
+      composeProviderNameTokens({
+        firstName: "  Ana ",
+        lastName: "Beck  ",
+        credentials: " DPT, OCS ",
+      }),
+    ).toEqual({
+      "provider.fullName": "Ana Beck",
+      "provider.lastFirst": "Beck, Ana",
+      "provider.fullNameWithCredentials": "Ana Beck, DPT, OCS",
+    });
+  });
+
+  it("does not emit provider composites when a required name part is missing", () => {
+    expect(composeProviderNameTokens({ firstName: "Ana", lastName: " " })).toEqual({});
+  });
+
+  it("requires street for streetAddress and full street/city/state/zip for fullAddress", () => {
+    expect(
+      composeFacilityAddressTokens({
+        street: "  1 Main St ",
+        suite: " Suite 2 ",
+        city: "Austin",
+        state: "Texas",
+        zip: "78701",
+      }),
+    ).toEqual({
+      "facility.address": "1 Main St, Austin, Texas, 78701",
+      "facility.streetAddress": "1 Main St, Suite 2",
+      "facility.fullAddress": "1 Main St, Suite 2, Austin, Texas 78701",
+    });
+    expect(
+      composeFacilityAddressTokens({ street: "1 Main St", city: "Austin", state: "TX" }),
+    ).toEqual({
+      "facility.address": "1 Main St, Austin, TX",
+      "facility.streetAddress": "1 Main St",
+    });
+    expect(composeFacilityAddressTokens({ city: "Austin", state: "TX", zip: "78701" })).toEqual({
+      "facility.address": "Austin, TX, 78701",
+    });
   });
 });

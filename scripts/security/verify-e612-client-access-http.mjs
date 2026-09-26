@@ -10,6 +10,7 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
+import { profileHttpFixtureSql } from "./e612-profile-http-fixtures.mjs";
 import { buildManifest } from "./e612-build-manifest.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -291,6 +292,16 @@ function runInternalDriver() {
     `${root}scripts/security/e613-http-probes.mjs`,
     `${names.gateway}:/tmp/e613-http-probes.mjs`,
   ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e612-profile-http-fixtures.mjs`,
+    `${names.gateway}:/tmp/e612-profile-http-fixtures.mjs`,
+  ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e612-profile-http-probes.mjs`,
+    `${names.gateway}:/tmp/e612-profile-http-probes.mjs`,
+  ]);
   try {
     const expiredToken = jwt({
       sub: E612.clientActive,
@@ -317,6 +328,7 @@ function runInternalDriver() {
     process.stdout.write(output);
     if (!output.includes("E612|HTTP|PASS")) fail("E612_HTTP_DRIVER_PASS_MARKER_MISSING");
     if (!output.includes("E613|HTTP|PASS")) fail("E613_HTTP_PROBE_PASS_MARKER_MISSING");
+    if (!output.includes("E612|PROFILE|PASS")) fail("E612_PROFILE_PROBE_PASS_MARKER_MISSING");
   } catch (error) {
     if (error.stdout) process.stdout.write(String(error.stdout));
     fail("E612_HTTP_DRIVER_FAILED");
@@ -570,6 +582,11 @@ ON CONFLICT (id) DO NOTHING;
 `);
   } catch {
     fail("E612_HTTP_SEED_FAILED_post");
+  }
+  try {
+    dbExec(profileHttpFixtureSql({ E612 }));
+  } catch {
+    fail("E612_HTTP_SEED_FAILED_profile");
   }
 }
 

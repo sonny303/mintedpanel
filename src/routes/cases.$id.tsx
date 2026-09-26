@@ -9,7 +9,7 @@
 // warning, and the two legacy pre-unification history ledgers — the unified
 // timeline is the one history surface. The narrow Work-in-portal launcher
 // lives only inside an eligible case TaskDrawer online-form step.
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { fmtDate } from "@/lib/format";
 import { buildProviderTokenValues } from "@/lib/pdfFill";
+import { useFreshPdfTokenValues, type RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import {
   useAddCaseFacility,
   useCase,
@@ -38,6 +39,7 @@ import { caseFacilityOptions } from "@/lib/caseFacility";
 import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
 import { pickLicenseForState } from "@/lib/licensePick";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
+import { useAuthStore } from "@/lib/auth-store";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseStatusControl } from "@/components/cases/CaseStatusControl";
 import { CaseStatusHistoryPanel } from "@/components/cases/CaseStatusHistoryPanel";
@@ -48,7 +50,11 @@ import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { DeleteCaseAction } from "@/components/cases/DeleteCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
-import { handoffFacilityOptions } from "@/lib/casePortals";
+import {
+  isSameCasePdfScope,
+  resolveFreshCasePdfFacility,
+  resolveHandoffFacility,
+} from "@/lib/casePortals";
 
 export const Route = createFileRoute("/cases/$id")({
   component: CaseDetailPage,
@@ -59,6 +65,10 @@ function CaseDetailPage() {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
   const isAdmin = useIsAdmin();
+  const actorId = useAuthStore((state) => state.user?.id ?? null);
+  const authGeneration = useAuthStore((state) => state.authGeneration);
+  const contextEpoch = useAuthStore((state) => state.contextEpoch);
+  const refreshPdfTokenValues = useFreshPdfTokenValues();
 
   const caseQ = useCase(id);
   const coordinatorsQ = useCoordinators();
@@ -66,7 +76,33 @@ function CaseDetailPage() {
   const facilitiesQ = useFacilities();
   const facilityAssignmentsQ = useProviderAssignments();
   const caseFacilitiesQ = useCaseFacilities(id);
+  const refetchCurrentCase = caseQ.refetch;
+  const refetchCaseFacilities = caseFacilitiesQ.refetch;
+  const refetchFacilities = facilitiesQ.refetch;
   const c = caseQ.data;
+  const selectionContext = [
+    c?.orgId ?? "no-org",
+    c?.id ?? id,
+    c?.groupId ?? "no-group",
+    c?.state ?? "no-state",
+    actorId ?? "no-actor",
+    authGeneration,
+    contextEpoch,
+  ].join(":");
+  const selectionGeneration = useRef({ context: "", generation: 0 });
+  if (selectionGeneration.current.context !== selectionContext) {
+    selectionGeneration.current = {
+      context: selectionContext,
+      generation: selectionGeneration.current.generation + 1,
+    };
+  }
+  const selectionOwner = `${selectionContext}:${selectionGeneration.current.generation}`;
+  const [facilitySelection, setFacilitySelection] = useState<{
+    owner: string;
+    facilityId: string;
+  } | null>(null);
+  const selectedFacilityId =
+    facilitySelection?.owner === selectionOwner ? facilitySelection.facilityId : undefined;
   const licensesQ = useStateLicensesByProvider(c?.providerId);
   // DYN-TOKEN-05 — policies for the CASE's group (not the provider's primary
   // mirror). Empty string keeps the query disabled until a group is known.
@@ -101,6 +137,128 @@ function CaseDetailPage() {
     );
   }, [c?.providerId, c?.groupId, c?.facilityId, facilityAssignmentsQ.data, facilitiesQ.data]);
 
+  const handoffFacilities = useMemo(
+    () =>
+      (caseFacilitiesQ.data ?? []).map((row) => ({
+        id: row.facilityId,
+        name: row.facility.name,
+      })),
+    [caseFacilitiesQ.data],
+  );
+  const facilityResolution = resolveHandoffFacility(
+    caseFacilitiesQ.isError ? "error" : caseFacilitiesQ.isLoading ? "loading" : "ready",
+    handoffFacilities,
+    c?.facilityId ?? null,
+    selectedFacilityId,
+  );
+  const selectedCaseFacilityId =
+    facilityResolution.status === "ready" ? facilityResolution.facilityId : undefined;
+  const selectedFacilityIsInCaseSet = selectedCaseFacilityId
+    ? handoffFacilities.some((facility) => facility.id === selectedCaseFacilityId)
+    : false;
+  const selectedCaseFacility = selectedFacilityIsInCaseSet
+    ? ((facilitiesQ.data ?? []).find((facility) => facility.id === selectedCaseFacilityId) ?? null)
+    : null;
+  const selectedFacilityDataState = selectedCaseFacilityId
+    ? facilitiesQ.isError
+      ? "full-facility-error"
+      : facilitiesQ.isLoading
+        ? "full-facility-loading"
+        : selectedCaseFacility
+          ? "full-facility-ready"
+          : "full-facility-missing"
+    : "no-facility-data-required";
+  const pdfContextKey = `${selectionOwner}:${facilityResolution.status === "ready" ? `ready:${facilityResolution.facilityId ?? "no-facility"}` : `blocked:${facilityResolution.reason}`}:${selectedFacilityDataState}`;
+  const refreshCasePdfTokenValues: RefreshPdfTokenValues = useCallback(
+    async (baseValues, isCurrent = () => true) => {
+      if (!isCurrent()) {
+        throw new Error("The fill context changed. Start a new fill in the current context.");
+      }
+      const isRouteContextCurrent = () => {
+        const current = useAuthStore.getState();
+        return (
+          isCurrent() &&
+          current.activeOrgId === c?.orgId &&
+          current.user?.id === actorId &&
+          current.authGeneration === authGeneration &&
+          current.contextEpoch === contextEpoch
+        );
+      };
+      const [caseResult, caseFacilitiesResult, facilitiesResult] = await Promise.all([
+        refetchCurrentCase(),
+        refetchCaseFacilities(),
+        refetchFacilities(),
+      ]);
+      if (!isRouteContextCurrent()) {
+        throw new Error("The fill context changed. Start a new fill in the current context.");
+      }
+      const currentCase = caseResult.data;
+      if (
+        caseResult.isError ||
+        !currentCase ||
+        !c ||
+        !isSameCasePdfScope(
+          {
+            id: c.id,
+            orgId: c.orgId,
+            providerId: c.providerId,
+            groupId: c.groupId,
+            state: c.state,
+          },
+          currentCase,
+        ) ||
+        caseFacilitiesResult.isError ||
+        facilitiesResult.isError
+      ) {
+        throw new Error(
+          "The case location could not be refreshed. Reload the case before filling.",
+        );
+      }
+      const freshCaseFacilities = (caseFacilitiesResult.data ?? []).map((row) => ({
+        id: row.facilityId,
+        name: row.facility.name,
+      }));
+      const freshFacility = resolveFreshCasePdfFacility(
+        freshCaseFacilities,
+        facilitiesResult.data ?? [],
+        currentCase.facilityId,
+        selectedFacilityId,
+      );
+      if (freshFacility.status !== "ready") {
+        throw new Error(
+          freshFacility.reason === "selection_required"
+            ? "Choose a case location before generating this PDF."
+            : freshFacility.reason === "selection_invalid"
+              ? "The selected case location was removed. Choose a current location before generating this PDF."
+              : "The selected case location details are unavailable. Reload the case before generating this PDF.",
+        );
+      }
+      const withoutOldFacility = Object.fromEntries(
+        Object.entries(baseValues).filter(([token]) => !token.startsWith("facility.")),
+      );
+      const freshFacilityValues = buildProviderTokenValues(null, null, freshFacility.facility);
+      return refreshPdfTokenValues(
+        { ...withoutOldFacility, ...freshFacilityValues },
+        isRouteContextCurrent,
+      );
+    },
+    [
+      c?.id,
+      c?.orgId,
+      c?.providerId,
+      c?.groupId,
+      c?.state,
+      actorId,
+      authGeneration,
+      contextEpoch,
+      refetchCurrentCase,
+      refetchCaseFacilities,
+      refetchFacilities,
+      refreshPdfTokenValues,
+      selectedFacilityId,
+    ],
+  );
+
   // DYN-TOKEN-05 — which of the provider's state licenses the license.* tokens
   // mean. The CASE names exactly one state (it is part of the 4-part case key),
   // so this is unambiguous here in a way the web profile's ?state= param has to
@@ -128,11 +286,11 @@ function CaseDetailPage() {
       buildProviderTokenValues(
         c?.provider ?? null,
         c?.group ?? null,
-        c?.facility ?? null,
+        selectedCaseFacility,
         caseLicense,
         caseGroupInsurance,
       ),
-    [c?.provider, c?.group, c?.facility, caseLicense, caseGroupInsurance],
+    [c?.provider, c?.group, selectedCaseFacility, caseLicense, caseGroupInsurance],
   );
 
   if (caseQ.isLoading) {
@@ -232,6 +390,8 @@ function CaseDetailPage() {
                 c?.provider ? `${c.provider.firstName} ${c.provider.lastName}` : "this provider"
               }
               groupName={c?.group?.name ?? null}
+              refreshPdfTokenValues={refreshCasePdfTokenValues}
+              pdfContextKey={pdfContextKey}
               portalHandoff={{
                 caseId: c.id,
                 providerId: c.providerId,
@@ -245,14 +405,10 @@ function CaseDetailPage() {
                 // The whole case-location set is required: reducing this to
                 // credential_cases.facility_id would erase a selected
                 // secondary and make safe choice impossible.
-                facilities: handoffFacilityOptions(
-                  (caseFacilitiesQ.data ?? []).map((row) => ({
-                    id: row.facilityId,
-                    name: row.facility.name,
-                  })),
-                  c.facilityId,
-                  c.facility ? { id: c.facility.id, name: c.facility.name } : null,
-                ),
+                facilities: handoffFacilities,
+                selectedFacilityId,
+                onSelectFacility: (facilityId) =>
+                  setFacilitySelection({ owner: selectionOwner, facilityId }),
               }}
             />
             <CaseTouchesPanel

@@ -11,7 +11,11 @@
 // server bundle). It only knows about field NAMES (strings) and value maps, so it
 // stays pure, deterministic, and unit-tested — the browser layer (pdfFillClient)
 // reads the field names off the PDF and hands them here.
-import { buildEntityTokenValues, composeAddressToken } from "@/lib/entityTokens";
+import {
+  buildEntityTokenValues,
+  composeFacilityAddressTokens,
+  composeProviderNameTokens,
+} from "@/lib/entityTokens";
 import { normalizeFieldLabel } from "@/lib/tokenFormat";
 import type { Facility, FieldDictionaryEntry, Provider, ProviderGroup } from "@/types";
 // Type-only, like csvImport/payerForm/providerGroup do — no runtime edge from
@@ -139,11 +143,8 @@ export function buildProviderTokenValues(
     license,
     groupInsurance,
   });
-  const address = facility
-    ? composeAddressToken([facility.street, facility.city, facility.state, facility.zip])
-    : null;
-  // Composed convenience token (mirrors sopResolver's facility.address).
-  if (address) out["facility.address"] = address;
+  Object.assign(out, composeProviderNameTokens(provider));
+  Object.assign(out, composeFacilityAddressTokens(facility));
   return out;
 }
 

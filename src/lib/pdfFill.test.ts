@@ -109,6 +109,7 @@ describe("buildProviderTokenValues", () => {
   const provider = {
     firstName: "Jordan",
     lastName: "Rivera",
+    credentials: "DPT",
     npi: "1003456701",
     ssnLast4: "1234",
     suffix: null,
@@ -123,6 +124,10 @@ describe("buildProviderTokenValues", () => {
     city: "Austin",
     state: "TX",
     zip: "78701",
+    suite: "Suite 4",
+    phone: "555-0131",
+    fax: "555-0132",
+    email: "riverbend@example.test",
   } as Facility;
 
   const license = {
@@ -152,6 +157,14 @@ describe("buildProviderTokenValues", () => {
     expect(map["group.tin"]).toBe("12-3456789");
     expect(map["facility.name"]).toBe("Riverbend Clinic");
     expect(map["facility.address"]).toBe("1 Main St, Austin, TX, 78701");
+    expect(map["facility.phone"]).toBe("555-0131");
+    expect(map["facility.fax"]).toBe("555-0132");
+    expect(map["facility.email"]).toBe("riverbend@example.test");
+    expect(map["provider.fullName"]).toBe("Jordan Rivera");
+    expect(map["provider.fullNameWithCredentials"]).toBe("Jordan Rivera, DPT");
+    expect(map["provider.lastFirst"]).toBe("Rivera, Jordan");
+    expect(map["facility.streetAddress"]).toBe("1 Main St, Suite 4");
+    expect(map["facility.fullAddress"]).toBe("1 Main St, Suite 4, Austin, TX 78701");
   });
 
   it("omits null and whitespace-only values so they resolve to no_value, not a blank fill", () => {

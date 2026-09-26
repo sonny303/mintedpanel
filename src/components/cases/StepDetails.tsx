@@ -9,7 +9,7 @@
 // fill from the case's provider data -> local download), and the E1.7b plain
 // channels (fax/phone/mail/custom). StepBody renders one step's body by stepType —
 // label/checkbox chrome belongs to the caller (the drawer's rows).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, Copy, Download, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,25 @@ import { StepArtifactsPanel } from "@/components/cases/StepArtifactsPanel";
 import { planGmailHandoff } from "@/lib/gmailCompose";
 import { splitOnUnresolvedTokens, findUnresolvedTokens } from "@/lib/caseWizard";
 import { pdfFillFileStem } from "@/lib/pdfFill";
-import { analyzePdfForm, fillAndDownloadPdf, type PdfAnalysis } from "@/lib/pdfFillClient";
+import {
+  analyzePdfForm,
+  downloadPdfOutput,
+  preparePdfFill,
+  type PdfAnalysis,
+} from "@/lib/pdfFillClient";
+import {
+  createFillRunGuard,
+  createFillRunLatch,
+  isPdfFillContextCurrent,
+} from "@/lib/fillRunGuard";
+import {
+  commitAnalysisIfIdle,
+  prepareAndDownloadPdfIfCurrent,
+  runExclusivePdfFill,
+} from "@/lib/pdfFillRun";
+import { useAuthStore } from "@/lib/auth-store";
+import type { PdfActorContext } from "@/lib/fillRunGuard";
+import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import { useFieldDictionary } from "@/hooks/useMappingReview";
 import type { ResolvedSOPEmailRecipient, SOPStep } from "@/types";
 
@@ -285,13 +303,45 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
 // confirmed field_dictionary (the SAME memory the portal mapper trains), fill
 // from this case's provider data, and download locally. pdf-lib is loaded lazily
 // (client-only) by the pdfFillClient helpers. Nothing is ever submitted.
-function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<string, string> }) {
+function PdfStep({
+  step,
+  tokenValues,
+  refreshTokenValues,
+  contextKey,
+}: {
+  step: SOPStep;
+  tokenValues: Record<string, string>;
+  refreshTokenValues?: RefreshPdfTokenValues;
+  contextKey: string;
+}) {
   const dictQ = useFieldDictionary();
   const dictionary = useMemo(() => dictQ.data ?? [], [dictQ.data]);
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<PdfAnalysis | null>(null);
-  const [busy, setBusy] = useState<"analyze" | "generate" | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const generationLatch = useRef(createFillRunLatch());
+  const generationActive = useRef(false);
+  const busy = generating ? "generate" : analyzing ? "analyze" : null;
+  const sourceGeneration = useRef({ file, dictionary, generation: 0 });
+  if (
+    sourceGeneration.current.file !== file ||
+    sourceGeneration.current.dictionary !== dictionary
+  ) {
+    sourceGeneration.current = {
+      file,
+      dictionary,
+      generation: sourceGeneration.current.generation + 1,
+    };
+  }
+  const runGuard = useRef(createFillRunGuard(contextKey));
+  runGuard.current.setContext(`${contextKey}:source-${sourceGeneration.current.generation}`);
+  const runGuardInstance = runGuard.current;
+  useEffect(() => {
+    runGuardInstance.activate();
+    return () => runGuardInstance.invalidate();
+  }, [runGuardInstance]);
 
   // Re-analyze whenever the file, the loaded dictionary, or the token values
   // change — this also covers the dictionary loading AFTER the file was picked.
@@ -301,11 +351,13 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
       return;
     }
     let cancelled = false;
-    setBusy("analyze");
+    setAnalyzing(true);
     setError(null);
     analyzePdfForm(file, dictionary, tokenValues)
       .then((result) => {
-        if (!cancelled) setAnalysis(result);
+        if (!cancelled) {
+          commitAnalysisIfIdle(generationActive.current, () => setAnalysis(result));
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -313,7 +365,7 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
         setError("Could not read this file as a fillable PDF form.");
       })
       .finally(() => {
-        if (!cancelled) setBusy(null);
+        if (!cancelled) setAnalyzing(false);
       });
     return () => {
       cancelled = true;
@@ -323,23 +375,74 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
   const willFill = analysis?.fill ?? [];
   const wontFill = analysis?.unfilled ?? [];
   const noFields = analysis != null && analysis.fieldNames.length === 0;
+  const hasMappedCandidates =
+    willFill.length > 0 || wontFill.some((field) => field.reason === "no_value");
 
   const handleGenerate = async () => {
     if (!file) return;
-    setBusy("generate");
+    const runToken = runGuard.current.capture();
+    const sourceGenerationAtStart = sourceGeneration.current.generation;
+    const authAtStart = useAuthStore.getState();
+    const actorContext: PdfActorContext = {
+      orgId: authAtStart.activeOrgId,
+      userId: authAtStart.user?.id ?? null,
+      authGeneration: authAtStart.authGeneration,
+      contextEpoch: authAtStart.contextEpoch,
+    };
+    const isCurrent = () => {
+      const current = useAuthStore.getState();
+      return isPdfFillContextCurrent({
+        runIsCurrent: runGuard.current.isCurrent(runToken),
+        expectedSourceGeneration: sourceGenerationAtStart,
+        currentSourceGeneration: sourceGeneration.current.generation,
+        expectedActor: actorContext,
+        currentActor: {
+          orgId: current.activeOrgId,
+          userId: current.user?.id ?? null,
+          authGeneration: current.authGeneration,
+          contextEpoch: current.contextEpoch,
+        },
+      });
+    };
     try {
-      const result = await fillAndDownloadPdf(
-        file,
-        dictionary,
-        tokenValues,
-        pdfFillFileStem(step.label),
+      const execution = await runExclusivePdfFill(
+        generationLatch.current,
+        async () => {
+          const freshValues = refreshTokenValues
+            ? await refreshTokenValues(tokenValues, isCurrent)
+            : tokenValues;
+          if (!isCurrent()) return null;
+          const result = await prepareAndDownloadPdfIfCurrent({
+            isCurrent,
+            prepare: () => preparePdfFill(file, dictionary, freshValues),
+            download: (prepared) => {
+              if (prepared.analysis.fill.length > 0) {
+                downloadPdfOutput(prepared.output, pdfFillFileStem(step.label));
+              }
+            },
+          });
+          return result.status === "ready" ? result.prepared : null;
+        },
+        () => {
+          generationActive.current = true;
+          setGenerating(true);
+        },
+        () => {
+          generationActive.current = false;
+          setGenerating(false);
+        },
       );
-      setAnalysis(result);
+      if (!execution.started || !execution.value || !isCurrent()) return;
+      const prepared = execution.value;
+      setAnalysis(prepared.analysis);
+      if (prepared.analysis.fill.length === 0) {
+        toast.error("No mapped fields have current values. Complete the form manually.");
+        return;
+      }
       toast.success("Filled PDF downloaded");
-    } catch {
-      toast.error("Could not generate the filled PDF");
-    } finally {
-      setBusy(null);
+    } catch (error) {
+      if (!isCurrent()) return;
+      toast.error(error instanceof Error ? error.message : "Could not generate the filled PDF");
     }
   };
 
@@ -405,7 +508,7 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
         <Button
           type="button"
           className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163f33]"
-          disabled={!file || busy !== null || willFill.length === 0}
+          disabled={!file || busy !== null || !hasMappedCandidates}
           onClick={handleGenerate}
         >
           {busy === "generate" ? (
@@ -509,6 +612,8 @@ export function StepBody({
   providerId = null,
   groupId = null,
   portalHandoff,
+  refreshTokenValues,
+  pdfContextKey = "",
 }: {
   step: SOPStep;
   tokenValues?: Record<string, string>;
@@ -517,11 +622,21 @@ export function StepBody({
   providerId?: string | null;
   groupId?: string | null;
   portalHandoff?: PortalHandoffContext;
+  refreshTokenValues?: RefreshPdfTokenValues;
+  pdfContextKey?: string;
 }) {
   const stepType = step.stepType ?? "online_form";
   const artifactCtx: StepArtifactContext = { taskId, caseId, providerId, groupId };
   if (stepType === "draft_email") return <DraftEmailStep step={step} />;
-  if (stepType === "pdf") return <PdfStep step={step} tokenValues={tokenValues} />;
+  if (stepType === "pdf")
+    return (
+      <PdfStep
+        step={step}
+        tokenValues={tokenValues}
+        refreshTokenValues={refreshTokenValues}
+        contextKey={`${pdfContextKey}:${taskId}:${step.id}`}
+      />
+    );
   if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
     return <PlainChannelStep step={step} artifactCtx={artifactCtx} />;
   }

@@ -4,6 +4,7 @@
 // route adds at read time (no schema backing) so the picker offers the full set
 // the fill engine can resolve. Tokens are the BARE catalog form.
 import { supabase } from "@/integrations/supabase/externalClient";
+import { orgContactTokenKeys } from "@/lib/orgContactTokens";
 
 export interface TokenCatalogEntry {
   token: string;
@@ -27,9 +28,33 @@ const USER_TOKENS: TokenCatalogEntry[] = [
   { token: "user.email", table: "auth", column: "jwt.email" },
 ];
 
+// Computed values do not correspond to one physical column, but both real
+// fill surfaces resolve them from case/provider rows with shared pure rules.
+const COMPUTED_TOKENS: TokenCatalogEntry[] = [
+  { token: "provider.fullName", table: "providers", column: "composite" },
+  { token: "provider.fullNameWithCredentials", table: "providers", column: "composite" },
+  { token: "provider.lastFirst", table: "providers", column: "composite" },
+  { token: "facility.address", table: "facilities", column: "composite" },
+  { token: "facility.streetAddress", table: "facilities", column: "composite" },
+  { token: "facility.fullAddress", table: "facilities", column: "composite" },
+];
+
+// Role-specific contact tokens are code-owned (ROLE × FIELD), not emitted by
+// the schema sweep. The same keys are resolved at profile/fill time from the
+// org's current default role holders.
+const CONTACT_TOKENS: TokenCatalogEntry[] = orgContactTokenKeys().map((token) => ({
+  token,
+  table: "parties",
+  column: token.slice(token.indexOf(".") + 1),
+}));
+
 export async function listTokenCatalog(): Promise<TokenCatalogEntry[]> {
   const { data, error } = await supabase.rpc("get_sop_field_tokens" as never);
   if (error) throw error;
   const catalog = ((data ?? []) as TokenCatalogEntry[]).filter((e) => Boolean(e?.token));
-  return [...catalog, ...USER_TOKENS];
+  const byToken = new Map<string, TokenCatalogEntry>();
+  for (const entry of [...catalog, ...USER_TOKENS, ...CONTACT_TOKENS, ...COMPUTED_TOKENS]) {
+    if (!byToken.has(entry.token)) byToken.set(entry.token, entry);
+  }
+  return [...byToken.values()];
 }

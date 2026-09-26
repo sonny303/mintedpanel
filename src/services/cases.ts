@@ -434,7 +434,7 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
 // untouched — these three functions are purely additive, post-create.
 
 const CASE_FACILITY_COLUMNS =
-  "id, org_id, case_id, facility_id, is_primary, created_at, created_by, facility:facilities(id, name, street, city, state, zip, is_active)";
+  "id, org_id, case_id, facility_id, is_primary, created_at, created_by, facility:facilities(id, name, street, suite, city, state, zip, is_active)";
 
 /** A case's full location set, joined to `facilities` for display. Sorted by
  * facility name (the `caseFacilityOptions` picker convention) — `isPrimary`
