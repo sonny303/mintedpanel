@@ -64,6 +64,14 @@ Summary:
 4. Protected files unchanged unless the slice explicitly authorizes them.
 5. PM verifies UI/preview where the slice touches journeys; agent runs CI only.
 
+### Single-branch integration rule (Dual-branch merging retired)
+
+To eliminate branch divergence and prevent unpromoted staging drift:
+
+- **All PRs target `main`**: Feature branches, bug fixes, spikes, and 3M slices must always target `main`. Merging PRs directly into `staging` is strictly retired.
+- **`staging` is a deployment pointer only**: `refs/heads/staging` exists solely as an ancestry-enforced deployment tracking pointer for admitted `main` commits (`scripts/delivery/staging-source.mjs`). It is not an integration branch and must never accept independent feature development or divergent history.
+- **Advancing `staging`**: The `staging` branch is updated exclusively by fast-forwarding to a specific, admitted commit SHA from `main` (via governed `staging-delivery.yml` admission or an explicit fast-forward PR from `main`).
+
 ### Authorized merge execution
 
 Because automatic deployments from Git pushes are disabled in `vercel.json` (`git.deploymentEnabled: false`), merging to `main` is strictly a code integration step and does not trigger an uncontrolled release. To balance governance with developer velocity:
@@ -126,13 +134,14 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 
 ## Strip / simplify register (process muda)
 
-| Item                                                     | Status                                                    |
-| -------------------------------------------------------- | --------------------------------------------------------- |
-| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge to `main` is approval |
-| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — deliver epic docs to `main`         |
-| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough  |
-| Postman `/api` collection                                | **Out of scope** for 3M                                   |
-| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules     |
+| Item                                                     | Status                                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge to `main` is approval                                  |
+| Dual-branch merge pattern (merging to staging)           | **Retired** 2026-09-23 — all PRs target `main`; `staging` is strictly a deployment pointer |
+| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — deliver epic docs to `main`                                          |
+| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough                                   |
+| Postman `/api` collection                                | **Out of scope** for 3M                                                                    |
+| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules                                      |
 
 ---
 

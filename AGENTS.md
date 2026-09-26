@@ -5,6 +5,13 @@ Instructions for AI coding agents working on Minted Panel.
 Write/merge process (epic lane + 3M parallel lane): [`docs/ops/repo-workflow.md`](docs/ops/repo-workflow.md).
 Epic lifecycle: [`docs/redesign/README.md`](docs/redesign/README.md).
 
+## Branch and merge rules
+
+- **Single-branch integration**: All PRs must target `main`. Branch off `main`, PR targets `main`.
+- **Dual-branch merging is retired**: Never open, retarget, or merge PRs directly into `staging`.
+- **`staging` is a deployment pointer only**: `staging` is exclusively an ancestry-enforced fast-forward pointer tracking admitted `main` commits.
+- **Merge execution**: Autonomous agent self-merging is prohibited; merge to `main` only when explicitly authorized by the PM after required CI passes.
+
 ## Project overview
 
 Minted Panel is a credentialing operations SaaS for medical groups, tracking providers, payers, cases, tasks, touches, and contracts across states. The stack is React 19 + TypeScript + Tailwind v4 + shadcn/ui on **TanStack Start** (file-based routing on a nitro server, SSR-capable — not a plain Vite SPA), with Zustand for auth/org state, TanStack Query for server state, and Supabase for database, auth, and RLS. The product is feature-complete; most work is incremental UI, bug fixes, and additive backend tables.
