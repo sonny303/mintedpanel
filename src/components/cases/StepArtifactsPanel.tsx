@@ -39,8 +39,12 @@ import {
   documentKindLabel,
   documentOwnerTarget,
   expirationDateError,
+  formatUploadDocumentFileName,
+  normalizeDocumentFileName,
   resolveDocumentOwnerTarget,
+  signedDateError,
   stepArtifactRows,
+  utcTodayIso,
   type StepArtifactRow,
 } from "@/lib/documents";
 import { useGroupDocuments, useProviderDocuments, useUploadDocument } from "@/hooks/useDocuments";
@@ -61,6 +65,8 @@ interface StepArtifactsPanelProps {
   caseId: string | null;
   providerId: string | null;
   groupId: string | null;
+  providerName?: string | null;
+  groupName?: string | null;
 }
 
 function attachmentFromDocument(doc: ProviderDocument, artifactName: string): SOPStepAttachment {
@@ -95,6 +101,8 @@ export function StepArtifactsPanel({
   caseId,
   providerId,
   groupId,
+  providerName,
+  groupName,
 }: StepArtifactsPanelProps) {
   const canEdit = useCanWrite();
   const providerDocsQ = useProviderDocuments(providerId ?? "");
@@ -188,6 +196,8 @@ export function StepArtifactsPanel({
           caseId={caseId}
           providerId={providerId}
           groupId={groupId}
+          providerName={providerName}
+          groupName={groupName}
           vaultCurrent={vaultCurrent}
           onClose={() => setAttachTarget(null)}
         />
@@ -199,6 +209,8 @@ export function StepArtifactsPanel({
           attachment={replaceTarget.attachment}
           document={replaceTarget.document}
           caseId={caseId}
+          providerName={providerName}
+          groupName={groupName}
           onClose={() => setReplaceTarget(null)}
         />
       ) : null}
@@ -299,6 +311,8 @@ function AttachArtifactDialog({
   caseId,
   providerId,
   groupId,
+  providerName,
+  groupName,
   vaultCurrent,
   onClose,
 }: {
@@ -308,6 +322,8 @@ function AttachArtifactDialog({
   caseId: string | null;
   providerId: string | null;
   groupId: string | null;
+  providerName?: string | null;
+  groupName?: string | null;
   vaultCurrent: ProviderDocument[];
   onClose: () => void;
 }) {
@@ -327,11 +343,16 @@ function AttachArtifactDialog({
   const [selectedDocId, setSelectedDocId] = useState("");
 
   const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [fileNameEdited, setFileNameEdited] = useState(false);
   const [effectiveDate, setEffectiveDate] = useState("");
   const [expirationDate, setExpirationDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const target = resolveUploadTarget(row.resolvedKind, providerId, groupId);
+  const isSignedDate = Boolean(target && DOCUMENT_KIND_META[target.kind].dateKind === "signed");
+  const signedDateInvalid = isSignedDate && Boolean(signedDateError(effectiveDate, utcTodayIso()));
+  const ownerName = target?.ownerType === "group" ? groupName : providerName;
   const busy = attachM.isPending || uploadM.isPending;
 
   const submitExisting = () => {
@@ -367,6 +388,13 @@ function AttachArtifactDialog({
       setError(fileError);
       return;
     }
+    if (isSignedDate) {
+      const signedError = signedDateError(effectiveDate, utcTodayIso());
+      if (signedError) {
+        setError(signedError);
+        return;
+      }
+    }
     const expError = expirationDateError(target.kind, expirationDate || null);
     if (expError) {
       setError(expError);
@@ -379,8 +407,9 @@ function AttachArtifactDialog({
         ownerId: target.ownerId,
         kind: target.kind,
         file,
+        fileName,
         effectiveDate: effectiveDate || null,
-        expirationDate: expirationDate || null,
+        expirationDate: isSignedDate ? null : expirationDate || null,
         caseId,
       },
       {
@@ -466,37 +495,85 @@ function AttachArtifactDialog({
                 id="artifact-upload-file"
                 type="file"
                 accept={DOCUMENT_MIME_TYPES.join(",")}
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const selected = e.target.files?.[0] ?? null;
+                  setFile(selected);
+                  const preserveCustomName = fileNameEdited && Boolean(selected);
+                  setFileNameEdited(preserveCustomName);
+                  setFileName(
+                    selected
+                      ? preserveCustomName
+                        ? normalizeDocumentFileName(fileName, selected.name, selected.type)
+                        : target
+                          ? formatUploadDocumentFileName(
+                              ownerName,
+                              target.ownerType,
+                              target.ownerId,
+                              target.kind,
+                              selected.name,
+                              selected.type,
+                            )
+                          : selected.name
+                      : "",
+                  );
+                }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="artifact-upload-file-name">File name</Label>
+              <Input
+                id="artifact-upload-file-name"
+                value={fileName}
+                onChange={(e) => {
+                  setFileName(e.target.value);
+                  setFileNameEdited(true);
+                }}
+                disabled={!file}
+              />
+            </div>
+            {isSignedDate ? (
               <div className="space-y-1.5">
-                <Label htmlFor="artifact-upload-effective">Effective date</Label>
+                <Label htmlFor="artifact-upload-signed">Signed date (required)</Label>
                 <DatePicker
-                  id="artifact-upload-effective"
+                  id="artifact-upload-signed"
                   value={effectiveDate}
                   onChange={setEffectiveDate}
-                  ariaLabel="Effective date"
+                  ariaLabel="Signed date"
+                  invalid={signedDateInvalid}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="artifact-upload-expiration">
-                  Expiration date
-                  {target && DOCUMENT_KIND_META[target.kind].expirationRequired
-                    ? " (required)"
-                    : ""}
-                </Label>
-                <DatePicker
-                  id="artifact-upload-expiration"
-                  value={expirationDate}
-                  onChange={setExpirationDate}
-                  ariaLabel="Expiration date"
-                  invalid={Boolean(
-                    target && DOCUMENT_KIND_META[target.kind].expirationRequired && !expirationDate,
-                  )}
-                />
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="artifact-upload-effective">Effective date</Label>
+                  <DatePicker
+                    id="artifact-upload-effective"
+                    value={effectiveDate}
+                    onChange={setEffectiveDate}
+                    ariaLabel="Effective date"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="artifact-upload-expiration">
+                    Expiration date
+                    {target && DOCUMENT_KIND_META[target.kind].expirationRequired
+                      ? " (required)"
+                      : ""}
+                  </Label>
+                  <DatePicker
+                    id="artifact-upload-expiration"
+                    value={expirationDate}
+                    onChange={setExpirationDate}
+                    ariaLabel="Expiration date"
+                    invalid={Boolean(
+                      target &&
+                      DOCUMENT_KIND_META[target.kind].expirationRequired &&
+                      !expirationDate,
+                    )}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -538,6 +615,8 @@ function ReplaceArtifactDialog({
   attachment,
   document,
   caseId,
+  providerName,
+  groupName,
   onClose,
 }: {
   taskId: string;
@@ -545,19 +624,29 @@ function ReplaceArtifactDialog({
   attachment: SOPStepAttachment;
   document: ProviderDocument;
   caseId: string | null;
+  providerName?: string | null;
+  groupName?: string | null;
   onClose: () => void;
 }) {
   const uploadM = useUploadDocument();
   const attachM = useAttachStepArtifact();
   const detachM = useDetachStepArtifact();
   const [file, setFile] = useState<File | null>(null);
-  const [expirationDate, setExpirationDate] = useState(document.expirationDate ?? "");
+  const [fileName, setFileName] = useState("");
+  const [fileNameEdited, setFileNameEdited] = useState(false);
+  const kindMeta = DOCUMENT_KIND_META[document.docType];
+  const isSignedDate = kindMeta.dateKind === "signed";
+  const [effectiveDate, setEffectiveDate] = useState(document.effectiveDate ?? "");
+  const [expirationDate, setExpirationDate] = useState(
+    isSignedDate ? "" : (document.expirationDate ?? ""),
+  );
   const [error, setError] = useState<string | null>(null);
 
   // The replacement versions THIS document's family, so it must keep this
   // document's owner (shared with the required-documents rail).
   const owner = documentOwnerTarget(document);
-  const kindMeta = DOCUMENT_KIND_META[document.docType];
+  const ownerName = owner?.ownerType === "group" ? groupName : providerName;
+  const signedDateInvalid = isSignedDate && Boolean(signedDateError(effectiveDate, utcTodayIso()));
   const busy = uploadM.isPending || attachM.isPending || detachM.isPending;
 
   const submit = () => {
@@ -569,6 +658,13 @@ function ReplaceArtifactDialog({
     if (fileError) {
       setError(fileError);
       return;
+    }
+    if (isSignedDate) {
+      const signedError = signedDateError(effectiveDate, utcTodayIso());
+      if (signedError) {
+        setError(signedError);
+        return;
+      }
     }
     const expError = expirationDateError(document.docType, expirationDate || null);
     if (expError) {
@@ -586,8 +682,9 @@ function ReplaceArtifactDialog({
         ownerId: owner.ownerId,
         kind: document.docType,
         file,
-        effectiveDate: document.effectiveDate,
-        expirationDate: expirationDate || null,
+        fileName,
+        effectiveDate: isSignedDate ? effectiveDate || null : document.effectiveDate,
+        expirationDate: isSignedDate ? null : expirationDate || null,
         familyId: document.documentFamilyId,
         caseId,
       },
@@ -653,21 +750,67 @@ function ReplaceArtifactDialog({
               id="artifact-replace-file"
               type="file"
               accept={DOCUMENT_MIME_TYPES.join(",")}
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const selected = e.target.files?.[0] ?? null;
+                setFile(selected);
+                const preserveCustomName = fileNameEdited && Boolean(selected);
+                setFileNameEdited(preserveCustomName);
+                setFileName(
+                  selected
+                    ? preserveCustomName
+                      ? normalizeDocumentFileName(fileName, selected.name, selected.type)
+                      : owner
+                        ? formatUploadDocumentFileName(
+                            ownerName,
+                            owner.ownerType,
+                            owner.ownerId,
+                            document.docType,
+                            selected.name,
+                            selected.type,
+                          )
+                        : selected.name
+                    : "",
+                );
+              }}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="artifact-replace-expiration">
-              Expiration date{kindMeta.expirationRequired ? " (required)" : ""}
-            </Label>
-            <DatePicker
-              id="artifact-replace-expiration"
-              value={expirationDate}
-              onChange={setExpirationDate}
-              ariaLabel="Expiration date"
-              invalid={kindMeta.expirationRequired && !expirationDate}
+            <Label htmlFor="artifact-replace-file-name">File name</Label>
+            <Input
+              id="artifact-replace-file-name"
+              value={fileName}
+              onChange={(e) => {
+                setFileName(e.target.value);
+                setFileNameEdited(true);
+              }}
+              disabled={!file}
             />
           </div>
+          {isSignedDate ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="artifact-replace-signed">Signed date (required)</Label>
+              <DatePicker
+                id="artifact-replace-signed"
+                value={effectiveDate}
+                onChange={setEffectiveDate}
+                ariaLabel="Signed date"
+                invalid={signedDateInvalid}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="artifact-replace-expiration">
+                Expiration date{kindMeta.expirationRequired ? " (required)" : ""}
+              </Label>
+              <DatePicker
+                id="artifact-replace-expiration"
+                value={expirationDate}
+                onChange={setExpirationDate}
+                ariaLabel="Expiration date"
+                invalid={kindMeta.expirationRequired && !expirationDate}
+              />
+            </div>
+          )}
           {error ? (
             <div
               role="alert"

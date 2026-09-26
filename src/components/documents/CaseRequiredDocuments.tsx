@@ -22,12 +22,17 @@ import { StatusPill } from "@/components/StatusPill";
 import {
   caseDocumentStatus,
   downloadableCaseDocuments,
+  formatCaseDocumentDownloadName,
   requiredDocumentKinds,
   uploadOwnerTargetForCheck,
   type CaseDocumentCheck,
 } from "@/lib/documents";
 import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
-import { useDocumentDownload, useGroupDocuments, useProviderDocuments } from "@/hooks/useDocuments";
+import {
+  useDownloadDocumentFile,
+  useGroupDocuments,
+  useProviderDocuments,
+} from "@/hooks/useDocuments";
 import { useCanWrite } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import type { DocumentKind, ProviderDocument, Task } from "@/types";
@@ -39,31 +44,49 @@ interface CaseRequiredDocumentsProps {
   providerName: string;
   groupId: string | null;
   groupName: string | null;
+  payerName?: string | null;
+  state?: string | null;
   caseId?: string | null;
   tasks: Task[];
 }
 
-// D-ASD-8 — sequential anchor-click downloads, never `window.open` in a loop:
-// a loop of new-tab opens is exactly what trips a browser's popup blocker,
-// and a signed URL is single-use-short-lived anyway, so each file gets its
-// own signed URL fetched and clicked one at a time.
+// D-ASD-8 — fetch each audited signed object fully before starting its local
+// Blob download. This keeps downloads separate, avoids cross-origin navigation
+// races, and never opens a popup for every document.
 async function downloadSequentially(
   documents: ProviderDocument[],
-  getSignedUrl: (documentId: string) => Promise<{ url: string; fileName: string }>,
+  getDownloadFile: (
+    documentId: string,
+    downloadName: string,
+  ) => Promise<{ blob: Blob; fileName: string }>,
+  getDownloadName: (document: ProviderDocument) => string,
 ): Promise<{ failed: number }> {
   let failed = 0;
   for (const doc of documents) {
+    let objectUrl: string | null = null;
     try {
-      const signed = await getSignedUrl(doc.id);
+      const downloadName = getDownloadName(doc);
+      const downloaded = await getDownloadFile(doc.id, downloadName);
+      objectUrl = URL.createObjectURL(downloaded.blob);
       const a = window.document.createElement("a");
-      a.href = signed.url;
-      a.download = signed.fileName;
+      a.href = objectUrl;
+      a.download = downloaded.fileName;
       a.rel = "noopener";
-      window.document.body.appendChild(a);
-      a.click();
-      a.remove();
+      try {
+        window.document.body.appendChild(a);
+        a.click();
+      } finally {
+        a.remove();
+      }
     } catch {
       failed += 1;
+    } finally {
+      if (objectUrl) {
+        // Let the browser consume the Blob URL, then release it on a bounded
+        // timer even if the user keeps this task open.
+        const createdObjectUrl = objectUrl;
+        window.setTimeout(() => URL.revokeObjectURL(createdObjectUrl), 30_000);
+      }
     }
   }
   return { failed };
@@ -74,6 +97,8 @@ export function CaseRequiredDocuments({
   providerName,
   groupId,
   groupName,
+  payerName = null,
+  state = null,
   caseId = null,
   tasks,
 }: CaseRequiredDocumentsProps) {
@@ -82,7 +107,7 @@ export function CaseRequiredDocuments({
   const providerDocsQ = useProviderDocuments(requiredKinds.length > 0 ? providerId : "");
   const groupDocsQ = useGroupDocuments(requiredKinds.length > 0 && groupId ? groupId : "");
   const today = localTodayIso();
-  const downloadM = useDocumentDownload();
+  const downloadM = useDownloadDocumentFile();
   const [uploadTarget, setUploadTarget] = useState<CaseDocumentCheck<ProviderDocument> | null>(
     null,
   );
@@ -108,8 +133,15 @@ export function CaseRequiredDocuments({
     if (downloadable.length === 0 || downloadingAll) return;
     setDownloadingAll(true);
     try {
-      const { failed } = await downloadSequentially(downloadable, (id) =>
-        downloadM.mutateAsync(id),
+      const { failed } = await downloadSequentially(
+        downloadable,
+        (documentId, fileName) => downloadM.mutateAsync({ documentId, fileName }),
+        (doc) =>
+          formatCaseDocumentDownloadName(
+            providerName.trim().toLowerCase() === "this provider" ? null : providerName,
+            doc,
+            { payerName, state },
+          ),
       );
       if (failed > 0) {
         toast.error(
@@ -119,6 +151,9 @@ export function CaseRequiredDocuments({
         );
       }
     } finally {
+      // The mutation result contains the file bytes; clear the final result as
+      // soon as all object URLs have been handed to the browser.
+      downloadM.reset();
       setDownloadingAll(false);
     }
   };
@@ -186,7 +221,13 @@ export function CaseRequiredDocuments({
             ) : (
               <StatusPill status="red" label="Missing" />
             )}
-            {c.document?.expirationDate ? (
+            {c.kind === "w9" && c.document ? (
+              <span className="text-[12px] text-muted-foreground">
+                {c.document.effectiveDate
+                  ? `Signed ${fmtDate(c.document.effectiveDate)}`
+                  : "Signed date not set"}
+              </span>
+            ) : c.document?.expirationDate ? (
               <span className="text-[12px] text-muted-foreground">
                 {c.state === "expired" ? "expired" : "expires"} {fmtDate(c.document.expirationDate)}
               </span>

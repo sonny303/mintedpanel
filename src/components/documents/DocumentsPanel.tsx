@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCanWrite } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
@@ -24,6 +25,8 @@ import {
   currentVersions,
   documentKindLabel,
   isDocumentKind,
+  signedDateAge,
+  utcTodayIso,
 } from "@/lib/documents";
 import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
 import {
@@ -50,6 +53,7 @@ export function DocumentsPanel({ ownerType, ownerId, ownerName }: DocumentsPanel
   const docsQ = ownerType === "provider" ? providerQ : groupQ;
   const documents = useMemo(() => docsQ.data ?? [], [docsQ.data]);
   const today = localTodayIso();
+  const signedDateToday = utcTodayIso();
 
   const [upload, setUpload] = useState<{ replaceTarget: ProviderDocument | null } | null>(null);
   const [historyFamily, setHistoryFamily] = useState<string | null>(null);
@@ -119,7 +123,7 @@ export function DocumentsPanel({ ownerType, ownerId, ownerName }: DocumentsPanel
           <TableHeader>
             <TableRow>
               <TableHead className="h-9">Document</TableHead>
-              <TableHead className="h-9">Effective</TableHead>
+              <TableHead className="h-9">Date</TableHead>
               <TableHead className="h-9">Expires</TableHead>
               <TableHead className="h-9">Version</TableHead>
               <TableHead className="h-9">Uploaded by</TableHead>
@@ -128,65 +132,91 @@ export function DocumentsPanel({ ownerType, ownerId, ownerName }: DocumentsPanel
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(({ document, versions, status }) => (
-              <TableRow key={document.id} className="h-10">
-                <TableCell>
-                  <div className="text-[13px] font-medium text-foreground">
-                    {documentKindLabel(document.docType)}
-                  </div>
-                  <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">
-                    {document.fileName}
-                  </div>
-                </TableCell>
-                <TableCell className="tabular-nums">{fmtDate(document.effectiveDate)}</TableCell>
-                <TableCell>
-                  <span className="tabular-nums">{fmtDate(document.expirationDate)}</span>
-                  {status ? (
-                    <span className="ml-2 inline-flex">
-                      <DocumentExpirationPill status={status} />
-                    </span>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  {versions > 1 ? (
-                    <button
-                      type="button"
-                      className="text-[13px] tabular-nums text-foreground underline decoration-dotted underline-offset-2 hover:text-[#1B4D3E]"
-                      onClick={() => setHistoryFamily(document.documentFamilyId)}
-                    >
-                      v{document.versionNumber} · history
-                    </button>
-                  ) : (
-                    <span className="tabular-nums">v{document.versionNumber}</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {document.uploadedBy ? (uploaderNames.get(document.uploadedBy) ?? "—") : "—"}
-                </TableCell>
-                <TableCell className="tabular-nums">{fmtDate(document.createdAt)}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <DocumentDownloadButton documentId={document.id} fileName={document.fileName} />
-                    {canWrite ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            aria-label={`Replace ${documentKindLabel(document.docType)}`}
-                            onClick={() => setUpload({ replaceTarget: document })}
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Upload a new version</TooltipContent>
-                      </Tooltip>
-                    ) : null}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {rows.map(({ document, versions, status }) => {
+              const signedAge =
+                document.docType === "w9"
+                  ? signedDateAge(document.effectiveDate, signedDateToday)
+                  : null;
+              const signedDateText = document.effectiveDate
+                ? `Signed ${fmtDate(document.effectiveDate) === "—" ? document.effectiveDate : fmtDate(document.effectiveDate)} · age unavailable`
+                : "Signed date not set";
+              return (
+                <TableRow key={document.id} className="h-10">
+                  <TableCell>
+                    <div className="text-[13px] font-medium text-foreground">
+                      {documentKindLabel(document.docType)}
+                    </div>
+                    <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">
+                      {document.fileName}
+                    </div>
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {document.docType === "w9" ? (
+                      signedAge ? (
+                        <StatusPill status={signedAge.tone} label={signedAge.label} />
+                      ) : (
+                        signedDateText
+                      )
+                    ) : (
+                      fmtDate(document.effectiveDate)
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {document.docType === "w9" ? null : (
+                      <>
+                        <span className="tabular-nums">{fmtDate(document.expirationDate)}</span>
+                        {status ? (
+                          <span className="ml-2 inline-flex">
+                            <DocumentExpirationPill status={status} />
+                          </span>
+                        ) : null}
+                      </>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {versions > 1 ? (
+                      <button
+                        type="button"
+                        className="text-[13px] tabular-nums text-foreground underline decoration-dotted underline-offset-2 hover:text-[#1B4D3E]"
+                        onClick={() => setHistoryFamily(document.documentFamilyId)}
+                      >
+                        v{document.versionNumber} · history
+                      </button>
+                    ) : (
+                      <span className="tabular-nums">v{document.versionNumber}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {document.uploadedBy ? (uploaderNames.get(document.uploadedBy) ?? "—") : "—"}
+                  </TableCell>
+                  <TableCell className="tabular-nums">{fmtDate(document.createdAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <DocumentDownloadButton
+                        documentId={document.id}
+                        fileName={document.fileName}
+                      />
+                      {canWrite ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label={`Replace ${documentKindLabel(document.docType)}`}
+                              onClick={() => setUpload({ replaceTarget: document })}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Upload a new version</TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}

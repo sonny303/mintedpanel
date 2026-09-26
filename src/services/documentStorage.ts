@@ -34,10 +34,13 @@ import {
   expirationDateError,
   currentVersions,
   isDocumentKind,
+  normalizeDocumentFileName,
   isOrphanExpired,
   nextVersionNumber,
   orphanVersionFolders,
   safeFileName,
+  signedDateError,
+  utcTodayIso,
 } from "@/lib/documents";
 import type { DocumentKind, DocumentOwnerType, ProviderDocument } from "@/types";
 
@@ -263,6 +266,7 @@ export async function createDocumentUploadIntent(
 ): Promise<DocumentStorageResult<UploadIntent>> {
   const invalid = await validateOwnerKindFile(ctx, input);
   if (invalid) return { kind: "rejected", ...invalid };
+  const displayName = normalizeDocumentFileName(input.fileName, input.fileName, input.mimeType);
 
   if (input.caseId) {
     const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
@@ -306,7 +310,7 @@ export async function createDocumentUploadIntent(
     ownerId: input.ownerId,
     familyId,
     version: versionNumber,
-    fileName: input.fileName,
+    fileName: displayName,
   });
   const { data, error } = await ctx.db.storage.from(DOCUMENT_BUCKET).createSignedUploadUrl(path);
   if (error || !data) {
@@ -328,6 +332,10 @@ export async function finalizeDocument(
   ctx: DocumentStorageServiceCtx,
   input: FinalizeDocumentInput,
 ): Promise<DocumentStorageResult<ProviderDocument>> {
+  if (input.kind === "w9") {
+    const signedError = signedDateError(input.effectiveDate ?? null, utcTodayIso());
+    if (signedError) return { kind: "rejected", status: 422, message: signedError };
+  }
   const invalid = await validateOwnerKindFile(ctx, input);
   if (invalid) return { kind: "rejected", ...invalid };
 
@@ -370,15 +378,16 @@ export async function finalizeDocument(
   // The object must exist at the SERVER-derived path (the client never names a
   // path) with an allowed size and the declared MIME type — metadata is never
   // written for a missing or misdescribed object (TE-4).
+  const displayName = normalizeDocumentFileName(input.fileName, input.fileName, input.mimeType);
   const path = documentObjectPath({
     orgId: ctx.orgId,
     ownerType: input.ownerType,
     ownerId: input.ownerId,
     familyId: input.familyId,
     version: input.versionNumber,
-    fileName: input.fileName,
+    fileName: displayName,
   });
-  const storedName = safeFileName(input.fileName);
+  const storedName = safeFileName(displayName);
   const parent = path.slice(0, path.length - storedName.length - 1);
   const { data: objects, error: listErr } = await ctx.db.storage
     .from(DOCUMENT_BUCKET)
@@ -410,9 +419,11 @@ export async function finalizeDocument(
     case_id: input.caseId ?? null,
     doc_type: input.kind,
     file_path: path,
-    file_name: storedName,
+    file_name: displayName,
     effective_date: input.effectiveDate ?? null,
-    expiration_date: input.expirationDate ?? null,
+    // W-9 expiration values may exist on historical rows, but new writes
+    // always honor the IRS signed-date semantics.
+    expiration_date: input.kind === "w9" ? null : (input.expirationDate ?? null),
     uploaded_by: ctx.userId,
     document_family_id: input.familyId,
     version_number: input.versionNumber,

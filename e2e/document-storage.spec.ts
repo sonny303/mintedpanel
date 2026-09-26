@@ -1,4 +1,12 @@
-import { test, expect, type Route, type BrowserContext } from "./fixtures/legacy-access-context";
+import {
+  test,
+  expect,
+  type Route,
+  type BrowserContext,
+  type Page,
+} from "./fixtures/legacy-access-context";
+import type { Download, Frame, Request } from "@playwright/test";
+import { safeFileName } from "@/lib/documents";
 
 // E4.5 Document Storage — TS-88/89/90 over the mock harness. The browser's
 // metadata reads ride /rest/v1 under RLS (mocked here with filter-honoring
@@ -14,7 +22,7 @@ import { test, expect, type Route, type BrowserContext } from "./fixtures/legacy
 //   TS-89  expiring-credentials table sorts by expiration with derived
 //          expired / expiring-soon / current states; the group's readiness
 //          view carries the advisory COI warning (never a gap)
-//   TS-90  case-side required-document verification (present / missing /
+//   TS-90  active TaskDrawer required-document verification (present / missing /
 //          expired) + one-click short-lived signed download
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -49,6 +57,42 @@ function isoDaysFromNow(days: number): string {
   d.setDate(d.getDate() + days);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function ordinalDay(day: number): string {
+  const mod100 = day % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th");
+  return `${day}${suffix}`;
+}
+
+async function chooseCalendarDate(
+  page: Page,
+  triggerName: string,
+  dateOnly: string,
+  displayedDate = new Date().toISOString().slice(0, 10),
+) {
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  const [displayedYear, displayedMonth] = displayedDate.split("-").map(Number);
+  const monthDelta = year * 12 + month - (displayedYear * 12 + displayedMonth);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayName = date.toLocaleString("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+  const monthName = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  await page.getByRole("button", { name: triggerName }).click();
+  const direction = monthDelta < 0 ? "Previous" : "Next";
+  for (let offset = 0; offset < Math.abs(monthDelta); offset += 1) {
+    await page.getByRole("button", { name: `Go to the ${direction} Month` }).click();
+  }
+  await page
+    .getByRole("button", {
+      name: new RegExp(
+        `^(?:Today, )?${dayName}, ${monthName} ${ordinalDay(day)}, ${year}(?:, selected)?$`,
+      ),
+    })
+    .click();
 }
 
 function providerRow(over: Record<string, unknown> = {}) {
@@ -102,6 +146,7 @@ interface DocRowInput {
   docType: string;
   providerId?: string | null;
   groupId?: string | null;
+  effectiveDate?: string | null;
   expirationDate?: string | null;
   familyId?: string;
   versionNumber?: number;
@@ -123,7 +168,7 @@ function docRow(input: DocRowInput) {
     file_path: `org/${ORG_ID}/${input.providerId ? "provider" : "group"}/${
       input.providerId ?? input.groupId
     }/${family}/${input.versionNumber ?? 1}/${input.fileName ?? `${input.docType}.pdf`}`,
-    effective_date: null,
+    effective_date: input.effectiveDate ?? null,
     expiration_date: input.expirationDate ?? null,
     uploaded_by: USER_ID,
     created_at: "2026-07-15T00:00:00Z",
@@ -199,6 +244,7 @@ function makeFixtures(over: Record<string, unknown[]> = {}) {
 interface Recorder {
   apiCalls: Array<{ method: string; path: string; body: unknown }>;
   storagePuts: string[];
+  storageDownloads: Array<{ path: string; fileName: string | null }>;
   documentQueries: string[];
 }
 
@@ -267,7 +313,12 @@ function camelDoc(row: Record<string, unknown>) {
 // Mount all three mock layers: /rest+auth (fixtures), /api/documents/*
 // (write-through signed actions), /storage/v1 (signed PUT/GET).
 async function mountAll(context: BrowserContext, fixtures: Record<string, unknown[]>) {
-  const rec: Recorder = { apiCalls: [], storagePuts: [], documentQueries: [] };
+  const rec: Recorder = {
+    apiCalls: [],
+    storagePuts: [],
+    storageDownloads: [],
+    documentQueries: [],
+  };
 
   await context.route(/\/(rest|auth)\/v1\//, async (route: Route) => {
     const req = route.request();
@@ -352,7 +403,7 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
           (max, d) => Math.max(max, Number((d as Record<string, unknown>).version_number ?? 1)),
           0,
         ) + 1;
-      const path = `org/${ORG_ID}/${body.ownerType}/${body.ownerId}/${familyId}/${versionNumber}/${body.fileName}`;
+      const path = `org/${ORG_ID}/${body.ownerType}/${body.ownerId}/${familyId}/${versionNumber}/${safeFileName(String(body.fileName ?? ""))}`;
       return json({
         familyId,
         versionNumber,
@@ -373,17 +424,24 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
       );
       const head = family.find((d) => !superseded.has((d as Record<string, unknown>).id)) as
         Record<string, unknown> | undefined;
-      const row = docRow({
-        id: `doc-${familyId}-v${body.versionNumber}`,
-        docType: body.kind as string,
-        providerId: body.ownerType === "provider" ? (body.ownerId as string) : null,
-        groupId: body.ownerType === "group" ? (body.ownerId as string) : null,
-        expirationDate: (body.expirationDate as string | null) ?? null,
-        familyId,
-        versionNumber: body.versionNumber as number,
-        supersedes: (head?.id as string | undefined) ?? null,
-        fileName: body.fileName as string,
-      });
+      const displayName = String(body.fileName ?? "document");
+      const objectName = safeFileName(displayName);
+      const objectPath = `org/${ORG_ID}/${body.ownerType}/${body.ownerId}/${familyId}/${body.versionNumber}/${objectName}`;
+      const row = {
+        ...docRow({
+          id: `doc-${familyId}-v${body.versionNumber}`,
+          docType: body.kind as string,
+          providerId: body.ownerType === "provider" ? (body.ownerId as string) : null,
+          groupId: body.ownerType === "group" ? (body.ownerId as string) : null,
+          expirationDate: (body.expirationDate as string | null) ?? null,
+          effectiveDate: (body.effectiveDate as string | null) ?? null,
+          familyId,
+          versionNumber: body.versionNumber as number,
+          supersedes: (head?.id as string | undefined) ?? null,
+          fileName: displayName,
+        }),
+        file_path: objectPath,
+      };
       fixtures.provider_documents = [...(fixtures.provider_documents ?? []), row];
       return json(camelDoc(row), 201);
     }
@@ -393,8 +451,13 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
         (r) => (r as Record<string, unknown>).id === downloadMatch[1],
       ) as Record<string, unknown> | undefined;
       if (!d) return json(null, 404);
+      const signedUrl = new URL(
+        `https://example.supabase.co/storage/v1/object/sign/provider-documents/${d.file_path}`,
+      );
+      signedUrl.searchParams.set("token", "signed");
+      signedUrl.searchParams.set("download", String(d.file_name));
       return json({
-        url: `https://example.supabase.co/storage/v1/object/sign/provider-documents/${d.file_path}?token=signed`,
+        url: signedUrl.toString(),
         fileName: d.file_name,
         expiresIn: 120,
       });
@@ -414,7 +477,17 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
         body: JSON.stringify({ Key: url.pathname }),
       });
     }
-    return route.fulfill({ status: 200, contentType: "application/pdf", body: "FAKEPDF" });
+    const fileName = url.searchParams.get("download");
+    rec.storageDownloads.push({ path: url.pathname, fileName });
+    return route.fulfill({
+      status: 200,
+      contentType: "application/pdf",
+      headers: {
+        "access-control-allow-origin": "*",
+        ...(fileName ? { "content-disposition": `attachment; filename="${fileName}"` } : {}),
+      },
+      body: "FAKEPDF",
+    });
   });
 
   await context.addInitScript(
@@ -428,6 +501,37 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
     [AUTH_KEY, SESSION, ORG_ID] as const,
   );
   return rec;
+}
+
+function collectDownloads(
+  page: Page,
+  expectedCount: number,
+  timeoutMs = 15_000,
+): { promise: Promise<string[]>; fileNames: () => string[]; cleanup: () => void } {
+  const fileNames: string[] = [];
+  let resolveDownloads!: (names: string[]) => void;
+  let rejectDownloads!: (error: Error) => void;
+  const promise = new Promise<string[]>((resolve, reject) => {
+    resolveDownloads = resolve;
+    rejectDownloads = reject;
+  });
+  const onDownload = (download: Download) => {
+    fileNames.push(download.suggestedFilename());
+    if (fileNames.length === expectedCount) resolveDownloads([...fileNames]);
+  };
+  const timeout = setTimeout(
+    () => rejectDownloads(new Error(`Timed out waiting for ${expectedCount} downloads`)),
+    timeoutMs,
+  );
+  page.on("download", onDownload);
+  return {
+    promise,
+    fileNames: () => [...fileNames],
+    cleanup: () => {
+      clearTimeout(timeout);
+      page.off("download", onDownload);
+    },
+  };
 }
 
 const FAKE_PDF = {
@@ -462,6 +566,9 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
   await expect(page.getByRole("option", { name: "W-9" })).toHaveCount(0);
   await page.getByRole("option", { name: "State License" }).click();
   await dialog.locator("#doc-file").setInputFiles(FAKE_PDF);
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Brooke Ostrander - State License.pdf",
+  );
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(dialog).toContainText("State License requires an expiration date");
 
@@ -517,11 +624,18 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
   await expect(history.getByRole("row").nth(2)).toContainText("v1");
 });
 
-test("TS-88: the group grain offers group kinds and stores a W-9 on the group record", async ({
+test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselection, and replacement", async ({
   context,
   page,
 }) => {
-  const fixtures = makeFixtures({ provider_groups: [groupRow()] });
+  const legacyW9 = docRow({
+    id: "legacy-w9-undated",
+    docType: "w9",
+    groupId: GROUP_ID,
+    expirationDate: "2020-01-01",
+    fileName: "legacy-w9.pdf",
+  });
+  const fixtures = makeFixtures({ provider_groups: [groupRow()], provider_documents: [legacyW9] });
   const rec = await mountAll(context, fixtures);
 
   await page.goto("/onboarding/wizard");
@@ -530,6 +644,9 @@ test("TS-88: the group grain offers group kinds and stores a W-9 on the group re
 
   await groupCard.getByRole("button", { name: "Documents" }).click();
   const panel = groupCard.locator("section", { hasText: "Documents" }).last();
+  const legacyRow = panel.getByRole("row").filter({ hasText: "legacy-w9.pdf" });
+  await expect(legacyRow).toContainText("Signed date not set");
+  await expect(legacyRow).not.toContainText("Expired");
   await panel.getByRole("button", { name: "Upload" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -538,14 +655,102 @@ test("TS-88: the group grain offers group kinds and stores a W-9 on the group re
   await expect(page.getByRole("option", { name: "W-9" })).toBeVisible();
   await expect(page.getByRole("option", { name: "CMS-460" })).toBeVisible();
   await expect(page.getByRole("option", { name: "State License" })).toHaveCount(0);
+  await page.getByRole("option", { name: "COI" }).click();
+  await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "coi.pdf" });
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - COI.pdf",
+  );
+  await dialog.getByRole("button", { name: "Expiration date" }).click();
+  const monthName = new Date().toLocaleString("en-US", { month: "long" });
+  await page
+    .getByRole("button", { name: new RegExp(`${monthName} 28th`) })
+    .first()
+    .click();
+  await dialog.getByRole("combobox").click();
   await page.getByRole("option", { name: "W-9" }).click();
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.pdf",
+  );
+  await expect(dialog.getByRole("button", { name: "Signed date" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Effective date" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
   await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "w9.pdf" });
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.pdf",
+  );
+  await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "w9.scan.PDF" });
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.PDF",
+  );
+  await dialog.locator("#doc-file-name").fill("Custom W9.png");
+  await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "w9.reselected.pdf" });
+  await expect(dialog.locator("#doc-file-name")).toHaveValue("Custom W9.pdf");
+  await dialog.getByRole("combobox").click();
+  await page.getByRole("option", { name: "CMS-460" }).click();
+  await expect(dialog.locator("#doc-file-name")).toHaveValue("Custom W9.pdf");
+  await dialog.getByRole("combobox").click();
+  await page.getByRole("option", { name: "W-9" }).click();
+  await expect(dialog.locator("#doc-file-name")).toHaveValue("Custom W9.pdf");
+
+  // The browser preflight blocks both missing and future signed dates before
+  // requesting an upload intent.
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog).toContainText("W-9 requires a signed date");
+  const uploadIntentCount = () =>
+    rec.apiCalls.filter((call) => call.path.endsWith("/upload-intent")).length;
+  expect(uploadIntentCount()).toBe(0);
+  const futureSignedDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  await chooseCalendarDate(page, "Signed date", futureSignedDate);
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog).toContainText("Signed date cannot be in the future");
+  expect(uploadIntentCount()).toBe(0);
+  const todayDate = new Date().toISOString().slice(0, 10);
+  await chooseCalendarDate(page, "Signed date", todayDate, futureSignedDate);
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
 
-  await expect(panel).toContainText("W-9", { timeout: 15000 });
+  await expect.poll(uploadIntentCount).toBe(1);
+  const w9Row = panel.getByRole("row").filter({ hasText: "Custom W9.pdf" });
+  await expect(w9Row).toBeVisible();
   const intent = rec.apiCalls.find((c) => c.path.endsWith("/upload-intent"));
-  expect(intent?.body).toMatchObject({ ownerType: "group", ownerId: GROUP_ID, kind: "w9" });
+  expect(intent?.body).toMatchObject({
+    ownerType: "group",
+    ownerId: GROUP_ID,
+    kind: "w9",
+    fileName: "Custom W9.pdf",
+  });
+  const finalize = rec.apiCalls.find((c) => c.path.endsWith("/finalize"));
+  expect(finalize?.body).toMatchObject({
+    kind: "w9",
+    fileName: "Custom W9.pdf",
+    effectiveDate: expect.any(String),
+    expirationDate: null,
+  });
+  expect(rec.storagePuts[0]).toContain("/Custom_W9.pdf");
   expect(rec.storagePuts[0]).toContain(`/org/${ORG_ID}/group/${GROUP_ID}/`);
+  await expect(w9Row).toContainText("Signed");
+  const signedMonth = new Date().toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  await expect(w9Row).toContainText(
+    `Signed ${signedMonth} ${new Date().getUTCFullYear()} · 0 mo old`,
+  );
+
+  // Replacement defaults from the group and document type while retaining the
+  // replacement file's extension.
+  await w9Row.getByRole("button", { name: "Replace W-9" }).click();
+  const replacementDialog = page.getByRole("dialog");
+  await replacementDialog
+    .locator("#doc-file")
+    .setInputFiles({ ...FAKE_PDF, name: "replacement.scan.pdf" });
+  await expect(replacementDialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.pdf",
+  );
+  await replacementDialog.getByRole("button", { name: "Upload new version" }).click();
+  await expect(panel).toContainText("v2 · history", { timeout: 15000 });
+  await panel.getByRole("button", { name: "v2 · history" }).click();
+  const history = page.getByRole("dialog");
+  await expect(history.getByRole("row").nth(1)).toContainText("Signed");
+  await expect(history.getByRole("row").nth(2)).toContainText("Signed");
 });
 
 test("TS-89: the expiring-credentials table sorts by expiration with derived states, and readiness carries the COI advisory", async ({
@@ -645,7 +850,13 @@ test("TS-89: the expiring-credentials table sorts by expiration with derived sta
       currentDea,
       // Dateless w9 + voided check keep the other group checks green so the
       // advisory is the ONLY amber note on the readiness row.
-      docRow({ id: "doc-w9", docType: "w9", groupId: GROUP_ID }),
+      docRow({
+        id: "doc-w9",
+        docType: "w9",
+        groupId: GROUP_ID,
+        effectiveDate: "2024-06-01",
+        expirationDate: isoDaysFromNow(-30),
+      }),
       docRow({ id: "doc-vc", docType: "voided_check", groupId: GROUP_ID }),
     ],
   });
@@ -685,13 +896,11 @@ test("TS-89: the expiring-credentials table sorts by expiration with derived sta
 });
 
 // TS-90 (Slice E retarget, payer-and-cases screen 6 / handoff §2.7): the
-// required-documents card is REMOVED from case detail — documents are not a
-// product capability there, per the product owner, and the E4.5 surface is out
-// of the design rather than relocated. What the epic actually needs pinned is
-// the audited short-lived signed download, so this test now asserts the
-// removal on the case screen AND exercises the same download endpoint from the
-// provider record's Documents tab, where document work lives.
-test("TS-90: case detail renders no required-documents card; the current version downloads via a short-lived signed URL from the provider record", async ({
+// required-documents card is REMOVED from case detail. This test asserts that
+// removal, verifies the audited single-file download on the provider's
+// Documents tab, then exercises active required-document work in the case's
+// TaskDrawer.
+test("TS-90: case detail has no document card; active TaskDrawer downloads use short-lived signed URLs", async ({
   context,
   page,
 }) => {
@@ -700,7 +909,7 @@ test("TS-90: case detail renders no required-documents card; the current version
     docType: "state_license",
     providerId: PROVIDER_ID,
     expirationDate: isoDaysFromNow(300),
-    fileName: "license.pdf",
+    fileName: "license.PDF",
   });
   const expiredGroupCoi = docRow({
     id: "doc-coi",
@@ -708,6 +917,13 @@ test("TS-90: case detail renders no required-documents card; the current version
     groupId: GROUP_ID,
     expirationDate: isoDaysFromNow(-5),
     fileName: "coi.pdf",
+  });
+  const legacyExpiredW9 = docRow({
+    id: "doc-w9",
+    docType: "w9",
+    groupId: GROUP_ID,
+    expirationDate: isoDaysFromNow(-500),
+    fileName: "irs-form.PDF",
   });
   const fixtures = makeFixtures({
     providers: [providerRow()],
@@ -764,6 +980,16 @@ test("TS-90: case detail renders no required-documents card; the current version
             isCompleted: false,
             stepType: "online_form",
             requiredArtifacts: ["state_license", "W-9", "coi", "Submission confirmation PDF"],
+            attachments: [
+              {
+                documentId: "doc-w9",
+                artifactName: "W-9",
+                fileName: "irs-form.PDF",
+                uploadedAt: "2026-07-15T00:00:00Z",
+                uploadedBy: USER_ID,
+                kind: "w9",
+              },
+            ],
           },
         ],
         status: "pending",
@@ -779,7 +1005,7 @@ test("TS-90: case detail renders no required-documents card; the current version
         updated_at: "2026-07-14T00:00:00Z",
       },
     ],
-    provider_documents: [providerLicense, expiredGroupCoi],
+    provider_documents: [providerLicense, expiredGroupCoi, legacyExpiredW9],
   });
   const rec = await mountAll(context, fixtures);
 
@@ -804,4 +1030,120 @@ test("TS-90: case detail renders no required-documents card; the current version
   await popupPromise;
   const download = rec.apiCalls.find((c) => c.path.endsWith("/doc-lic/download"));
   expect(download).toBeTruthy();
+
+  // Open the task from its owning case, following the product's current
+  // TaskDrawer journey. The full task route does not render the active document
+  // rail. Its legacy W-9 expiration must not make it appear expired, and the
+  // actual cross-origin download response must carry the standardized name.
+  await page.goto(`/cases/${CASE_ID}`);
+  const openStep = page.getByRole("button", { name: "Open step" });
+  await expect(openStep).toBeVisible({ timeout: 30000 });
+  await openStep.click();
+  const taskDrawer = page.getByRole("dialog", { name: "Submit enrollment packet" });
+  await expect(taskDrawer).toBeVisible();
+  const requiredDocuments = taskDrawer.locator("section", { hasText: "Required documents" }).last();
+  await expect(requiredDocuments).toBeVisible({ timeout: 30000 });
+  const w9Check = requiredDocuments.locator("li", { hasText: "W-9" });
+  await expect(w9Check).toContainText("Present");
+  await expect(w9Check).toContainText("Signed date not set");
+
+  const stepArtifacts = page.getByText("Documents for this step").locator("xpath=../..");
+  const w9Artifact = stepArtifacts.getByText("W-9", { exact: true }).locator("xpath=../..");
+  await w9Artifact.getByRole("button", { name: "Attach" }).click();
+  const attachDialog = page.getByRole("dialog", { name: "Attach a document" });
+  await attachDialog.getByRole("button", { name: "Upload new" }).click();
+  await expect(attachDialog.getByRole("button", { name: "Signed date" })).toBeVisible();
+  await expect(attachDialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
+  await attachDialog
+    .locator("#artifact-upload-file")
+    .setInputFiles({ ...FAKE_PDF, name: "task-w9.PDF" });
+  await expect(attachDialog.locator("#artifact-upload-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.PDF",
+  );
+  const taskUploadIntentCount = () =>
+    rec.apiCalls.filter((call) => call.path.endsWith("/upload-intent")).length;
+  await attachDialog.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(attachDialog).toContainText("W-9 requires a signed date");
+  expect(taskUploadIntentCount()).toBe(0);
+  await chooseCalendarDate(page, "Signed date", new Date().toISOString().slice(0, 10));
+  await attachDialog.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(attachDialog).toHaveCount(0);
+  expect(taskUploadIntentCount()).toBe(1);
+
+  await stepArtifacts.getByRole("button", { name: "Replace irs-form.PDF" }).click();
+  const replaceDialog = page.getByRole("dialog", { name: "Replace W-9" });
+  await expect(replaceDialog.getByRole("button", { name: "Signed date" })).toBeVisible();
+  await expect(replaceDialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
+  await replaceDialog
+    .locator("#artifact-replace-file")
+    .setInputFiles({ ...FAKE_PDF, name: "replacement-w9.PDF" });
+  await expect(replaceDialog.locator("#artifact-replace-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.PDF",
+  );
+  await replaceDialog.getByRole("button", { name: "Upload new version" }).click();
+  await expect(replaceDialog).toContainText("W-9 requires a signed date");
+  expect(taskUploadIntentCount()).toBe(1);
+  await replaceDialog.getByRole("button", { name: "Cancel" }).click();
+
+  const downloads = collectDownloads(page, 3);
+  const bulkAuditStart = rec.apiCalls.length;
+  const storageDownloadStart = rec.storageDownloads.length;
+  const failedRequests: string[] = [];
+  const mainFrameNavigations: string[] = [];
+  const onRequestFailed = (request: Request) => {
+    failedRequests.push(
+      `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "unknown failure"}`,
+    );
+  };
+  const onFrameNavigated = (frame: Frame) => {
+    if (frame === page.mainFrame()) mainFrameNavigations.push(frame.url());
+  };
+  let fileNames: string[] = [];
+  context.on("requestfailed", onRequestFailed);
+  page.on("framenavigated", onFrameNavigated);
+  try {
+    await requiredDocuments.getByRole("button", { name: /Download all/ }).click();
+    fileNames = await downloads.promise.catch((error: Error) => {
+      const bulkAuditRequests = rec.apiCalls
+        .slice(bulkAuditStart)
+        .filter((call) => call.method === "GET" && call.path.endsWith("/download"));
+      throw new Error(
+        [
+          error.message,
+          `collected filenames: ${JSON.stringify(downloads.fileNames())}`,
+          `bulk audit calls: ${bulkAuditRequests.length}`,
+          `storage requests: ${JSON.stringify(rec.storageDownloads.slice(storageDownloadStart))}`,
+          `request failures: ${JSON.stringify(failedRequests)}`,
+          `main-frame navigations: ${JSON.stringify(mainFrameNavigations)}`,
+        ].join("; "),
+      );
+    });
+  } finally {
+    downloads.cleanup();
+    context.off("requestfailed", onRequestFailed);
+    page.off("framenavigated", onFrameNavigated);
+  }
+  expect(fileNames.sort()).toEqual(
+    [
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_COI.pdf",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_State_License.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_W-9.PDF",
+    ].sort(),
+  );
+  expect(
+    rec.storageDownloads
+      .slice(-3)
+      .map((item) => item.fileName)
+      .sort(),
+  ).toEqual(
+    [
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_State_License.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_W-9.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_COI.pdf",
+    ].sort(),
+  );
+  const bulkAuditRequests = rec.apiCalls.filter(
+    (call) => call.method === "GET" && call.path.endsWith("/download"),
+  );
+  expect(bulkAuditRequests).toHaveLength(4); // single download above + three bulk reads
 });

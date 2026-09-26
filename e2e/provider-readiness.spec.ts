@@ -136,7 +136,7 @@ const readyProvider = (orgId: string, id: string, first: string, last: string) =
   updated_at: "2026-07-10T00:00:00Z",
 });
 
-const groupDocs = (orgId: string, groupId: string) => [
+const groupDocs = (orgId: string, groupId: string, includeVoidedCheck = true) => [
   { id: `${groupId}-w9`, org_id: orgId, group_id: groupId, doc_type: "w9", expiration_date: null },
   {
     id: `${groupId}-coi`,
@@ -145,13 +145,17 @@ const groupDocs = (orgId: string, groupId: string) => [
     doc_type: "coi",
     expiration_date: null,
   },
-  {
-    id: `${groupId}-vc`,
-    org_id: orgId,
-    group_id: groupId,
-    doc_type: "voided_check",
-    expiration_date: null,
-  },
+  ...(includeVoidedCheck
+    ? [
+        {
+          id: `${groupId}-vc`,
+          org_id: orgId,
+          group_id: groupId,
+          doc_type: "voided_check",
+          expiration_date: null,
+        },
+      ]
+    : []),
 ];
 
 const payerRow = (id: string, name: string, states: string[]) => ({
@@ -326,7 +330,9 @@ test("TS-43: recording the license PSV flips the readiness check — nothing sto
         created_at: "2026-07-12T00:00:00Z",
       },
     ],
-    provider_documents: groupDocs(ORG_OUTER_BANKS, "g-ob"),
+    // Initial readiness is complete aside from the unverified license; no
+    // voided check is present in this provider's documents.
+    provider_documents: groupDocs(ORG_OUTER_BANKS, "g-ob", false),
   });
   const { handler, writes } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
@@ -356,6 +362,10 @@ test("TS-43: recording the license PSV flips the readiness check — nothing sto
   await page.getByRole("tab", { name: "Cases" }).click();
   await expect(card).toContainText("Ready", { timeout: 30000 });
   await expect(card).toContainText("1 of 1 ready");
+  await expect(card).not.toContainText("Voided check on file");
+  await card.getByLabel("Filter by gap type").click();
+  await expect(page.getByRole("option", { name: "Voided check missing" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   expect(writes).toHaveLength(0);
 });
 
@@ -403,7 +413,8 @@ test("TS-44: group state gap + stale CAQH stay advisory — nothing blocked, no 
         created_at: "2026-07-12T00:00:00Z",
       },
     ],
-    provider_documents: groupDocs(ORG_SHELBY, "g-2"),
+    // The two real readiness gaps remain visible with no voided-check document.
+    provider_documents: groupDocs(ORG_SHELBY, "g-2", false),
   });
   const { handler, writes } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
