@@ -42,6 +42,7 @@ async function buildFixtureForm(): Promise<ArrayBuffer> {
 }
 
 const entry = (over: Partial<PayerFormFillEntry> & { selector: string }): PayerFormFillEntry => ({
+  mapId: "11111111-2222-4333-8444-555555555555",
   label: over.selector,
   token: null,
   value: null,

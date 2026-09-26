@@ -6,6 +6,8 @@ import type { CaseStatus } from "@/lib/caseStatus";
 import type { ExecutionType } from "@/lib/executionTypes";
 import type { ReleaseScopeRecord } from "@/lib/releaseScope";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
+import type { FillEventV2FieldOutcome } from "./fillEventV2";
+import type { FillEventV2Outcome, FillEventV2ReasonCode } from "./fillEventV2";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
@@ -1600,6 +1602,38 @@ export interface FillSkippedField {
   reason: "unmapped" | "empty_token";
 }
 
+/** Persisted legacy-compatible projection for fills after free text was removed. */
+export interface SafeFillSkippedMetadata {
+  label: "";
+  reason:
+    | FillEventV2Outcome
+    | FillEventV2ReasonCode
+    | "field not found on this page"
+    | "field belongs to another page"
+    | "field is hidden on this page"
+    | "readback_unavailable"
+    | "mapping_required"
+    | "missing_value"
+    | "page_unknown"
+    | "manual_required"
+    | "unmapped"
+    | "empty_token";
+  kind:
+    | FillEventV2Outcome
+    | "skipped"
+    | "other_page"
+    | "hidden"
+    | "unmapped"
+    | "empty_token"
+    | "no_mapping"
+    | "no_value"
+    | "file"
+    | "review";
+  mapId: string | null;
+}
+
+export type FillSessionSkippedField = FillSkippedField | SafeFillSkippedMetadata;
+
 export interface FillSession {
   id: string;
   orgId: string;
@@ -1610,9 +1644,15 @@ export interface FillSession {
   startedAt: string;
   completedAt: string | null;
   fieldsFilled: number;
-  fieldsSkipped: FillSkippedField[] | null;
+  fieldsSkipped: FillSessionSkippedField[] | null;
   docsAttached: unknown;
   performedBy: string | null;
+  /** NULL/absent = historical V1 semantics; 2 = explicit per-map evidence. */
+  eventSchemaVersion?: 1 | 2 | null;
+  fieldsAttempted?: number | null;
+  fieldsVerified?: number | null;
+  fieldsRejected?: number | null;
+  fieldOutcomes?: FillEventV2FieldOutcome[] | null;
   /** E4.2 TE-17 — dry-run test fill marker; excluded from every metric reader. */
   isTest?: boolean;
 }

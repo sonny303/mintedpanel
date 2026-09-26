@@ -14,7 +14,7 @@
 // trained field mappings: the same file, with everything the panel already
 // knows written into it. The blank download stays, because a mapping can be
 // absent, partial, or simply not what this case needs.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Download, FileText, Loader2, Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import { useMarkPayerFormSent, useRemovePayerFormFromCase } from "@/hooks/useTas
 import { usePortalFieldMaps } from "@/hooks/usePortals";
 import { payerFormDisplayName, type ResolvedPayerFormPointer } from "@/lib/payerForms";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
+import { createFillRunGuard } from "@/lib/fillRunGuard";
 import { planPayerFormFill } from "@/lib/payerFormFill";
 import type { RegistryRow } from "@/lib/fieldRegistry";
 import type { Task } from "@/types";
@@ -57,6 +58,30 @@ export function PayerFormActionRow({
   const portalKey = pdfFormPortalKey(pointer.familyId);
   const mapsQ = usePortalFieldMaps(portalKey);
   const fill = useFillPayerForm();
+  const contextKey = [
+    task.caseId ?? "",
+    task.providerId ?? "",
+    pointer.familyId,
+    pointer.formId,
+  ].join(":");
+  const runGuard = useRef(createFillRunGuard(contextKey));
+  runGuard.current.setContext(contextKey);
+  const runGuardInstance = runGuard.current;
+  const clearPendingRecording = fill.clearPendingRecording;
+  useEffect(() => {
+    runGuardInstance.activate();
+    return () => {
+      runGuardInstance.invalidate();
+      clearPendingRecording(task.caseId ?? "", pointer.formId);
+    };
+  }, [
+    clearPendingRecording,
+    pointer.familyId,
+    pointer.formId,
+    runGuardInstance,
+    task.caseId,
+    task.providerId,
+  ]);
   const values = useMemo(() => tokenValues ?? {}, [tokenValues]);
 
   const rows = useMemo(
@@ -70,6 +95,9 @@ export function PayerFormActionRow({
   const label = payerFormDisplayName(pointer);
   const sent = task.status === "completed";
   const canFill = Boolean(pointer.formId) && plan.fill.length > 0;
+  const recordingPending = fill.hasPendingRecording(task.caseId ?? "", pointer.formId);
+  const pendingSummary = fill.getPendingRecordingSummary(task.caseId ?? "", pointer.formId);
+  const canRetryRecording = Boolean(pointer.formId) && recordingPending;
 
   const runDownload = async () => {
     try {
@@ -81,6 +109,8 @@ export function PayerFormActionRow({
   };
 
   const runFill = async () => {
+    const wasRecordingPending = fill.hasPendingRecording(task.caseId ?? "", pointer.formId);
+    const runToken = runGuard.current.capture();
     try {
       const result = await fill.mutateAsync({
         formId: pointer.formId,
@@ -90,15 +120,35 @@ export function PayerFormActionRow({
         rows,
         tokenValues: values,
         fileStem: `${label.replace(/[^\w.-]+/g, "-")}-filled`,
+        isCurrent: () => runGuard.current.isCurrent(runToken),
       });
-      const left = result.plan.manualLabels.length + result.plan.fieldsSkipped.length;
+      if (!runGuard.current.isCurrent(runToken)) return;
+      if (result.recordingRetried) {
+        toast.success(
+          result.needsReviewCount > 0
+            ? `Fill result saved. ${result.needsReviewCount} field${result.needsReviewCount === 1 ? " still needs" : "s still need"} review${result.rejectedCount > 0 ? `, including ${result.rejectedCount} writer rejection${result.rejectedCount === 1 ? "" : "s"}` : ""}; the PDF was already downloaded.`
+            : "Fill result saved. The PDF was already downloaded.",
+        );
+        return;
+      }
+      const left = result.needsReviewCount;
       toast.success(
         left > 0
-          ? `Filled ${result.written} field${result.written === 1 ? "" : "s"} — ${left} still need${left === 1 ? "s" : ""} a person`
-          : `Filled ${result.written} field${result.written === 1 ? "" : "s"}`,
+          ? `Wrote ${result.written} field${result.written === 1 ? "" : "s"}; ${left} still need${left === 1 ? "s" : ""} review${result.rejectedCount > 0 ? `, including ${result.rejectedCount} writer rejection${result.rejectedCount === 1 ? "" : "s"}` : ""}. Writes are not readback-verified.`
+          : `Wrote ${result.written} field${result.written === 1 ? "" : "s"}. Writes are not readback-verified.`,
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not fill that form.");
+      if (!runGuard.current.isCurrent(runToken)) return;
+      if (wasRecordingPending || fill.hasPendingRecording(task.caseId ?? "", pointer.formId)) {
+        const summary = fill.getPendingRecordingSummary(task.caseId ?? "", pointer.formId);
+        const review = summary?.needsReviewCount ?? 0;
+        const rejected = summary?.rejectedCount ?? 0;
+        toast.error(
+          `The PDF was generated and downloaded, but its fill result is pending${review > 0 ? `; ${review} field${review === 1 ? " still needs" : "s still need"} review` : ""}${rejected > 0 ? `, including ${rejected} writer rejection${rejected === 1 ? "" : "s"}` : ""}. Select Retry recording.`,
+        );
+      } else {
+        toast.error(e instanceof Error ? e.message : "Could not fill that form.");
+      }
     }
   };
 
@@ -152,21 +202,25 @@ export function PayerFormActionRow({
           )}
           Download
         </Button>
-        {canFill ? (
+        {canFill || canRetryRecording ? (
           <Button
             size="sm"
             variant="outline"
             className="h-8"
             onClick={runFill}
             disabled={fill.isPending}
-            title={`Writes ${plan.fill.length} mapped field${plan.fill.length === 1 ? "" : "s"}; ${plan.manualLabels.length + plan.fieldsSkipped.length} left for you`}
+            title={
+              canRetryRecording
+                ? "Retry saving the previous fill result without generating another PDF"
+                : `Writes ${plan.fill.length} mapped field${plan.fill.length === 1 ? "" : "s"}; ${plan.manualLabels.length + plan.fieldsSkipped.length} left for you`
+            }
           >
             {fill.isPending ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="mr-1 h-4 w-4" />
             )}
-            Fill &amp; download
+            {canRetryRecording ? "Retry recording" : "Fill & download"}
           </Button>
         ) : null}
         {canEdit && !sent ? (
@@ -188,10 +242,12 @@ export function PayerFormActionRow({
           </Button>
         ) : null}
       </div>
-      {canFill ? (
+      {canFill || canRetryRecording ? (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          A filled copy downloads to this computer only and stays editable — nothing is uploaded.
-          {plan.manualLabels.length + plan.fieldsSkipped.length > 0
+          {recordingPending
+            ? `The filled copy was already downloaded and stays editable. ${pendingSummary?.needsReviewCount ?? 0} field${pendingSummary?.needsReviewCount === 1 ? " still needs" : "s still need"} review${(pendingSummary?.rejectedCount ?? 0) > 0 ? `, including ${pendingSummary?.rejectedCount} writer rejection${pendingSummary?.rejectedCount === 1 ? "" : "s"}` : ""}. Retry saves its value-free outcome record; it will not generate another PDF.`
+            : "A filled copy downloads to this computer only and stays editable — nothing is uploaded."}
+          {!recordingPending && plan.manualLabels.length + plan.fieldsSkipped.length > 0
             ? ` ${plan.manualLabels.length + plan.fieldsSkipped.length} field(s) come back blank for you to complete.`
             : ""}
         </p>

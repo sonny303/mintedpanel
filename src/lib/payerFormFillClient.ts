@@ -11,6 +11,8 @@
 // The output stays an editable AcroForm on purpose: the coordinator completes
 // what only a human can, reviews it, and submits it themselves.
 import type { PayerFormFillPlan } from "@/lib/payerFormFill";
+import { createPayerPdfFillEventV2, type PdfWriterDisposition } from "@/lib/payerPdfFillOutcomes";
+import type { FillEventV2Metadata } from "@/types/fillEventV2";
 
 const CHECKED = /^(y|yes|true|x|on|1|checked)$/i;
 
@@ -22,6 +24,8 @@ export interface PayerFormFillResult {
    * fatal, so one bad field can't cost the whole fill. */
   written: number;
   rejected: string[];
+  /** Numeric/value-free metadata; writer acceptance remains unverified. */
+  outcomes: PdfWriterDisposition[];
 }
 
 /** The pdf-lib fill itself, split out from the browser download trigger so it
@@ -36,43 +40,75 @@ export async function fillPayerFormBytes(
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const form = doc.getForm();
   const rejected: string[] = [];
+  const outcomes: PdfWriterDisposition[] = [];
   let written = 0;
 
   for (const entry of plan.fill) {
     const value = entry.value ?? "";
+    let setterInvoked = false;
     try {
       const field = form.getField(entry.selector);
       if (field instanceof PDFTextField) {
+        setterInvoked = true;
         field.setText(value);
       } else if (field instanceof PDFDropdown || field instanceof PDFOptionList) {
         const match = matchOption(field.getOptions(), value);
         if (match === null) {
           rejected.push(entry.label);
+          outcomes.push({ mapId: entry.mapId, kind: "option_mismatch" });
           continue;
         }
+        setterInvoked = true;
         field.select(match);
       } else if (field instanceof PDFRadioGroup) {
         const match = matchOption(field.getOptions(), value);
         if (match === null) {
           rejected.push(entry.label);
+          outcomes.push({ mapId: entry.mapId, kind: "option_mismatch" });
           continue;
         }
+        setterInvoked = true;
         field.select(match);
       } else if (field instanceof PDFCheckBox) {
+        setterInvoked = true;
         if (CHECKED.test(value.trim())) field.check();
         else field.uncheck();
       } else {
         rejected.push(entry.label);
+        outcomes.push({ mapId: entry.mapId, kind: "unsupported" });
         continue;
       }
       written += 1;
+      outcomes.push({ mapId: entry.mapId, kind: "accepted" });
     } catch {
       rejected.push(entry.label);
+      outcomes.push({ mapId: entry.mapId, kind: setterInvoked ? "rejected" : "needs_mapping" });
     }
   }
 
   const output = await doc.save();
-  return { output, written, rejected };
+  return { output, written, rejected, outcomes };
+}
+
+export interface PreparedPayerFormFill {
+  output: Uint8Array;
+  written: number;
+  rejected: string[];
+  event: FillEventV2Metadata;
+}
+
+/** Fill bytes and prepare bounded outcomes without triggering a download. */
+export async function preparePayerFormFill(
+  bytes: ArrayBuffer,
+  plan: PayerFormFillPlan,
+): Promise<PreparedPayerFormFill> {
+  const { output, written, rejected, outcomes } = await fillPayerFormBytes(bytes, plan);
+  const event = createPayerPdfFillEventV2(plan, outcomes);
+  return { output, written, rejected, event };
+}
+
+export function downloadPayerFormOutput(output: Uint8Array, fileStem: string): void {
+  triggerDownload(output, `${fileStem}.pdf`);
 }
 
 /** Fill the blank form's bytes from the plan and trigger a local download. */
@@ -80,10 +116,10 @@ export async function fillAndDownloadPayerForm(
   bytes: ArrayBuffer,
   plan: PayerFormFillPlan,
   fileStem: string,
-): Promise<{ written: number; rejected: string[] }> {
-  const { output, written, rejected } = await fillPayerFormBytes(bytes, plan);
-  triggerDownload(output, `${fileStem}.pdf`);
-  return { written, rejected };
+): Promise<Omit<PreparedPayerFormFill, "output">> {
+  const { output, written, rejected, event } = await preparePayerFormFill(bytes, plan);
+  downloadPayerFormOutput(output, fileStem);
+  return { written, rejected, event };
 }
 
 // A payer's option vocabulary rarely matches our value byte-for-byte ("NC" vs

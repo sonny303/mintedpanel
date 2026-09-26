@@ -126,6 +126,8 @@ describe("isOnPageNotFound / isOtherPageSkip", () => {
   it("folds off-page and hidden into one no-evidence predicate", () => {
     expect(isNoEvidenceSkip({ kind: OTHER_PAGE_KIND, reason: OTHER_PAGE_REASON })).toBe(true);
     expect(isNoEvidenceSkip({ kind: HIDDEN_KIND, reason: HIDDEN_REASON })).toBe(true);
+    expect(isNoEvidenceSkip({ kind: "page_unknown", reason: "page_unknown" })).toBe(true);
+    expect(isNoEvidenceSkip({ kind: "unverified", reason: "readback_unavailable" })).toBe(true);
     expect(isNoEvidenceSkip({ kind: "skipped", reason: FIELD_NOT_FOUND_REASON })).toBe(false);
   });
 });
@@ -161,6 +163,85 @@ describe("latestRealFillPerPortal", () => {
 describe("brokenMapsForFill", () => {
   const m1 = map({ id: "m1", selector: "label:NPI" });
   const m2 = map({ id: "m2", selector: "#caqh", fieldLabel: "CAQH ID" });
+
+  it("accepts V2 drift only from a validated qualified not-found outcome", () => {
+    const v2Map = map({ id: V2_MAP_ID, selector: "#npi" });
+    const fieldOutcome = {
+      mapId: V2_MAP_ID,
+      targetKey: V2_TARGET,
+      frameKey: V2_FRAME,
+      stepKey: V2_STEP,
+      attempted: false,
+      outcome: "not_found",
+      reasonCode: "target_missing",
+      notFoundEvidence: {
+        stepKnown: true,
+        frameAccessible: true,
+        pageSettled: true,
+        searchComplete: true,
+        targetAbsent: true,
+      },
+    } as const;
+    expect(
+      brokenMapsForFill(
+        {
+          portalKey: "bcbs_ks_enrollment",
+          fieldsSkipped: [],
+          eventSchemaVersion: 2,
+          fieldOutcomes: [fieldOutcome],
+        },
+        [v2Map],
+      ),
+    ).toEqual([v2Map]);
+
+    expect(
+      brokenMapsForFill(
+        {
+          portalKey: "bcbs_ks_enrollment",
+          fieldsSkipped: [],
+          eventSchemaVersion: 2,
+          fieldOutcomes: [
+            {
+              ...fieldOutcome,
+              notFoundEvidence: { ...fieldOutcome.notFoundEvidence, targetAbsent: false },
+            },
+          ] as never,
+        },
+        [v2Map],
+      ),
+    ).toEqual([]);
+  });
+
+  it("joins a valid uppercase V2 UUID to the lowercase mapping identity", () => {
+    const v2Map = map({ id: V2_MAP_ID, selector: "#npi" });
+    const fieldOutcome = {
+      mapId: V2_MAP_ID.toUpperCase(),
+      targetKey: V2_TARGET,
+      frameKey: V2_FRAME,
+      stepKey: V2_STEP,
+      attempted: false,
+      outcome: "not_found",
+      reasonCode: "target_missing",
+      notFoundEvidence: {
+        stepKnown: true,
+        frameAccessible: true,
+        pageSettled: true,
+        searchComplete: true,
+        targetAbsent: true,
+      },
+    } as const;
+    expect(
+      brokenMapsForFill(
+        {
+          portalKey: "bcbs_ks_enrollment",
+          fieldsSkipped: [],
+          eventSchemaVersion: 2,
+          fieldOutcomes: [fieldOutcome],
+        },
+        [v2Map],
+      ),
+    ).toEqual([v2Map]);
+  });
 
   it("joins by reported mapId first", () => {
     const broken = brokenMapsForFill(
@@ -336,6 +417,23 @@ const S64_MAP = {
   fieldLabel: "NPI",
   createdAt: "2026-01-01T00:00:00Z",
 } as unknown as PortalFieldMap;
+const V2_MAP_ID = "a1111111-2222-4333-8444-555555555555";
+const V2_MAP = { ...S64_MAP, id: V2_MAP_ID } as PortalFieldMap;
+const V2_TARGET = "t_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const V2_FRAME = "f_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const V2_STEP = "s_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+function verifiedV2Outcome(mapId = V2_MAP_ID) {
+  return {
+    mapId,
+    targetKey: V2_TARGET,
+    frameKey: V2_FRAME,
+    stepKey: V2_STEP,
+    attempted: true,
+    outcome: "verified",
+    reasonCode: null,
+  } as const;
+}
 
 // Reuses the notFound(label, mapId?) helper declared at the top of this file.
 const S64_HISTORY: FillHistoryEntry[] = [
@@ -364,6 +462,58 @@ const S64_HISTORY: FillHistoryEntry[] = [
 describe("lastWorkingAt (S6.4)", () => {
   it("dates the break from the NEWEST fill that did not report it broken", () => {
     expect(lastWorkingAt(S64_MAP, S64_HISTORY)).toBe("2026-07-10T00:00:00Z");
+  });
+
+  it("uses explicit V2 verified map evidence even when the legacy count is zero", () => {
+    expect(
+      lastWorkingAt(V2_MAP, [
+        {
+          portalKey: "availity",
+          startedAt: "2026-07-25T00:00:00Z",
+          fieldsFilled: 0,
+          fieldsSkipped: [],
+          eventSchemaVersion: 2,
+          fieldOutcomes: [verifiedV2Outcome()],
+        },
+      ]),
+    ).toBe("2026-07-25T00:00:00Z");
+  });
+
+  it("joins uppercase V2 verified map UUIDs when dating the last working fill", () => {
+    expect(
+      lastWorkingAt(V2_MAP, [
+        {
+          portalKey: "availity",
+          startedAt: "2026-07-25T00:00:00Z",
+          fieldsFilled: 1,
+          fieldsSkipped: [],
+          eventSchemaVersion: 2,
+          fieldOutcomes: [verifiedV2Outcome(V2_MAP_ID.toUpperCase())],
+        },
+      ]),
+    ).toBe("2026-07-25T00:00:00Z");
+  });
+
+  it("does not infer V2 success from a positive fieldsFilled count without explicit verified evidence", () => {
+    expect(
+      lastWorkingAt(V2_MAP, [
+        {
+          portalKey: "availity",
+          startedAt: "2026-07-25T00:00:00Z",
+          fieldsFilled: 8,
+          fieldsSkipped: [],
+          eventSchemaVersion: 2,
+          fieldOutcomes: [
+            {
+              ...verifiedV2Outcome(),
+              attempted: true,
+              outcome: "unverified",
+              reasonCode: "readback_unavailable",
+            },
+          ],
+        },
+      ]),
+    ).toBeNull();
   });
 
   it("returns null when every fill reported it broken — a bad mapping, not drift", () => {
@@ -414,7 +564,7 @@ describe("lastWorkingAt (S6.4)", () => {
     expect(lastWorkingAt(S64_MAP, legacy)).toBeNull();
   });
 
-  it("ignores a skip for a DIFFERENT reason — only not-found is a break", () => {
+  it("does not infer success from a non-not-found skip", () => {
     const otherReason: FillHistoryEntry[] = [
       {
         portalKey: "availity",
@@ -422,8 +572,35 @@ describe("lastWorkingAt (S6.4)", () => {
         fieldsFilled: 3,
         fieldsSkipped: [{ kind: "skipped", reason: "no value", mapId: "m-npi", label: "#npi" }],
       },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 2,
+        fieldsSkipped: [],
+      },
     ];
-    expect(lastWorkingAt(S64_MAP, otherReason)).toBe("2026-07-20T00:00:00Z");
+    expect(lastWorkingAt(S64_MAP, otherReason)).toBe("2026-07-10T00:00:00Z");
+  });
+
+  it("does not infer V1 success from newly sanitized unknown-step or unverified outcomes", () => {
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [
+          { kind: "page_unknown", reason: "page_unknown", mapId: "m-npi", label: "" },
+          { kind: "unverified", reason: "readback_unavailable", mapId: "m-npi", label: "" },
+        ],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 2,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, history)).toBe("2026-07-10T00:00:00Z");
   });
 
   it("ignores dry runs — they never touched the live DOM", () => {
