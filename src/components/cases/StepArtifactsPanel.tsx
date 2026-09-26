@@ -332,6 +332,7 @@ function AttachArtifactDialog({
   const [error, setError] = useState<string | null>(null);
 
   const target = resolveUploadTarget(row.resolvedKind, providerId, groupId);
+  const isSignedDate = Boolean(target && DOCUMENT_KIND_META[target.kind].dateKind === "signed");
   const busy = attachM.isPending || uploadM.isPending;
 
   const submitExisting = () => {
@@ -380,7 +381,7 @@ function AttachArtifactDialog({
         kind: target.kind,
         file,
         effectiveDate: effectiveDate || null,
-        expirationDate: expirationDate || null,
+        expirationDate: isSignedDate ? null : expirationDate || null,
         caseId,
       },
       {
@@ -469,34 +470,48 @@ function AttachArtifactDialog({
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {isSignedDate ? (
               <div className="space-y-1.5">
-                <Label htmlFor="artifact-upload-effective">Effective date</Label>
+                <Label htmlFor="artifact-upload-signed">Signed date</Label>
                 <DatePicker
-                  id="artifact-upload-effective"
+                  id="artifact-upload-signed"
                   value={effectiveDate}
                   onChange={setEffectiveDate}
-                  ariaLabel="Effective date"
+                  ariaLabel="Signed date"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="artifact-upload-expiration">
-                  Expiration date
-                  {target && DOCUMENT_KIND_META[target.kind].expirationRequired
-                    ? " (required)"
-                    : ""}
-                </Label>
-                <DatePicker
-                  id="artifact-upload-expiration"
-                  value={expirationDate}
-                  onChange={setExpirationDate}
-                  ariaLabel="Expiration date"
-                  invalid={Boolean(
-                    target && DOCUMENT_KIND_META[target.kind].expirationRequired && !expirationDate,
-                  )}
-                />
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="artifact-upload-effective">Effective date</Label>
+                  <DatePicker
+                    id="artifact-upload-effective"
+                    value={effectiveDate}
+                    onChange={setEffectiveDate}
+                    ariaLabel="Effective date"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="artifact-upload-expiration">
+                    Expiration date
+                    {target && DOCUMENT_KIND_META[target.kind].expirationRequired
+                      ? " (required)"
+                      : ""}
+                  </Label>
+                  <DatePicker
+                    id="artifact-upload-expiration"
+                    value={expirationDate}
+                    onChange={setExpirationDate}
+                    ariaLabel="Expiration date"
+                    invalid={Boolean(
+                      target &&
+                      DOCUMENT_KIND_META[target.kind].expirationRequired &&
+                      !expirationDate,
+                    )}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -551,13 +566,17 @@ function ReplaceArtifactDialog({
   const attachM = useAttachStepArtifact();
   const detachM = useDetachStepArtifact();
   const [file, setFile] = useState<File | null>(null);
-  const [expirationDate, setExpirationDate] = useState(document.expirationDate ?? "");
+  const kindMeta = DOCUMENT_KIND_META[document.docType];
+  const isSignedDate = kindMeta.dateKind === "signed";
+  const [effectiveDate, setEffectiveDate] = useState(document.effectiveDate ?? "");
+  const [expirationDate, setExpirationDate] = useState(
+    isSignedDate ? "" : (document.expirationDate ?? ""),
+  );
   const [error, setError] = useState<string | null>(null);
 
   // The replacement versions THIS document's family, so it must keep this
   // document's owner (shared with the required-documents rail).
   const owner = documentOwnerTarget(document);
-  const kindMeta = DOCUMENT_KIND_META[document.docType];
   const busy = uploadM.isPending || attachM.isPending || detachM.isPending;
 
   const submit = () => {
@@ -586,8 +605,8 @@ function ReplaceArtifactDialog({
         ownerId: owner.ownerId,
         kind: document.docType,
         file,
-        effectiveDate: document.effectiveDate,
-        expirationDate: expirationDate || null,
+        effectiveDate: isSignedDate ? effectiveDate || null : document.effectiveDate,
+        expirationDate: isSignedDate ? null : expirationDate || null,
         familyId: document.documentFamilyId,
         caseId,
       },
@@ -656,18 +675,30 @@ function ReplaceArtifactDialog({
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="artifact-replace-expiration">
-              Expiration date{kindMeta.expirationRequired ? " (required)" : ""}
-            </Label>
-            <DatePicker
-              id="artifact-replace-expiration"
-              value={expirationDate}
-              onChange={setExpirationDate}
-              ariaLabel="Expiration date"
-              invalid={kindMeta.expirationRequired && !expirationDate}
-            />
-          </div>
+          {isSignedDate ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="artifact-replace-signed">Signed date</Label>
+              <DatePicker
+                id="artifact-replace-signed"
+                value={effectiveDate}
+                onChange={setEffectiveDate}
+                ariaLabel="Signed date"
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="artifact-replace-expiration">
+                Expiration date{kindMeta.expirationRequired ? " (required)" : ""}
+              </Label>
+              <DatePicker
+                id="artifact-replace-expiration"
+                value={expirationDate}
+                onChange={setExpirationDate}
+                ariaLabel="Expiration date"
+                invalid={kindMeta.expirationRequired && !expirationDate}
+              />
+            </div>
+          )}
           {error ? (
             <div
               role="alert"

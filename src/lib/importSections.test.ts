@@ -108,10 +108,13 @@ describe("per-section header gates (F3.3.1 no-more-no-fewer)", () => {
     }
   });
 
-  it("provider template covers every Add Provider field plus only documented extras (R1)", () => {
+  it("provider import mapping accounts for each form field and emits only mapped headers (R1)", () => {
     expect(Object.keys(PROVIDER_FORM_TEMPLATE_HEADERS).sort()).toEqual(
       Object.keys(emptyProviderFormState).sort(),
     );
+    // Gender is intentionally accounted for with no CSV header until the
+    // transactional import path persists it.
+    expect(PROVIDER_FORM_TEMPLATE_HEADERS.gender).toEqual([]);
     const expectedHeaders = [
       ...Object.values(PROVIDER_FORM_TEMPLATE_HEADERS).flat(),
       ...PROVIDER_TEMPLATE_EXTRA_HEADERS,
@@ -283,6 +286,23 @@ const PROVIDER_ROW: Record<string, string> = {
 };
 
 describe("provider scan (TE-2/TE-6)", () => {
+  it("keeps gender and sex out of provider CSVs until the commit path persists them", () => {
+    expect(PROVIDER_FORM_TEMPLATE_HEADERS.gender).toEqual([]);
+    expect(PROVIDER_DESCRIPTOR.headers).not.toContain("gender");
+    expect(PROVIDER_DESCRIPTOR.headers).not.toContain("sex");
+    expect(sectionTemplateCsv(PROVIDER_DESCRIPTOR)).not.toContain("gender");
+
+    for (const header of ["gender", "sex"]) {
+      const gate = checkHeaders(
+        [...PROVIDER_DESCRIPTOR.headers, header],
+        PROVIDER_DESCRIPTOR.headers,
+        PROVIDER_DESCRIPTOR.optionalHeaders ?? [],
+      );
+      expect(gate.ok).toBe(false);
+      expect(gate.extra).toContain(header);
+    }
+  });
+
   it("stages a valid provider row without any facility columns", () => {
     const row = scanRow(PROVIDER_DESCRIPTOR, PROVIDER_ROW);
     expect(row.rowState).toBe("staged");

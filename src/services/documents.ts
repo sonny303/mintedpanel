@@ -13,6 +13,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import { normalizeDocumentFileName } from "@/lib/documents";
 import {
   getContextRevisionSnapshot,
   observeContextRevisionForRequest,
@@ -140,6 +141,8 @@ export interface UploadDocumentInput {
   ownerId: string;
   kind: DocumentKind;
   file: File;
+  /** Optional display/storage name; the selected file's extension is retained. */
+  fileName?: string | null;
   effectiveDate?: string | null;
   expirationDate?: string | null;
   /** Replace flow: version an existing family. */
@@ -153,6 +156,8 @@ export interface UploadDocumentInput {
  * idempotent server-side; a failed PUT leaves an orphan the server's bounded
  * sweep cleans on the next intent (TE-4). */
 export async function uploadDocument(input: UploadDocumentInput): Promise<ProviderDocument> {
+  const fileName = normalizeDocumentFileName(input.fileName, input.file.name, input.file.type);
+  const expirationDate = input.kind === "w9" ? null : (input.expirationDate ?? null);
   const intent = await authedApiFetch<DocumentUploadIntent>(
     "/api/documents/upload-intent",
     {
@@ -161,7 +166,7 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
         ownerType: input.ownerType,
         ownerId: input.ownerId,
         kind: input.kind,
-        fileName: input.file.name,
+        fileName,
         fileSize: input.file.size,
         mimeType: input.file.type,
         familyId: input.familyId ?? null,
@@ -188,10 +193,10 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
         kind: input.kind,
         familyId: intent.familyId,
         versionNumber: intent.versionNumber,
-        fileName: input.file.name,
+        fileName,
         mimeType: input.file.type,
         effectiveDate: input.effectiveDate ?? null,
-        expirationDate: input.expirationDate ?? null,
+        expirationDate,
         caseId: input.caseId ?? null,
       }),
     },

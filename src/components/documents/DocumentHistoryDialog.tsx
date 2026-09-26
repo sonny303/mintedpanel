@@ -54,7 +54,9 @@ export function DocumentHistoryDialog({
             <TableRow>
               <TableHead className="h-9">Version</TableHead>
               <TableHead className="h-9">File</TableHead>
-              <TableHead className="h-9">Expires</TableHead>
+              <TableHead className="h-9">
+                {versions[0]?.docType === "w9" ? "Signed" : "Expires"}
+              </TableHead>
               <TableHead className="h-9">Uploaded</TableHead>
               <TableHead className="h-9">By</TableHead>
               <TableHead className="h-9 text-right">Download</TableHead>
@@ -70,7 +72,13 @@ export function DocumentHistoryDialog({
                   ) : null}
                 </TableCell>
                 <TableCell className="max-w-[220px] truncate">{v.fileName}</TableCell>
-                <TableCell className="tabular-nums">{fmtDate(v.expirationDate)}</TableCell>
+                <TableCell className="tabular-nums">
+                  {v.docType === "w9"
+                    ? v.effectiveDate
+                      ? `Signed ${fmtDate(v.effectiveDate)}`
+                      : "Signed date not set"
+                    : fmtDate(v.expirationDate)}
+                </TableCell>
                 <TableCell className="tabular-nums">{fmtDate(v.createdAt)}</TableCell>
                 <TableCell>
                   {v.uploadedBy ? (uploaderNames.get(v.uploadedBy) ?? "—") : "—"}

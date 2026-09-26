@@ -58,7 +58,6 @@ const GAP_OPTIONS: Array<{ key: ReadinessCheckKey; label: string }> = [
   { key: "state_facility", label: "No facility in state" },
   { key: "w9", label: "W-9 missing" },
   { key: "group_coi", label: "Group COI missing/expired" },
-  { key: "voided_check", label: "Voided check missing" },
 ];
 
 const ALL_FILTERS: ReadinessFilters = { groupId: "all", payerId: "all", state: "all", gap: "all" };

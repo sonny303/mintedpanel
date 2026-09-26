@@ -48,6 +48,7 @@ const providerRow = (
   first_name: first,
   last_name: last,
   credentials: "PT",
+  gender: null,
   npi: "1093817465",
   status: "active",
   verification_state: "verified",
@@ -749,4 +750,94 @@ test("TS-130: PHI sweep — the roster list read selects no DOB/SSN/home-address
   // Reveal-on-edit: the master edit mode exposes the DOB date input w/ value.
   await page.getByRole("button", { name: "Edit details" }).click();
   await expect(page.getByLabel("Date of birth", { exact: true })).toHaveValue("1990-01-01");
+});
+
+test("MP-20/34: create and edit gender while preserving an existing legacy value", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  const legacyGender = " F ";
+  fixtures.providers[0].gender = legacyGender;
+  const { handler, requests } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/new");
+  await expect(page.getByRole("heading", { name: "Add provider" })).toBeVisible({
+    timeout: 30000,
+  });
+  await page.getByLabel("First name", { exact: true }).fill("Taylor");
+  await page.getByLabel("Last name", { exact: true }).fill("Provider");
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await page.getByRole("option", { name: "Prefer not to say" }).click();
+
+  for (let step = 0; step < 4; step += 1) {
+    await page.getByRole("button", { name: "Next" }).click();
+  }
+  await page.getByRole("button", { name: "Create provider" }).click();
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+  const createWrites = requests.filter(
+    (request) => request.method === "POST" && request.path === "providers",
+  );
+  expect(createWrites).toHaveLength(1);
+  expect((createWrites[0].body as Record<string, unknown>).gender).toBe("prefer_not_to_say");
+  await expect(page.getByText("Prefer not to say", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await page.getByRole("option", { name: "Nonbinary" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Nonbinary", { exact: true })).toBeVisible({ timeout: 15000 });
+  const genderPatches = requests.filter(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "providers" &&
+      (request.body as Record<string, unknown>).gender === "nonbinary",
+  );
+  expect(genderPatches).toHaveLength(1);
+
+  // An unrelated edit preserves the existing unknown value by leaving gender
+  // out of the diff-only patch.
+  await page.goto("/providers/pr-brooke");
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText(legacyGender, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await expect(page.getByRole("option", { name: legacyGender })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Phone", { exact: true }).fill("252-555-0199");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  const phonePatches = requests.filter(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "providers" &&
+      (request.body as Record<string, unknown>).phone === "252-555-0199",
+  );
+  expect(phonePatches).toHaveLength(1);
+  expect(phonePatches[0].body).toEqual({ phone: "252-555-0199" });
+  expect(fixtures.providers.find((provider) => provider.id === "pr-brooke")?.gender).toBe(
+    legacyGender,
+  );
+
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await page.getByRole("option", { name: "Not set" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Not set", { exact: true })).toBeVisible({ timeout: 15000 });
+  const clearGenderPatches = requests.filter(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "providers" &&
+      Object.hasOwn(request.body as Record<string, unknown>, "gender") &&
+      (request.body as Record<string, unknown>).gender === null,
+  );
+  expect(clearGenderPatches).toHaveLength(1);
+  expect(clearGenderPatches[0].body).toEqual({ gender: null });
+  expect(fixtures.providers.find((provider) => provider.id === "pr-brooke")?.gender).toBeNull();
 });

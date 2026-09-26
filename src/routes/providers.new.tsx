@@ -45,6 +45,7 @@ function toProviderInput(form: ProviderFormState): ProviderInput {
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
     credentials: form.credentials.trim() || null,
+    gender: form.gender || null,
     dateOfBirth: form.dateOfBirth || null,
     ssnLast4: form.ssnLast4 || null,
     email: form.email.trim() || null,

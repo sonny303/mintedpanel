@@ -31,6 +31,8 @@ export interface DocumentKindMeta {
   owners: DocumentOwnerType[];
   /** Kinds that expire require an expiration date at upload (D2/TE-5). */
   expirationRequired: boolean;
+  /** How the UI labels the date stored in effective_date, when applicable. */
+  dateKind?: "signed" | "effective_and_expiration";
   /** "Expiring soon" window in days (TE-6 reviewer defaults: 90 State
    * License / 60 DEA / 30 COI and any other expiration-tracked kind). A PM
    * change is one edit here — never a schema migration. */
@@ -82,6 +84,7 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     label: "W-9",
     owners: ["group"],
     expirationRequired: false,
+    dateKind: "signed",
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["w9", "w_9"],
@@ -266,6 +269,75 @@ export function safeFileName(raw: string): string {
   return capped || "document";
 }
 
+function filenameExtension(raw: string, fallback: string): string {
+  const dot = raw.lastIndexOf(".");
+  const separator = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
+  if (dot <= separator || dot === raw.length - 1) return fallback;
+  const extension = raw.slice(dot).replace(/[^A-Za-z0-9.]/g, "");
+  return extension.length > 1 && extension.length <= 20 ? extension : fallback;
+}
+
+function extensionForMimeType(mimeType: string | null | undefined): string {
+  switch (mimeType) {
+    case "image/png":
+      return ".png";
+    case "image/jpeg":
+      return ".jpg";
+    case "application/pdf":
+    default:
+      return ".pdf";
+  }
+}
+
+/**
+ * Normalize a user-selected display name while keeping the selected file's
+ * extension authoritative. Both upload intent and finalize use this exact
+ * value so the server-generated object path and metadata row stay aligned.
+ */
+export function normalizeDocumentFileName(
+  requestedName: string | null | undefined,
+  originalFileName: string,
+  mimeType?: string | null,
+): string {
+  const extension = filenameExtension(originalFileName, extensionForMimeType(mimeType));
+  const requested = requestedName?.trim() || originalFileName;
+  const dot = requested.lastIndexOf(".");
+  const separator = Math.max(requested.lastIndexOf("/"), requested.lastIndexOf("\\"));
+  const stem = dot > separator ? requested.slice(0, dot) : requested;
+  const safeStem = safeFileName(stem).slice(0, Math.max(1, 100 - extension.length));
+  return `${safeStem.replace(/[_.-]+$/g, "") || "document"}${extension}`;
+}
+
+function safeDownloadPart(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[\s/\\:]+/g, "_")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^[_-]+|[_-]+$/g, "");
+}
+
+/** Formats a payer-portal-friendly filename for a case document download. */
+export function formatCaseDocumentDownloadName(
+  providerName: string | null | undefined,
+  doc: { docType: DocumentKind; fileName: string; id?: string },
+): string {
+  const label = safeDownloadPart(DOCUMENT_KIND_META[doc.docType]?.label ?? doc.docType);
+  const provider = safeDownloadPart(providerName ?? "");
+  const idSuffix = (doc.id ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 8);
+  const stem = provider ? `${provider}_${label}` : idSuffix ? `${label}_${idSuffix}` : label;
+  const extension = filenameExtension(doc.fileName, ".pdf");
+  const safeStem = safeFileName(stem).slice(0, Math.max(1, 100 - extension.length));
+  return `${safeStem.replace(/[_.-]+$/g, "") || label || "document"}${extension}`;
+}
+
+/** Supabase Storage honors the download query even on cross-origin signed URLs. */
+export function signedDocumentUrlWithFileName(url: string, fileName: string): string {
+  const signedUrl = new URL(url);
+  signedUrl.searchParams.set("download", safeFileName(fileName));
+  return signedUrl.toString();
+}
+
 export interface DocumentPathParts {
   orgId: string;
   ownerType: DocumentOwnerType;
@@ -370,7 +442,7 @@ export function classifyExpiration(
   expirationDate: string | null,
   today: string,
 ): DocumentExpirationStatus | null {
-  if (!expirationDate) return null;
+  if (!expirationDate || DOCUMENT_KIND_META[kind].dateKind === "signed") return null;
   const daysUntil = dateOnlyDays(today, expirationDate);
   if (daysUntil < 0) return "expired";
   if (daysUntil <= DOCUMENT_KIND_META[kind].expiringSoonDays) return "expiring_soon";
@@ -401,16 +473,18 @@ export function expiringCredentialRows<T extends ExpiringCredentialShape>(
   today: string,
 ): ExpiringCredentialRow<T>[] {
   return currentVersions(rows)
-    .filter((r) => r.expirationDate !== null)
-    .sort((a, b) => (a.expirationDate as string).localeCompare(b.expirationDate as string))
     .map((document) => ({
       document,
       status: classifyExpiration(
         isDocumentKind(document.docType) ? document.docType : "other",
         document.expirationDate,
         today,
-      ) as DocumentExpirationStatus,
-    }));
+      ),
+    }))
+    .filter((row): row is ExpiringCredentialRow<T> => row.status !== null)
+    .sort((a, b) =>
+      (a.document.expirationDate as string).localeCompare(b.document.expirationDate as string),
+    );
 }
 
 // ---------------------------------------------------------------------------

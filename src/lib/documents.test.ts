@@ -18,7 +18,9 @@ import {
   expirationDateError,
   expiringCredentialRows,
   familyHistory,
+  formatCaseDocumentDownloadName,
   isOrphanExpired,
+  normalizeDocumentFileName,
   nextVersionNumber,
   orphanVersionFolders,
   parseDocumentKind,
@@ -27,6 +29,7 @@ import {
   resolvableStepArtifactKind,
   resolveDocumentOwnerTarget,
   safeFileName,
+  signedDocumentUrlWithFileName,
   stepArtifactRows,
   uploadOwnerTargetForCheck,
   uploadableKinds,
@@ -108,6 +111,59 @@ describe("kind metadata (TE-5)", () => {
     expect(expirationDateError("state_license", null)).toMatch(/expiration date/);
     expect(expirationDateError("state_license", "2027-01-01")).toBeNull();
     expect(expirationDateError("w9", null)).toBeNull();
+  });
+
+  it("marks W-9 as a signed-date kind with no required expiration", () => {
+    expect(DOCUMENT_KIND_META.w9).toMatchObject({ expirationRequired: false, dateKind: "signed" });
+    expect(expirationDateError("w9", null)).toBeNull();
+  });
+});
+
+describe("document filenames (MP-17/MP-15)", () => {
+  it("formats provider downloads with sanitized labels and preserves extension case", () => {
+    expect(
+      formatCaseDocumentDownloadName("Dr. Marcus Welby, Jr.", {
+        docType: "state_license",
+        fileName: "scan.final.PDF",
+      }),
+    ).toBe("Dr_Marcus_Welby_Jr_State_License.PDF");
+  });
+
+  it("uses a label and sanitized id snippet when provider name is missing", () => {
+    expect(
+      formatCaseDocumentDownloadName(null, {
+        id: "9f8b2c1a-5555-4444-3333-222211110000",
+        docType: "w9",
+        fileName: "irs_form.pdf",
+      }),
+    ).toBe("W-9_9f8b2c1a.pdf");
+  });
+
+  it("normalizes the custom name to the selected file's extension", () => {
+    expect(normalizeDocumentFileName("Jane's Packet", "upload.scan.PDF", "application/pdf")).toBe(
+      "Jane_s_Packet.PDF",
+    );
+    expect(
+      normalizeDocumentFileName("Jane's Packet.png", "upload.scan.PDF", "application/pdf"),
+    ).toBe("Jane_s_Packet.PDF");
+    expect(
+      normalizeDocumentFileName("../../Jane Lee/W-9 draft", "upload.scan.PDF", "application/pdf"),
+    ).toBe("Jane_Lee_W-9_draft.PDF");
+    expect(normalizeDocumentFileName(null, "upload.scan.PDF", "application/pdf")).toBe(
+      "upload.scan.PDF",
+    );
+    expect(normalizeDocumentFileName("receipt", "image", "image/jpeg")).toBe("receipt.jpg");
+  });
+
+  it("overrides the signed download name while retaining the Storage token and path", () => {
+    expect(
+      signedDocumentUrlWithFileName(
+        "https://storage.example.test/object/sign/bucket/a.pdf?token=signed&download=stored.pdf",
+        "Jane_Doe_W-9.pdf",
+      ),
+    ).toBe(
+      "https://storage.example.test/object/sign/bucket/a.pdf?token=signed&download=Jane_Doe_W-9.pdf",
+    );
   });
 });
 
@@ -209,6 +265,19 @@ describe("expiration classification boundaries (TE-6/TE-12)", () => {
 
   it("a dateless row classifies to null (no tracking)", () => {
     expect(classifyExpiration("w9", null, TODAY)).toBeNull();
+  });
+
+  it("ignores legacy W-9 expiration dates in reports and case status", () => {
+    const legacyExpiredW9 = row({
+      id: "legacy-w9",
+      docType: "w9",
+      expirationDate: "2020-01-01",
+    });
+    expect(classifyExpiration("w9", legacyExpiredW9.expirationDate, TODAY)).toBeNull();
+    expect(expiringCredentialRows([legacyExpiredW9], TODAY)).toEqual([]);
+    expect(caseDocumentStatus(["w9"], [], [legacyExpiredW9], TODAY)).toMatchObject([
+      { state: "present", expiringSoon: false, document: legacyExpiredW9 },
+    ]);
   });
 });
 

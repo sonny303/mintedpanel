@@ -22,7 +22,9 @@ import { StatusPill } from "@/components/StatusPill";
 import {
   caseDocumentStatus,
   downloadableCaseDocuments,
+  formatCaseDocumentDownloadName,
   requiredDocumentKinds,
+  signedDocumentUrlWithFileName,
   uploadOwnerTargetForCheck,
   type CaseDocumentCheck,
 } from "@/lib/documents";
@@ -50,14 +52,19 @@ interface CaseRequiredDocumentsProps {
 async function downloadSequentially(
   documents: ProviderDocument[],
   getSignedUrl: (documentId: string) => Promise<{ url: string; fileName: string }>,
+  getDownloadName: (document: ProviderDocument) => string,
 ): Promise<{ failed: number }> {
   let failed = 0;
   for (const doc of documents) {
     try {
       const signed = await getSignedUrl(doc.id);
+      const downloadName = getDownloadName(doc);
       const a = window.document.createElement("a");
-      a.href = signed.url;
-      a.download = signed.fileName;
+      // The anchor download attribute is ignored for cross-origin URLs in
+      // several browsers. Supabase Storage supports this query override on
+      // the existing signed URL while preserving its token and path.
+      a.href = signedDocumentUrlWithFileName(signed.url, downloadName || signed.fileName);
+      a.download = downloadName || signed.fileName;
       a.rel = "noopener";
       window.document.body.appendChild(a);
       a.click();
@@ -108,8 +115,14 @@ export function CaseRequiredDocuments({
     if (downloadable.length === 0 || downloadingAll) return;
     setDownloadingAll(true);
     try {
-      const { failed } = await downloadSequentially(downloadable, (id) =>
-        downloadM.mutateAsync(id),
+      const { failed } = await downloadSequentially(
+        downloadable,
+        (id) => downloadM.mutateAsync(id),
+        (doc) =>
+          formatCaseDocumentDownloadName(
+            providerName.trim().toLowerCase() === "this provider" ? null : providerName,
+            doc,
+          ),
       );
       if (failed > 0) {
         toast.error(
@@ -186,7 +199,13 @@ export function CaseRequiredDocuments({
             ) : (
               <StatusPill status="red" label="Missing" />
             )}
-            {c.document?.expirationDate ? (
+            {c.kind === "w9" && c.document ? (
+              <span className="text-[12px] text-muted-foreground">
+                {c.document.effectiveDate
+                  ? `Signed ${fmtDate(c.document.effectiveDate)}`
+                  : "Signed date not set"}
+              </span>
+            ) : c.document?.expirationDate ? (
               <span className="text-[12px] text-muted-foreground">
                 {c.state === "expired" ? "expired" : "expires"} {fmtDate(c.document.expirationDate)}
               </span>

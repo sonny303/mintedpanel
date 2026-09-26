@@ -338,9 +338,17 @@ describe("finalizeDocument", () => {
       versionNumber: 1,
       fileName: "w9.pdf",
       mimeType: "application/pdf",
+      effectiveDate: "2026-09-25",
+      expirationDate: "2020-01-01",
     });
     expect(result.kind).toBe("ok");
-    expect(inserted[0]).toMatchObject({ group_id: GROUP, provider_id: null, doc_type: "w9" });
+    expect(inserted[0]).toMatchObject({
+      group_id: GROUP,
+      provider_id: null,
+      doc_type: "w9",
+      effective_date: "2026-09-25",
+      expiration_date: null,
+    });
   });
 });
 

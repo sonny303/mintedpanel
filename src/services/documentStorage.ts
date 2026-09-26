@@ -412,7 +412,9 @@ export async function finalizeDocument(
     file_path: path,
     file_name: storedName,
     effective_date: input.effectiveDate ?? null,
-    expiration_date: input.expirationDate ?? null,
+    // W-9 expiration values may exist on historical rows, but new writes
+    // always honor the IRS signed-date semantics.
+    expiration_date: input.kind === "w9" ? null : (input.expirationDate ?? null),
     uploaded_by: ctx.userId,
     document_family_id: input.familyId,
     version_number: input.versionNumber,

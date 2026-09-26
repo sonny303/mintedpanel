@@ -119,7 +119,7 @@ export function DocumentsPanel({ ownerType, ownerId, ownerName }: DocumentsPanel
           <TableHeader>
             <TableRow>
               <TableHead className="h-9">Document</TableHead>
-              <TableHead className="h-9">Effective</TableHead>
+              <TableHead className="h-9">Date</TableHead>
               <TableHead className="h-9">Expires</TableHead>
               <TableHead className="h-9">Version</TableHead>
               <TableHead className="h-9">Uploaded by</TableHead>
@@ -138,14 +138,24 @@ export function DocumentsPanel({ ownerType, ownerId, ownerName }: DocumentsPanel
                     {document.fileName}
                   </div>
                 </TableCell>
-                <TableCell className="tabular-nums">{fmtDate(document.effectiveDate)}</TableCell>
+                <TableCell className="tabular-nums">
+                  {document.docType === "w9"
+                    ? document.effectiveDate
+                      ? `Signed ${fmtDate(document.effectiveDate)}`
+                      : "Signed date not set"
+                    : fmtDate(document.effectiveDate)}
+                </TableCell>
                 <TableCell>
-                  <span className="tabular-nums">{fmtDate(document.expirationDate)}</span>
-                  {status ? (
-                    <span className="ml-2 inline-flex">
-                      <DocumentExpirationPill status={status} />
-                    </span>
-                  ) : null}
+                  {document.docType === "w9" ? null : (
+                    <>
+                      <span className="tabular-nums">{fmtDate(document.expirationDate)}</span>
+                      {status ? (
+                        <span className="ml-2 inline-flex">
+                          <DocumentExpirationPill status={status} />
+                        </span>
+                      ) : null}
+                    </>
+                  )}
                 </TableCell>
                 <TableCell>
                   {versions > 1 ? (
