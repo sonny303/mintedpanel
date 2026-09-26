@@ -358,7 +358,7 @@ WHERE portal_key = '${ids.portalKey}' AND selector IN ('#tier-org-match','#tier-
 `);
   assert(
     tierRows.stdout ===
-      `shared:#tier-org-conflict:provider.npi,${ids.orgId}:#tier-org-conflict:provider.firstName,shared:#tier-org-match:provider.firstName,${ids.orgId}:#tier-org-match:provider.npi,shared:#tier-shared-only:provider.npi`,
+      `${ids.orgId}:#tier-org-conflict:provider.firstName,shared:#tier-org-conflict:provider.npi,${ids.orgId}:#tier-org-match:provider.npi,shared:#tier-org-match:provider.firstName,shared:#tier-shared-only:provider.npi`,
     `tier lookup modified or selected the wrong map rows: ${tierRows.stdout}`,
   );
 
