@@ -1,0 +1,17 @@
+{
+  "fixtureId": "date-mask-reversion-synthetic-01",
+  "synthetic": true,
+  "notPayerEvidence": true,
+  "purpose": "Represent a text-mask write that changes the calendar year after the attempted value.",
+  "attempt": {
+    "format": "MM/DD/YYYY",
+    "value": "02/02/1980"
+  },
+  "settled": {
+    "format": "MM/DD/YYYY",
+    "value": "02/02/6100"
+  },
+  "expectedOutcome": "write_rejected",
+  "reasonCode": "mask_reverted",
+  "telemetryRule": "Attempted and settled values are fixture stimuli only; persisted telemetry stores neither value."
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html
+  lang="en"
+  data-fixture="synthetic"
+  data-fixture-url="https://credentialing-simulator.example.invalid/application/edit"
+>
+  <head>
+    <meta charset="utf-8" />
+    <title>Enrollment — Page 1 of 7</title>
+  </head>
+  <body>
+    <nav aria-label="Application progress">
+      <ol>
+        <li>
+          <a
+            href="/application/edit"
+            data-progress-index="1"
+            aria-current="step"
+            data-trained-anchor="profile"
+            >Page 1: Profile</a
+          >
+        </li>
+        <li><a href="/application/edit" data-progress-index="2">Page 2: Organization</a></li>
+        <li><a href="/application/edit" data-progress-index="3">Page 3: Credentials</a></li>
+        <li><a href="/application/edit" data-progress-index="4">Page 4: Locations</a></li>
+        <li><a href="/application/edit" data-progress-index="5">Page 5: Identifiers</a></li>
+        <li><a href="/application/edit" data-progress-index="6">Page 6: Disclosures</a></li>
+        <li><a href="/application/edit" data-progress-index="7">Page 7: Review</a></li>
+      </ol>
+    </nav>
+    <main data-active-panel="profile">
+      <p class="progress-copy">Page 1 of 7</p>
+      <h1>Enrollment</h1>
+      <h2>Provider Profile</h2>
+      <form id="synthetic-form-profile">
+        <label for="synthetic-provider-name">Synthetic Profile field</label>
+        <input id="synthetic-provider-name" name="synthetic-provider-name" type="text" value="" />
+      </form>
+    </main>
+  </body>
+</html>
