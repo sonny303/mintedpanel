@@ -351,6 +351,18 @@ VALUES
       tierPrecedence.preserved_count === 1,
     "org rows did not take precedence over shared rows with accurate confirmation/preservation counts",
   );
+  const tierResults = new Map(
+    (tierPrecedence.results ?? []).map((result) => [result.selector, result]),
+  );
+  assert(
+    tierResults.get("#tier-org-match")?.token === "provider.npi" &&
+      tierResults.get("#tier-org-match")?.outcome === "already_present" &&
+      tierResults.get("#tier-org-conflict")?.token === "provider.npi" &&
+      tierResults.get("#tier-org-conflict")?.outcome === "preserved" &&
+      tierResults.get("#tier-shared-only")?.token === "provider.npi" &&
+      tierResults.get("#tier-shared-only")?.outcome === "already_present",
+    `tier lookup returned unexpected per-selector outcomes: ${JSON.stringify(tierPrecedence.results)}`,
+  );
   const tierRows = await runPsql(`
 SELECT string_agg(COALESCE(org_id::text, 'shared') || ':' || selector || ':' || token, ',' ORDER BY selector, org_id NULLS LAST)
 FROM public.portal_field_maps
