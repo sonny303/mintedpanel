@@ -135,6 +135,7 @@ beforeEach(() => {
 describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
   const FACILITY_ID = "aaaa1111-2222-4333-8444-555566667777";
+  const CASE_ID = "cccc1111-2222-4333-8444-555566667777";
   const url = (qs = "") => new URL(`https://x.test/api/providers/${PROVIDER_ID}/profile${qs}`);
   // What the ctx() caller resolves to (see resolveUserTokens). ctx().db is an
   // empty stub, so the profiles read fails and resolution falls back to auth
@@ -164,6 +165,7 @@ describe("provider profile handler", () => {
         unresolved: [],
         facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
         selected_facility_id: FACILITY_ID,
+        case_id: null,
         ...profile,
       },
       needsFacility,
@@ -199,6 +201,7 @@ describe("provider profile handler", () => {
       unresolved: [],
       facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
       selected_facility_id: FACILITY_ID,
+      case_id: null,
     });
     // Facility auto-selected, so no needs_facility; the only meta is the
     // resolution notes for the tokens with no source on this ctx.
@@ -254,6 +257,7 @@ describe("provider profile handler", () => {
           route: "/api/providers/:id/profile",
           state: "KS",
           facilityId: FACILITY_ID,
+          caseId: null,
         },
       }),
     );
@@ -278,7 +282,7 @@ describe("provider profile handler", () => {
     expect(getProfileMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       PROVIDER_ID,
-      { state: "KS", facilityId: undefined },
+      { state: "KS", facilityId: undefined, caseId: undefined },
     );
   });
 
@@ -294,7 +298,7 @@ describe("provider profile handler", () => {
     expect(getProfileMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       PROVIDER_ID,
-      { state: undefined, facilityId: FACILITY_ID },
+      { state: undefined, facilityId: FACILITY_ID, caseId: undefined },
     );
   });
 
@@ -303,6 +307,42 @@ describe("provider profile handler", () => {
     expect(res.status).toBe(404);
     expect((await body(res)).error).toBe("Facility not found for this provider");
     expect(getProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("requires an exact case_id UUID when the parameter is present", async () => {
+    for (const query of ["?case_id=", "?case_id=not-a-uuid"]) {
+      const res = await handleProviderProfile(PROVIDER_ID, url(query), ctx());
+      expect(res.status).toBe(422);
+      expect(getProfileMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects an explicitly empty case-bound facility selection instead of using primary", async () => {
+    const res = await handleProviderProfile(
+      PROVIDER_ID,
+      url(`?case_id=${CASE_ID}&facilityId=`),
+      ctx(),
+    );
+    expect(res.status).toBe(404);
+    expect(getProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("forwards case_id and returns the exact service binding proof", async () => {
+    getProfileMock.mockResolvedValue(
+      okResult({ case_id: CASE_ID, facilities: [], selected_facility_id: null }),
+    );
+    const c = ctx();
+    const res = await handleProviderProfile(PROVIDER_ID, url(`?case_id=${CASE_ID}`), c);
+    expect(res.status).toBe(200);
+    expect(getProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      PROVIDER_ID,
+      { state: undefined, facilityId: undefined, caseId: CASE_ID },
+    );
+    expect((await body(res)).data).toMatchObject({ case_id: CASE_ID, facilities: [] });
+    expect(c.writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ after: expect.objectContaining({ caseId: CASE_ID }) }),
+    );
   });
 
   it("returns 404 when the facility is outside the org or the provider's set, without auditing", async () => {

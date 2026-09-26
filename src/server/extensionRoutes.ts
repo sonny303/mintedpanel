@@ -122,8 +122,9 @@ export async function handleNextBestAction(url: URL, ctx: AuthContext): Promise<
   return ok(result, { total: result.items.length });
 }
 
-// GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the
-// fill engine needs for one provider, resolved server-side. The most PHI-dense
+// GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>&case_id=<uuid>] —
+// everything the fill engine needs for a provider, optionally bound to a case.
+// The most PHI-dense
 // response in the system (SSN last-4, DOB, home address — unmasked by design
 // for form fill): Cache-Control: no-store, and nothing here may ever log the
 // response body.
@@ -141,11 +142,21 @@ export async function handleProviderProfile(
     if (!STATE_RE.test(stateRaw)) return fail(422, "state must be a two-letter code");
     state = stateRaw.toUpperCase();
   }
+  const caseIdPresent = url.searchParams.has("case_id");
+  const caseIdRaw = url.searchParams.get("case_id");
+  if (caseIdPresent && (!caseIdRaw || !UUID_RE.test(caseIdRaw))) {
+    return fail(422, "case_id must be a UUID");
+  }
+  const caseId = caseIdRaw ?? undefined;
+
   // Explicit facility selection for the facility.*/assignment.* tokens. A
   // non-UUID can't be a facility — same early 404 the set-membership check
   // below would produce, without a uuid-cast 500.
   const facilityIdRaw = url.searchParams.get("facilityId");
   let facilityId: string | undefined;
+  if (caseIdPresent && facilityIdRaw === "") {
+    return fail(404, "Facility not found for this case");
+  }
   if (facilityIdRaw != null && facilityIdRaw !== "") {
     if (!UUID_RE.test(facilityIdRaw)) return fail(404, "Facility not found for this provider");
     facilityId = facilityIdRaw;
@@ -154,6 +165,7 @@ export async function handleProviderProfile(
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
+    caseId,
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
   // A facilityId outside the caller's org or this provider's facility set —
@@ -192,6 +204,7 @@ export async function handleProviderProfile(
       route: "/api/providers/:id/profile",
       state: state ?? null,
       facilityId: profile.selected_facility_id,
+      caseId: profile.case_id,
     },
     description: "Provider profile read (extension fill payload)",
   });

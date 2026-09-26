@@ -168,7 +168,8 @@ describe("provider profile service — injected server context", () => {
 
     expect(rpcCalls).toEqual(["get_sop_field_tokens"]);
     // Every catalog entry appears in tokens, resolved or not.
-    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length);
+    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 6);
+    expect(profile.case_id).toBeNull();
     expect(valueOf(profile, "provider.firstName")).toBe("Ana");
     expect(valueOf(profile, "group.name")).toBe("Group One");
     expect(valueOf(profile, "license.licenseNumber")).toBe("KS-100");
@@ -327,6 +328,272 @@ describe("provider profile service — injected server context", () => {
     expect(reasonFor(profile, "groupInsurance.policyNumber")).toBe("provider has no group");
     expect(captures.some((c) => c.table === "provider_groups")).toBe(false);
     expect(captures.some((c) => c.table === "group_insurance_policies")).toBe(false);
+  });
+
+  it("case group and state override provider primary context and a valid secondary remains selected", async () => {
+    const caseId = "case-1";
+    const caseRows = [
+      {
+        is_primary: true,
+        facility: {
+          id: "f1",
+          name: "Main Clinic",
+          street: "1 Main",
+          city: "Austin",
+          state: "Texas",
+          zip: "78701",
+        },
+      },
+      {
+        is_primary: false,
+        facility: {
+          id: "f2",
+          name: "Secondary Clinic",
+          street: "2 Main",
+          suite: "Suite 5",
+          city: "Denver",
+          state: "Colorado",
+          zip: "80202",
+        },
+      },
+    ];
+    const { db, captures } = makeFakeDb(
+      {
+        providers: { data: { ...providerRow, group_id: "provider-primary-group" } },
+        credential_cases: {
+          data: {
+            id: caseId,
+            provider_id: "p1",
+            group_id: "case-group",
+            state: "CO",
+            facility_id: "f1",
+          },
+        },
+        provider_groups: { data: { id: "case-group", name: "Case Group" } },
+        state_licenses: {
+          data: [licenseKS, { ...licenseMO, id: "l-co", state: "CO", license_number: "CO-300" }],
+        },
+        provider_facility_assignments: { data: [assignmentF1, assignmentF2] },
+        group_insurance_policies: { data: [{ id: "case-policy", policy_number: "CASE-POL" }] },
+        case_facilities: { data: caseRows },
+      },
+      { data: CATALOG },
+    );
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", {
+        state: "KS",
+        caseId,
+        facilityId: "f2",
+      }),
+    );
+
+    expect(profile.case_id).toBe(caseId);
+    expect(profile.selected_facility_id).toBe("f2");
+    expect(profile.facilities).toEqual([
+      { id: "f1", name: "Main Clinic" },
+      { id: "f2", name: "Secondary Clinic" },
+    ]);
+    expect(valueOf(profile, "group.name")).toBe("Case Group");
+    expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("CASE-POL");
+    expect(valueOf(profile, "license.licenseNumber")).toBe("CO-300");
+    expect(valueOf(profile, "facility.name")).toBe("Secondary Clinic");
+    expect(valueOf(profile, "facility.fullAddress")).toBe(
+      "2 Main, Suite 5, Denver, Colorado 80202",
+    );
+    expect(valueOf(profile, "assignment.isPrimary")).toBe(false);
+
+    const caseCap = captures.find((capture) => capture.table === "credential_cases");
+    expect(caseCap?.filters).toContainEqual(["id", caseId]);
+    expect(caseCap?.filters).toContainEqual(["org_id", "org-1"]);
+    const locationsCap = captures.find((capture) => capture.table === "case_facilities");
+    expect(locationsCap?.filters).toContainEqual(["case_id", caseId]);
+    expect(locationsCap?.filters).toContainEqual(["org_id", "org-1"]);
+    expect(locationsCap?.filters).toContainEqual(["facility.org_id", "org-1"]);
+    expect(captures.find((capture) => capture.table === "provider_groups")?.filters).toContainEqual(
+      ["id", "case-group"],
+    );
+    expect(
+      captures.find((capture) => capture.table === "group_insurance_policies")?.filters,
+    ).toContainEqual(["group_id", "case-group"]);
+  });
+
+  it("case locations do not fall back to provider facilities when the case has no locations", async () => {
+    const { db } = makeFakeDb(
+      {
+        ...happyTables(),
+        credential_cases: {
+          data: {
+            id: "case-empty",
+            provider_id: "p1",
+            group_id: "g-case",
+            state: "KS",
+            facility_id: "f1",
+          },
+        },
+        case_facilities: { data: [] },
+      },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1", { caseId: "case-empty" }));
+
+    expect(profile.case_id).toBe("case-empty");
+    expect(profile.facilities).toEqual([]);
+    expect(profile.selected_facility_id).toBeNull();
+    expect(valueOf(profile, "facility.name")).toBeNull();
+    expect(reasonFor(profile, "facility.name")).toContain("case has no facilities");
+  });
+
+  it("echoes the exact mixed-case UUID request while matching canonical stored UUIDs", async () => {
+    const providerId = "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE";
+    const caseId = "CCCC1111-2222-4333-8444-555566667777";
+    const { db, captures } = makeFakeDb(
+      {
+        ...happyTables(),
+        providers: { data: { ...providerRow, id: providerId.toLowerCase() } },
+        credential_cases: {
+          data: {
+            id: caseId.toLowerCase(),
+            provider_id: providerId.toLowerCase(),
+            group_id: "case-group",
+            state: "KS",
+            facility_id: null,
+          },
+        },
+        case_facilities: { data: [] },
+      },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), providerId, { caseId }));
+
+    expect(profile.case_id).toBe(caseId);
+    expect(
+      captures.find((capture) => capture.table === "credential_cases")?.filters,
+    ).toContainEqual(["id", caseId]);
+  });
+
+  it("case facility set remains authoritative and exact assignment tokens stay unresolved without a matching assignment", async () => {
+    const { db } = makeFakeDb(
+      {
+        providers: { data: providerRow },
+        credential_cases: {
+          data: {
+            id: "case-secondary",
+            provider_id: "p1",
+            group_id: "g-case",
+            state: "KS",
+            facility_id: null,
+          },
+        },
+        provider_groups: { data: groupRow },
+        state_licenses: { data: [licenseKS] },
+        provider_facility_assignments: { data: [assignmentF1] },
+        group_insurance_policies: { data: [policyRow] },
+        case_facilities: {
+          data: [
+            {
+              is_primary: false,
+              facility: {
+                id: "f2",
+                name: "Case-only Clinic",
+                street: "2 Main",
+                city: "Austin",
+                state: "Texas",
+                zip: "78701",
+              },
+            },
+          ],
+        },
+      },
+      { data: CATALOG },
+    );
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", { caseId: "case-secondary", facilityId: "f2" }),
+    );
+
+    expect(profile.facilities).toEqual([{ id: "f2", name: "Case-only Clinic" }]);
+    expect(profile.selected_facility_id).toBe("f2");
+    expect(valueOf(profile, "facility.name")).toBe("Case-only Clinic");
+    expect(valueOf(profile, "assignment.isPrimary")).toBeNull();
+    expect(reasonFor(profile, "assignment.isPrimary")).toContain("assigned facility not found");
+  });
+
+  it("an explicit case facility removed from the full set fails closed", async () => {
+    const { db } = makeFakeDb(
+      {
+        ...happyTables(),
+        credential_cases: {
+          data: {
+            id: "case-removed",
+            provider_id: "p1",
+            group_id: "g1",
+            state: "KS",
+            facility_id: "f1",
+          },
+        },
+        case_facilities: {
+          data: [{ is_primary: true, facility: { id: "f1", name: "Main Clinic" } }],
+        },
+      },
+      { data: CATALOG },
+    );
+
+    await expect(
+      getProviderProfile(ctxWith(db), "p1", { caseId: "case-removed", facilityId: "f2" }),
+    ).resolves.toEqual({ kind: "facility_not_found" });
+  });
+
+  it("a case bound to another provider is indistinguishable from a missing provider", async () => {
+    const { db, rpcCalls } = makeFakeDb(
+      {
+        providers: { data: providerRow },
+        credential_cases: {
+          data: {
+            id: "case-other-provider",
+            provider_id: "p2",
+            group_id: "g1",
+            state: "KS",
+            facility_id: "f1",
+          },
+        },
+      },
+      { data: CATALOG },
+    );
+
+    expect(await getProviderProfile(ctxWith(db), "p1", { caseId: "case-other-provider" })).toEqual({
+      kind: "provider_not_found",
+    });
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("a case with no group does not fall back to the provider's primary group", async () => {
+    const { db, captures } = makeFakeDb(
+      {
+        ...happyTables(),
+        credential_cases: {
+          data: {
+            id: "case-no-group",
+            provider_id: "p1",
+            group_id: null,
+            state: "KS",
+            facility_id: null,
+          },
+        },
+        case_facilities: { data: [] },
+      },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1", { caseId: "case-no-group" }));
+
+    expect(valueOf(profile, "group.name")).toBeNull();
+    expect(reasonFor(profile, "group.name")).toBe("case has no group");
+    expect(valueOf(profile, "groupInsurance.policyNumber")).toBeNull();
+    expect(captures.some((capture) => capture.table === "provider_groups")).toBe(false);
+    expect(captures.some((capture) => capture.table === "group_insurance_policies")).toBe(false);
   });
 
   // E4.3 F4.3.5 Q4 (PM decision 2026-07-17): a group holding SEVERAL policies

@@ -27,12 +27,17 @@ describe("isPdfFillableToken", () => {
     // DYN-TOKEN-05 — case page picks a group_insurance_policies row and passes it.
     expect(isPdfFillableToken("groupInsurance.policyNumber")).toBe(true);
     expect(isPdfFillableToken("groupInsurance.insurerName")).toBe(true);
+    expect(isPdfFillableToken("provider.fullNameWithCredentials")).toBe(true);
+    expect(isPdfFillableToken("facility.fullAddress")).toBe(true);
+    expect(isPdfFillableToken("user.name")).toBe(true);
+    expect(isPdfFillableToken("billingContact.fullName")).toBe(true);
+    expect(isPdfFillableToken("credentialingContact.phoneOffice")).toBe(true);
+    expect(isPdfFillableToken("contractingSigner.email")).toBe(true);
   });
 
   it("rejects every family with no row in hand on the case page", () => {
     for (const token of [
       "assignment.isPrimary",
-      "user.name",
       "payer.name",
       "contract.effectiveDate",
       "mso.name",
@@ -60,7 +65,7 @@ describe("isPdfFillableToken", () => {
 });
 
 describe("isWebFillableToken", () => {
-  it("admits the six profile source rows plus the appended user family", () => {
+  it("admits profile source rows plus appended user and contact families", () => {
     for (const token of [
       "provider.npi",
       "group.tin",
@@ -69,6 +74,9 @@ describe("isWebFillableToken", () => {
       "assignment.isPrimary",
       "groupInsurance.policyNumber",
       "user.name",
+      "billingContact.fullName",
+      "credentialingContact.phoneOffice",
+      "contractingSigner.email",
     ]) {
       expect(isWebFillableToken(token)).toBe(true);
     }
@@ -98,12 +106,14 @@ describe("isUnfillableToken / UNFILLABLE_FAMILIES", () => {
   });
 
   it("never claims a token one surface can fill", () => {
-    // user resolves on web only; license/groupInsurance now resolve on both
+    // assignment resolves on web only; profile/contact/user and
+    // license/groupInsurance now resolve on both
     // (TOKEN-05). Withdrawing either would delete working mappings —
     // narrowing per-surface is DYN-TOKEN-02, not this bite.
     expect(isUnfillableToken("license.expirationDate")).toBe(false);
     expect(isUnfillableToken("groupInsurance.policyNumber")).toBe(false);
     expect(isUnfillableToken("user.name")).toBe(false);
+    expect(isUnfillableToken("billingContact.fullName")).toBe(false);
     expect(isUnfillableToken("provider.npi")).toBe(false);
   });
 });
@@ -150,6 +160,7 @@ describe("filterMappingTokens", () => {
     { token: "provider.npi" },
     { token: "license.expirationDate" },
     { token: "user.name" },
+    { token: "billingContact.fullName" },
     { token: "payer.name" },
     { token: "contract.effectiveDate" },
     { token: "mso.name" },
@@ -160,6 +171,7 @@ describe("filterMappingTokens", () => {
       "provider.npi",
       "license.expirationDate",
       "user.name",
+      "billingContact.fullName",
     ]);
   });
 

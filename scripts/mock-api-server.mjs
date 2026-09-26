@@ -20,6 +20,7 @@
 //   fieldmaps   another org's field-map rows leak into the catalog, and a
 //               proposed row lands global instead of org-scoped (5b, 5c, 20a)
 //   profile     cross-org provider profile served instead of 404     (6)
+//   caseprofile cross-org case-bound profile served instead of 404 (6b)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
 //   casesearch  cross-org case rows leak into ?q= search results      (15b)
@@ -87,6 +88,7 @@ export const LEAK_MODES = [
   "spoof",
   "fieldmaps",
   "profile",
+  "caseprofile",
   "fillevents",
   "cases",
   "casesearch",
@@ -193,6 +195,7 @@ const CASES = [
     // The case's explicit facility link — the ONLY source the context
     // endpoint's selectedFacility resolves from (never the provider's set).
     facilityId: FIXTURES.SOUTHPARK_FACILITY_ID,
+    facilities: [{ facilityId: FIXTURES.SOUTHPARK_FACILITY_ID, isPrimary: true }],
     payerName: "South Park Health",
     state: "CO",
     status: "In Progress",
@@ -214,6 +217,7 @@ const CASES = [
     orgId: FIXTURES.KANSAS_ORG,
     providerId: FIXTURES.KANSAS_PROVIDER_ID,
     facilityId: FIXTURES.KANSAS_FACILITY_ID,
+    facilities: [{ facilityId: FIXTURES.KANSAS_FACILITY_ID, isPrimary: true }],
     payerName: "BCBS of Kansas",
     state: "KS",
     status: "Submitted",
@@ -446,10 +450,11 @@ function readBody(req) {
   });
 }
 
-function profileFor(p, user, { facilities, selectedFacilityId }) {
+function profileFor(p, user, { facilities, selectedFacilityId, caseId = null }) {
   const selected = FACILITIES.find((f) => f.id === selectedFacilityId) ?? null;
   return {
     provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
+    case_id: caseId,
     tokens: [
       { token: "provider.firstName", value: p.firstName },
       { token: "provider.lastName", value: p.lastName },
@@ -933,32 +938,69 @@ export async function createMockApiServer(options = {}) {
       const p = PROVIDERS.find((row) => row.id === profileMatch[1]);
       const visible = p && (p.orgId === orgId || leak === "profile");
       if (!visible) return envelope(res, 404, null, "Provider not found");
+      const hasCaseIntent = url.searchParams.has("case_id");
+      const requestedCaseId = hasCaseIntent ? url.searchParams.get("case_id") : null;
+      let profileCase = null;
+      if (hasCaseIntent) {
+        profileCase = CASES.find(
+          (row) => row.id === requestedCaseId && row.orgId === orgId && row.providerId === p.id,
+        );
+        if (!profileCase && leak === "caseprofile") {
+          profileCase = CASES.find((row) => row.id === requestedCaseId) ?? null;
+        }
+        if (!profileCase) return envelope(res, 404, null, "Case not found for this provider");
+      }
       // Facility awareness: ?facilityId must be in the caller's org AND the
       // provider's facility set (else 404); the sole facility auto-selects;
       // several without a choice -> tokens empty + meta.needs_facility. Leak
       // "facility": the checks are skipped and a cross-org facility is served.
       const requestedFacility = url.searchParams.get("facilityId");
       const provFacilities = facilitiesOf(p);
+      const caseFacilities = profileCase
+        ? (
+            profileCase.facilities ??
+            (profileCase.facilityId
+              ? [{ facilityId: profileCase.facilityId, isPrimary: true }]
+              : [])
+          )
+            .map(({ facilityId }) => FACILITIES.find((facility) => facility.id === facilityId))
+            .filter((facility) => facility?.orgId === orgId)
+        : null;
+      const selectableFacilities = caseFacilities ?? provFacilities;
       let selectedFacilityId = null;
       let needsFacility = false;
       if (requestedFacility) {
-        const okFacility = provFacilities.some(
+        const okFacility = selectableFacilities.some(
           (f) => f.id === requestedFacility && f.orgId === orgId,
         );
         if (!okFacility && leak !== "facility") {
           return envelope(res, 404, null, "Facility not found for this provider");
         }
         selectedFacilityId = requestedFacility;
-      } else if (provFacilities.length === 1) {
-        selectedFacilityId = provFacilities[0].id;
-      } else if (provFacilities.length > 1) {
+      } else if (profileCase) {
+        const primary =
+          profileCase.facilities?.find(({ isPrimary }) => isPrimary)?.facilityId ??
+          profileCase.facilityId ??
+          null;
+        if (primary && selectableFacilities.some((facility) => facility.id === primary)) {
+          selectedFacilityId = primary;
+        } else if (selectableFacilities.length > 0) {
+          needsFacility = true;
+        }
+      } else if (selectableFacilities.length === 1) {
+        selectedFacilityId = selectableFacilities[0].id;
+      } else if (selectableFacilities.length > 1) {
         needsFacility = true;
       }
       res.setHeader("cache-control", "no-store");
       return envelope(
         res,
         200,
-        profileFor(p, user, { facilities: provFacilities, selectedFacilityId }),
+        profileFor(p, user, {
+          facilities: selectableFacilities,
+          selectedFacilityId,
+          caseId: profileCase?.id ?? null,
+        }),
         null,
         needsFacility ? { needs_facility: true } : null,
       );

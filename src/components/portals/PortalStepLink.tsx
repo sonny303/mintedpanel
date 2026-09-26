@@ -10,6 +10,7 @@ import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { usePortals } from "@/hooks/usePortals";
 import {
   resolveHandoffFacility,
+  shouldShowCaseFacilityPicker,
   type HandoffFacilityLoadState,
   type HandoffFacilityOption,
 } from "@/lib/casePortals";
@@ -88,12 +89,11 @@ export function PortalStepLink({
       ? { portalKey: key, name: displayName, url: portal.formUrl }
       : null;
   const invalidPortalUrl = Boolean(portal.formUrl) && target === null;
-  const showFacilityPicker =
-    handoff?.facilityLoadState === "ready" &&
-    handoff.facilities.length > 0 &&
-    (handoff.facilities.length > 1 ||
-      (facilityResolution?.status === "blocked" &&
-        facilityResolution.reason === "selection_invalid"));
+  const showFacilityPicker = Boolean(
+    handoff &&
+    facilityResolution &&
+    shouldShowCaseFacilityPicker(handoff.facilityLoadState, handoff.facilities, facilityResolution),
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-2.5 py-1.5 text-[12px]">

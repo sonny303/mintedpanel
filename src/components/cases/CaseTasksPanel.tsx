@@ -6,7 +6,7 @@
 // steps render beneath it; the CURRENT step (the first incomplete step of the
 // first unfinished task) carries the "Open step" affordance that opens the
 // drawer, where the step bodies and Mark-step-done live.
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { differenceInDays, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
@@ -37,7 +44,13 @@ import {
   summarizeTasks,
 } from "@/lib/caseDetailView";
 import { EXECUTION_TYPE_LABELS, resolveExecutionType } from "@/lib/executionTypes";
-import type { HandoffFacilityLoadState, HandoffFacilityOption } from "@/lib/casePortals";
+import {
+  resolveHandoffFacility,
+  shouldShowCaseFacilityPicker,
+  type HandoffFacilityLoadState,
+  type HandoffFacilityOption,
+} from "@/lib/casePortals";
+import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import type { Task, TaskStatus } from "@/types";
 
 export interface CasePortalHandoffData {
@@ -47,6 +60,8 @@ export interface CasePortalHandoffData {
   caseFacilityId: string | null;
   facilityLoadState: HandoffFacilityLoadState;
   facilities: HandoffFacilityOption[];
+  selectedFacilityId: string | undefined;
+  onSelectFacility: (facilityId: string) => void;
 }
 
 function taskStatusIcon(status: Task["status"], locked: boolean) {
@@ -60,6 +75,8 @@ function taskStatusIcon(status: Task["status"], locked: boolean) {
 export function CaseTasksPanel({
   tasks: allTasks,
   tokenValues,
+  refreshPdfTokenValues,
+  pdfContextKey,
   groupId = null,
   providerName = "this provider",
   groupName = null,
@@ -68,6 +85,8 @@ export function CaseTasksPanel({
   tasks: Task[];
   /** token -> value map for the drawer's pdf-step filler (built by the case page). */
   tokenValues?: Record<string, string>;
+  refreshPdfTokenValues?: RefreshPdfTokenValues;
+  pdfContextKey?: string;
   /** ASD — the case's group, threaded to the drawer's step-artifact panel
    * and Active Documents rail. */
   groupId?: string | null;
@@ -81,18 +100,26 @@ export function CaseTasksPanel({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
-  const [selectedFacilityId, setSelectedFacilityId] = useState<string | undefined>(undefined);
-  const handoffCaseId = portalHandoff?.caseId;
-  useEffect(() => {
-    setSelectedFacilityId(undefined);
-  }, [handoffCaseId]);
   const drawerPortalHandoff: PortalHandoffContext | undefined = portalHandoff
-    ? {
-        ...portalHandoff,
-        selectedFacilityId,
-        onSelectFacility: setSelectedFacilityId,
-      }
+    ? portalHandoff
     : undefined;
+  const caseFacilityResolution = portalHandoff
+    ? resolveHandoffFacility(
+        portalHandoff.facilityLoadState,
+        portalHandoff.facilities,
+        portalHandoff.caseFacilityId,
+        portalHandoff.selectedFacilityId,
+      )
+    : null;
+  const showCaseFacilityPicker = Boolean(
+    portalHandoff &&
+    caseFacilityResolution &&
+    shouldShowCaseFacilityPicker(
+      portalHandoff.facilityLoadState,
+      portalHandoff.facilities,
+      caseFacilityResolution,
+    ),
+  );
   // Payer PDF — a removed payer form is off this case for good, so it drops out
   // BEFORE anything derives from the list: the summary counts, the sequential
   // lock, and the current-step pointer must all behave as though it was never
@@ -160,10 +187,38 @@ export function CaseTasksPanel({
       <Card className="shadow-none border-border">
         <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-[14px] font-semibold">Tasks</CardTitle>
-          <span className="text-[12px] text-muted-foreground tabular-nums">
-            {summary.completed} of {summary.total} completed
-            {summary.nextDueDate ? ` · next due ${fmtDate(summary.nextDueDate)}` : ""}
-          </span>
+          <div className="flex min-w-0 items-center gap-3">
+            {showCaseFacilityPicker && portalHandoff ? (
+              <div className="flex items-center gap-2">
+                <label className="text-[12px] font-medium text-muted-foreground">
+                  Fill location
+                </label>
+                <Select
+                  value={
+                    caseFacilityResolution?.status === "ready"
+                      ? caseFacilityResolution.facilityId
+                      : undefined
+                  }
+                  onValueChange={portalHandoff.onSelectFacility}
+                >
+                  <SelectTrigger className="h-8 w-[190px] shadow-none" aria-label="Fill location">
+                    <SelectValue placeholder="Choose a location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {portalHandoff.facilities.map((facility) => (
+                      <SelectItem key={facility.id} value={facility.id}>
+                        {facility.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <span className="text-[12px] text-muted-foreground tabular-nums">
+              {summary.completed} of {summary.total} completed
+              {summary.nextDueDate ? ` · next due ${fmtDate(summary.nextDueDate)}` : ""}
+            </span>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {tasks.length === 0 ? (
@@ -278,6 +333,8 @@ export function CaseTasksPanel({
                         pointer={payerFormPointer}
                         canEdit={canEdit}
                         tokenValues={tokenValues}
+                        refreshTokenValues={refreshPdfTokenValues}
+                        pdfContextKey={pdfContextKey ?? ""}
                       />
                     ) : null}
                     {!payerFormPointer && steps.length > 0 && !locked ? (
@@ -351,6 +408,8 @@ export function CaseTasksPanel({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         tokenValues={tokenValues}
+        refreshTokenValues={refreshPdfTokenValues}
+        pdfContextKey={pdfContextKey}
         groupId={groupId}
         caseTasks={tasks}
         providerName={providerName}

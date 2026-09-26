@@ -35,6 +35,7 @@ import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTas
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
 import { isPortalHandoffStepEligible } from "@/lib/casePortals";
+import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
 interface TaskDrawerProps {
@@ -45,6 +46,8 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** token -> value map for the pdf-step filler (from the case page). */
   tokenValues?: Record<string, string>;
+  refreshTokenValues?: RefreshPdfTokenValues;
+  pdfContextKey?: string;
   /** ASD — the case's group, for the step-artifact panel's vault grain AND
    * the Active Documents rail below. The task carries its own
    * caseId/providerId; groupId lives on the case. */
@@ -90,6 +93,8 @@ export function TaskDrawer({
   open,
   onOpenChange,
   tokenValues,
+  refreshTokenValues,
+  pdfContextKey = "",
   groupId = null,
   caseTasks = [],
   providerName = "this provider",
@@ -344,6 +349,8 @@ export function TaskDrawer({
                               <StepBody
                                 step={step}
                                 tokenValues={tokenValues}
+                                refreshTokenValues={refreshTokenValues}
+                                pdfContextKey={pdfContextKey}
                                 taskId={task.id}
                                 caseId={task.caseId}
                                 providerId={task.providerId}
