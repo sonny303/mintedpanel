@@ -373,14 +373,20 @@ describe("me orgs handler", () => {
 
 describe("portal field maps handler", () => {
   it("returns the rows with meta.total", async () => {
-    listMapsMock.mockResolvedValue([{ id: "m1" }, { id: "m2" }] as never);
+    listMapsMock.mockResolvedValue([
+      { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
+      { id: "m2" },
+    ] as never);
     const res = await handleListPortalFieldMaps(
       new URL("https://x.test/api/portal-field-maps"),
       ctx(),
     );
     expect(res.status).toBe(200);
     const b = await body(res);
-    expect(b.data).toEqual([{ id: "m1" }, { id: "m2" }]);
+    expect(b.data).toEqual([
+      { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
+      { id: "m2" },
+    ]);
     expect(b.meta).toEqual({ total: 2 });
   });
 

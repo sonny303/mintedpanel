@@ -192,7 +192,7 @@ BEGIN
       FROM public.portal_field_maps m
      WHERE m.portal_key = p_portal_key AND m.selector = v_selector
        AND (m.org_id = p_org_id OR m.org_id IS NULL)
-     ORDER BY (m.org_id = p_org_id) DESC
+     ORDER BY (m.org_id = p_org_id) DESC NULLS LAST, m.id
      LIMIT 1;
 
     IF FOUND THEN

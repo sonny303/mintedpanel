@@ -323,6 +323,45 @@ FROM public.portal_field_maps WHERE portal_key = '${ids.portalKey}'
     `existing mapping decisions changed: ${preservedRows.stdout}`,
   );
 
+  await runPsql(`
+INSERT INTO public.portal_field_maps (org_id, portal_key, map_type, selector, source, token, field_type, status)
+VALUES
+  (NULL, '${ids.portalKey}', 'web', '#tier-org-match', 'token', 'provider.firstName', 'text', 'approved'),
+  ('${ids.orgId}', '${ids.portalKey}', 'web', '#tier-org-match', 'token', 'provider.npi', 'text', 'approved'),
+  (NULL, '${ids.portalKey}', 'web', '#tier-org-conflict', 'token', 'provider.npi', 'text', 'approved'),
+  ('${ids.orgId}', '${ids.portalKey}', 'web', '#tier-org-conflict', 'token', 'provider.firstName', 'text', 'approved'),
+  (NULL, '${ids.portalKey}', 'web', '#tier-shared-only', 'token', 'provider.npi', 'text', 'approved');
+`);
+  const tierPrecedence = parseJsonOutput(
+    await runPsql(
+      rpcSql(ids, ids.actorId, {
+        mappings: [
+          mapping("#tier-org-match", "provider.npi"),
+          mapping("#tier-org-conflict", "provider.npi"),
+          mapping("#tier-shared-only", "provider.npi"),
+        ],
+      }),
+    ),
+    "org-over-shared precedence",
+  );
+  assert(
+    tierPrecedence.kind === "ok" &&
+      tierPrecedence.inserted_count === 0 &&
+      tierPrecedence.confirmed_saved_count === 2 &&
+      tierPrecedence.preserved_count === 1,
+    "org rows did not take precedence over shared rows with accurate confirmation/preservation counts",
+  );
+  const tierRows = await runPsql(`
+SELECT string_agg(COALESCE(org_id::text, 'shared') || ':' || selector || ':' || token, ',' ORDER BY selector, org_id NULLS LAST)
+FROM public.portal_field_maps
+WHERE portal_key = '${ids.portalKey}' AND selector IN ('#tier-org-match','#tier-org-conflict','#tier-shared-only');
+`);
+  assert(
+    tierRows.stdout ===
+      `shared:#tier-org-conflict:provider.npi,${ids.orgId}:#tier-org-conflict:provider.firstName,shared:#tier-org-match:provider.firstName,${ids.orgId}:#tier-org-match:provider.npi,shared:#tier-shared-only:provider.npi`,
+    `tier lookup modified or selected the wrong map rows: ${tierRows.stdout}`,
+  );
+
   await runPsql(
     "ALTER TABLE public.audit_log ADD CONSTRAINT flywheel_test_audit_failure CHECK (entity_type <> 'portal_field_map') NOT VALID;",
   );
