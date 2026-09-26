@@ -14,7 +14,7 @@
 //          authoring a payer SOP later changes nothing on the existing case,
 //          and reapply restamps the NEW cycle at the current payer SOP while
 //          the original cycle's fallback stamp survives untouched.
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

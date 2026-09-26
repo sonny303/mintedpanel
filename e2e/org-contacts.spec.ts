@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.2 FR-5 / TE-4 — Playwright verification that the seeded CRM contacts render
 // on a seeded org's workspace. The sandbox/CI can't reach *.supabase.co, so this

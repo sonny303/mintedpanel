@@ -17,7 +17,7 @@
 //   TS-B  validation toasts never cover or intercept the primary action: with
 //         an error toast visible, the footer Publish button still receives
 //         the click (Playwright fails a click intercepted by an overlay).
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

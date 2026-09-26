@@ -319,6 +319,86 @@ The single case-activity spine (Story 1, migration `20260707120000_touchlog_entr
 
 `id, org_id, ts, user_id, user_name, action_type, entity_type, entity_id, before jsonb, after jsonb, description, created_at`. No edit, no delete, by anyone — including admins. `action_type` is check-constrained to `CREATE | UPDATE | STATUS_CHANGE | TOUCH_LOGGED | TERMINATION | READ` (`READ` added 2026-07-05 for profile-endpoint read auditing — migration `20260705190000_audit_log_read_action_type.sql`).
 
+## E6.12 restricted client access context (2026-09-25)
+
+E6.12 adds a private, service-only authorization graph for the Enrollment
+Explorer boundary. These relations never receive `anon` or `authenticated`
+table grants and are protected by RLS/FORCE RLS. Browser report reads use the
+dedicated `/api` service gateway; no browser path calls `private.*` directly.
+
+### Private relations
+
+- **`private.internal_staff`** — `(auth_user_id, org_id, staff_role)` owner-
+  approved manifest rows. The active manifest is the independent dual-user
+  exemption for global training; matching current membership is required when
+  the row is used for report authority or client management. Activation and
+  revocation use the service-only `set_internal_staff_manifest(...)` RPC.
+- **`private.client_identity_classifications`** — durable verified-user
+  classification (`pending|active|expired|revoked`) bound at invite issuance.
+  It survives email changes, no-grant transitions, expiry, and revocation so a
+  pre-existing verified Auth account cannot escape classification by changing
+  email before claim.
+- **`private.client_invites`** and **`private.client_invite_group_grants`** —
+  one hashed, seven-day, single-use token plus its organization/group snapshot.
+  Option A requires an existing confirmed, non-banned, non-deleted,
+  non-anonymous Auth user at issuance; claim rechecks the current verified
+  email and status in the same transaction.
+- **`private.client_access`** and **`private.client_group_grants`** — canonical
+  verified `(auth_user_id, org_id)` access and explicit provider-group scope.
+  Composite foreign keys enforce user/org/classification and org/group
+  coherence; no `memberships` row is created for a client.
+
+The dedicated `minted_e612_authz_owner` is `NOLOGIN`/`NOBYPASSRLS` and has
+only the narrow SELECT policies needed by `app_authz.is_restricted_external()`;
+it has no private write authority. `app_authz` exposes only that no-argument
+boolean helper to `authenticated` (and the service role); `PUBLIC` and `anon`
+EXECUTE are revoked. The helper reads `auth.uid()` and never exposes private
+rows or `auth.users` data.
+
+### E6.12 RPC contract
+
+The five browser-facing gateways (`resolve_enrollment_context`,
+`create_client_invite`, `claim_client_invite`, `set_client_group_grants`, and
+`revoke_client_access`) accept a non-null `p_actor_user_id` supplied by the
+server after verified JWT authentication, are service-role-only, and
+independently recheck Auth status. The separate operator-only
+`set_internal_staff_manifest` RPC accepts its operator actor from approved
+manifest tooling; it is not a browser gateway. Management RPCs require an
+active matching manifest row and current same-org `admin` membership. Report
+authority additionally allows current same-org `specialist` membership, but is
+never inferred from membership alone. The manifest is the dual-user
+staff/report authority check, while legitimate zero-membership nonclient
+training remains available.
+
+- `resolve_enrollment_context(p_actor_user_id, p_audience, p_org_id) RETURNS jsonb`
+  — returns verified actor, staff/client capabilities, selected audience/org,
+  group grants, `globalTraining`, `restrictedExternal`, and `contextRevision`.
+- `create_client_invite(p_actor_user_id, p_org_id, p_recipient_email,
+p_group_ids) RETURNS jsonb` — transactional issue/replacement and audit. The
+  authenticated gateway adds a caller-deliverable `inviteUrl`; it does not send
+  mail or provision an Auth account.
+- `claim_client_invite(p_actor_user_id, p_token) RETURNS jsonb` — transactional
+  verified-email claim, canonical access upsert, group snapshot, replay/expiry
+  denial, and audit.
+- `set_client_group_grants(p_actor_user_id, p_access_id, p_group_ids) RETURNS
+jsonb` and `revoke_client_access(p_actor_user_id, p_access_id) RETURNS jsonb`
+  — lock classification before access, invalidate pending replacement tokens,
+  and write audit rows.
+
+Existing public response envelopes stay unchanged. Protected existing responses
+may carry the additive `X-Minted-Context-Revision` header; new access-context
+responses include `contextRevision` in their JSON data. A changed revision,
+audience, organization, or grant cancels in-flight client work and invalidates
+the corresponding query cache before the next context mounts.
+
+The native verifier is SQL-only evidence for PostgreSQL roles, RLS, RPC bodies,
+and transaction behavior; it does not prove Auth, PostgREST, Storage, or
+browser HTTP behavior. Those boundaries require the paired isolated HTTP and
+browser harnesses. The browser claim entrypoint is `/client-invites/claim/:token`. An unauthenticated
+recipient is sent to `/login?invite=:token`; after sign-in, the token is returned
+to the explicit claim action. This is for an existing verified Auth recipient
+only and has no signup or outbound-email path.
+
 ## Extension + cleanup surfaces
 
 ### portal_field_maps

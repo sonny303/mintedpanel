@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E3.3 TE-12 — Sectioned Intake Uniformity e2e:
 //   TS-65 The wizard's Provider Group, Facilities, and Providers sections each

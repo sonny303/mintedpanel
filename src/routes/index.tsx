@@ -1,35 +1,10 @@
 // Public marketing landing page for Minted Panel Credentialing.
 // Ported from the reference design: brand-green hero with dot texture, live-status card, and section blocks.
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { useAuthStore } from "@/lib/auth-store";
-import { listPortfolioOrgs } from "@/services/portfolio";
-import { resolveLanding } from "@/lib/landing";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: async () => {
-    // On a hard load init() hasn't run yet, so the store session is null here and
-    // we fall through to the public marketing page (unchanged E0.0 behavior). On
-    // client-side navigation the store is populated, so resolve the E0.4 landing.
-    const { session, activeOrgId, setActiveOrg } = useAuthStore.getState();
-    if (!session) return;
-    let decision;
-    try {
-      decision = resolveLanding(await listPortfolioOrgs(), activeOrgId);
-    } catch {
-      throw redirect({ to: "/reporting/portfolio", replace: true });
-    }
-    if (decision.kind === "workspace") {
-      // Redesign E0.4 TE-1: land in the last-active (or most-recent) org
-      // workspace — since E6.1 F6.1.2 that means the Cases surface. first-run /
-      // all-inactive fall through to the Reporting Center's Portfolio report
-      // (E0.6 TE-3; NoOrgScreen renders there when memberships are 0).
-      setActiveOrg(decision.orgId);
-      throw redirect({ to: "/cases", replace: true });
-    }
-    throw redirect({ to: "/reporting/portfolio", replace: true });
-  },
   component: LandingPage,
 });
 

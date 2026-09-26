@@ -1186,3 +1186,9 @@ Format per entry:
   existing auth-only denial evidence must close effective privileges before
   hosted external activation; this entry grants no staging repair or release
   permission.
+
+- **Invite timing amendment (2026-09-24):** PM approved **Option A** for
+  E6.12: a client invite may be issued only to an existing confirmed,
+  non-banned, non-deleted, non-anonymous Auth user. Claim still rechecks the
+  current verified email and Auth status. Invite-before-signup account
+  lifecycle work is outside this slice.

@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E4.2 hardening — canonical payer selection, retargeted by the
 // payer-and-cases Slice A (the catalog browse is retired). Payer Setup lists

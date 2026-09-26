@@ -26,7 +26,9 @@
 // there is no org this event belongs to. RLS is the whole enforcement story
 // (profiles_update_self: `id = auth.uid()`), which is why nothing here accepts
 // a user id from the caller.
+import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
+import { applyAuthStateChange, useAuthStore } from "@/lib/auth-store";
 import { composeFullName } from "@/lib/personName";
 
 export interface UserProfile {
@@ -44,6 +46,12 @@ export interface UserProfileInput {
   firstName: string;
   lastName: string;
   title: string;
+}
+
+export type ProfileMetadataSync = "synced" | "skipped" | "failed";
+
+export interface UserProfileSaveResult extends UserProfile {
+  metadataSync: ProfileMetadataSync;
 }
 
 const COLUMNS = "id, first_name, last_name, title, full_name, email";
@@ -95,10 +103,17 @@ export async function getMyProfile(): Promise<UserProfile | null> {
  * Blank title is stored as NULL rather than "" — an empty string would resolve
  * as a present-but-empty token instead of an honest "no title on file".
  */
-export async function updateMyProfile(input: UserProfileInput): Promise<UserProfile> {
+export async function updateMyProfile(input: UserProfileInput): Promise<UserProfileSaveResult> {
+  const originAuthGeneration = useAuthStore.getState().authGeneration;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const originSession = sessionData.session;
+  const originActor = originSession?.user?.id;
+  const originAccessToken = originSession?.access_token;
+  if (!originActor || !originAccessToken) throw new Error("Not signed in");
+
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
-  if (!userId) throw new Error("Not signed in");
+  if (!userId || userId !== originActor) throw new Error("Session changed; try again");
 
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
@@ -121,18 +136,67 @@ export async function updateMyProfile(input: UserProfileInput): Promise<UserProf
     .single();
   if (error) throw new Error(error.message);
 
-  // Keep auth metadata in step. A failure here is NOT fatal: the profiles row
-  // is the source of truth and userTokens.ts reads it first, so a stale
-  // metadata copy degrades to "the fallback is out of date", never to a lost
-  // save. Surfacing it as an error would tell the user their save failed when
-  // it did not.
+  const saved = toProfile(data as ProfileRow);
+
+  // The profiles write is already committed. Bind the metadata request to the
+  // captured actor token so a session switch cannot mirror A's name into B.
+  const currentState = useAuthStore.getState();
+  const { data: currentSessionData } = await supabase.auth.getSession();
+  const currentSession = currentSessionData.session;
+  if (
+    currentState.user?.id !== originActor ||
+    currentState.authGeneration !== originAuthGeneration ||
+    currentSession?.user?.id !== originActor ||
+    currentSession.access_token !== originAccessToken
+  ) {
+    return { ...saved, metadataSync: "skipped" };
+  }
+
   if (fullName) {
     try {
-      await supabase.auth.updateUser({ data: { full_name: fullName } });
+      const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
+      const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
+      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          apikey: anonKey,
+          authorization: `Bearer ${originAccessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ data: { full_name: fullName } }),
+      });
+      let payload: unknown = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      if (!response.ok) return { ...saved, metadataSync: "failed" };
+      const rawUser =
+        payload && typeof payload === "object" && "user" in payload
+          ? (payload as { user?: unknown }).user
+          : payload;
+      if (
+        !rawUser ||
+        typeof rawUser !== "object" ||
+        (rawUser as { id?: unknown }).id !== originActor
+      ) {
+        return { ...saved, metadataSync: "failed" };
+      }
+
+      const updatedSession: Session = {
+        ...originSession,
+        user: rawUser as User,
+      };
+      const applied = await applyAuthStateChange("USER_UPDATED", updatedSession, {
+        actorUserId: originActor,
+        authGeneration: originAuthGeneration,
+      });
+      return { ...saved, metadataSync: applied ? "synced" : "skipped" };
     } catch {
-      // ignore — profiles already holds the authoritative value
+      return { ...saved, metadataSync: "failed" };
     }
   }
 
-  return toProfile(data as ProfileRow);
+  return { ...saved, metadataSync: "skipped" };
 }
