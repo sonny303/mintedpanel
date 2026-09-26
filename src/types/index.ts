@@ -755,6 +755,206 @@ export interface EnrollmentFact {
   createdAt: string;
 }
 
+/** E6.13 enrollment explorer wire contracts. Actor, org, audience and context
+ * revision are supplied by the verified API context, never by DTO payloads. */
+export type EnrollmentExplorerAudience = "staff" | "client";
+export type EnrollmentStatus =
+  | "not_started"
+  | "in_progress"
+  | "submitted"
+  | "in_review"
+  | "action_required"
+  | "approved"
+  | "denied"
+  | "not_pursuing"
+  | "terminated";
+export type EnrollmentActionOwner = "Minted" | "Client" | "Payer" | "Complete" | "Unassigned";
+export type EnrollmentRetroStatus = "unknown" | "not_supported" | "documented";
+export type EnrollmentSourceKind = "case" | "fact";
+export type EnrollmentEvidenceKind =
+  "payer_approval_letter" | "payer_roster_confirmation" | "payer_acknowledgement" | "license_psv";
+export type EnrollmentProofField =
+  | "enrollment_status"
+  | "payer_reference"
+  | "approved_date"
+  | "effective_date"
+  | "termination_date"
+  | "facility_id"
+  | "product_id"
+  | "retro_status"
+  | "retro_days"
+  | "retro_date"
+  | "submitted_date"
+  | "payer_acknowledged_date"
+  | "license_current";
+
+export interface EnrollmentSourceLink {
+  sourceKind: EnrollmentSourceKind;
+  sourceId: string;
+  sourceFingerprint: string;
+}
+
+export interface EnrollmentRevisionDraft {
+  status: EnrollmentStatus;
+  intakeDate?: string | null;
+  completeToSubmitDate?: string | null;
+  submittedDate?: string | null;
+  payerAcknowledgedDate?: string | null;
+  approvedDate?: string | null;
+  effectiveDate?: string | null;
+  terminationDate?: string | null;
+  payerReference?: string | null;
+  clientSafeBlocker?: string | null;
+  owner: EnrollmentActionOwner;
+  retroStatus: EnrollmentRetroStatus;
+  retroDays?: number | null;
+  retroDate?: string | null;
+  retroBasis?: string | null;
+  staffNote?: string | null;
+  observedAt?: string | null;
+}
+
+export interface EnrollmentScopeSaveInput {
+  scopeId?: string | null;
+  expectedRevisionId?: string | null;
+  providerId: string;
+  groupId: string;
+  payerProductId: string;
+  facilityId: string;
+  state: string;
+  revision: EnrollmentRevisionDraft;
+  sources: EnrollmentSourceLink[];
+}
+
+export interface EnrollmentCatalogProduct {
+  productId: string;
+  payerId: string;
+  payerName: string;
+  productKey: string;
+  displayName: string;
+  isActive: boolean;
+}
+
+export interface EnrollmentCatalogTarget {
+  targetId: string;
+  groupId: string;
+  payerProductId: string;
+  payerId: string;
+  state: string;
+  isActive: boolean;
+}
+
+export interface EnrollmentCatalog {
+  products: EnrollmentCatalogProduct[];
+  targets: EnrollmentCatalogTarget[];
+}
+
+export interface EnrollmentUnmappedCoordinate {
+  payerProductId: string;
+  facilityId: string;
+  state: string;
+}
+
+export type EnrollmentTriageState = "needs_verification" | "unmapped" | "partially_mapped";
+
+export interface EnrollmentUnresolvedSource {
+  sourceKind: EnrollmentSourceKind;
+  sourceId: string;
+  sourceFingerprint: string;
+  /** Canonical source projection is staff-only; never use it for client DTOs. */
+  sourceSnapshot: Record<string, unknown>;
+  mappedScopeIds: string[];
+  unmappedFacilityIds: string[];
+  unmappedCoordinates: EnrollmentUnmappedCoordinate[];
+  mappingNeedsConfiguration: boolean;
+  triageState: EnrollmentTriageState;
+  observedAt: string;
+}
+
+export interface EnrollmentUnresolvedCursor {
+  observedAt: string;
+  sourceKind: EnrollmentSourceKind;
+  sourceId: string;
+}
+
+export interface EnrollmentUnresolvedPage {
+  items: EnrollmentUnresolvedSource[];
+  nextCursor: EnrollmentUnresolvedCursor | null;
+}
+
+export interface EnrollmentProofSummary {
+  publicationId: string;
+  evidenceKind: EnrollmentEvidenceKind;
+  supportedFields: EnrollmentProofField[];
+  publishedAt: string;
+}
+
+export interface EnrollmentClientScopeSummary {
+  scopeId: string;
+  orgId: string;
+  providerId: string;
+  groupId: string;
+  payerProductId: string;
+  facilityId: string;
+  state: string;
+  status: EnrollmentStatus | "needs_verification";
+  historicalStatus?: EnrollmentStatus;
+  clientSafeBlocker?: string | null;
+  owner?: EnrollmentActionOwner;
+  reviewedAt?: string;
+  cycleNo?: number;
+  revisionNo?: number;
+  intakeDate?: string | null;
+  completeToSubmitDate?: string | null;
+  submittedDate?: string | null;
+  payerAcknowledgedDate?: string | null;
+  approvedDate?: string | null;
+  effectiveDate?: string | null;
+  terminationDate?: string | null;
+  payerReference?: string | null;
+  retroStatus?: EnrollmentRetroStatus;
+  retroDays?: number | null;
+  retroDate?: string | null;
+  retroBasis?: string | null;
+  proofs: EnrollmentProofSummary[];
+}
+
+export interface EnrollmentScopeDetailStaff {
+  scope: {
+    id: string;
+    orgId: string;
+    providerId: string;
+    groupId: string;
+    payerProductId: string;
+    facilityId: string;
+    state: string;
+    currentRevisionId: string;
+  };
+  revision: Record<string, unknown>;
+  stale: boolean;
+  sources: Array<EnrollmentSourceLink & { sourceSnapshot: Record<string, unknown> }>;
+  summary: {
+    publicationId: string;
+    revisionId: string;
+    status: EnrollmentStatus;
+    clientSafeBlocker: string | null;
+    owner: EnrollmentActionOwner;
+    publishedAt: string;
+  } | null;
+  proofs: Array<EnrollmentProofSummary & { documentVersionId: string; sha256: string }>;
+}
+
+export type EnrollmentScopeDetail = EnrollmentScopeDetailStaff | EnrollmentClientScopeSummary;
+
+export interface EnrollmentProofCaptureInput {
+  scopeId: string;
+  revisionId: string;
+  documentVersionId: string;
+  evidenceKind: EnrollmentEvidenceKind;
+  supportedFields: EnrollmentProofField[];
+  reason: string;
+}
+
 export interface Mso {
   id: string;
   orgId: string;

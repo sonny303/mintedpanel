@@ -25,6 +25,7 @@ import {
   handleSetClientGroupGrants,
 } from "./clientAccessRoutes";
 import { resolveEnrollmentContext } from "@/services/clientAccess";
+import type { EnrollmentExplorerAudience } from "@/types";
 
 // Route handlers pull in their services (and the Supabase client graph). They
 // are loaded lazily so /api/health stays free of that graph and proves the
@@ -137,6 +138,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   // Authorization/x-org-id always trigger a browser preflight; answer it
   // before auth (a preflight carries no credentials by definition).
   if (request.method.toUpperCase() === "OPTIONS") return handlePreflight(request);
+  const requestPath = new URL(request.url).pathname;
+  if (
+    requestPath === "/api/enrollment-explorer" ||
+    requestPath.startsWith("/api/enrollment-explorer/")
+  ) {
+    return withCors(await handleEnrollmentExplorerApiRequest(request), request);
+  }
   const operation = await resolveOperationContext(request);
   if (operation && "error" in operation) {
     return withCors(toErrorResponse(operation.error), request);
@@ -173,6 +181,111 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     response.headers.set("X-Minted-Context-Revision", operation.revision);
   }
   return withCors(response, request);
+}
+
+/** E6.13 makes audience selection explicit because one identity may have both
+ * staff and client grants. Never reuse the default context or infer staff. */
+async function handleEnrollmentExplorerApiRequest(request: Request): Promise<Response> {
+  const noStoreFailure = (status: number, message: string, revision?: string) => {
+    const response = fail(status, message);
+    response.headers.set("cache-control", "no-store, max-age=0");
+    response.headers.set("pragma", "no-cache");
+    if (revision) response.headers.set("x-minted-context-revision", revision);
+    return response;
+  };
+  const contextFailure = (error: unknown, statusForUnavailable: number): Response => {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === "P0001") {
+      const message = (error as Error).message;
+      if (message === "Verified actor is unavailable") {
+        return noStoreFailure(401, "Your session is no longer active; sign in again");
+      }
+      if (message === "Unsupported audience") {
+        return noStoreFailure(400, "Choose a supported enrollment audience");
+      }
+      return noStoreFailure(
+        statusForUnavailable,
+        "Selected enrollment access is no longer available",
+      );
+    }
+    return noStoreFailure(500, "Unable to resolve enrollment access");
+  };
+  try {
+    if (hasForgedActorTransport(request)) {
+      return noStoreFailure(400, "Actor identity is derived from the verified session");
+    }
+    const user = await authenticateUserForRequest(request);
+    const orgId = request.headers.get("x-org-id") ?? "";
+    const audience = request.headers.get("x-enrollment-audience");
+    const requestedRevision = request.headers.get("x-minted-context-revision");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+      return noStoreFailure(400, "A valid x-org-id header is required");
+    }
+    if (audience !== "staff" && audience !== "client") {
+      return noStoreFailure(400, "Choose an explicit enrollment audience");
+    }
+    if (!requestedRevision) {
+      return noStoreFailure(409, "Access context is missing; refresh before retrying", "unknown");
+    }
+    const selectedAudience = audience as EnrollmentExplorerAudience;
+    let current;
+    try {
+      current = await resolveEnrollmentContext(
+        { db: user.db, actorUserId: user.userId },
+        { audience: selectedAudience, orgId },
+      );
+    } catch (error) {
+      return contextFailure(error, 403);
+    }
+    if (current.audience !== selectedAudience || current.selectedOrgId !== orgId) {
+      return noStoreFailure(403, "Selected enrollment audience is not available");
+    }
+    if (current.contextRevision !== requestedRevision) {
+      return noStoreFailure(
+        409,
+        "Access context changed; retry the request",
+        current.contextRevision,
+      );
+    }
+    const routes = await import("./enrollmentExplorerRoutes");
+    const response = await routes.handleEnrollmentExplorerRequest(request, user, {
+      orgId,
+      audience: selectedAudience,
+    });
+    response.headers.set("x-minted-context-revision", current.contextRevision);
+    if (response.status >= 400) return response;
+    try {
+      const after = await resolveEnrollmentContext(
+        { db: user.db, actorUserId: user.userId },
+        { audience: selectedAudience, orgId },
+      );
+      if (after.contextRevision !== current.contextRevision) {
+        if (request.method.toUpperCase() === "GET") {
+          return noStoreFailure(
+            409,
+            "Access context changed; retry the request",
+            after.contextRevision,
+          );
+        }
+        response.headers.set("x-minted-context-revision", "unknown");
+      } else {
+        response.headers.set("x-minted-context-revision", after.contextRevision);
+      }
+    } catch (error) {
+      if (request.method.toUpperCase() === "GET") {
+        const stale = contextFailure(error, 409);
+        stale.headers.set("x-minted-context-revision", "unknown");
+        return stale;
+      }
+      response.headers.set("x-minted-context-revision", "unknown");
+    }
+    return response;
+  } catch (error) {
+    const response = toErrorResponse(error);
+    response.headers.set("cache-control", "no-store, max-age=0");
+    response.headers.set("pragma", "no-cache");
+    return response;
+  }
 }
 
 // Existing response envelopes remain unchanged. Capture the fingerprint before

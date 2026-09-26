@@ -4087,6 +4087,142 @@ export type Database = {
         };
         Returns: Json;
       };
+      authorize_enrollment_proof_download: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_publication_id: string;
+        };
+        Returns: Json;
+      };
+      curate_enrollment_payer_product: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_display_name: string;
+          p_is_active: boolean;
+          p_org_id: string;
+          p_payer_id: string;
+          p_product_key: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_catalog: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_group_id: string | null;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_proof_capture_target: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_document_version_id: string;
+          p_org_id: string;
+          p_revision_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_scope_detail: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_unresolved_page: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_cursor: Json;
+          p_group_id: string | null;
+          p_limit: number;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
+      publish_enrollment_proof: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_document_version_id: string;
+          p_evidence_kind: string;
+          p_org_id: string;
+          p_reason: string;
+          p_scope_id: string;
+          p_sha256: string;
+          p_supported_fields: string[];
+          p_revision_id: string;
+        };
+        Returns: Json;
+      };
+      publish_enrollment_summary: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_revision_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      record_enrollment_proof_download: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_document_version_id: string;
+          p_org_id: string;
+          p_publication_id: string;
+          p_sha256: string;
+        };
+        Returns: Json;
+      };
+      revoke_enrollment_publication: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_org_id: string;
+          p_publication_id: string;
+          p_reason: string;
+        };
+        Returns: Json;
+      };
+      save_enrollment_revision: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_expected_revision_id: string | null;
+          p_facility_id: string;
+          p_group_id: string;
+          p_org_id: string;
+          p_payer_product_id: string;
+          p_provider_id: string;
+          p_revision: Json;
+          p_scope_id: string | null;
+          p_sources: Json;
+          p_state: string;
+        };
+        Returns: Json;
+      };
+      set_enrollment_group_product_target: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_group_id: string;
+          p_is_active: boolean;
+          p_org_id: string;
+          p_payer_product_id: string;
+          p_state: string;
+        };
+        Returns: Json;
+      };
       create_case_with_tasks: {
         Args: { p_input: Json; p_tasks?: Json };
         Returns: Json;

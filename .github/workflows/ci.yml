@@ -215,6 +215,12 @@ jobs:
           node scripts/security/verify-e612-client-access.mjs
           node scripts/security/verify-e612-client-access-http.mjs
 
+      - name: Verify E6.13 enrollment scope SQL contract
+        env:
+          E613_DOCKER_CONTEXT: default
+          E613_POSTGRES_IMAGE: postgres@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
+        run: node scripts/security/verify-e613-enrollment-scope.mjs
+
   # Gate 0.4 — migration dry-run against a throwaway Postgres (never a Supabase
   # branch or prod). Applies every file in supabase/migrations/ in filename order
   # after seeding the Supabase prerequisites the baseline assumes.
