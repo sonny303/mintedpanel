@@ -27,6 +27,8 @@
 //   tasks       cross-org task_id closed by a submission touch        (13)
 //   casecontext cross-org case context served instead of 404         (14b)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
+//   accesscontext another org leaks into the pre-shell access context, or the
+//               stale/forged actor boundary is ignored (30, 30b, 30c, 30d)
 //   facility    cross-org profile facilityId honored instead of 404  (11)
 //   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 //   documentdownload cross-org signed document download served instead of 404 (17b)
@@ -92,6 +94,7 @@ export const LEAK_MODES = [
   "tasks",
   "casecontext",
   "meorgs",
+  "accesscontext",
   "facility",
   "ssnrelease",
   "documentdownload",
@@ -100,6 +103,7 @@ export const LEAK_MODES = [
   "documentupload",
   "providergroups",
   "payerformwrite",
+  "e613isolation",
 ];
 
 const USERS = {
@@ -535,6 +539,92 @@ export async function createMockApiServer(options = {}) {
     const user = Object.values(USERS).find((u) => u.token === token);
     if (!user) return envelope(res, 401, null, "Missing or malformed Authorization header");
 
+    // --- E6.12 pre-shell access context. This mock keeps the existing
+    // org-isolation gate useful for the new API rule without pretending to be
+    // the service-role RPC implementation. The real route binds actor id to
+    // the verified JWT, requires a revision for selection, and fails closed on
+    // stale authority. Leak "accesscontext" adds a foreign org so the gate
+    // proves this response is tenant-scoped before shell hooks mount.
+    if (/^\/api\/me\/access-context\/?$/.test(url.pathname)) {
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => url.searchParams.has(key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const contextRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      const staffOrgs = [
+        {
+          orgId: user.orgId,
+          orgName: user.orgName,
+          role: user.role,
+          reportStaff: user.role !== "billing",
+          clientManage: user.role === "admin",
+        },
+      ];
+      if (leak === "accesscontext") {
+        staffOrgs.push({
+          orgId: FIXTURES.SOUTHPARK_ORG,
+          orgName: "South Park Physician Group",
+          role: "admin",
+          reportStaff: true,
+          clientManage: true,
+        });
+      }
+      return envelope(res, 200, {
+        actorUserId: user.userId,
+        email: user.email,
+        audience: "staff",
+        // Discovery intentionally leaves staff organization selection null;
+        // the real resolver only auto-selects a sole client org. The explicit
+        // POST selection below exercises the staff org choice.
+        selectedOrgId: null,
+        staffOrgs,
+        clientOrgs: [],
+        globalTraining: true,
+        restrictedExternal: false,
+        contextRevision,
+      });
+    }
+    if (/^\/api\/me\/access-context\/select\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      const body = (await readBody(req)) ?? {};
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      const contextRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      if (body.contextRevision !== contextRevision) {
+        return envelope(
+          res,
+          409,
+          null,
+          "Access context changed; refresh before selecting a new context",
+        );
+      }
+      if (body.audience !== "staff" || body.orgId !== user.orgId) {
+        return envelope(res, 403, null, "This access context is not authorized");
+      }
+      return envelope(res, 200, {
+        actorUserId: user.userId,
+        email: user.email,
+        audience: "staff",
+        selectedOrgId: user.orgId,
+        staffOrgs: [
+          {
+            orgId: user.orgId,
+            orgName: user.orgName,
+            role: user.role,
+            reportStaff: user.role !== "billing",
+            clientManage: user.role === "admin",
+          },
+        ],
+        clientOrgs: [],
+        globalTraining: true,
+        restrictedExternal: false,
+        contextRevision,
+      });
+    }
+
     // --- /api/me/orgs (user-scoped: sits BEFORE org resolution, like the real
     // route runs on authenticateUser — x-org-id is irrelevant to it) ---
     if (/^\/api\/me\/orgs\/?$/.test(url.pathname)) {
@@ -687,6 +777,54 @@ export async function createMockApiServer(options = {}) {
         return envelope(res, 200, { fields });
       }
       return envelope(res, 405, null, "Method not allowed");
+    }
+
+    // E6.13 explicit-audience contract used by the local isolation harness.
+    // This is a synthetic response only; live DB authorization is covered by
+    // the disposable native verifier and the application route tests.
+    if (url.pathname.startsWith("/api/enrollment-explorer/")) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => url.searchParams.has(key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      const audience = req.headers["x-enrollment-audience"];
+      const revision = req.headers["x-minted-context-revision"];
+      const selectedOrg = req.headers["x-org-id"];
+      if (audience !== "staff" && audience !== "client") {
+        return envelope(res, 400, null, "Choose an explicit enrollment audience");
+      }
+      if (!revision)
+        return envelope(res, 409, null, "Access context is missing; refresh before retrying");
+      const expectedRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      if (revision !== expectedRevision) {
+        return envelope(res, 409, null, "Access context changed; retry the request");
+      }
+      if (!selectedOrg) return envelope(res, 400, null, "A valid x-org-id header is required");
+      if (selectedOrg !== user.orgId && leak !== "e613isolation") {
+        return envelope(res, 403, null, "Selected enrollment access is no longer available");
+      }
+      if (audience !== "staff" || user.role === "billing") {
+        return envelope(res, 403, null, "Selected enrollment access is no longer available");
+      }
+      res.setHeader("cache-control", "no-store, max-age=0");
+      res.setHeader("x-minted-context-revision", expectedRevision);
+      return envelope(res, 200, {
+        products: [
+          { productId: "mock-product", payerId: "mock-payer", displayName: "Mock Product" },
+        ],
+        targets: [
+          {
+            targetId: "mock-target",
+            groupId: "mock-group",
+            payerProductId: "mock-product",
+            state: "KS",
+            ...(leak === "e613isolation" && selectedOrg !== user.orgId
+              ? { orgId: FIXTURES.SOUTHPARK_ORG }
+              : {}),
+          },
+        ],
+      });
     }
 
     const requestedOrg = req.headers["x-org-id"] ?? url.searchParams.get("orgId");

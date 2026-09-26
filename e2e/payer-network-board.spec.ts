@@ -6,7 +6,7 @@
 // honest boards) and TS-124 (remove = archive, re-attach restores without
 // duplicates). Everything on the board is DERIVED — the harness records every
 // write so the derive-only posture is pinned at the wire.
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

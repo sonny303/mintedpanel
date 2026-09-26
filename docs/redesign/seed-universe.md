@@ -324,6 +324,21 @@ WP1.1. These are synthetic identity and authorization states over the existing
 org/group fixture universe; they add no real client/provider data and no new
 baseline production rows.
 
+## E6.13 / WP1.1 scenario mapping
+
+| Scenario ID | Requirement scenario                              | Fixture mapping                                                                                       | Expected validation                                                                                                                                                                         |
+| ----------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TS-167      | Curated products and concrete enrollment identity | Shelby Sports Rehab P1/P2; Outer Banks cross-org variant; synthetic payer products and two facilities | Global payer/product identity, intent-only targets, six-part uniqueness and same-org checks; unauthorized curation denied.                                                                  |
+| TS-168      | Atomic revisions and source lineage               | Synthetic multi-product, multi-location provider with case/fact sources                               | Initial-save rollback, current-pointer integrity, concurrent conflict, append-only revisions, partial mapping, material invalidation, purge-safe lineage and actual 100k batch measurement. |
+| TS-169      | Separate summary and reviewed proof publication   | Shelby P1 and granted P5 owner; synthetic immutable document versions                                 | Pending summary without proof; product/location evidence, source/document expiry and supersession checks; safe stale shell and immediate retraction.                                        |
+| TS-170      | Authenticated pinned proof delivery and denial    | E6.12 synthetic staff/client/dual/no-grant identities and private synthetic bytes                     | Stored-byte SHA-256, no-store response, pre-byte reauthorization, no signed URL, IDs-only audit and wrong-org/group/direct-call denial.                                                     |
+
+**TS-167–TS-170 added (2026-09-25):** allocated with
+`node scripts/check-epic-hygiene.mjs --next` for E6.13. Disposable SQL fixtures
+reuse E6.12's neutral Org A/Org B replicas and `.test` identities for the named
+persona/organization roles. No production seed, real credentials, or invented
+production payer products are introduced.
+
 **TS-158–TS-162 added (2026-08-13):** E6.10 structured-control autofill
 (option-vocabulary capture, re-capture refresh, option-picked fixed values,
 authored value shaping, named vocabulary-mismatch reasons). No new baseline

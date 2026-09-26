@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.5 TE-8 — Payer Network wizard-section coverage over the mock harness:
 //   TS-41 catalog attach + expansion (Shelby, OPA-RETIRE): the picker offers

@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.7b F1.7b.5 — structured draft-email recipients over the mock harness
 // (TS-46 recipient slice):

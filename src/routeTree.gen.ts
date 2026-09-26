@@ -83,6 +83,7 @@ import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$por
 import { Route as GroupsGroupIdPayerNetworkRouteImport } from './routes/groups.$groupId.payer-network'
 import { Route as GroupsGroupIdFacilitiesRouteImport } from './routes/groups.$groupId.facilities'
 import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
+import { Route as ClientInvitesClaimTokenRouteImport } from './routes/client-invites.claim.$token'
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
@@ -474,6 +475,11 @@ const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
   path: '/$runId',
   getParentRoute: () => GenerationRunsRoute,
 } as any)
+const ClientInvitesClaimTokenRoute = ClientInvitesClaimTokenRouteImport.update({
+  id: '/client-invites/claim/$token',
+  path: '/client-invites/claim/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -625,6 +631,7 @@ export interface FileRoutesByFullPath {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/client-invites/claim/$token': typeof ClientInvitesClaimTokenRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
   '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
@@ -707,6 +714,7 @@ export interface FileRoutesByTo {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/client-invites/claim/$token': typeof ClientInvitesClaimTokenRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
   '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
@@ -799,6 +807,7 @@ export interface FileRoutesById {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/client-invites/claim/$token': typeof ClientInvitesClaimTokenRoute
   '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
   '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
   '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
@@ -892,6 +901,7 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/client-invites/claim/$token'
     | '/generation/runs/$runId'
     | '/groups/$groupId/facilities'
     | '/groups/$groupId/payer-network'
@@ -974,6 +984,7 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/client-invites/claim/$token'
     | '/generation/runs/$runId'
     | '/groups/$groupId/facilities'
     | '/groups/$groupId/payer-network'
@@ -1065,6 +1076,7 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/client-invites/claim/$token'
     | '/generation_/runs/$runId'
     | '/groups/$groupId/facilities'
     | '/groups/$groupId/payer-network'
@@ -1144,6 +1156,7 @@ export interface RootRouteChildren {
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
   AdminPayersNewRoute: typeof AdminPayersNewRoute
+  ClientInvitesClaimTokenRoute: typeof ClientInvitesClaimTokenRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
   ReportingRostersHistoryRoute: typeof ReportingRostersHistoryRoute
   ReportingRostersTemplatesRoute: typeof ReportingRostersTemplatesRoute
@@ -1674,6 +1687,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GenerationRunsRunIdRouteImport
       parentRoute: typeof GenerationRunsRoute
     }
+    '/client-invites/claim/$token': {
+      id: '/client-invites/claim/$token'
+      path: '/client-invites/claim/$token'
+      fullPath: '/client-invites/claim/$token'
+      preLoaderRoute: typeof ClientInvitesClaimTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/templates/new': {
       id: '/admin/templates/new'
       path: '/new'
@@ -1979,6 +1999,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
   AdminPayersNewRoute: AdminPayersNewRoute,
+  ClientInvitesClaimTokenRoute: ClientInvitesClaimTokenRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
   ReportingRostersHistoryRoute: ReportingRostersHistoryRoute,
   ReportingRostersTemplatesRoute: ReportingRostersTemplatesRoute,

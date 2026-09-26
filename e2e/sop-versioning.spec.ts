@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.7b — SOP-as-Data over the mock harness (TS-45/46/47 UI slices), extended
 // by slice F (payer-and-cases screen 4 — Template Editor):
