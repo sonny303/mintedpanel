@@ -36,6 +36,14 @@ indexes arbitrate concurrent inserts.
 | No broad grant / no definer bypass                  | SECURITY INVOKER; explicit membership checks; execute granted only to `service_role`                                       | SQL role/grant assertion; CI migration job                           |
 | Wire mirror                                         | Extension `BatchLearnPortalFieldMapsRequest` / `Response` in `src/shared/apiTypes.ts`                                      | Extension `tsc --noEmit`                                             |
 
+## Database table trace
+
+| Access     | Tables                                                                     | Purpose                                                                                  |
+| ---------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Read       | `memberships`, `credential_cases`, `fill_sessions`, `touches`, `audit_log` | Revalidate writer role, tenant ownership, and the successful submission evidence.        |
+| Read/write | `portal_field_maps`                                                        | Check existing decisions and insert only eligible learned maps.                          |
+| Write      | `audit_log`                                                                | Record each inserted map with a fixed, value-free audit payload in the same transaction. |
+
 ## Database verification
 
 On a disposable PostgreSQL 16 database after replaying every repository
