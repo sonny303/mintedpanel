@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "./fixtures/legacy-access-context";
 import { readFile } from "node:fs/promises";
 
 // WP1.2 browser coverage uses a synthetic PostgREST/GoTrue HTTP layer only.
