@@ -5,6 +5,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { utcTodayIso } from "@/lib/documents";
 import {
   createDocumentUploadIntent,
   finalizeDocument,
@@ -156,6 +157,19 @@ describe("createDocumentUploadIntent", () => {
     expect(result.value.versionNumber).toBe(1);
     expect(calls.signedUploadPaths[0]).toBe(
       `org/${ORG}/provider/${PROVIDER}/${result.value.familyId}/1/license.pdf`,
+    );
+  });
+
+  it("normalizes readable upload names to the existing safe storage-key convention", async () => {
+    const { db, calls } = fakeDb({ providers: [orgProvider] });
+    const result = await createDocumentUploadIntent(ctx(db), {
+      ...intentInput,
+      fileName: "Brooke Ostrander - State License.PDF",
+    });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(calls.signedUploadPaths[0]).toBe(
+      `org/${ORG}/provider/${PROVIDER}/${result.value.familyId}/1/Brooke_Ostrander_-_State_License.PDF`,
     );
   });
 
@@ -338,7 +352,7 @@ describe("finalizeDocument", () => {
       versionNumber: 1,
       fileName: "w9.pdf",
       mimeType: "application/pdf",
-      effectiveDate: "2026-09-25",
+      effectiveDate: utcTodayIso(),
       expirationDate: "2020-01-01",
     });
     expect(result.kind).toBe("ok");
@@ -346,8 +360,68 @@ describe("finalizeDocument", () => {
       group_id: GROUP,
       provider_id: null,
       doc_type: "w9",
-      effective_date: "2026-09-25",
+      effective_date: utcTodayIso(),
       expiration_date: null,
+    });
+  });
+
+  it("rejects missing and future W-9 signed dates before metadata writes", async () => {
+    const { db, inserted } = fakeDb({ provider_groups: [orgGroup] });
+    const nextDay = new Date();
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const future = nextDay.toISOString().slice(0, 10);
+    const base = {
+      ownerType: "group" as const,
+      ownerId: GROUP,
+      kind: "w9" as const,
+      familyId: FAMILY,
+      versionNumber: 1,
+      fileName: "w9.pdf",
+      mimeType: "application/pdf",
+    };
+
+    await expect(
+      finalizeDocument(ctx(db), { ...base, effectiveDate: null }),
+    ).resolves.toMatchObject({
+      kind: "rejected",
+      status: 422,
+      message: "W-9 requires a signed date",
+    });
+    await expect(
+      finalizeDocument(ctx(db), { ...base, effectiveDate: future }),
+    ).resolves.toMatchObject({
+      kind: "rejected",
+      status: 422,
+      message: "Signed date cannot be in the future",
+    });
+    expect(inserted).toEqual([]);
+  });
+
+  it("stores human-readable display names while resolving the safe object key", async () => {
+    const displayName = "Meridian Group - W-9.PDF";
+    const objectName = "Meridian_Group_-_W-9.PDF";
+    const { db, inserted } = fakeDb(
+      { provider_groups: [orgGroup] },
+      {
+        [`org/${ORG}/group/${GROUP}/${FAMILY}/1`]: [
+          { name: objectName, metadata: { size: 500, mimetype: "application/pdf" } },
+        ],
+      },
+    );
+    const result = await finalizeDocument(ctx(db), {
+      ownerType: "group",
+      ownerId: GROUP,
+      kind: "w9",
+      familyId: FAMILY,
+      versionNumber: 1,
+      fileName: displayName,
+      mimeType: "application/pdf",
+      effectiveDate: utcTodayIso(),
+    });
+    expect(result.kind).toBe("ok");
+    expect(inserted[0]).toMatchObject({
+      file_name: displayName,
+      file_path: expect.stringContaining(objectName),
     });
   });
 });

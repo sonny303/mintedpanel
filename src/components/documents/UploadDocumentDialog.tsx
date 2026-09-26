@@ -29,7 +29,10 @@ import {
   DOCUMENT_MIME_TYPES,
   checkDocumentFile,
   expirationDateError,
+  formatUploadDocumentFileName,
   normalizeDocumentFileName,
+  signedDateError,
+  utcTodayIso,
   vaultPickerKinds,
 } from "@/lib/documents";
 import { useUploadDocument } from "@/hooks/useDocuments";
@@ -75,6 +78,19 @@ export function UploadDocumentDialog({
   const kinds = vaultPickerKinds(ownerType);
   const expirationRequired = kind !== "" && DOCUMENT_KIND_META[kind].expirationRequired;
   const isSignedDate = kind !== "" && DOCUMENT_KIND_META[kind].dateKind === "signed";
+  const signedDateInvalid = isSignedDate && Boolean(signedDateError(effectiveDate, utcTodayIso()));
+
+  const defaultFileName = (selected: File, selectedKind: DocumentKind | "") =>
+    selectedKind
+      ? formatUploadDocumentFileName(
+          ownerName,
+          ownerType,
+          ownerId,
+          selectedKind,
+          selected.name,
+          selected.type,
+        )
+      : selected.name;
 
   const submit = () => {
     if (!kind) {
@@ -89,6 +105,13 @@ export function UploadDocumentDialog({
     if (fileError) {
       setError(fileError);
       return;
+    }
+    if (isSignedDate) {
+      const signedError = signedDateError(effectiveDate, utcTodayIso());
+      if (signedError) {
+        setError(signedError);
+        return;
+      }
     }
     const expError = expirationDateError(kind, expirationDate || null);
     if (expError) {
@@ -146,9 +169,13 @@ export function UploadDocumentDialog({
             <Select
               value={kind || undefined}
               onValueChange={(v) => {
-                setKind(v as DocumentKind);
+                const selectedKind = v as DocumentKind;
+                setKind(selectedKind);
                 setEffectiveDate("");
                 setExpirationDate("");
+                if (file && !fileNameEdited) {
+                  setFileName(defaultFileName(file, selectedKind));
+                }
               }}
               disabled={kindLocked}
             >
@@ -181,7 +208,7 @@ export function UploadDocumentDialog({
                   selected
                     ? preserveCustomName
                       ? normalizeDocumentFileName(fileName, selected.name, selected.type)
-                      : selected.name
+                      : defaultFileName(selected, kind)
                     : "",
                 );
               }}
@@ -203,12 +230,13 @@ export function UploadDocumentDialog({
 
           {isSignedDate ? (
             <div className="space-y-1.5">
-              <Label htmlFor="doc-signed">Signed date</Label>
+              <Label htmlFor="doc-signed">Signed date (required)</Label>
               <DatePicker
                 id="doc-signed"
                 value={effectiveDate}
                 onChange={setEffectiveDate}
                 ariaLabel="Signed date"
+                invalid={signedDateInvalid}
               />
             </div>
           ) : (

@@ -80,7 +80,6 @@ import { isValidNpi } from "@/lib/providerGroup";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  PROVIDER_GENDER_OPTIONS,
   PROVIDER_GENDER_UNSET_VALUE,
   providerGenderLabel,
   providerGenderOptionsForValue,
@@ -591,23 +590,11 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value={PROVIDER_GENDER_UNSET_VALUE}>Not set</SelectItem>
-                          {PROVIDER_GENDER_OPTIONS.map((option) => (
+                          {providerGenderOptionsForValue(c.value).map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
                             </SelectItem>
                           ))}
-                          {providerGenderOptionsForValue(c.value)
-                            .filter(
-                              (option) =>
-                                !PROVIDER_GENDER_OPTIONS.some(
-                                  (known) => known.value === option.value,
-                                ),
-                            )
-                            .map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
                         </SelectContent>
                       </Select>
                     ) : (

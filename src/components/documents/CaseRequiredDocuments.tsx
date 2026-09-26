@@ -44,6 +44,8 @@ interface CaseRequiredDocumentsProps {
   providerName: string;
   groupId: string | null;
   groupName: string | null;
+  payerName?: string | null;
+  state?: string | null;
   caseId?: string | null;
   tasks: Task[];
 }
@@ -95,6 +97,8 @@ export function CaseRequiredDocuments({
   providerName,
   groupId,
   groupName,
+  payerName = null,
+  state = null,
   caseId = null,
   tasks,
 }: CaseRequiredDocumentsProps) {
@@ -136,6 +140,7 @@ export function CaseRequiredDocuments({
           formatCaseDocumentDownloadName(
             providerName.trim().toLowerCase() === "this provider" ? null : providerName,
             doc,
+            { payerName, state },
           ),
       );
       if (failed > 0) {

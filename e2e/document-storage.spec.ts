@@ -6,6 +6,7 @@ import {
   type Page,
 } from "./fixtures/legacy-access-context";
 import type { Download, Frame, Request } from "@playwright/test";
+import { safeFileName } from "@/lib/documents";
 
 // E4.5 Document Storage — TS-88/89/90 over the mock harness. The browser's
 // metadata reads ride /rest/v1 under RLS (mocked here with filter-honoring
@@ -56,6 +57,42 @@ function isoDaysFromNow(days: number): string {
   d.setDate(d.getDate() + days);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function ordinalDay(day: number): string {
+  const mod100 = day % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th");
+  return `${day}${suffix}`;
+}
+
+async function chooseCalendarDate(
+  page: Page,
+  triggerName: string,
+  dateOnly: string,
+  displayedDate = new Date().toISOString().slice(0, 10),
+) {
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  const [displayedYear, displayedMonth] = displayedDate.split("-").map(Number);
+  const monthDelta = year * 12 + month - (displayedYear * 12 + displayedMonth);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayName = date.toLocaleString("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+  const monthName = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  await page.getByRole("button", { name: triggerName }).click();
+  const direction = monthDelta < 0 ? "Previous" : "Next";
+  for (let offset = 0; offset < Math.abs(monthDelta); offset += 1) {
+    await page.getByRole("button", { name: `Go to the ${direction} Month` }).click();
+  }
+  await page
+    .getByRole("button", {
+      name: new RegExp(
+        `^(?:Today, )?${dayName}, ${monthName} ${ordinalDay(day)}, ${year}(?:, selected)?$`,
+      ),
+    })
+    .click();
 }
 
 function providerRow(over: Record<string, unknown> = {}) {
@@ -366,7 +403,7 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
           (max, d) => Math.max(max, Number((d as Record<string, unknown>).version_number ?? 1)),
           0,
         ) + 1;
-      const path = `org/${ORG_ID}/${body.ownerType}/${body.ownerId}/${familyId}/${versionNumber}/${body.fileName}`;
+      const path = `org/${ORG_ID}/${body.ownerType}/${body.ownerId}/${familyId}/${versionNumber}/${safeFileName(String(body.fileName ?? ""))}`;
       return json({
         familyId,
         versionNumber,
@@ -387,18 +424,24 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
       );
       const head = family.find((d) => !superseded.has((d as Record<string, unknown>).id)) as
         Record<string, unknown> | undefined;
-      const row = docRow({
-        id: `doc-${familyId}-v${body.versionNumber}`,
-        docType: body.kind as string,
-        providerId: body.ownerType === "provider" ? (body.ownerId as string) : null,
-        groupId: body.ownerType === "group" ? (body.ownerId as string) : null,
-        expirationDate: (body.expirationDate as string | null) ?? null,
-        effectiveDate: (body.effectiveDate as string | null) ?? null,
-        familyId,
-        versionNumber: body.versionNumber as number,
-        supersedes: (head?.id as string | undefined) ?? null,
-        fileName: body.fileName as string,
-      });
+      const displayName = String(body.fileName ?? "document");
+      const objectName = safeFileName(displayName);
+      const objectPath = `org/${ORG_ID}/${body.ownerType}/${body.ownerId}/${familyId}/${body.versionNumber}/${objectName}`;
+      const row = {
+        ...docRow({
+          id: `doc-${familyId}-v${body.versionNumber}`,
+          docType: body.kind as string,
+          providerId: body.ownerType === "provider" ? (body.ownerId as string) : null,
+          groupId: body.ownerType === "group" ? (body.ownerId as string) : null,
+          expirationDate: (body.expirationDate as string | null) ?? null,
+          effectiveDate: (body.effectiveDate as string | null) ?? null,
+          familyId,
+          versionNumber: body.versionNumber as number,
+          supersedes: (head?.id as string | undefined) ?? null,
+          fileName: displayName,
+        }),
+        file_path: objectPath,
+      };
       fixtures.provider_documents = [...(fixtures.provider_documents ?? []), row];
       return json(camelDoc(row), 201);
     }
@@ -523,6 +566,9 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
   await expect(page.getByRole("option", { name: "W-9" })).toHaveCount(0);
   await page.getByRole("option", { name: "State License" }).click();
   await dialog.locator("#doc-file").setInputFiles(FAKE_PDF);
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Brooke Ostrander - State License.pdf",
+  );
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(dialog).toContainText("State License requires an expiration date");
 
@@ -582,7 +628,14 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
   context,
   page,
 }) => {
-  const fixtures = makeFixtures({ provider_groups: [groupRow()] });
+  const legacyW9 = docRow({
+    id: "legacy-w9-undated",
+    docType: "w9",
+    groupId: GROUP_ID,
+    expirationDate: "2020-01-01",
+    fileName: "legacy-w9.pdf",
+  });
+  const fixtures = makeFixtures({ provider_groups: [groupRow()], provider_documents: [legacyW9] });
   const rec = await mountAll(context, fixtures);
 
   await page.goto("/onboarding/wizard");
@@ -591,6 +644,9 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
 
   await groupCard.getByRole("button", { name: "Documents" }).click();
   const panel = groupCard.locator("section", { hasText: "Documents" }).last();
+  const legacyRow = panel.getByRole("row").filter({ hasText: "legacy-w9.pdf" });
+  await expect(legacyRow).toContainText("Signed date not set");
+  await expect(legacyRow).not.toContainText("Expired");
   await panel.getByRole("button", { name: "Upload" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -600,6 +656,10 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
   await expect(page.getByRole("option", { name: "CMS-460" })).toBeVisible();
   await expect(page.getByRole("option", { name: "State License" })).toHaveCount(0);
   await page.getByRole("option", { name: "COI" }).click();
+  await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "coi.pdf" });
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - COI.pdf",
+  );
   await dialog.getByRole("button", { name: "Expiration date" }).click();
   const monthName = new Date().toLocaleString("en-US", { month: "long" });
   await page
@@ -608,49 +668,83 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
     .click();
   await dialog.getByRole("combobox").click();
   await page.getByRole("option", { name: "W-9" }).click();
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.pdf",
+  );
   await expect(dialog.getByRole("button", { name: "Signed date" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Effective date" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
   await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "w9.pdf" });
-  await expect(dialog.locator("#doc-file-name")).toHaveValue("w9.pdf");
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.pdf",
+  );
   await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "w9.scan.PDF" });
-  await expect(dialog.locator("#doc-file-name")).toHaveValue("w9.scan.PDF");
+  await expect(dialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.PDF",
+  );
   await dialog.locator("#doc-file-name").fill("Custom W9.png");
-  await dialog.getByRole("button", { name: "Signed date" }).click();
-  await page
-    .getByRole("button", { name: new RegExp(`${monthName} 28th`) })
-    .first()
-    .click();
+  await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "w9.reselected.pdf" });
+  await expect(dialog.locator("#doc-file-name")).toHaveValue("Custom W9.pdf");
+  await dialog.getByRole("combobox").click();
+  await page.getByRole("option", { name: "CMS-460" }).click();
+  await expect(dialog.locator("#doc-file-name")).toHaveValue("Custom W9.pdf");
+  await dialog.getByRole("combobox").click();
+  await page.getByRole("option", { name: "W-9" }).click();
+  await expect(dialog.locator("#doc-file-name")).toHaveValue("Custom W9.pdf");
+
+  // The browser preflight blocks both missing and future signed dates before
+  // requesting an upload intent.
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog).toContainText("W-9 requires a signed date");
+  const uploadIntentCount = () =>
+    rec.apiCalls.filter((call) => call.path.endsWith("/upload-intent")).length;
+  expect(uploadIntentCount()).toBe(0);
+  const futureSignedDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  await chooseCalendarDate(page, "Signed date", futureSignedDate);
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog).toContainText("Signed date cannot be in the future");
+  expect(uploadIntentCount()).toBe(0);
+  const todayDate = new Date().toISOString().slice(0, 10);
+  await chooseCalendarDate(page, "Signed date", todayDate, futureSignedDate);
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
 
-  await expect(panel).toContainText("W-9", { timeout: 15000 });
+  await expect.poll(uploadIntentCount).toBe(1);
+  const w9Row = panel.getByRole("row").filter({ hasText: "Custom W9.pdf" });
+  await expect(w9Row).toBeVisible();
   const intent = rec.apiCalls.find((c) => c.path.endsWith("/upload-intent"));
   expect(intent?.body).toMatchObject({
     ownerType: "group",
     ownerId: GROUP_ID,
     kind: "w9",
-    fileName: "Custom_W9.PDF",
+    fileName: "Custom W9.pdf",
   });
   const finalize = rec.apiCalls.find((c) => c.path.endsWith("/finalize"));
   expect(finalize?.body).toMatchObject({
     kind: "w9",
-    fileName: "Custom_W9.PDF",
+    fileName: "Custom W9.pdf",
     effectiveDate: expect.any(String),
     expirationDate: null,
   });
-  expect(rec.storagePuts[0]).toContain("/Custom_W9.PDF");
+  expect(rec.storagePuts[0]).toContain("/Custom_W9.pdf");
   expect(rec.storagePuts[0]).toContain(`/org/${ORG_ID}/group/${GROUP_ID}/`);
-  const w9Row = panel.getByRole("row").filter({ hasText: "W-9" }).first();
   await expect(w9Row).toContainText("Signed");
+  const signedMonth = new Date().toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  await expect(w9Row).toContainText(
+    `Signed ${signedMonth} ${new Date().getUTCFullYear()} · 0 mo old`,
+  );
 
-  // Replacement picks up the replacement file's own name rather than keeping
-  // the prior version's custom name.
+  // Replacement defaults from the group and document type while retaining the
+  // replacement file's extension.
   await w9Row.getByRole("button", { name: "Replace W-9" }).click();
   const replacementDialog = page.getByRole("dialog");
   await replacementDialog
     .locator("#doc-file")
     .setInputFiles({ ...FAKE_PDF, name: "replacement.scan.pdf" });
-  await expect(replacementDialog.locator("#doc-file-name")).toHaveValue("replacement.scan.pdf");
+  await expect(replacementDialog.locator("#doc-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.pdf",
+  );
   await replacementDialog.getByRole("button", { name: "Upload new version" }).click();
   await expect(panel).toContainText("v2 · history", { timeout: 15000 });
   await panel.getByRole("button", { name: "v2 · history" }).click();
@@ -960,12 +1054,35 @@ test("TS-90: case detail has no document card; active TaskDrawer downloads use s
   await attachDialog.getByRole("button", { name: "Upload new" }).click();
   await expect(attachDialog.getByRole("button", { name: "Signed date" })).toBeVisible();
   await expect(attachDialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
-  await attachDialog.getByRole("button", { name: "Cancel" }).click();
+  await attachDialog
+    .locator("#artifact-upload-file")
+    .setInputFiles({ ...FAKE_PDF, name: "task-w9.PDF" });
+  await expect(attachDialog.locator("#artifact-upload-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.PDF",
+  );
+  const taskUploadIntentCount = () =>
+    rec.apiCalls.filter((call) => call.path.endsWith("/upload-intent")).length;
+  await attachDialog.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(attachDialog).toContainText("W-9 requires a signed date");
+  expect(taskUploadIntentCount()).toBe(0);
+  await chooseCalendarDate(page, "Signed date", new Date().toISOString().slice(0, 10));
+  await attachDialog.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(attachDialog).toHaveCount(0);
+  expect(taskUploadIntentCount()).toBe(1);
 
   await stepArtifacts.getByRole("button", { name: "Replace irs-form.PDF" }).click();
   const replaceDialog = page.getByRole("dialog", { name: "Replace W-9" });
   await expect(replaceDialog.getByRole("button", { name: "Signed date" })).toBeVisible();
   await expect(replaceDialog.getByRole("button", { name: "Expiration date" })).toHaveCount(0);
+  await replaceDialog
+    .locator("#artifact-replace-file")
+    .setInputFiles({ ...FAKE_PDF, name: "replacement-w9.PDF" });
+  await expect(replaceDialog.locator("#artifact-replace-file-name")).toHaveValue(
+    "Outer Banks Rehab Group LLC - W-9.PDF",
+  );
+  await replaceDialog.getByRole("button", { name: "Upload new version" }).click();
+  await expect(replaceDialog).toContainText("W-9 requires a signed date");
+  expect(taskUploadIntentCount()).toBe(1);
   await replaceDialog.getByRole("button", { name: "Cancel" }).click();
 
   const downloads = collectDownloads(page, 3);
@@ -1008,9 +1125,9 @@ test("TS-90: case detail has no document card; active TaskDrawer downloads use s
   }
   expect(fileNames.sort()).toEqual(
     [
-      "Brooke_Ostrander_COI.pdf",
-      "Brooke_Ostrander_State_License.PDF",
-      "Brooke_Ostrander_W-9.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_COI.pdf",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_State_License.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_W-9.PDF",
     ].sort(),
   );
   expect(
@@ -1020,9 +1137,9 @@ test("TS-90: case detail has no document card; active TaskDrawer downloads use s
       .sort(),
   ).toEqual(
     [
-      "Brooke_Ostrander_State_License.PDF",
-      "Brooke_Ostrander_W-9.PDF",
-      "Brooke_Ostrander_COI.pdf",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_State_License.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_W-9.PDF",
+      "Brooke_Ostrander_Blue_Cross_and_Blue_Shield_of_North_Carolina_NC_COI.pdf",
     ].sort(),
   );
   const bulkAuditRequests = rec.apiCalls.filter(

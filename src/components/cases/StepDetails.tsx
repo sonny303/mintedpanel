@@ -462,6 +462,8 @@ export interface StepArtifactContext {
   caseId: string | null;
   providerId: string | null;
   groupId: string | null;
+  providerName?: string | null;
+  groupName?: string | null;
 }
 
 function StepCadenceMeta({
@@ -495,6 +497,8 @@ function StepCadenceMeta({
           caseId={artifactCtx.caseId}
           providerId={artifactCtx.providerId}
           groupId={artifactCtx.groupId}
+          providerName={artifactCtx.providerName}
+          groupName={artifactCtx.groupName}
         />
       ) : null}
     </div>
@@ -508,6 +512,8 @@ export function StepBody({
   caseId = null,
   providerId = null,
   groupId = null,
+  providerName,
+  groupName,
   portalHandoff,
 }: {
   step: SOPStep;
@@ -516,10 +522,19 @@ export function StepBody({
   caseId?: string | null;
   providerId?: string | null;
   groupId?: string | null;
+  providerName?: string | null;
+  groupName?: string | null;
   portalHandoff?: PortalHandoffContext;
 }) {
   const stepType = step.stepType ?? "online_form";
-  const artifactCtx: StepArtifactContext = { taskId, caseId, providerId, groupId };
+  const artifactCtx: StepArtifactContext = {
+    taskId,
+    caseId,
+    providerId,
+    groupId,
+    providerName,
+    groupName,
+  };
   if (stepType === "draft_email") return <DraftEmailStep step={step} />;
   if (stepType === "pdf") return <PdfStep step={step} tokenValues={tokenValues} />;
   if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {

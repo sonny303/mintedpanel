@@ -2,8 +2,9 @@
 // metadata map (labels, owner grains, expiration-required, expiring-soon
 // thresholds), file/path rules, current-version derivation, expiration
 // classification, and the SOP required-kind join. Fully derived — nothing
-// here stores flags, reads a clock, or touches Supabase; "today" is always a
-// passed-in date-only ISO string (the enrollmentReadiness idiom).
+// here stores flags or touches Supabase; derived date logic takes a passed-in
+// date-only ISO string (the enrollmentReadiness idiom). `utcTodayIso` is the
+// explicit clock boundary for browser/server signed-date policy.
 //
 // Dependency direction: enrollmentReadiness.ts imports FROM this module (the
 // COI advisory threshold); this module imports nothing from it, so the
@@ -229,6 +230,95 @@ export function expirationDateError(
   return null;
 }
 
+interface DateOnlyParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function daysInMonth(year: number, month: number): number {
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
+
+function dateOnlyParts(value: string): DateOnlyParts | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  return { year, month, day };
+}
+
+/** Date-only policy uses UTC's calendar day in both browser and server code,
+ * so a midnight zone boundary cannot make the two sides disagree. */
+export function utcTodayIso(now: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${String(now.getUTCFullYear()).padStart(4, "0")}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}`;
+}
+
+/** New W-9 versions require a real, non-future signed calendar date. */
+export function signedDateError(
+  signedDate: string | null | undefined,
+  today: string,
+): string | null {
+  if (!signedDate) return "W-9 requires a signed date";
+  const signedParts = dateOnlyParts(signedDate);
+  const todayParts = dateOnlyParts(today);
+  if (!signedParts) return "Signed date must be a valid calendar date";
+  if (!todayParts) return "Current date is invalid";
+  if (signedDate > today) return "Signed date cannot be in the future";
+  return null;
+}
+
+export interface SignedDateAge {
+  label: string;
+  monthYear: string;
+  monthsOld: number;
+  tone: "gray" | "amber" | "red";
+}
+
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** Calendar age in completed months; a month-end signing date reaches the
+ * next month's last day (Jan 31 → Feb 28 is one month). */
+export function signedDateAge(
+  signedDate: string | null | undefined,
+  today: string,
+): SignedDateAge | null {
+  if (!signedDate) return null;
+  const signed = dateOnlyParts(signedDate);
+  const current = dateOnlyParts(today);
+  if (!signed || !current || signedDate > today) return null;
+
+  let monthsOld = (current.year - signed.year) * 12 + current.month - signed.month;
+  const anniversaryDay = Math.min(signed.day, daysInMonth(current.year, current.month));
+  if (current.day < anniversaryDay) monthsOld -= 1;
+
+  const monthYear = `${SHORT_MONTHS[signed.month - 1]} ${signed.year}`;
+  return {
+    monthYear,
+    monthsOld,
+    label: `Signed ${monthYear} · ${monthsOld} mo old`,
+    tone: monthsOld < 12 ? "gray" : monthsOld <= 36 ? "amber" : "red",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // TE-4 — file limits + the org-bound object path contract. The bucket-level
 // limits in migration 20260717150100 are the storage-side backstop of these
@@ -304,31 +394,118 @@ export function normalizeDocumentFileName(
   const dot = requested.lastIndexOf(".");
   const separator = Math.max(requested.lastIndexOf("/"), requested.lastIndexOf("\\"));
   const stem = dot > separator ? requested.slice(0, dot) : requested;
-  const safeStem = safeFileName(stem).slice(0, Math.max(1, 100 - extension.length));
-  return `${safeStem.replace(/[_.-]+$/g, "") || "document"}${extension}`;
+  const safeStem = safeDisplayPart(stem).slice(0, Math.max(1, 100 - extension.length));
+  return `${safeStem.replace(/[ ._-]+$/g, "") || "document"}${extension}`;
+}
+
+/** User-facing filenames keep normal punctuation and whitespace while
+ * removing path/control characters. Storage object keys continue to use
+ * safeFileName separately. */
+function safeDisplayPart(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[\p{Cc}/\\:*?"<>|]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[. ]+|[. ]+$/g, "");
 }
 
 function safeDownloadPart(raw: string): string {
-  return raw
-    .trim()
-    .replace(/[\s/\\:]+/g, "_")
-    .replace(/[^A-Za-z0-9_-]/g, "")
+  return safeDisplayPart(raw)
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}._-]/gu, "")
     .replace(/_+/g, "_")
     .replace(/^[_-]+|[_-]+$/g, "");
+}
+
+function cappedUploadFilename(owner: string, label: string, extension: string): string {
+  const separator = " - ";
+  const maxOwnerLength = Math.max(1, 100 - extension.length - label.length - separator.length);
+  const prefix = owner.slice(0, maxOwnerLength).replace(/[ ._-]+$/g, "");
+  return `${prefix || "Owner"}${separator}${label}${extension}`;
+}
+
+function allocateFilenameParts(parts: string[], characterBudget: number): string[] {
+  const budgets: number[] = parts.map((part) => (part ? 1 : 0));
+  let remaining = characterBudget - budgets.reduce((total, budget) => total + budget, 0);
+  let cursor = 0;
+  while (remaining > 0) {
+    const nextIndex = Array.from(
+      { length: parts.length },
+      (_, offset) => (cursor + offset) % parts.length,
+    ).find((index) => budgets[index] < parts[index].length);
+    if (nextIndex === undefined) break;
+    budgets[nextIndex] += 1;
+    cursor = (nextIndex + 1) % parts.length;
+    remaining -= 1;
+  }
+  return parts.map((part, index) => part.slice(0, budgets[index]).replace(/[_-]+$/g, ""));
+}
+
+function meaningfulOwnerName(
+  ownerName: string | null | undefined,
+  ownerType: DocumentOwnerType,
+  ownerId: string,
+): string {
+  const cleaned = safeDisplayPart(ownerName ?? "");
+  const placeholder = /^(this provider|the provider|this group|the group)$/i.test(cleaned);
+  if (cleaned && !placeholder) return cleaned;
+  const idPart =
+    ownerId
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean)
+      .at(-1) ?? "";
+  const id = idPart.slice(-8);
+  return id ? `${ownerType === "provider" ? "Provider" : "Group"} ${id}` : "Document owner";
+}
+
+/** Default user-facing upload filename; the selected file supplies the real
+ * extension, while missing owner names fall back to a stable owner identifier. */
+export function formatUploadDocumentFileName(
+  ownerName: string | null | undefined,
+  ownerType: DocumentOwnerType,
+  ownerId: string,
+  kind: DocumentKind,
+  originalFileName: string,
+  mimeType?: string | null,
+): string {
+  const extension = filenameExtension(originalFileName, extensionForMimeType(mimeType));
+  const owner = meaningfulOwnerName(ownerName, ownerType, ownerId);
+  const label = safeDisplayPart(DOCUMENT_KIND_META[kind]?.label ?? kind) || "Document";
+  return cappedUploadFilename(owner, label, extension);
 }
 
 /** Formats a payer-portal-friendly filename for a case document download. */
 export function formatCaseDocumentDownloadName(
   providerName: string | null | undefined,
   doc: { docType: DocumentKind; fileName: string; id?: string },
+  context: { payerName?: string | null; state?: string | null } = {},
 ): string {
   const label = safeDownloadPart(DOCUMENT_KIND_META[doc.docType]?.label ?? doc.docType);
-  const provider = safeDownloadPart(providerName ?? "");
+  const providerValue = /^(this provider|the provider)$/i.test(providerName?.trim() ?? "")
+    ? ""
+    : (providerName ?? "");
+  const provider = safeDownloadPart(providerValue);
+  const payer = safeDownloadPart(context.payerName ?? "");
+  const state = safeDownloadPart(context.state ?? "");
   const idSuffix = (doc.id ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 8);
-  const stem = provider ? `${provider}_${label}` : idSuffix ? `${label}_${idSuffix}` : label;
+  const providerPart = provider || (idSuffix ? `Provider_${idSuffix}` : "Provider");
   const extension = filenameExtension(doc.fileName, ".pdf");
-  const safeStem = safeFileName(stem).slice(0, Math.max(1, 100 - extension.length));
-  return `${safeStem.replace(/[_.-]+$/g, "") || label || "document"}${extension}`;
+  const maxStemLength = Math.max(1, 100 - extension.length);
+  const contextParts = payer ? [providerPart, payer] : [providerPart];
+  const safeLabel = label || "Document";
+  const maxStateLength = Math.max(
+    0,
+    maxStemLength - safeLabel.length - 1 - contextParts.length * 2,
+  );
+  const safeState = state.slice(0, maxStateLength);
+  const tail = [safeState, safeLabel].filter(Boolean).join("_");
+  const payloadBudget = Math.max(
+    contextParts.length,
+    maxStemLength - tail.length - contextParts.length,
+  );
+  const allocatedContext = allocateFilenameParts(contextParts, payloadBudget).filter(Boolean);
+  const fullStem = [...allocatedContext, tail].filter(Boolean).join("_");
+  return `${fullStem.replace(/[_-]+$/g, "") || safeLabel}${extension}`;
 }
 
 /** Supabase Storage honors the download query even on cross-origin signed URLs. */

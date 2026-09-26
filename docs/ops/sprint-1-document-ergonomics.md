@@ -13,28 +13,39 @@ and hosted data changes require separate approval. Automatic Vercel deployments
 are disabled. The attachment's direct staging merge/deployment sequence is not
 the approved execution path.
 
+The user subsequently requested the corrections in the supplied Jira gap-analysis
+attachment. Its requirements below supersede the original handoff's optional W-9
+date and filename defaults. This is an update to the same draft PR, starting from
+`e18798e9b8915adb3284bd0f85b7dc59f38f9c1d`; the supplied ticket report is the
+requirements source, not a claim that this task independently inspected Jira.
+
 ## Requirements and acceptance
 
-| ID       | Required behavior                                                                                                                                                                                                                                                                                              | Verification                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| MP-17    | Case Download all saves each available document as `{ProviderName}_{DocumentLabel}.{ext}`. Sanitize filenames; preserve extension; use label plus an ID snippet when provider name is unavailable. Preserve sequential, individually audited downloads and partial-failure reporting.                          | Filename edge cases; executable download behavior; existing authorization/signing regression tests. |
-| MP-22    | W-9 upload/replacement has one optional Signed date stored in `effective_date`. New W-9 metadata always has null expiration. Lists/checklists show Signed date or Signed date not set. Existing W-9 expiration values never produce expired/expiring alerts. Other kinds retain their existing date semantics. | Metadata/classification tests, storage finalization tests, upload and list browser coverage.        |
-| MP-15    | Upload permits a custom filename, defaults to the selected file, and keeps the real extension when it is omitted or altered. Intent and finalize use the same normalized name. File reselection and replacement must not silently use a stale default.                                                         | Filename edge cases; upload intent/finalize consistency; browser upload coverage.                   |
-| MP-35    | Missing voided check does not reduce initial enrollment readiness or appear in its gap filter. All other readiness requirements remain. Voided-check upload and SOP document support remain available. This sprint adds no automatic contracting-stage gate.                                                   | Ready-provider fixture without a voided check; readiness regression and browser tests.              |
-| MP-20/34 | Add Provider captures optional gender and persists it. Personal information displays and permits editing it. Form defaults and the import exhaustiveness contract account for gender; CSV gender import remains unsupported. Preserve existing null and legacy values.                                         | Import/form contract tests and provider creation/detail browser coverage.                           |
+| ID       | Required behavior                                                                                                                                                                                                                                                                                                                                                                                                         | Verification                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| MP-16/17 | Case Download all reliably saves every available document as `{ProviderName}_{PayerName}_{State}_{DocumentLabel}.{ext}` using actual case context. Sanitize filenames, preserve label and extension, and use meaningful fallbacks for absent context. Preserve sequential, individually audited downloads and partial-failure reporting.                                                                                  | Filename edge cases and length limits; actual browser download events and names; authorization/signing regression tests.        |
+| MP-22    | New W-9 uploads and replacements require a valid, non-future Signed date stored in `effective_date`, enforced in every upload UI and server finalization. New W-9 metadata always has null expiration. The Documents table shows `Signed <Mon YYYY> · <n> mo old`: neutral below 12 months, amber from 12 through 36, red above 36. Historical missing dates remain readable. W-9 never contributes to expiration alerts. | Required/invalid/future date rejection before writes; calendar-month age boundaries; storage finalization and browser coverage. |
+| MP-15    | Default upload filename is `{Owner Name} - {Document Type}.{ext}` using the actual provider/group owner. Permit explicit custom names and preserve the selected file's extension. File/kind selection order, changes, replacement, and reselection must keep automatic defaults current without discarding explicit overrides. Intent and finalize use the same normalized display name.                                  | Filename edge cases; upload intent/finalize consistency; provider/group and alternate task upload browser coverage.             |
+| MP-35    | Missing voided check does not reduce initial enrollment readiness or appear in its gap filter. All other readiness requirements remain. Voided-check upload and SOP document support remain available. This sprint adds no automatic contracting-stage gate.                                                                                                                                                              | Ready-provider fixture without a voided check; readiness regression and browser tests.                                          |
+| MP-20/34 | Add Provider captures optional gender and persists it. Personal information displays and permits editing it with one shared options mapping. Form defaults and the import exhaustiveness contract account for gender; CSV gender import remains unsupported. Preserve existing null and exact legacy values.                                                                                                              | Import/form contract tests and provider creation/detail browser coverage.                                                       |
 
 ## Ownership and boundaries
 
-| Owner                    | Write surface                                                                                                                                                                                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document implementation  | `src/lib/documents*`, document components and `StepArtifactsPanel.tsx`, document services/hooks/server routes and focused tests, `e2e/document-storage.spec.ts`; only necessary existing router/mock-harness wiring if download behavior requires it. |
-| Readiness implementation | `src/lib/enrollmentReadiness*`, `ProviderReadinessSection.tsx`, readiness query projections and `e2e/provider-readiness.spec.ts`.                                                                                                                     |
-| Gender implementation    | Provider form state/sections, provider creation/detail routes, import exhaustiveness tests, a shared pure gender vocabulary if needed, and focused provider browser coverage.                                                                         |
-| Orchestrator             | This requirements/evidence record, integration checks, commits, and draft PR.                                                                                                                                                                         |
+| Owner                    | Write surface                                                                                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Document implementation  | `src/lib/documents*`, document components and `StepArtifactsPanel.tsx`, document services/hooks/server routes and focused tests, `e2e/document-storage.spec.ts`; existing case/task prop wiring for owner, payer, and state context. |
+| Readiness implementation | `src/lib/enrollmentReadiness*`, `ProviderReadinessSection.tsx`, readiness query projections and `e2e/provider-readiness.spec.ts`.                                                                                                    |
+| Gender implementation    | Provider form state/sections, provider creation/detail routes, import exhaustiveness tests, a shared pure gender vocabulary if needed, and focused provider browser coverage.                                                        |
+| Orchestrator             | This requirements/evidence record, integration checks, commits, and draft PR.                                                                                                                                                        |
 
 Shared document edits have one owner. No agent merges branches or publishes.
 No migrations, grants, credentials, dependencies, protected shell/UI components,
 design tokens, or unrelated reporting features are part of this sprint.
+
+MP-35 remains partially open: this PR removes the initial readiness requirement,
+but does not implement the early contracting-stage check. That follow-up must
+define its contracting entry point and advisory/blocking behavior before a
+separate implementation. Existing voided-check upload and SOP support remain.
 
 ## Data trace and invariants
 
@@ -69,6 +80,18 @@ Bulk transfers retrieve each signed file sequentially before starting a local
 Blob download, avoiding overlapping cross-origin navigations that dropped files
 in repeated browser tests. No API endpoint or database migration is added.
 
+The attachment's suggestion to call the download service directly from a
+component conflicts with the repository's component → hook → service rule.
+The hook boundary, immediate mutation cleanup, and bounded Blob URL cleanup
+remain. Optional sanitizer/timer rewrites are limited to changes needed for the
+accepted behavior; storage-key compatibility must not change merely for cleanup.
+
+Signed dates use an explicit UTC calendar-day boundary in both browser and
+server validation. Age is the number of completed calendar months, with
+end-of-month clamping: January 31 to February 28 is one month. It is not a
+30-day approximation. Freshness color is advisory display metadata and never
+an expiration or readiness gate.
+
 ## Verification record
 
 Baseline verification on the unchanged staging tree (identical to the approved
@@ -83,7 +106,7 @@ A fresh UTC-browser run of TS-112 passed. Sprint browser evidence uses an
 explicit UTC timezone and synthetic fixtures; this does not repair or certify
 the unrelated date-formatting behavior.
 
-Implementation verification: 196 unit files / 2,435 tests passed. TypeScript,
+Prior implementation at `e18798e`: 196 unit files / 2,435 tests passed. TypeScript,
 lint (the same 14 baseline warnings), formatting, and epic hygiene passed.
 Independent Astra/high review reran 162 focused tests and reviewed corrections
 for exact legacy gender preservation and collecting distinct download events.
@@ -97,7 +120,15 @@ missing browser downloads despite three successful signing and Storage requests.
 The sequential byte-transfer change addresses that failure. Provider-edit tests
 also wait for save completion before inspecting their exact patch assertions.
 
-The final commit's CI results and automated browser evidence are recorded in
+Follow-up local verification: 196 unit files / 2,443 tests passed; TypeScript,
+formatting, and epic hygiene passed; lint has zero errors and the same 14
+baseline warnings. All four document browser scenarios passed without retries,
+including signed-date rejection, automatic/custom filename behavior, task
+attachments, replacement, and three actual downloads carrying case context.
+The provider gender browser regression also passed. Independent Astra/high
+review found no remaining actionable findings after the test corrections.
+
+The final commit's CI results and automated browser evidence are in
 [draft PR #422](https://github.com/sonny303/mintedpanel/pull/422). Browser checks
 use synthetic fixtures. Hosted runtime/UAT remains outside this source-only
 delivery and must not be represented as verified. Merge and release remain
