@@ -143,11 +143,19 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const setActiveOrg = useAuthStore((s) => s.setActiveOrg);
+  const selectAccessContext = useAuthStore((s) => s.selectAccessContext);
+  const accessContext = useAuthStore((s) => s.accessContext);
   const signOut = useAuthStore((s) => s.signOut);
   const user = useAuthStore((s) => s.user);
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
   const openCases = useOpenCaseCount();
+
+  const isClient = accessContext?.audience === "client";
+  const clientOrg = isClient
+    ? (accessContext?.clientOrgs.find((o) => o.orgId === accessContext?.selectedOrgId) ??
+       accessContext?.clientOrgs[0])
+    : null;
   // E6.5 F6.5.4 — the chip is DRIFT-ONLY now: mappings the last real fill
   // couldn't find on the live page (the one repair signal), derived from two
   // org caches. The four-kind Fix-it deck count retired with the deck.
@@ -203,40 +211,53 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
         <span className="text-[14px] font-semibold text-white">Minted Panel</span>
       </div>
 
-      {/* Cross-org provider lookup. A button, not a nav link — the six primary
-          items stay exactly the Workspace and org-zone links. */}
-      <div className="px-3 pb-2">
-        <button
-          type="button"
-          onClick={onOpenSearch}
-          aria-label="Find a provider"
-          className={`flex h-9 w-full items-center gap-2 rounded-[var(--mp-radius-control)] border border-white/10 bg-white/[0.06] px-3 text-[13px] text-white/70 hover:bg-white/10 hover:text-white ${navFocus}`}
-        >
-          <Search className="h-4 w-4 flex-none" />
-          <span className="flex-1 text-left">Find a provider</span>
-          <kbd className="text-[11px] text-white/40">{shortcut}</kbd>
-        </button>
-      </div>
+      {/* Cross-org provider lookup. Suppressed for client audience to preserve isolation */}
+      {!isClient ? (
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            aria-label="Find a provider"
+            className={`flex h-9 w-full items-center gap-2 rounded-[var(--mp-radius-control)] border border-white/10 bg-white/[0.06] px-3 text-[13px] text-white/70 hover:bg-white/10 hover:text-white ${navFocus}`}
+          >
+            <Search className="h-4 w-4 flex-none" />
+            <span className="flex-1 text-left">Find a provider</span>
+            <kbd className="text-[11px] text-white/40">{shortcut}</kbd>
+          </button>
+        </div>
+      ) : null}
 
-      {/* Workspace — the three cross-org journey entries (F6.1.1) */}
+      {/* Workspace — cross-org journeys */}
       <div className="px-3 pt-1.5">
         <div className={sectionLabelClass}>Workspace</div>
         <nav className="space-y-0.5" aria-label="Workspace">
-          {renderNavItem(
-            { to: "/cases", label: "Cases", icon: FolderKanban },
-            openCases !== null ? (
-              <CountChip count={openCases} label={`${openCases} open cases`} />
-            ) : undefined,
+          {!isClient ? (
+            <>
+              {renderNavItem(
+                { to: "/cases", label: "Cases", icon: FolderKanban },
+                openCases !== null ? (
+                  <CountChip count={openCases} label={`${openCases} open cases`} />
+                ) : undefined,
+              )}
+              {/* Payer Setup renders for ALL roles for now (two trusted users;
+                  revisit at the third hire) — F6.1.1. */}
+              {renderNavItem(
+                { to: "/admin/payer-admin", label: "Payer Setup", icon: CreditCard },
+                needsAttention !== null && needsAttention > 0 ? (
+                  <CountChip count={needsAttention} label={`${needsAttention} broken form mappings`} />
+                ) : undefined,
+              )}
+              {renderNavItem({ to: "/reporting", label: "Reporting Center", icon: BarChart3 })}
+            </>
+          ) : (
+            <>
+              {renderNavItem({
+                to: "/reporting/enrollment-explorer",
+                label: "Enrollment Explorer",
+                icon: BarChart3,
+              })}
+            </>
           )}
-          {/* Payer Setup renders for ALL roles for now (two trusted users;
-              revisit at the third hire) — F6.1.1. */}
-          {renderNavItem(
-            { to: "/admin/payer-admin", label: "Payer Setup", icon: CreditCard },
-            needsAttention !== null && needsAttention > 0 ? (
-              <CountChip count={needsAttention} label={`${needsAttention} broken form mappings`} />
-            ) : undefined,
-          )}
-          {renderNavItem({ to: "/reporting", label: "Reporting Center", icon: BarChart3 })}
         </nav>
       </div>
 
@@ -246,7 +267,63 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
       {/* Org zone — the switcher tile IS the header; children are the three
           org-scoped journey entries (F6.1.1). */}
       <div className="flex-1 overflow-y-auto px-3 pt-6 pb-1">
-        {active ? (
+        {isClient && clientOrg ? (
+          <div>
+            {accessContext.clientOrgs.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Active organization: ${clientOrg.orgName}. Switch organization`}
+                    className={`w-full flex items-center gap-2.5 rounded-[var(--mp-radius-sm)] border border-white/[0.08] bg-white/[0.06] px-3 py-[9px] mb-1.5 text-left hover:bg-white/10 transition-colors ${navFocus}`}
+                  >
+                    <span className="flex-1 min-w-0 flex flex-col gap-px">
+                      <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-white/40">
+                        Client Organization
+                      </span>
+                      <span className="truncate text-[14px] font-semibold text-white">
+                        {clientOrg.orgName}
+                      </span>
+                    </span>
+                    <ChevronDown className="w-4 h-4 flex-none text-white/50" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64 p-1">
+                  {accessContext.clientOrgs.map((org) => (
+                    <DropdownMenuItem
+                      key={org.orgId}
+                      onSelect={() => {
+                        void selectAccessContext({ audience: "client", orgId: org.orgId });
+                      }}
+                      className="flex items-center justify-between gap-2 px-3 py-[7px] text-[13px]"
+                    >
+                      <span className={org.orgId === clientOrg.orgId ? "font-medium" : ""}>
+                        {org.orgName}
+                      </span>
+                      {org.orgId === clientOrg.orgId ? (
+                        <Check className="w-3.5 h-3.5 text-primary" />
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex items-center gap-2.5 rounded-[var(--mp-radius-sm)] border border-white/[0.08] bg-white/[0.06] px-3 py-[9px] mb-1.5 text-left">
+                <span className="flex-1 min-w-0 flex flex-col gap-px">
+                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-white/40">
+                    Client Organization
+                  </span>
+                  <span className="truncate text-[14px] font-semibold text-white">
+                    {clientOrg.orgName}
+                  </span>
+                </span>
+              </div>
+            )}
+            <div className="px-3 py-2 text-[11.5px] text-white/40">
+              {clientOrg.groups.length} provider group{clientOrg.groups.length === 1 ? "" : "s"} assigned
+            </div>
+          </div>
+        ) : active ? (
           <>
             <DropdownMenu onOpenChange={(open) => !open && setOrgQuery("")}>
               <DropdownMenuTrigger asChild>
@@ -372,7 +449,7 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
                   {fullName ?? user?.email ?? "Signed in"}
                 </div>
                 <div className="truncate text-[11px] text-white/50">
-                  {active ? (ROLE_LABELS[active.role] ?? active.role) : ""}
+                  {isClient ? "Client Access" : active ? (ROLE_LABELS[active.role] ?? active.role) : ""}
                 </div>
               </div>
               <ChevronDown className="w-4 h-4 text-white/40" />

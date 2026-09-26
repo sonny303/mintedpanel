@@ -844,9 +844,79 @@ export interface EnrollmentCatalogTarget {
   isActive: boolean;
 }
 
+export interface EnrollmentCatalogFacility {
+  id: string;
+  name: string;
+  state?: string | null;
+}
+
+export interface EnrollmentCatalogGroup {
+  id: string;
+  name: string;
+}
+
+export interface EnrollmentCatalogPayer {
+  id: string;
+  name: string;
+}
+
 export interface EnrollmentCatalog {
   products: EnrollmentCatalogProduct[];
   targets: EnrollmentCatalogTarget[];
+  facilities?: EnrollmentCatalogFacility[];
+  groups?: EnrollmentCatalogGroup[];
+  payers?: EnrollmentCatalogPayer[];
+}
+
+export interface EnrollmentMatrixCell {
+  scopeId: string;
+  providerId: string;
+  payerProductId: string;
+  facilityId: string;
+  status: EnrollmentStatus | "needs_verification" | "not_started";
+  actionOwner: EnrollmentActionOwner;
+  effectiveDate: string | null;
+  clientSafeBlocker: string | null;
+  payerReference: string | null;
+  facilityCount: number;
+  proofCount: number;
+  reviewedAt?: string | null;
+}
+
+export interface EnrollmentMatrixClinician {
+  providerId: string;
+  firstName: string;
+  lastName: string;
+  npi: string;
+  taxonomyCode: string | null;
+  discipline: "PT" | "PTA" | "OT" | "OTA" | "SLP" | "Other" | "Unknown";
+  groupIds: string[];
+  facilityIds: string[];
+}
+
+export interface EnrollmentMatrixProductColumn {
+  productId: string;
+  payerId: string;
+  payerName: string;
+  productKey: string;
+  displayName: string;
+}
+
+export interface EnrollmentMatrixStats {
+  totalClinicians: number;
+  activeEnrollments: number;
+  pendingPayerAction: number;
+  actionableClientBlockers: number;
+}
+
+export interface EnrollmentMatrixQueryResult {
+  clinicians: EnrollmentMatrixClinician[];
+  products: EnrollmentMatrixProductColumn[];
+  cells: Record<string, EnrollmentMatrixCell>;
+  stats: EnrollmentMatrixStats;
+  totalClinicians: number;
+  page: number;
+  limit: number;
 }
 
 export interface EnrollmentUnmappedCoordinate {
@@ -887,6 +957,7 @@ export interface EnrollmentProofSummary {
   evidenceKind: EnrollmentEvidenceKind;
   supportedFields: EnrollmentProofField[];
   publishedAt: string;
+  sha256?: string;
 }
 
 export interface EnrollmentClientScopeSummary {

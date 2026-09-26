@@ -10,7 +10,7 @@ import { Menu, X, BarChart3, Search } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Sidebar } from "./Sidebar";
 import { GlobalProviderSearchDialog } from "@/components/search/GlobalProviderSearchDialog";
-import { useActiveMembership } from "@/lib/auth-store";
+import { useActiveMembership, useAuthStore } from "@/lib/auth-store";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -25,7 +25,13 @@ export function AppShell({ children }: AppShellProps) {
     setSearchOpen(true);
   };
   const active = useActiveMembership();
-  const activeOrgName = active?.orgName ?? "Minted Panel";
+  const accessContext = useAuthStore((s) => s.accessContext);
+  const isClient = accessContext?.audience === "client";
+  const clientOrg = isClient
+    ? (accessContext?.clientOrgs.find((o) => o.orgId === accessContext?.selectedOrgId) ??
+       accessContext?.clientOrgs[0])
+    : null;
+  const activeOrgName = clientOrg?.orgName ?? active?.orgName ?? "Minted Panel";
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -88,17 +94,19 @@ export function AppShell({ children }: AppShellProps) {
           <span className="flex-1 truncate font-semibold text-[15px] tracking-tight text-foreground">
             {activeOrgName}
           </span>
-          <button
-            type="button"
-            aria-label="Find a provider"
-            onClick={() => setSearchOpen(true)}
-            className="w-9 h-9 rounded-[var(--mp-radius-sm)] flex items-center justify-center text-foreground hover:bg-muted transition-colors"
-          >
-            <Search className="w-5 h-5" />
-          </button>
+          {!isClient ? (
+            <button
+              type="button"
+              aria-label="Find a provider"
+              onClick={() => setSearchOpen(true)}
+              className="w-9 h-9 rounded-[var(--mp-radius-sm)] flex items-center justify-center text-foreground hover:bg-muted transition-colors"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+          ) : null}
           <Link
-            to="/reporting"
-            aria-label="Open Reporting Center"
+            to={isClient ? "/reporting/enrollment-explorer" : "/reporting"}
+            aria-label={isClient ? "Open Enrollment Explorer" : "Open Reporting Center"}
             className="w-9 h-9 -mr-2 rounded-[var(--mp-radius-sm)] flex items-center justify-center text-foreground hover:bg-muted transition-colors"
           >
             <BarChart3 className="w-5 h-5" />

@@ -40,3 +40,8 @@ dist-ssr
 
 # Claude Code agent worktree scratch (transient, never commit)
 .claude/worktrees/
+
+# Local build and temp
+.vercel/
+supabase/.temp/
+

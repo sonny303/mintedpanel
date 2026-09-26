@@ -10,6 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useInboundLeads } from "@/hooks/useInboundLeads";
 import { REPORT_GROUPS, reportsInGroup, type ReportDef } from "@/lib/reports";
 
+import { useAuthStore } from "@/lib/auth-store";
+
 export const Route = createFileRoute("/reporting/")({
   component: ReportingCenterPage,
 });
@@ -44,6 +46,7 @@ function ReportCard({ report, badge }: { report: ReportDef; badge?: number }) {
 }
 
 function ReportingCenterPage() {
+  const isClient = useAuthStore((s) => s.accessContext?.audience === "client");
   // The Intake badge: new (untriaged) leads, rendered only when > 0 (F6.6.1).
   const leadsQ = useInboundLeads();
   const newLeadCount = (leadsQ.data ?? []).filter((l) => l.status === "new").length;
@@ -56,7 +59,7 @@ function ReportingCenterPage() {
       />
       <div className="space-y-6">
         {REPORT_GROUPS.map((group) => {
-          const reports = reportsInGroup(group.key);
+          const reports = reportsInGroup(group.key, isClient ? "client" : undefined);
           if (reports.length === 0) return null;
           return (
             <section key={group.key} aria-labelledby={`report-group-${group.key}`}>

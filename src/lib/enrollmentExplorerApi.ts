@@ -3,10 +3,12 @@ import {
   getContextRevisionSnapshot,
   observeContextRevisionForRequest,
 } from "@/lib/contextRevision";
+import { useAuthStore } from "@/lib/auth-store";
 import type {
   EnrollmentCatalog,
   EnrollmentEvidenceKind,
   EnrollmentExplorerAudience,
+  EnrollmentMatrixQueryResult,
   EnrollmentProofField,
   EnrollmentScopeDetail,
   EnrollmentScopeSaveInput,
@@ -131,17 +133,110 @@ function encodeCursor(cursor: unknown): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+export function resolveExplorerContext(
+  contextOrOrgId?: EnrollmentExplorerRequestContext | string | null,
+): EnrollmentExplorerRequestContext {
+  if (contextOrOrgId && typeof contextOrOrgId === "object" && "orgId" in contextOrOrgId) {
+    return contextOrOrgId;
+  }
+  const store = useAuthStore.getState();
+  const accessContext = store.accessContext;
+  const orgId = typeof contextOrOrgId === "string" ? contextOrOrgId : (store.activeOrgId ?? "");
+  const audience = accessContext?.audience ?? "staff";
+  const contextRevision = accessContext?.contextRevision ?? "rev-init";
+  return { orgId, audience, contextRevision };
+}
+
 export function fetchEnrollmentCatalog(
-  context: EnrollmentExplorerRequestContext,
-  groupId: string | null,
+  contextOrOrgId: EnrollmentExplorerRequestContext | string,
+  groupId?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<EnrollmentCatalog> {
+  const context = resolveExplorerContext(contextOrOrgId);
   const query = new URLSearchParams();
   if (groupId) query.set("groupId", groupId);
   const suffix = query.toString();
   return request(context, `/api/enrollment-explorer/catalog${suffix ? `?${suffix}` : ""}`, {
     signal: options?.signal,
   });
+}
+
+export interface QueryEnrollmentScopesParams {
+  groupId?: string | null;
+  facilityId?: string | null;
+  discipline?: string | null;
+  statusBucket?: string | null;
+  search?: string | null;
+  page?: number;
+  limit?: number;
+}
+
+export function queryEnrollmentScopes(
+  contextOrParams?: EnrollmentExplorerRequestContext | QueryEnrollmentScopesParams,
+  paramsOrOptions?: QueryEnrollmentScopesParams | { signal?: AbortSignal },
+  options?: { signal?: AbortSignal },
+): Promise<EnrollmentMatrixQueryResult> {
+  let context: EnrollmentExplorerRequestContext;
+  let params: QueryEnrollmentScopesParams = {};
+  let opt = options;
+
+  if (contextOrParams && "audience" in contextOrParams) {
+    context = contextOrParams;
+    if (paramsOrOptions && !("signal" in paramsOrOptions)) {
+      params = paramsOrOptions as QueryEnrollmentScopesParams;
+    } else if (paramsOrOptions && "signal" in paramsOrOptions) {
+      opt = paramsOrOptions as { signal?: AbortSignal };
+    }
+  } else {
+    context = resolveExplorerContext();
+    if (contextOrParams && !("audience" in contextOrParams)) {
+      params = contextOrParams;
+    }
+    if (paramsOrOptions && "signal" in paramsOrOptions) {
+      opt = paramsOrOptions as { signal?: AbortSignal };
+    }
+  }
+
+  const query = new URLSearchParams();
+  if (params.groupId) query.set("groupId", params.groupId);
+  if (params.facilityId) query.set("facilityId", params.facilityId);
+  if (params.discipline) query.set("discipline", params.discipline);
+  if (params.statusBucket) query.set("statusBucket", params.statusBucket);
+  if (params.search) query.set("search", params.search);
+  if (params.page != null) query.set("page", String(params.page));
+  if (params.limit != null) query.set("limit", String(params.limit));
+
+  const suffix = query.toString();
+  return request(context, `/api/enrollment-explorer/scopes/query${suffix ? `?${suffix}` : ""}`, {
+    signal: opt?.signal,
+  });
+}
+
+export async function fetchEnrollmentProofDocument(
+  contextOrProofId: EnrollmentExplorerRequestContext | string,
+  proofIdOrOptions?: string | { signal?: AbortSignal },
+  options?: { signal?: AbortSignal },
+): Promise<{ blob: Blob; fileName: string }> {
+  let context: EnrollmentExplorerRequestContext;
+  let proofId: string;
+  let opt = options;
+
+  if (typeof contextOrProofId === "string") {
+    context = resolveExplorerContext();
+    proofId = contextOrProofId;
+    if (proofIdOrOptions && typeof proofIdOrOptions === "object" && "signal" in proofIdOrOptions) {
+      opt = proofIdOrOptions;
+    }
+  } else {
+    context = contextOrProofId;
+    proofId = proofIdOrOptions as string;
+  }
+
+  const blob = await downloadEnrollmentProof(context, proofId, opt);
+  return {
+    blob,
+    fileName: `proof-${proofId}.pdf`,
+  };
 }
 
 export function fetchUnresolvedEnrollmentPage(

@@ -334,7 +334,7 @@ CREATE OR REPLACE FUNCTION private.e613_require_context(
   p_require_admin boolean DEFAULT false,
   p_group_id uuid DEFAULT NULL
 ) RETURNS void
-LANGUAGE plpgsql SECURITY INVOKER
+LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private, auth'
 AS $$
 DECLARE
@@ -396,7 +396,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION private.e613_source_snapshot(p_source_kind text, p_source_id uuid)
-RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY INVOKER
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path TO 'pg_catalog, public'
 AS $$
 DECLARE
@@ -440,7 +440,7 @@ AS $$ SELECT encode(sha256(convert_to(p_snapshot::text, 'UTF8')), 'hex') $$;
 -- their revision stale instead of disappearing from the batch.
 CREATE OR REPLACE FUNCTION private.e613_revision_source_batch(p_revisions jsonb)
 RETURNS TABLE(scope_id uuid, revision_id uuid, source_valid boolean)
-LANGUAGE sql STABLE SECURITY INVOKER
+LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path TO 'pg_catalog, private'
 AS $$
   WITH requested AS MATERIALIZED (
@@ -485,7 +485,7 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION private.e613_revision_sources_valid(p_scope_id uuid, p_revision_id uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path TO 'pg_catalog, private'
 AS $$
   SELECT COALESCE((
@@ -498,7 +498,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.curate_enrollment_payer_product(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_payer_id uuid,
   p_product_key text, p_display_name text, p_is_active boolean
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE v_product private.payer_products%ROWTYPE;
@@ -524,7 +524,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.set_enrollment_group_product_target(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_group_id uuid,
   p_payer_product_id uuid, p_state text, p_is_active boolean
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -561,7 +561,7 @@ CREATE OR REPLACE FUNCTION public.save_enrollment_revision(
   p_expected_revision_id uuid, p_provider_id uuid, p_group_id uuid,
   p_payer_product_id uuid, p_facility_id uuid, p_state text,
   p_revision jsonb, p_sources jsonb
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -732,7 +732,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.publish_enrollment_summary(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_scope_id uuid, p_revision_id uuid
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE v_scope private.enrollment_scopes%ROWTYPE; v_revision private.enrollment_scope_revisions%ROWTYPE; v_publication uuid;
@@ -762,7 +762,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.get_enrollment_scope_detail(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_scope_id uuid
-) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -907,7 +907,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.get_enrollment_unresolved_page(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_group_id uuid,
   p_cursor jsonb, p_limit integer
-) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -1099,7 +1099,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.get_enrollment_catalog(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_group_id uuid
-) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -1141,7 +1141,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.publish_enrollment_proof(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_scope_id uuid, p_revision_id uuid,
   p_document_version_id uuid, p_evidence_kind text, p_supported_fields text[], p_sha256 text, p_reason text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -1213,7 +1213,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.get_enrollment_proof_capture_target(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_scope_id uuid,
   p_revision_id uuid, p_document_version_id uuid
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -1258,7 +1258,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_enrollment_publication(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_publication_id uuid, p_reason text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE v_scope_id uuid; v_revision_id uuid; v_event_id uuid; v_summary_id uuid; v_proof_id uuid;
@@ -1299,7 +1299,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.authorize_enrollment_proof_download(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_publication_id uuid
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE
@@ -1357,7 +1357,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.record_enrollment_proof_download(
   p_actor_user_id uuid, p_org_id uuid, p_audience text, p_publication_id uuid,
   p_document_version_id uuid, p_sha256 text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog, public, private'
 AS $$
 DECLARE

@@ -15,6 +15,7 @@ import {
   getEnrollmentUnresolvedPage,
   publishEnrollmentProof,
   publishEnrollmentSummary,
+  queryEnrollmentScopes,
   readStoredProviderDocument,
   revokeEnrollmentPublication,
   saveEnrollmentRevision,
@@ -235,6 +236,32 @@ export async function handleEnrollmentExplorerRequest(
         }
       }
       return okNoStore(await getEnrollmentUnresolvedPage(ctx, { groupId, cursor, limit }));
+    }
+
+    if (path === "/api/enrollment-explorer/scopes/query") {
+      if (method !== "GET") return bad("Method not allowed", 405);
+      const groupId = url.searchParams.get("groupId");
+      if (groupId && !uuid(groupId)) return bad("groupId must be a UUID");
+      const facilityId = url.searchParams.get("facilityId");
+      if (facilityId && !uuid(facilityId)) return bad("facilityId must be a UUID");
+      const discipline = url.searchParams.get("discipline");
+      const statusBucket = url.searchParams.get("statusBucket");
+      const search = url.searchParams.get("search");
+      const rawLimit = url.searchParams.get("limit");
+      const limit = rawLimit ? Number(rawLimit) : undefined;
+      const rawPage = url.searchParams.get("page");
+      const page = rawPage ? Number(rawPage) : undefined;
+      return okNoStore(
+        await queryEnrollmentScopes(ctx, {
+          groupId,
+          facilityId,
+          discipline,
+          statusBucket,
+          search,
+          page,
+          limit,
+        }),
+      );
     }
 
     const detail = /^\/api\/enrollment-explorer\/scopes\/([^/]+)$/.exec(path);

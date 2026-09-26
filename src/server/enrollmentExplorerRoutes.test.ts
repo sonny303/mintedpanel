@@ -255,4 +255,95 @@ describe("E6.13 enrollment explorer HTTP routes", () => {
     ]);
     expect(response.headers.get("content-disposition")).toBeNull();
   });
+
+  it("handles scopes matrix query with filters and returns no-store", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        clinicians: [
+          {
+            providerId: "p-1",
+            firstName: "Alice",
+            lastName: "Smith",
+            npi: "1234567890",
+            disciplines: ["PT"],
+            primaryDiscipline: "PT",
+            facilityIds: ["f-1"],
+            facilityNames: ["Main Clinic"],
+            cells: {},
+          },
+        ],
+        products: [],
+        stats: { totalEnrollments: 1, readyToBill: 1, actionNeeded: 0, inFlight: 0, coveragePct: 100 },
+        pagination: { page: 1, pageSize: 50, totalClinicians: 1, totalPages: 1 },
+      },
+      error: null,
+    });
+
+    const response = await handleEnrollmentExplorerRequest(
+      request("/api/enrollment-explorer/scopes/query?discipline=PT&statusBucket=approved&page=1&limit=50"),
+      user({ rpc }),
+      { orgId: ORG, audience: "staff" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(rpc).toHaveBeenCalledWith("get_enrollment_explorer_page", {
+      p_actor_user_id: ACTOR,
+      p_org_id: ORG,
+      p_audience: "staff",
+      p_group_id: null,
+      p_facility_id: null,
+      p_discipline: "PT",
+      p_status_bucket: "approved",
+      p_search: null,
+      p_page: 1,
+      p_limit: 50,
+    });
+    const body = await response.json();
+    expect(body.data.clinicians[0].firstName).toBe("Alice");
+  });
+
+  it("rejects invalid UUID in scopes query filters", async () => {
+    const rpc = vi.fn();
+    const response = await handleEnrollmentExplorerRequest(
+      request("/api/enrollment-explorer/scopes/query?groupId=not-a-uuid"),
+      user({ rpc }),
+      { orgId: ORG, audience: "staff" },
+    );
+
+    expect(response.status).toBe(422);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("passes client audience to get_enrollment_explorer_page for multi-tenant boundary", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        clinicians: [],
+        products: [],
+        stats: { totalEnrollments: 0, readyToBill: 0, actionNeeded: 0, inFlight: 0, coveragePct: 0 },
+        pagination: { page: 1, pageSize: 50, totalClinicians: 0, totalPages: 0 },
+      },
+      error: null,
+    });
+
+    const response = await handleEnrollmentExplorerRequest(
+      request("/api/enrollment-explorer/scopes/query"),
+      user({ rpc }),
+      { orgId: ORG, audience: "client" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("get_enrollment_explorer_page", {
+      p_actor_user_id: ACTOR,
+      p_org_id: ORG,
+      p_audience: "client",
+      p_group_id: null,
+      p_facility_id: null,
+      p_discipline: null,
+      p_status_bucket: null,
+      p_search: null,
+      p_page: 1,
+      p_limit: 50,
+    });
+  });
 });

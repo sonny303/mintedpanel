@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
@@ -239,6 +240,11 @@ function ClientContextSurface({
             ))}
           </div>
         </div>
+        <div className="mt-5 flex items-center gap-3">
+          <Button asChild className="h-9">
+            <Link to="/reporting/enrollment-explorer">Open Enrollment Explorer</Link>
+          </Button>
+        </div>
         {canSwitchToStaff ? (
           <div className="mt-5">
             <div className="text-[12px] font-semibold text-muted-foreground">
@@ -265,6 +271,7 @@ function ClientContextSurface({
 }
 
 export function AccessContextBoundary({ children }: AccessContextBoundaryProps) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const session = useAuthStore((state) => state.session);
   const context = useAuthStore((state) => state.accessContext);
   const loading = useAuthStore((state) => state.accessContextLoading);
@@ -313,6 +320,16 @@ export function AccessContextBoundary({ children }: AccessContextBoundaryProps) 
     return <AudienceChooser staffOrgs={context.staffOrgs} clientOrgs={context.clientOrgs} />;
   }
   if (hasClient && (context.audience === "client" || context.restrictedExternal)) {
+    const isAllowedClientRoute =
+      pathname.startsWith("/reporting/enrollment-explorer") ||
+      pathname === "/reporting" ||
+      pathname === "/reporting/" ||
+      pathname.startsWith("/account");
+
+    if (isAllowedClientRoute) {
+      return <>{children}</>;
+    }
+
     return (
       <ClientContextSurface
         orgs={context.clientOrgs}

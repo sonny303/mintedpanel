@@ -224,7 +224,7 @@ CREATE OR REPLACE FUNCTION public.set_internal_staff_manifest(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path TO 'public, private, auth, extensions'
 AS $$
 DECLARE
@@ -311,18 +311,24 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = private, auth, pg_catalog
+SET search_path = private, pg_catalog
 AS $$
   SELECT EXISTS (
     SELECT 1
       FROM private.client_identity_classifications c
-     WHERE c.auth_user_id = auth.uid()
+     WHERE c.auth_user_id = coalesce(
+       nullif(current_setting('request.jwt.claim.sub', true), ''),
+       (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+     )::uuid
        AND c.state IN ('pending', 'active', 'expired', 'revoked')
   )
   AND NOT EXISTS (
     SELECT 1
       FROM private.internal_staff s
-     WHERE s.auth_user_id = auth.uid()
+     WHERE s.auth_user_id = coalesce(
+       nullif(current_setting('request.jwt.claim.sub', true), ''),
+       (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+     )::uuid
        AND s.active
   );
 $$;
@@ -1364,7 +1370,7 @@ CREATE OR REPLACE FUNCTION public.resolve_enrollment_context(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path TO 'public, private, auth, extensions'
 AS $$
 DECLARE
@@ -1541,7 +1547,7 @@ CREATE OR REPLACE FUNCTION public.create_client_invite(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path TO 'public, private, auth, extensions'
 AS $$
 DECLARE
@@ -1660,7 +1666,7 @@ CREATE OR REPLACE FUNCTION public.claim_client_invite(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path TO 'public, private, auth, extensions'
 AS $$
 DECLARE
@@ -1754,7 +1760,7 @@ CREATE OR REPLACE FUNCTION public.set_client_group_grants(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path TO 'public, private, auth, extensions'
 AS $$
 DECLARE
@@ -1818,7 +1824,7 @@ CREATE OR REPLACE FUNCTION public.revoke_client_access(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path TO 'public, private, auth, extensions'
 AS $$
 DECLARE
@@ -1883,8 +1889,8 @@ GRANT EXECUTE ON FUNCTION public.create_organization(text, text, text) TO authen
 GRANT EXECUTE ON FUNCTION public.create_organization(text, text, text, jsonb, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_invites() TO authenticated, service_role;
 
--- Service-only RPC floor. SECURITY INVOKER is intentional: service_role is
--- the only caller and all private table access is explicit.
+-- Service-only RPC floor. SECURITY DEFINER owned by postgres ensures secure
+-- access to internal tables while execute privileges are strictly restricted to service_role.
 REVOKE ALL ON FUNCTION public.resolve_enrollment_context(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.create_client_invite(uuid, uuid, text, uuid[]) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.claim_client_invite(uuid, text) FROM PUBLIC, anon, authenticated;

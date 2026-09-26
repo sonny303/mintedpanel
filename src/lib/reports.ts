@@ -13,6 +13,7 @@ export interface ReportDef {
   description: string;
   path: string;
   group: ReportGroup;
+  roles?: readonly string[];
 }
 
 /** The four groups in display order (E6.6 F6.6.1). */
@@ -24,6 +25,14 @@ export const REPORT_GROUPS: readonly { key: ReportGroup; title: string }[] = [
 ];
 
 export const REPORTS: ReportDef[] = [
+  {
+    key: "enrollment-explorer",
+    title: "Enrollment Explorer",
+    description: "Self-service matrix of clinician enrollments across payer products with version-bound proof.",
+    path: "/reporting/enrollment-explorer",
+    group: "performance",
+    roles: ["admin", "specialist", "billing", "client"],
+  },
   {
     key: "portfolio",
     title: "Portfolio",
@@ -95,6 +104,15 @@ export function findReport(key: string): ReportDef | undefined {
 }
 
 /** Registry entries for one group, registry order preserved. */
-export function reportsInGroup(group: ReportGroup): ReportDef[] {
-  return REPORTS.filter((r) => r.group === group);
+export function reportsInGroup(group: ReportGroup, role?: string): ReportDef[] {
+  return REPORTS.filter((r) => {
+    if (r.group !== group) return false;
+    if (role === "client") {
+      return Boolean(r.roles?.includes("client"));
+    }
+    if (role && r.roles) {
+      return r.roles.includes(role);
+    }
+    return true;
+  });
 }

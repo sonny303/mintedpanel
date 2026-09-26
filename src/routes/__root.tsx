@@ -182,6 +182,7 @@ function RootComponent() {
   const initError = useAuthStore((s) => s.initError);
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
+  const context = useAuthStore((s) => s.accessContext);
 
   useEffect(() => {
     registerQueryClient(queryClient);
@@ -237,7 +238,7 @@ function RootComponent() {
         <AccessContextBoundary>
           {isRootRoute && session ? (
             <AuthenticatedHome />
-          ) : memberships.length === 0 ? (
+          ) : memberships.length === 0 && context?.audience !== "client" ? (
             // Signed in but part of no org yet — bootstrap the first org before the
             // app shell (which mounts org-scoped hooks) ever renders.
             <NoOrgScreen />
@@ -248,7 +249,13 @@ function RootComponent() {
                   (selected provider/case/facility, filters, unsaved forms) before
                   the new org loads. Server state is cleared by
                   auth-store.setActiveOrg -> queryClient.removeQueries(). */}
-              <Outlet key={activeOrgId ?? "no-org"} />
+              <Outlet
+                key={
+                  context?.audience === "client"
+                    ? (context.selectedOrgId ?? "client-org")
+                    : (activeOrgId ?? "no-org")
+                }
+              />
             </AppShell>
           )}
         </AccessContextBoundary>
@@ -267,6 +274,10 @@ function AuthenticatedHome() {
 
   useEffect(() => {
     if (!context) return;
+    if (context.audience === "client") {
+      void router.navigate({ to: "/reporting/enrollment-explorer", replace: true });
+      return;
+    }
     if (context.staffOrgs.length === 0) {
       // Preserve the existing first-run/all-inactive landing. A genuinely
       // org-less verified trainer still keeps its global API capability, but

@@ -5,6 +5,7 @@ import type {
   EnrollmentCatalog,
   EnrollmentEvidenceKind,
   EnrollmentExplorerAudience,
+  EnrollmentMatrixQueryResult,
   EnrollmentProofField,
   EnrollmentScopeDetail,
   EnrollmentScopeSaveInput,
@@ -67,6 +68,31 @@ export function getEnrollmentCatalog(
   groupId: string | null,
 ): Promise<EnrollmentCatalog> {
   return call(ctx, "get_enrollment_catalog", { p_group_id: groupId });
+}
+
+export interface QueryEnrollmentScopesInput {
+  groupId?: string | null;
+  facilityId?: string | null;
+  discipline?: string | null;
+  statusBucket?: string | null;
+  search?: string | null;
+  page?: number;
+  limit?: number;
+}
+
+export function queryEnrollmentScopes(
+  ctx: EnrollmentExplorerContext,
+  input: QueryEnrollmentScopesInput = {},
+): Promise<EnrollmentMatrixQueryResult> {
+  return call(ctx, "get_enrollment_explorer_page", {
+    p_group_id: input.groupId ?? null,
+    p_facility_id: input.facilityId ?? null,
+    p_discipline: input.discipline ?? null,
+    p_status_bucket: input.statusBucket ?? null,
+    p_search: input.search ?? null,
+    p_page: input.page ?? 1,
+    p_limit: input.limit ?? 50,
+  });
 }
 
 export function curateEnrollmentProduct(
