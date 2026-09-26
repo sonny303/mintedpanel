@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // E6.5 — the consolidated Payer Setup module over the mock harness

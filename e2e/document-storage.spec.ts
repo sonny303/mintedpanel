@@ -1,4 +1,4 @@
-import { test, expect, type Route, type BrowserContext } from "@playwright/test";
+import { test, expect, type Route, type BrowserContext } from "./fixtures/legacy-access-context";
 
 // E4.5 Document Storage — TS-88/89/90 over the mock harness. The browser's
 // metadata reads ride /rest/v1 under RLS (mocked here with filter-honoring

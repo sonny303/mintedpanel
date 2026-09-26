@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // Approach A, in the shell. A user who belongs to two orgs looks up a provider
 // who lives only in the other org, copies the NPI without leaving the active

@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.1 TE-10 — Provider Group entity coverage over the mock harness:
 //   TS-29 Tree Hill single-group capture: form save → section Complete →

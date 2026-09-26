@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // E6.9 — the unified field registry inside the Submit-form task editor

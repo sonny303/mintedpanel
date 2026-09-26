@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // The footprint inspector is mounted on /dev/global-search only. The shell
 // palette stays the shallow lookup: same person, no inspect control, no

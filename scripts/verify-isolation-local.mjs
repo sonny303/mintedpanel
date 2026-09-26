@@ -58,6 +58,9 @@ function runGate(baseUrl) {
         SEARCH_LEAK_QUERY: "South Park",
         VERCEL_BYPASS_SECRET: "",
         GITHUB_STEP_SUMMARY: "",
+        // E6.13 explicit selected-audience routes are covered against this
+        // synthetic API in local isolation runs, never against hosted data.
+        E613_VERIFY: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -97,6 +100,10 @@ const EXPECTED_FAILS = {
   // The leaked extra membership row breaks both the exact-count shape check
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],
+  // E6.12: a foreign org in the pre-shell access context is the only intended
+  // failure for this leak; forged actor and stale-revision denials stay intact.
+  accesscontext: ["30b"],
+  e613isolation: ["31c"],
   facility: ["11"],
   // The SSN-release leak serves a cross-org provider's full SSN (assertion 16).
   ssnrelease: ["16"],

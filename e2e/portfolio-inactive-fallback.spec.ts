@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.4 F0.4.2 / TE-3 + TD-4 — Playwright coverage of the all-inactive Portfolio
 // fallback (TS-12). This path is reachable only when every org the caller can see

@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.8 TE-12 readiness-matrix coverage — relocated 2026-07-21 with the
 // surface: the matrix lives on the PROVIDER RECORD's Readiness section now

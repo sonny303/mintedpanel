@@ -1,9 +1,8 @@
 // Login page: 46/54 split. Deep-green left panel with dot texture, logo
 // tile, headline and watermark. Off-white right panel with sign-in form.
-import { createFileRoute, useRouterState } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuthStore } from "@/lib/auth-store";
-import { useLandingRedirect } from "@/hooks/useLandingRedirect";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 
 export const Route = createFileRoute("/login")({
@@ -13,18 +12,43 @@ export const Route = createFileRoute("/login")({
 const FONT = { fontFamily: '"Geist", ui-sans-serif, system-ui, sans-serif' };
 
 function LoginPage() {
-  const goToLanding = useLandingRedirect();
+  const navigate = useNavigate();
   const session = useAuthStore((s) => s.session);
   const signIn = useAuthStore((s) => s.signIn);
+  const loadAccessContext = useAuthStore((s) => s.loadAccessContext);
   const loading = useAuthStore((s) => s.loading);
   const initialized = useAuthStore((s) => s.initialized);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const inviteToken =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("invite")
+      : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Guards the resolver against re-firing while it navigates away from /login.
   const redirected = useRef(false);
+
+  const goToLanding = useCallback(async (): Promise<void> => {
+    try {
+      await loadAccessContext();
+      if (inviteToken) {
+        // The recipient already has a verified Auth account. Keep the token in
+        // the URL while the session is established, then hand it to the
+        // explicit claim entrypoint; no signup or outbound email is implied.
+        window.location.assign(`/client-invites/claim/${encodeURIComponent(inviteToken)}`);
+        return;
+      }
+      // The root boundary owns landing selection after context resolution:
+      // it preserves live staff landing, all-inactive Portfolio fallback, a
+      // dual chooser, and the restricted client surface in one place.
+      await navigate({ to: "/", replace: true });
+    } catch {
+      redirected.current = false;
+      setError("We couldn't resolve your access context. Try again.");
+    }
+  }, [inviteToken, loadAccessContext, navigate]);
 
   useEffect(() => {
     if (initialized && session && pathname === "/login" && !redirected.current) {
@@ -234,6 +258,31 @@ function LoginPage() {
               >
                 {error}
               </div>
+            ) : null}
+
+            {error && session ? (
+              <button
+                type="button"
+                onClick={() => {
+                  redirected.current = true;
+                  setError(null);
+                  void goToLanding();
+                }}
+                style={{
+                  alignSelf: "flex-start",
+                  marginTop: "-10px",
+                  border: 0,
+                  padding: 0,
+                  background: "transparent",
+                  color: "var(--mp-primary)",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  ...FONT,
+                }}
+              >
+                Retry
+              </button>
             ) : null}
 
             <button
