@@ -34,6 +34,7 @@ const loadProviderRoutes = () => import("./providerRoutes");
 const loadExtensionRoutes = () => import("./extensionRoutes");
 const loadDocumentRoutes = () => import("./documentRoutes");
 const loadPayerFormRoutes = () => import("./payerFormRoutes");
+const loadRosterRoutes = () => import("./rosterRoutes");
 
 // `/api/providers/:id/profile` — must be matched before the generic :id route.
 const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
@@ -91,6 +92,7 @@ const DOCUMENT_DOWNLOAD_ROUTE = /^\/api\/documents\/([^/]+)\/download\/?$/;
 const PAYER_FORM_UPLOAD_INTENT_ROUTE = /^\/api\/payer-forms\/upload-intent\/?$/;
 const PAYER_FORM_FINALIZE_ROUTE = /^\/api\/payer-forms\/finalize\/?$/;
 const PAYER_FORM_DOWNLOAD_ROUTE = /^\/api\/payer-forms\/([^/]+)\/download\/?$/;
+const ROSTER_ROUTE = /^\/api\/rosters(?:\/.*)?\/?$/;
 
 // Keep verified user context request-scoped. Legacy routes retain one auth
 // call while the additive context-revision header reuses that actor after
@@ -409,6 +411,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     isPayerFormUploadIntent || isPayerFormFinalize
       ? null
       : pathname.match(PAYER_FORM_DOWNLOAD_ROUTE);
+  const isRosterRoute = ROSTER_ROUTE.test(pathname);
   if (
     !profileMatch &&
     !ssnReleaseMatch &&
@@ -439,7 +442,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !documentDownloadMatch &&
     !isPayerFormUploadIntent &&
     !isPayerFormFinalize &&
-    !payerFormDownloadMatch
+    !payerFormDownloadMatch &&
+    !isRosterRoute
   ) {
     return fail(404, "Not found");
   }
@@ -592,6 +596,62 @@ async function routeApiRequest(request: Request): Promise<Response> {
   }
 
   try {
+    if (isRosterRoute) {
+      const roster = await loadRosterRoutes();
+      const privateFailure = (status: number, message: string): Response => {
+        const response = fail(status, message);
+        response.headers.set("Cache-Control", "no-store, private, max-age=0");
+        response.headers.set("Pragma", "no-cache");
+        return response;
+      };
+      if (pathname === "/api/rosters/templates" || pathname === "/api/rosters/templates/") {
+        return method === "GET"
+          ? await roster.handleListRosterTemplates(ctx)
+          : privateFailure(405, "Method not allowed");
+      }
+      if (pathname === "/api/rosters/mappings" || pathname === "/api/rosters/mappings/") {
+        if (method === "GET") return await roster.handleListRosterMappings(ctx);
+        if (method === "POST")
+          return await roster.handleCreateRosterMapping(await readJsonBody(request), ctx);
+        return privateFailure(405, "Method not allowed");
+      }
+      if (pathname === "/api/rosters/history" || pathname === "/api/rosters/history/") {
+        return method === "GET"
+          ? await roster.handleRosterHistory(ctx)
+          : privateFailure(405, "Method not allowed");
+      }
+      const downloadMatch = pathname.match(/^\/api\/rosters\/exports\/([^/]+)\/download\/?$/);
+      if (downloadMatch) {
+        return method === "GET"
+          ? await roster.handleRosterDownload(downloadMatch[1], ctx)
+          : privateFailure(405, "Method not allowed");
+      }
+      const mappingActionMatch = pathname.match(
+        /^\/api\/rosters\/mappings\/([^/]+)(?:\/(preview|validate|overrides|export))?\/?$/,
+      );
+      if (mappingActionMatch) {
+        const [, mappingId, action] = mappingActionMatch;
+        if (!action) {
+          if (method === "GET") return await roster.handleGetRosterMapping(mappingId, ctx);
+          if (method === "PATCH")
+            return await roster.handleUpdateRosterMapping(
+              mappingId,
+              await readJsonBody(request),
+              ctx,
+            );
+        } else if (action === "preview" && method === "GET") {
+          return await roster.handleRosterPreview(mappingId, ctx);
+        } else if (action === "validate" && method === "POST") {
+          return await roster.handleRosterValidation(mappingId, ctx);
+        } else if (action === "overrides" && method === "POST") {
+          return await roster.handleSaveRosterOverride(mappingId, await readJsonBody(request), ctx);
+        } else if (action === "export" && method === "POST") {
+          return await roster.handleRosterExport(mappingId, await readJsonBody(request), ctx);
+        }
+        return privateFailure(405, "Method not allowed");
+      }
+      return privateFailure(404, "Not found");
+    }
     if (profileMatch) {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();

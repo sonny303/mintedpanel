@@ -3946,6 +3946,267 @@ export type Database = {
         };
         Relationships: [];
       };
+      roster_templates: {
+        Row: {
+          columns: Json;
+          created_at: string;
+          grains: string[];
+          id: string;
+          is_verified: boolean;
+          name: string;
+          org_id: string;
+          payer_name: string;
+          schema_version: number;
+          slug: string;
+          updated_at: string;
+          verification_status: string;
+        };
+        Insert: {
+          columns: Json;
+          created_at?: string;
+          grains: string[];
+          id?: string;
+          is_verified?: boolean;
+          name: string;
+          org_id: string;
+          payer_name: string;
+          schema_version?: number;
+          slug: string;
+          updated_at?: string;
+          verification_status?: string;
+        };
+        Update: {
+          columns?: Json;
+          created_at?: string;
+          grains?: string[];
+          id?: string;
+          is_verified?: boolean;
+          name?: string;
+          org_id?: string;
+          payer_name?: string;
+          schema_version?: number;
+          slug?: string;
+          updated_at?: string;
+          verification_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_templates_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      roster_mappings: {
+        Row: {
+          column_assignments: Json;
+          created_at: string;
+          created_by: string;
+          grain: string;
+          id: string;
+          name: string;
+          org_id: string;
+          revision: number;
+          selected_facility_ids: string[];
+          selected_group_ids: string[];
+          selected_provider_ids: string[];
+          template_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          column_assignments?: Json;
+          created_at?: string;
+          created_by: string;
+          grain: string;
+          id?: string;
+          name: string;
+          org_id: string;
+          revision?: number;
+          selected_facility_ids?: string[];
+          selected_group_ids?: string[];
+          selected_provider_ids?: string[];
+          template_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          column_assignments?: Json;
+          created_at?: string;
+          created_by?: string;
+          grain?: string;
+          id?: string;
+          name?: string;
+          org_id?: string;
+          revision?: number;
+          selected_facility_ids?: string[];
+          selected_group_ids?: string[];
+          selected_provider_ids?: string[];
+          template_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_mappings_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "roster_mappings_org_id_template_id_fkey";
+            columns: ["org_id", "template_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_templates";
+            referencedColumns: ["org_id", "id"];
+          },
+        ];
+      };
+      roster_export_snapshots: {
+        Row: {
+          applied_overrides: Json;
+          expected_input_fingerprint: string;
+          exported_at: string;
+          exported_by: string;
+          file_bytes: string;
+          file_name: string;
+          format: string;
+          frozen_snapshot: Json;
+          id: string;
+          idempotency_key: string;
+          mapping_id: string;
+          mapping_name: string;
+          org_id: string;
+          sha256: string;
+          template_id: string;
+          template_name: string;
+          template_is_verified: boolean;
+          template_verification_status: string;
+          total_rows: number;
+        };
+        Insert: {
+          applied_overrides?: Json;
+          expected_input_fingerprint: string;
+          exported_at?: string;
+          exported_by: string;
+          file_bytes: string;
+          file_name: string;
+          format: string;
+          frozen_snapshot: Json;
+          id?: string;
+          idempotency_key: string;
+          mapping_id: string;
+          mapping_name: string;
+          org_id: string;
+          sha256: string;
+          template_id: string;
+          template_name: string;
+          template_is_verified?: boolean;
+          template_verification_status?: string;
+          total_rows: number;
+        };
+        Update: {
+          applied_overrides?: Json;
+          expected_input_fingerprint?: string;
+          exported_at?: string;
+          exported_by?: string;
+          file_bytes?: string;
+          file_name?: string;
+          format?: string;
+          frozen_snapshot?: Json;
+          id?: string;
+          idempotency_key?: string;
+          mapping_id?: string;
+          mapping_name?: string;
+          org_id?: string;
+          sha256?: string;
+          template_id?: string;
+          template_name?: string;
+          template_is_verified?: boolean;
+          template_verification_status?: string;
+          total_rows?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_export_snapshots_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "roster_export_snapshots_org_id_mapping_id_fkey";
+            columns: ["org_id", "mapping_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_mappings";
+            referencedColumns: ["org_id", "id"];
+          },
+          {
+            foreignKeyName: "roster_export_snapshots_org_id_template_id_fkey";
+            columns: ["org_id", "template_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_templates";
+            referencedColumns: ["org_id", "id"];
+          },
+        ];
+      };
+      roster_export_overrides: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          field_key: string;
+          id: string;
+          input_fingerprint: string;
+          mapping_id: string;
+          mapping_revision: number;
+          org_id: string;
+          reason: string;
+          row_key: string;
+          rule_code: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          field_key: string;
+          id?: string;
+          input_fingerprint: string;
+          mapping_id: string;
+          mapping_revision: number;
+          org_id: string;
+          reason: string;
+          row_key: string;
+          rule_code: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          field_key?: string;
+          id?: string;
+          input_fingerprint?: string;
+          mapping_id?: string;
+          mapping_revision?: number;
+          org_id?: string;
+          reason?: string;
+          row_key?: string;
+          rule_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "roster_export_overrides_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "roster_export_overrides_org_id_mapping_id_fkey";
+            columns: ["org_id", "mapping_id"];
+            isOneToOne: false;
+            referencedRelation: "roster_mappings";
+            referencedColumns: ["org_id", "id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -4756,6 +5017,58 @@ export type Database = {
       user_is_admin_anywhere: { Args: never; Returns: boolean };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
+      roster_engine_read_source: {
+        Args: { p_actor_id: string; p_mapping_id: string; p_org_id: string };
+        Returns: Json;
+      };
+      roster_engine_save_mapping: {
+        Args: {
+          p_actor_id: string;
+          p_column_assignments: Json;
+          p_expected_revision: number;
+          p_grain: string;
+          p_mapping_id: string | null;
+          p_name: string;
+          p_org_id: string;
+          p_selected_facility_ids: string[];
+          p_selected_group_ids: string[];
+          p_selected_provider_ids: string[];
+          p_template_id: string;
+        };
+        Returns: Json;
+      };
+      roster_engine_record_override: {
+        Args: {
+          p_actor_id: string;
+          p_field_key: string;
+          p_input_fingerprint: string;
+          p_mapping_id: string;
+          p_mapping_revision: number;
+          p_org_id: string;
+          p_reason: string;
+          p_row_key: string;
+          p_rule_code: string;
+        };
+        Returns: Json;
+      };
+      roster_engine_commit_export: {
+        Args: {
+          p_actor_id: string;
+          p_applied_overrides: Json;
+          p_expected_input_fingerprint: string;
+          p_file_bytes_b64: string;
+          p_file_name: string;
+          p_format: string;
+          p_frozen_snapshot: Json;
+          p_idempotency_key: string;
+          p_mapping_id: string;
+          p_mapping_revision: number;
+          p_org_id: string;
+          p_template_id: string;
+          p_total_rows: number;
+        };
+        Returns: Json;
+      };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
       validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };
