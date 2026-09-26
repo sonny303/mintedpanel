@@ -107,8 +107,7 @@ try {
     fail("FILLER_LOCAL_DOCKER_CONTEXT_REQUIRED");
   }
 
-  const imageId = docker(["image", "inspect", image, "--format", "{{.Id}}"])
-    .trim();
+  const imageId = docker(["image", "inspect", image, "--format", "{{.Id}}"]).trim();
   if (!/^sha256:[a-f0-9]{64}$/.test(imageId)) fail("FILLER_LOCAL_POSTGRES_IMAGE_REQUIRED");
 
   docker([
@@ -179,8 +178,9 @@ try {
   const output = sql(read("supabase/tests/filler-outcomes-security.sql"));
   const lines = output.trim().split(/\r?\n/).filter(Boolean);
   if (
-    !lines.every((line) =>
-      /^FILLER\|(PASS|FAIL)\|[a-z0-9_.-]+$/.test(line) || /^FILLER\|COUNT\|[0-9]+$/.test(line),
+    !lines.every(
+      (line) =>
+        /^FILLER\|(PASS|FAIL)\|[a-z0-9_.-]+$/.test(line) || /^FILLER\|COUNT\|[0-9]+$/.test(line),
     )
   ) {
     fail("FILLER_UNEXPECTED_TEST_OUTPUT");
