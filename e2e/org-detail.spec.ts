@@ -5,7 +5,7 @@
 // after it completes. The Organization-data summaries render on the Groups
 // shell instead. No Onboarding nav entry exists; the wizard is entered via
 // the org switcher's Add organization (and the banner).
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

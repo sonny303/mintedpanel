@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E1.2 TE-11 — Facilities wizard-section coverage over the mock harness:
 //   TS-31 Tree Hill first facility: CAQH form save (address + state + group +

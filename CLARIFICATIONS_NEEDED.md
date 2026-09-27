@@ -1168,3 +1168,27 @@ Format per entry:
 
 - **Decision:** PM confirmed on 2026-07-08: "Get started" is always present.
   Revisit only if the PM reopens it.
+
+## [wp1.1] Enrollment Explorer restricted client access and publication defaults — RESOLVED (2026-09-24)
+
+- **Issue:** E6.9 D11 records an ungated global-training workflow for anyone
+  signed in, while WP1.1 requires restricted external client report access,
+  selected provider-group grants, and reviewed publication boundaries.
+- **Decision:** Selected groups are assigned by internal admins; specialists
+  may draft; internal admins publish or revoke client summaries and proof.
+  The WP1.1 client-read-only contract supersedes signed-in-is-trusted behavior
+  for restricted external identities only. Legitimate signed-in internal
+  global training remains available; no unrelated platform-role redesign is
+  introduced. `private.internal_staff` is bootstrapped by the project
+  owner/operator through an owner-approved manifest, with no self-bootstrap.
+  A narrow future protected-shell/browser-to-API exception is permitted for
+  this report only, with no AGENTS change. Direct REST/RPC/storage and
+  existing auth-only denial evidence must close effective privileges before
+  hosted external activation; this entry grants no staging repair or release
+  permission.
+
+- **Invite timing amendment (2026-09-24):** PM approved **Option A** for
+  E6.12: a client invite may be issued only to an existing confirmed,
+  non-banned, non-deleted, non-anonymous Auth user. Claim still rechecks the
+  current verified email and Auth status. Invite-before-signup account
+  lifecycle work is outside this slice.

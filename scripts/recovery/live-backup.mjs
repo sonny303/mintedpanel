@@ -7,6 +7,7 @@ import {
   loadSupabaseAccessToken,
   observeStagingProvider,
   withStagingLoginRole,
+  EXCLUSIVE_STAGING_MAINTENANCE,
 } from "./provider.mjs";
 
 const fail = () => new RecoveryError("RECOVERY_BACKUP_REJECTED");
@@ -15,7 +16,7 @@ const check = (condition) => {
 };
 
 export async function captureLiveStagingBackup(
-  { workspace, recipient, signal } = {},
+  { workspace, recipient, signal, cleanupMode = "exact-role" } = {},
   dependencies = {},
 ) {
   const loadToken = dependencies.loadToken ?? loadSupabaseAccessToken;
@@ -29,7 +30,8 @@ export async function captureLiveStagingBackup(
         workspace.startsWith("/") &&
         typeof recipient === "string" &&
         /^age1[023456789acdefghjklmnpqrstuvwxyz]{58}$/.test(recipient) &&
-        (signal === undefined || signal instanceof AbortSignal),
+        (signal === undefined || signal instanceof AbortSignal) &&
+        ["exact-role", EXCLUSIVE_STAGING_MAINTENANCE].includes(cleanupMode),
     );
     const token = await loadToken();
     const observation = await observe({ token });
@@ -39,6 +41,7 @@ export async function captureLiveStagingBackup(
     };
     const { output: captured, lifecycle } = await withLogin({
       token,
+      cleanupMode,
       operation: (credentials) =>
         capture({
           ...credentials,
@@ -74,9 +77,14 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       operation === "capture" &&
         workspaceFlag === "--workspace" &&
         recipientFlag === "--recipient" &&
-        extra.length === 0,
+        (extra.length === 0 ||
+          (extra.length === 1 && extra[0] === "--exclusive-staging-maintenance")),
     );
-    const result = await captureLiveStagingBackup({ workspace, recipient });
+    const result = await captureLiveStagingBackup({
+      workspace,
+      recipient,
+      cleanupMode: extra.length ? EXCLUSIVE_STAGING_MAINTENANCE : "exact-role",
+    });
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch {
     process.stdout.write('{"ok":false,"code":"RECOVERY_BACKUP_REJECTED"}\n');

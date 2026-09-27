@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.4 TE-8 — Assignments wizard-section coverage over the mock harness:
 //   TS-39 Tree Hill assignment gap: two providers, one assigned → unassigned

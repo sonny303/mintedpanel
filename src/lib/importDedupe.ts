@@ -92,6 +92,7 @@ export interface DedupeInputs {
 export interface LicenseDraft {
   state: string;
   licenseNumber: string;
+  licenseType: string | null;
   issueDate: string | null;
   expirationDate: string | null;
 }
@@ -121,12 +122,21 @@ export interface CreateDisposition {
     firstName: string;
     middleInitial: string | null;
     lastName: string;
+    credentials: string | null;
+    email: string | null;
+    phone: string | null;
     npi: string;
     caqhId: string | null;
+    caqhLastAttestedDate: string | null;
+    isNewGrad: boolean;
     specialty: string | null;
     taxonomyCode: string | null;
     ssnLast4: string | null;
     dateOfBirth: string | null;
+    startDate: string | null;
+    degree: string | null;
+    schoolName: string | null;
+    graduationDate: string | null;
   };
   /** resolved group ids, first = primary */
   groupIds: string[];
@@ -188,6 +198,56 @@ function personName(first: string | null, last: string | null): string {
   return [first, last].filter(Boolean).join(" ");
 }
 
+function createProviderDraft(row: StagedImportRow): CreateDisposition["provider"] {
+  const isNewGrad = field(row, "is_new_grad") === "true";
+  return {
+    firstName: field(row, "provider_first_name") ?? "",
+    middleInitial: field(row, "provider_middle_initial"),
+    lastName: field(row, "provider_last_name") ?? "",
+    credentials: field(row, "credentials"),
+    email: field(row, "email"),
+    phone: field(row, "phone"),
+    npi: field(row, "npi") ?? "",
+    caqhId: isNewGrad ? null : field(row, "caqh_id"),
+    caqhLastAttestedDate: isNewGrad ? null : field(row, "caqh_last_attested_date"),
+    isNewGrad,
+    specialty: field(row, "specialty"),
+    taxonomyCode: field(row, "taxonomy_code"),
+    ssnLast4: field(row, "ssn_last4"),
+    dateOfBirth: field(row, "date_of_birth"),
+    startDate: field(row, "start_date"),
+    degree: field(row, "degree"),
+    schoolName: field(row, "school_name"),
+    graduationDate: field(row, "graduation_date"),
+  };
+}
+
+const CREATE_SCALAR_LABELS = [
+  ["credentials", "credentials"],
+  ["email", "email"],
+  ["phone", "phone"],
+  ["specialty", "specialty"],
+  ["startDate", "start date"],
+  ["degree", "degree"],
+  ["schoolName", "school"],
+  ["graduationDate", "graduation date"],
+  ["isNewGrad", "new grad"],
+  ["caqhId", "CAQH ID"],
+  ["caqhLastAttestedDate", "CAQH attestation"],
+] as const satisfies readonly [keyof CreateDisposition["provider"], string][];
+
+function noteCreateScalarDisagreements(create: CreateDisposition, row: StagedImportRow): void {
+  const later = createProviderDraft(row);
+  const labels = CREATE_SCALAR_LABELS.filter(([key]) => create.provider[key] !== later[key]).map(
+    ([, label]) => label,
+  );
+  if (labels.length === 0) return;
+  pushNote(
+    create.notes,
+    `Row ${row.line} lists different ${labels.join(", ")} for NPI ${create.npi} — the first row's values are used`,
+  );
+}
+
 /** Group resolution: exact name, then TIN, then Type 2 NPI when the TIN is shared.
  * A scan-stamped `group_id` wins so preview cannot disagree with the upload scan. */
 export function resolveGroup(
@@ -245,6 +305,7 @@ function licenseOf(row: StagedImportRow): { draft: LicenseDraft | null; note: st
       draft: {
         state: state.toUpperCase(),
         licenseNumber: number,
+        licenseType: field(row, "license_type"),
         issueDate: field(row, "license_issue_date"),
         expirationDate: field(row, "license_expiration_date"),
       },
@@ -532,8 +593,14 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
               },
             });
           }
+        } else if (license.licenseType) {
+          // same state + same number → nothing to change; license_type is
+          // insert-only, so surface the ignored value instead of a quiet skip.
+          pushNote(
+            entry.notes,
+            `Row ${row.line} lists a license type for ${license.state} ${license.licenseNumber} — license type is only applied on new licenses`,
+          );
         }
-        // same state + same number → nothing to change
       }
       continue;
     }
@@ -548,20 +615,26 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
           `Row ${row.line} lists a different name for NPI ${npi} — the first row's values are used`,
         );
       }
+      noteCreateScalarDisagreements(existingCreate, row);
       pushNote(existingCreate.notes, groupNote);
       pushNote(existingCreate.notes, facilityNote);
       pushNote(existingCreate.notes, licenseNote);
       if (group) pushUnique(existingCreate.groupIds, group.id);
       if (facility) pushUnique(existingCreate.facilityIds, facility.id);
-      if (
-        license &&
-        !existingCreate.licenses.some(
+      if (license) {
+        const prior = existingCreate.licenses.find(
           (l) =>
             norm(l.state) === norm(license.state) &&
             norm(l.licenseNumber) === norm(license.licenseNumber),
-        )
-      ) {
-        existingCreate.licenses.push(license);
+        );
+        if (!prior) {
+          existingCreate.licenses.push(license);
+        } else if (prior.licenseType !== license.licenseType) {
+          pushNote(
+            existingCreate.notes,
+            `Row ${row.line} lists a different license type for ${license.state} ${license.licenseNumber} — the first row's values are used`,
+          );
+        }
       }
       continue;
     }
@@ -634,17 +707,7 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
       lines: [row.line],
       displayName,
       npi,
-      provider: {
-        firstName: first ?? "",
-        middleInitial: field(row, "provider_middle_initial"),
-        lastName: last ?? "",
-        npi,
-        caqhId: field(row, "caqh_id"),
-        specialty: field(row, "specialty"),
-        taxonomyCode: field(row, "taxonomy_code"),
-        ssnLast4: field(row, "ssn_last4"),
-        dateOfBirth: field(row, "date_of_birth"),
-      },
+      provider: createProviderDraft(row),
       groupIds: group ? [group.id] : [],
       facilityIds: facility ? [facility.id] : [],
       licenses: license ? [license] : [],
@@ -754,16 +817,26 @@ export interface CommitPlanCreate {
     last_name: string;
     npi: string;
     caqh_id: string | null;
+    caqh_last_attested_date: string | null;
+    is_new_grad: boolean;
+    credentials: string | null;
+    email: string | null;
+    phone: string | null;
     specialty: string | null;
     taxonomy_code: string | null;
     ssn_last4: string | null;
     date_of_birth: string | null;
+    start_date: string | null;
+    degree: string | null;
+    school_name: string | null;
+    graduation_date: string | null;
   };
   group_ids: string[];
   facility_ids: string[];
   licenses: Array<{
     state: string;
     license_number: string;
+    license_type: string | null;
     issue_date: string | null;
     expiration_date: string | null;
   }>;
@@ -778,6 +851,7 @@ export interface CommitPlanUpdate {
   license_inserts: Array<{
     state: string;
     license_number: string;
+    license_type: string | null;
     issue_date: string | null;
     expiration_date: string | null;
   }>;
@@ -805,6 +879,7 @@ export interface CommitPlan {
 const toWireLicense = (l: LicenseDraft) => ({
   state: l.state,
   license_number: l.licenseNumber,
+  license_type: l.licenseType,
   issue_date: l.issueDate,
   expiration_date: l.expirationDate,
 });
@@ -830,12 +905,21 @@ export function buildCommitPlan(
           first_name: d.provider.firstName,
           middle_initial: d.provider.middleInitial,
           last_name: d.provider.lastName,
+          credentials: d.provider.credentials,
+          email: d.provider.email,
+          phone: d.provider.phone,
           npi: d.provider.npi,
           caqh_id: d.provider.caqhId,
+          caqh_last_attested_date: d.provider.caqhLastAttestedDate,
+          is_new_grad: d.provider.isNewGrad,
           specialty: d.provider.specialty,
           taxonomy_code: d.provider.taxonomyCode,
           ssn_last4: d.provider.ssnLast4,
           date_of_birth: d.provider.dateOfBirth,
+          start_date: d.provider.startDate,
+          degree: d.provider.degree,
+          school_name: d.provider.schoolName,
+          graduation_date: d.provider.graduationDate,
         },
         group_ids: d.groupIds,
         facility_ids: d.facilityIds,

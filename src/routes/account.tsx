@@ -64,7 +64,6 @@ function AccountPage() {
     updateM.mutate(
       { firstName, lastName, title },
       {
-        onSuccess: () => toast.success("Profile saved"),
         onError: (e) => toast.error(e instanceof Error ? e.message : "Could not save profile"),
       },
     );

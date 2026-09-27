@@ -47,6 +47,7 @@ routes, lib). RPC-mediated tables note the RPC.
 
 | Table | Layer | Status | Usage | Notes / replacement |
 | ----------------------------- | --------- | ---------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| payer_forms | reference | support | 2 | Global blank payer PDF catalog; immutable family/version rows, derived current version, soft retirement. Authenticated reads; guarded service-role upload/finalize writes; private `payer-forms` Storage bucket. Migration `20260824170000`; E6.11 maps fields by family and fills the case's baked version. |
 | organizations | tenant | core | 2 | + `create_organization` RPC |
 | memberships | tenant | core | 6 | the M:N house pattern |
 | profiles | tenant | core | 8 | mirrors `auth.users`; 2026-08-16 gained `first_name`/`last_name`/`title` (edited on `/account`, source of truth for `{{user.*}}`) — `full_name` retained as a frozen mirror, never backfilled by splitting |
@@ -107,6 +108,56 @@ routes, lib). RPC-mediated tables note the RPC.
 | next_best_action_configs | support | support | 0 | **E4.2 F4.2.5/TE-7** org-level My Cases queue ranking (`org_id` PK, `ranking jsonb` = validated `{order:[...]}` of the four fixed keys, `updated_by`/`updated_at`); org-member SELECT, admin INSERT/UPDATE/DELETE (reset = row delete); **DORMANT since E6.6 F6.6.6** — the ranking editor and BOTH reads (browser + `/api/next-best-action`) are retired; the queue runs the fixed shipped order (`src/lib/nextBestActions.ts`). Table + policies kept per the additive rule; rows inert (TD-44) |
 | sop_template_drafts | work | support | 0 | **E4.2 F4.2.1** SOP wizard save-as-draft WIP (`org_id`, optional `template_id → sop_templates`, `payload jsonb`, `updated_by`, timestamps); admin-member RLS; NEVER resolved by `pickTemplate` or readiness; deleted on successful publish |
 | field_dictionary | extension | support | 1 | |
+
+## E6.12 private authorization relations (2026-09-25)
+
+These relations are intentionally outside the public table register's browser
+surface. They are service-only, `FORCE ROW LEVEL SECURITY`, and have no
+authenticated or anonymous table grants. The `app_authz.is_restricted_external()`
+helper reads only the two classification/manifest relations through its narrow
+owner policy; it exposes a boolean and never returns private rows.
+
+| Relation                                  | Grain                                          | Lifecycle / boundary                                                                                                                                   |
+| ----------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `private.internal_staff`                  | verified auth user × org × staff role          | Owner-approved manifest; active rows require matching current membership for report staff and client management.                                       |
+| `private.client_identity_classifications` | verified auth user × org                       | Durable pending/active/expired/revoked restricted identity bound at invite issuance; retained through email changes, no-grant, expiry, and revocation. |
+| `private.client_invites`                  | one hashed invite token × bound classification | Single-use, seven-day pending token; claim/replacement/revocation are transactional and store no plaintext token.                                      |
+| `private.client_invite_group_grants`      | invite × provider group                        | Pending group snapshot with composite org/group coherence; revoked/replaced with its invite.                                                           |
+| `private.client_access`                   | verified auth user × org                       | Canonical active/revoked access; `auth_user_id` and classification are non-null and composite-bound. No membership row is created.                     |
+| `private.client_group_grants`             | client access × provider group                 | Explicit client report scope; composite org/group foreign keys prevent cross-org wiring.                                                               |
+
+## E6.13 private enrollment relations (2026-09-25)
+
+All eight relations are service-only with forced RLS and no anonymous or
+authenticated grants. See the additive
+`20260925190537_enrollment_explorer_scope_contract.sql` migration and
+[E6.13 requirements](../redesign/E6.13-enrollment-explorer-scope-contract.md).
+
+| Relation                                  | Grain                                               | Lifecycle / boundary                                                                                                   |
+| ----------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `private.payer_products`                  | payer × stable product key                          | Core; global catalog identity curated by internal admins, no org-owned products or guessed seeds.                      |
+| `private.group_product_targets`           | org × group × product × state                       | Support; mutable intent only, never enrollment proof.                                                                  |
+| `private.enrollment_scopes`               | org × provider × group × product × facility × state | Core; concrete non-null identity with same-org FKs and a non-null composite current-revision pointer.                  |
+| `private.enrollment_scope_revisions`      | scope × cycle × revision                            | Core; append-only captured status/dates/reference/retro/owner/blocker; current pointer advances atomically with audit. |
+| `private.enrollment_scope_sources`        | revision × source kind × source ID                  | Support; immutable identity, snapshot and fingerprint; no source-table FK/cascade, preserving purge compatibility.     |
+| `private.enrollment_summary_publications` | publication × scope revision                        | Core; append-only client-safe summary independent of proof publication.                                                |
+| `private.enrollment_proof_publications`   | publication × scope revision × document version     | Core; append-only existing immutable document version, supported fields, evidence kind and stored-byte SHA-256.        |
+| `private.publication_events`              | event × summary or proof publication                | Support; append-only publication/revocation lineage; no ordinary update/delete.                                        |
+
+Existing `audit_log` holds atomic capture audit and identifiers-only proof-read
+audit; publication and revocation history lives in `private.publication_events`.
+No additional audit table is introduced. Existing cases,
+case history and facts remain read-only report inputs. This is repository
+schema documentation, not a claim of hosted migration application.
+
+## WP 1.3 — Provider Roster Engine
+
+| Table                   | Layer  | Status  | Usage                | Notes / replacement                                                                                                                                                                         |
+| ----------------------- | ------ | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| roster_templates        | party  | support | roster services/RPCs | Organization-scoped, versioned ordered schemas; BCBS NC, Humana, and Medicare reassignment starters remain explicitly unverified. No full SSN fields.                                       |
+| roster_mappings         | work   | support | roster services/RPCs | Organization/template-bound field assignments and explicit provider/location/group scope; revision checks prevent lost edits and invalidate prior validation.                               |
+| roster_export_overrides | ledger | support | roster services/RPCs | Append-only validation exceptions recorded immediately, with verified actor, timestamp, reason, row/rule/field, mapping revision and source fingerprint.                                    |
+| roster_export_snapshots | ledger | support | roster services/RPCs | Immutable original CSV/XLSX bytes, database-computed SHA-256, frozen inputs and applied overrides, actor/time/counts; atomic and idempotent export commit; authorized historical retrieval. |
 
 ## Design rules (defended by this register)
 

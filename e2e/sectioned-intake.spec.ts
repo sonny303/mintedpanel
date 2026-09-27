@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E3.3 TE-12 — Sectioned Intake Uniformity e2e:
 //   TS-65 The wizard's Provider Group, Facilities, and Providers sections each
@@ -108,16 +108,26 @@ const PROVIDER_HEADER_LINE = [
   "provider_first_name",
   "provider_middle_initial",
   "provider_last_name",
+  "credentials",
+  "date_of_birth",
+  "ssn_last4",
+  "email",
+  "phone",
   "npi",
   "caqh_id",
+  "caqh_last_attested_date",
+  "is_new_grad",
   "specialty",
   "taxonomy_code",
-  "license_number",
+  "start_date",
+  "degree",
+  "school_name",
+  "graduation_date",
   "license_state",
+  "license_number",
+  "license_type",
   "license_issue_date",
   "license_expiration_date",
-  "ssn_last4",
-  "date_of_birth",
   // E6.4 F6.4.6 — the one-row-per-relationship columns.
   "facility_name",
   "enrollment_payer",

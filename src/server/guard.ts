@@ -22,6 +22,12 @@ export interface UserContext {
   db: SupabaseClient<Database>;
 }
 
+const verifiedUserCache = new WeakMap<Request, UserContext>();
+
+export function rememberVerifiedUser(request: Request, user: UserContext): void {
+  verifiedUserCache.set(request, user);
+}
+
 export interface AuthContext {
   userId: string;
   orgId: string;
@@ -74,6 +80,8 @@ export function getBearerToken(request: Request): string {
 // must work for a multi-org caller BEFORE they can send x-org-id, so the
 // multi-org 400 in authenticate() must not apply there.
 export async function authenticateUser(request: Request): Promise<UserContext> {
+  const cached = verifiedUserCache.get(request);
+  if (cached) return cached;
   const token = getBearerToken(request);
 
   const { data: claimData, error: claimError } = await getAuthClient(token).auth.getClaims(token);
@@ -90,7 +98,9 @@ export async function authenticateUser(request: Request): Promise<UserContext> {
 
   const db = getServiceClient();
 
-  return { userId, email, userMetadata, db };
+  const user = { userId, email, userMetadata, db };
+  rememberVerifiedUser(request, user);
+  return user;
 }
 
 // Authenticate the request and resolve the caller's org membership.

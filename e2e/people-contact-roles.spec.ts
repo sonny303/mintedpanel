@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // People contact roles + the contact-token default holder (decisions D1/D5/D6/D8,
 // 2026-08-07). Three things this pins that all fail SILENTLY:

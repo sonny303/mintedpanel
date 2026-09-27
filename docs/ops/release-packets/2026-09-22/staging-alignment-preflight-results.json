@@ -1,0 +1,221 @@
+{
+  "scope": {
+    "source_ref": "43b59cfa95c84a929c452cc097453c802bbef50b",
+    "project_ref": "vmznysvietfaddakkegt",
+    "captured_at_utc": "2026-09-23T04:24:40.030953",
+    "read_only_aggregate": true,
+    "identity_guard_passed": true
+  },
+  "B2_dates": {
+    "no_contract_date": 9,
+    "approved_missing_date": 9,
+    "eligible_single_contract": 0,
+    "multiple_contract_matches": 0,
+    "conflicting_contract_dates": 0
+  },
+  "B1_status": {
+    "cases": 65,
+    "mapped_counts": {
+      "denied": 1,
+      "approved": 14,
+      "in_review": 1,
+      "submitted": 32,
+      "in_progress": 3,
+      "not_started": 12,
+      "not_pursuing": 2
+    },
+    "unknown_label": 0,
+    "unknown_pipeline": 0,
+    "already_canonical": 0,
+    "missing_status_reference": 0
+  },
+  "B7_payers": {
+    "rows": 287,
+    "unknown_kind": 0,
+    "unknown_source": 0,
+    "unknown_status": 0,
+    "source_backfill_eligible": 287,
+    "provider_id_pair_eligible": 0,
+    "duplicate_global_name_groups": 0
+  },
+  "B3_history": {
+    "history_table_present": false,
+    "initial_rows_expected_if_table_absent": 65
+  },
+  "B4_numbers": {
+    "maximum_number": null,
+    "missing_numbers": 65,
+    "existing_numbers": 0,
+    "sequence_present": false,
+    "sequence_last_value": null,
+    "duplicate_number_groups": 0
+  },
+  "B8_parties": {
+    "rows": 22,
+    "unresolved": 5,
+    "orphan_assignment": 0,
+    "resolved_by_assignment": 17,
+    "existing_owner_conflict": 0,
+    "multiple_assignment_orgs": 1,
+    "legacy_name_split_eligible": 22,
+    "resolved_by_sole_creator_org": 0,
+    "unassigned_multi_org_creator": 4,
+    "unassigned_no_creator_membership": 0
+  },
+  "B9_defaults": {
+    "role_grains": 20,
+    "unknown_scope_type": 0,
+    "missing_default_grains": 20,
+    "multiple_default_grains": 0,
+    "reserved_roles_to_activate": 3
+  },
+  "B11_registry": {
+    "rows": 25,
+    "missing_sort_order": 25,
+    "org_duplicate_groups": 0,
+    "shared_duplicate_groups": 0,
+    "global_portal_duplicate_keys": 0
+  },
+  "B6_documents": {
+    "rows": 0,
+    "missing_family": 0,
+    "invalid_version": 0,
+    "unsupported_kind": 0,
+    "orphaned_owner_reference": 0,
+    "legacy_expiring_without_date": 0,
+    "duplicate_family_version_groups": 0
+  },
+  "preservation": {
+    "rowsets": [
+      {
+        "rows": 65,
+        "rowset_md5": "328c194974e0bc689128ce8f8102128b",
+        "object_name": "credential_cases"
+      },
+      {
+        "rows": 22,
+        "rowset_md5": "24fd06139e9680212567a9efb93678ab",
+        "object_name": "parties"
+      },
+      {
+        "rows": 20,
+        "rowset_md5": "c6f4572587a51b67286051080f1be821",
+        "object_name": "party_role_assignments"
+      },
+      {
+        "rows": 0,
+        "rowset_md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "object_name": "provider_documents"
+      },
+      {
+        "rows": 19,
+        "rowset_md5": "bb2d245a775cddff0d87aaa7486fa70d",
+        "object_name": "provider_facility_assignments"
+      },
+      {
+        "rows": 3,
+        "rowset_md5": "f9aab1732db0a476c0a63cf2cec1fcf5",
+        "object_name": "provider_group_assignments"
+      },
+      {
+        "rows": 22,
+        "rowset_md5": "8d8275cc76cc67606ef649640d5a05d2",
+        "object_name": "sop_template_versions"
+      },
+      {
+        "rows": 22,
+        "rowset_md5": "b2822f8a2c55810baf9c3e352ee1a010",
+        "object_name": "sop_templates"
+      }
+    ],
+    "case_fk_set_null": true,
+    "function_definitions": [
+      {
+        "args": "p_run_id uuid, p_plan jsonb",
+        "name": "commit_import_run",
+        "anon_execute": false,
+        "definition_md5": "403f18ff69cf60ebb0f438d2e866135a",
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "args": "p_org_id uuid, p_case_id uuid",
+        "name": "delete_case",
+        "anon_execute": false,
+        "definition_md5": "7d83b12c95f0d6ed5f8fd42ca342b685",
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "args": "",
+        "name": "trg_case_generation_run_rows_created_case_check",
+        "anon_execute": true,
+        "definition_md5": "49c3c1d22754e212d6f4f6208fea8f0e",
+        "security_definer": false,
+        "authenticated_execute": true
+      }
+    ],
+    "insert_only_validator_present": true,
+    "old_created_case_check_present": false,
+    "invalid_import_kinds_for_target": 0,
+    "missing_required_generation_reasons": 0,
+    "invalid_generation_dispositions_for_target": 0
+  },
+  "B10_insurance": {
+    "rows": 2,
+    "multiple_policy_grains": 0,
+    "unknown_coverage_level": 0,
+    "conflicting_proposed_primary_grains": 0
+  },
+  "B5_facilities": {
+    "null_facility": 4,
+    "explicit_facility": 61,
+    "join_table_present": false,
+    "wrong_case_group_facility": 0,
+    "missing_provider_assignment": 2,
+    "missing_or_wrong_org_facility": 0,
+    "explicit_inactive_facility_preserve": 0
+  },
+  "B12_sop_states": {
+    "rows": 22,
+    "backfill_eligible": 13,
+    "active_overlap_pairs": 0,
+    "invalid_proposed_shape": 0,
+    "null_fallback_preserve": 9
+  },
+  "B13_datafields": {
+    "affected_templates": 1,
+    "fields_with_portal": 0,
+    "new_snapshots_needed": 1,
+    "fields_without_portal": 6,
+    "affected_org_templates": 0,
+    "snapshot_marker_duplicates": 0,
+    "next_version_already_occupied": 0,
+    "org_fields_would_become_shared": 0,
+    "existing_shared_selector_matches": 0,
+    "candidate_selector_duplicate_groups": 0,
+    "existing_shared_selector_label_conflicts": 0
+  },
+  "B14_environment": {
+    "auth_users": 6,
+    "memberships": 22,
+    "organizations": 15,
+    "public_tables": 53,
+    "public_columns": 647,
+    "storage_buckets": 0,
+    "storage_objects": 0,
+    "pgcrypto_in_extensions": true,
+    "vault_relation_present": true,
+    "required_table_presence": {
+      "payer_forms": false,
+      "payer_contacts": false,
+      "case_facilities": false,
+      "enrollment_facts": false,
+      "provider_ssn_vault": false,
+      "case_status_history": false,
+      "provider_ssn_intake_links": false,
+      "provider_field_verifications": false
+    },
+    "profile_split_columns_present": 0
+  }
+}

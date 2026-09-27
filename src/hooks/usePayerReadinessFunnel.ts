@@ -17,6 +17,7 @@ export interface PayerReadinessFunnelData {
   totalDrift: number;
   isLoading: boolean;
   isError: boolean;
+  errorSources: string[];
 }
 
 export function usePayerReadinessFunnel(): PayerReadinessFunnelData {
@@ -53,5 +54,11 @@ export function usePayerReadinessFunnel(): PayerReadinessFunnelData {
     totalDrift: drift.totalCount,
     isLoading: sources.some((q) => q.isLoading) || drift.isLoading,
     isError: sources.some((q) => q.isError) || drift.isError,
+    errorSources: [
+      ...(templatesQ.isError ? ["templates"] : []),
+      ...(portalsQ.isError ? ["portals"] : []),
+      ...(fieldMapsQ.isError ? ["field maps"] : []),
+      ...(drift.isError ? ["recent fills"] : []),
+    ],
   };
 }

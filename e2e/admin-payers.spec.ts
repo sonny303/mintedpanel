@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E4.2 payer governance + the unified-payer-setup consolidation (TE-18/TE-19),
 // post the 2026-07-18 legacy-payer close-out and the payer-and-cases Slice A

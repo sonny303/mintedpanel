@@ -22,7 +22,7 @@ export type CheckOwner = "provider" | "group";
 
 /** Where a red item is worked (F1.8.3, PM Option 3 2026-07-12): wizard
  * sections for checks with an exact editor; the owning group screen for
- * document/COI/voided-check gaps until a documents surface lands. */
+ * document/COI gaps until a documents surface lands. */
 export type FixTarget = "providers_section" | "facilities_section" | "group_screen";
 
 export type ProviderCheckKey =
@@ -34,8 +34,7 @@ export type ProviderCheckKey =
   | "npi"
   | "demographics";
 
-export type GroupCheckKey =
-  "state_facility" | "w9" | "group_coi" | "voided_check" | "group_contract";
+export type GroupCheckKey = "state_facility" | "w9" | "group_coi" | "group_contract";
 
 export type ReadinessCheckKey = ProviderCheckKey | GroupCheckKey;
 
@@ -305,14 +304,6 @@ function groupChecks(
       detail: coiCurrent ? null : "No current COI or insurance policy",
       fixTarget: "group_screen",
       advisory: coiAdvisory,
-    },
-    {
-      key: "voided_check",
-      owner: "group",
-      label: "Voided check on file",
-      pass: hasDoc("voided_check"),
-      detail: hasDoc("voided_check") ? null : "No voided check",
-      fixTarget: "group_screen",
     },
   ];
 }

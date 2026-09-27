@@ -52,7 +52,6 @@ function LeadRow({ lead }: { lead: InboundLead }) {
             disabled={busy}
             onClick={() =>
               convert.mutate(lead, {
-                onSuccess: () => toast.success(`Created ${lead.orgName} as a prospect`),
                 onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't convert"),
               })
             }

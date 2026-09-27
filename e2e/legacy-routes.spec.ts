@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E6.1 F6.1.6 / TS-106 + TS-120 — the wholesale redirect table over the mock
 // harness. The six-item restructure retires sixteen surfaces; every retired

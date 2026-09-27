@@ -1,0 +1,46 @@
+{
+  "version": "2026-09-22.1",
+  "generator": "scripts/uat/uat-fixture.mjs",
+  "ownership": {
+    "publicRows": "deterministic UUIDs from fixtureUuid(kind, index)",
+    "authUsers": "exact user_metadata.minted_uat_fixture.version marker",
+    "organizations": [
+      "47c01c05-97b8-4229-a0ff-43908ab6de86",
+      "1e68b236-22ef-4f47-a62c-f366249c17f5",
+      "5a828792-6d71-42ae-af0c-abb966f5f289"
+    ],
+    "deletionCases": [
+      "bc09108e-1d19-4339-ab55-ab47673378c8",
+      "75f2edb7-a92a-4db3-a96c-008b8a04325e",
+      "f2a3e970-b530-4bbd-afb2-79cd5000253b",
+      "fc35512b-8c4b-4445-ae85-a327630fc323",
+      "836b38dc-5576-4bbd-aea7-6e1d1d6da486",
+      "a68f1042-0229-47f7-af3f-b8ff5fe87b1f",
+      "c751ff75-7236-427d-a264-1cd6035b4098",
+      "b7ed5f1d-42d7-4ca0-ab59-bab3c66aace8",
+      "142f74ba-0567-4d57-a4c0-2546f648b281",
+      "66392061-89aa-4851-a1ef-d4405e3b16db"
+    ],
+    "resetRanges": [
+      { "table": "touches", "kind": "touch", "start": 1, "end": 60 },
+      { "table": "tasks", "kind": "task", "start": 1, "end": 100 },
+      { "table": "case_facilities", "kind": "case-facility", "start": 1, "end": 100 },
+      { "table": "credential_cases", "kind": "case", "start": 1, "end": 50 },
+      { "table": "enrollment_facts", "kind": "enrollment", "start": 1, "end": 20 },
+      {
+        "table": "provider_facility_assignments",
+        "kind": "provider-facility",
+        "start": 1,
+        "end": 30
+      },
+      { "table": "provider_group_assignments", "kind": "provider-group", "start": 1, "end": 20 },
+      { "table": "state_licenses", "kind": "license", "start": 1, "end": 30 },
+      { "table": "providers", "kind": "provider", "start": 1, "end": 20 },
+      { "table": "payer_network_targets", "kind": "payer-target", "start": 1, "end": 30 },
+      { "table": "org_payer_assignments", "kind": "org-payer", "start": 1, "end": 24 },
+      { "table": "facilities", "kind": "facility", "start": 1, "end": 10 },
+      { "table": "provider_groups", "kind": "group", "start": 1, "end": 5 },
+      { "table": "payers", "kind": "payer", "start": 1, "end": 8 }
+    ]
+  }
+}

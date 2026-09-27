@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/layout/AppShell";
 import { NoOrgScreen } from "@/components/org/NoOrgScreen";
+import { AccessContextBoundary } from "@/components/access/AccessContextBoundary";
 import { useAuthStore, registerQueryClient } from "@/lib/auth-store";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -160,19 +161,24 @@ function RootComponent() {
   const isShareRoute = pathname.startsWith("/share/");
   // E4.4 public secure SSN intake link — write-only ingress, no session.
   const isSsnIntakeRoute = pathname.startsWith("/ssn-intake/");
+  // E6.12 claim links are explicit entrypoints for existing verified
+  // recipients. They must remain reachable before a session is present so the
+  // page can send the recipient to sign in with the token preserved.
+  const isClientInviteClaimRoute = pathname.startsWith("/client-invites/claim/");
+  const session = useAuthStore((s) => s.session);
   const isChromelessRoute =
     isAuthRoute ||
-    isRootRoute ||
+    (isRootRoute && !session) ||
     isPrivacyRoute ||
     isCaptureRoute ||
     isContactRoute ||
     isShareRoute ||
-    isSsnIntakeRoute;
+    isSsnIntakeRoute ||
+    isClientInviteClaimRoute;
   const isPublicRoute = isChromelessRoute || isDevRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
-  const session = useAuthStore((s) => s.session);
   const initError = useAuthStore((s) => s.initError);
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
@@ -227,21 +233,68 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {isChromelessRoute ? (
         <Outlet />
-      ) : memberships.length === 0 ? (
-        // Signed in but part of no org yet — bootstrap the first org before the
-        // app shell (which mounts org-scoped hooks) ever renders.
-        <NoOrgScreen />
       ) : (
-        <AppShell>
-          {/* TE-4 (F0.0.3): keying the routed subtree on the active org forces a
-              remount on switch, clearing org-scoped component-local view state
-              (selected provider/case/facility, filters, unsaved forms) before
-              the new org loads. Server state is cleared by
-              auth-store.setActiveOrg -> queryClient.removeQueries(). */}
-          <Outlet key={activeOrgId ?? "no-org"} />
-        </AppShell>
+        <AccessContextBoundary>
+          {isRootRoute && session ? (
+            <AuthenticatedHome />
+          ) : memberships.length === 0 ? (
+            // Signed in but part of no org yet — bootstrap the first org before the
+            // app shell (which mounts org-scoped hooks) ever renders.
+            <NoOrgScreen />
+          ) : (
+            <AppShell>
+              {/* TE-4 (F0.0.3): keying the routed subtree on the active org forces a
+                  remount on switch, clearing org-scoped component-local view state
+                  (selected provider/case/facility, filters, unsaved forms) before
+                  the new org loads. Server state is cleared by
+                  auth-store.setActiveOrg -> queryClient.removeQueries(). */}
+              <Outlet key={activeOrgId ?? "no-org"} />
+            </AppShell>
+          )}
+        </AccessContextBoundary>
       )}
       <Toaster />
     </QueryClientProvider>
+  );
+}
+
+function AuthenticatedHome() {
+  const router = useRouter();
+  const context = useAuthStore((state) => state.accessContext);
+  const activeOrgId = useAuthStore((state) => state.activeOrgId);
+  const memberships = useAuthStore((state) => state.memberships);
+  const setActiveOrg = useAuthStore((state) => state.setActiveOrg);
+
+  useEffect(() => {
+    if (!context) return;
+    if (context.staffOrgs.length === 0) {
+      // Preserve the existing first-run/all-inactive landing. A genuinely
+      // org-less verified trainer still keeps its global API capability, but
+      // does not get stuck on the protected root route.
+      void router.navigate({ to: "/reporting/portfolio", replace: true });
+      return;
+    }
+    const liveMemberships = memberships.filter((membership) => {
+      return (
+        membership.lifecycleState !== "inactive" &&
+        context.staffOrgs.some((org) => org.orgId === membership.orgId)
+      );
+    });
+    if (liveMemberships.length === 0) {
+      void router.navigate({ to: "/reporting/portfolio", replace: true });
+      return;
+    }
+    const orgId =
+      liveMemberships.find((membership) => membership.orgId === activeOrgId)?.orgId ??
+      liveMemberships[0]?.orgId;
+    if (!orgId) return;
+    setActiveOrg(orgId);
+    void router.navigate({ to: "/cases", replace: true });
+  }, [activeOrgId, context, memberships, router, setActiveOrg]);
+
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-background text-[13px] text-muted-foreground">
+      Loading your workspace…
+    </div>
   );
 }

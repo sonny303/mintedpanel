@@ -62,6 +62,14 @@ export const REPORTS: ReportDef[] = [
     path: "/reporting/denials",
     group: "credentialing",
   },
+  {
+    key: "billing-readiness",
+    title: "Billing Readiness",
+    description:
+      "Current enrollment prerequisites and the credentialing changes that affect billing.",
+    path: "/reporting/billing-readiness",
+    group: "credentialing",
+  },
   // E4.5 F4.5.2 — the expiring-credentials table (org-scoped; the report
   // renders a select-an-organization state without an active org).
   {
@@ -70,6 +78,22 @@ export const REPORTS: ReportDef[] = [
     description:
       "Provider and group documents by soonest expiration — expired, expiring soon, current.",
     path: "/reporting/expiring-credentials",
+    group: "credentialing",
+  },
+  {
+    key: "roster-engine",
+    title: "Roster Engine",
+    description:
+      "Map provider records to payer roster templates, resolve validation issues, and export audited files.",
+    path: "/reporting/rosters/templates",
+    group: "credentialing",
+  },
+  {
+    key: "contracts-matrix",
+    title: "Group Contracts Matrix",
+    description:
+      "Payer × state contract execution, tentative/confirmed effective dates, and cross-payer dependencies per provider group.",
+    path: "/reporting/contracts-matrix",
     group: "credentialing",
   },
   // E6.6 F6.6.4 — the Audit Log admin page, relocated (same read surface).

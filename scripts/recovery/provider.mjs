@@ -44,7 +44,26 @@ async function keychainToken(run) {
       env: { PATH: "/usr/bin:/bin", HOME: homedir(), LANG: "C" },
     },
   );
-  return stdout.trim();
+  return decodeKeychainToken(stdout.trim());
+}
+
+// Supabase CLI uses go-keyring, which wraps macOS passwords before storage.
+// Decode only its canonical encodings, then retain the token format check below.
+export function decodeKeychainToken(value) {
+  for (const [prefix, encoding, pattern] of [
+    [
+      "go-keyring-base64:",
+      "base64",
+      /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
+    ],
+    ["go-keyring-encoded:", "hex", /^(?:[a-fA-F0-9]{2})+$/],
+  ]) {
+    if (!value.startsWith(prefix)) continue;
+    const encoded = value.slice(prefix.length);
+    check(pattern.test(encoded));
+    return Buffer.from(encoded, encoding).toString("utf8");
+  }
+  return value;
 }
 
 // Match Supabase CLI's precedence without ever logging or serializing the token.
@@ -72,7 +91,7 @@ export async function loadSupabaseAccessToken({
   }
 }
 
-async function request(fetchImpl, token, path, options = {}) {
+async function request(fetchImpl, token, path, options = {}, ignoreResponseBody = false) {
   const response = await fetchImpl(`${API}${path}`, {
     ...options,
     redirect: "error",
@@ -84,6 +103,7 @@ async function request(fetchImpl, token, path, options = {}) {
     },
   });
   check(response.status >= 200 && response.status < 300);
+  if (ignoreResponseBody) return null;
   return response.json();
 }
 
@@ -100,6 +120,28 @@ function exactTimestamp(value) {
       new Date(value).toISOString() === value,
   );
   return value;
+}
+
+// The Management API returns database-specific endpoint records, not the
+// two-field configuration object. Select one unambiguous, pinned primary and
+// discard connection strings before producing evidence.
+function normalizePooler(rows) {
+  check(Array.isArray(rows) && rows.length > 0);
+  check(rows.every((row) => plainObject(row) && row.identifier === STAGING.ref));
+  const primary = rows.filter((row) => row.database_type === "PRIMARY");
+  check(primary.length === 1);
+  const row = primary[0];
+  check(
+    row.db_host === STAGING.host &&
+      row.db_user === `postgres.${STAGING.ref}` &&
+      row.db_name === STAGING.database &&
+      row.is_using_scram_auth === true &&
+      ((row.pool_mode === "transaction" && row.db_port === 6543) ||
+        (row.pool_mode === "session" && row.db_port === 5432)) &&
+      (row.default_pool_size === null ||
+        (Number.isSafeInteger(row.default_pool_size) && row.default_pool_size > 0)),
+  );
+  return { default_pool_size: row.default_pool_size, pool_mode: row.pool_mode };
 }
 
 function projectObservation(project, pooler, capturedAt) {
@@ -171,9 +213,9 @@ export async function observeStagingProvider({
     check(new Date(capturedAt).toISOString() === capturedAt);
     const [project, pooler] = await Promise.all([
       jsonRequest(fetchImpl, token, `/v1/projects/${STAGING.ref}`),
-      jsonRequest(fetchImpl, token, `/v1/projects/${STAGING.ref}/config/database/pooler`),
+      request(fetchImpl, token, `/v1/projects/${STAGING.ref}/config/database/pooler`),
     ]);
-    return projectObservation(project, pooler, capturedAt);
+    return projectObservation(project, normalizePooler(pooler), capturedAt);
   } catch {
     throw fail();
   }
@@ -318,22 +360,109 @@ async function removeAndVerifyStagingLoginRole({
   };
 }
 
-// A successful POST is cleaned up by its exact validated role name. The
-// project-wide DELETE endpoint is never used: another actor's CLI role may
-// appear after the empty prestate. An uncertain POST with no validated role is
-// observed once and then left to the provider's bounded TTL; it cannot qualify.
+export const EXCLUSIVE_STAGING_MAINTENANCE = "exclusive-staging-maintenance";
+
+// The provider DELETE is project-wide. This opt-in is valid only while the
+// operator holds the explicitly authorized exclusive staging CLI window.
+// Inventory checks cannot eliminate a concurrent actor racing that window.
+async function removeExclusiveStagingLoginRole({ token, role, fetchImpl, clock }) {
+  check(TOKEN.test(token) && CLI_ROLE.test(role));
+  const soleOwnedRole = async () => {
+    const inventory = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(inventory.roleCount === 1 && inventory.roleNames[0] === role);
+  };
+  const sessions = async () => {
+    const rows = await request(
+      fetchImpl,
+      token,
+      `/v1/projects/${STAGING.ref}/database/query/read-only`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          query:
+            "SELECT pid, usename FROM pg_catalog.pg_stat_activity WHERE usename LIKE 'cli\\_login\\_%' ESCAPE '\\' ORDER BY pid",
+        }),
+      },
+    );
+    check(
+      Array.isArray(rows) &&
+        rows.every(
+          (row) =>
+            plainObject(row) &&
+            Number.isSafeInteger(row.pid) &&
+            row.pid > 0 &&
+            row.usename === role,
+        ),
+    );
+    return rows;
+  };
+  await soleOwnedRole();
+  if ((await sessions()).length) {
+    // Never terminate another role, even in the exclusive window.
+    const rows = await request(fetchImpl, token, `/v1/projects/${STAGING.ref}/database/query`, {
+      method: "POST",
+      body: JSON.stringify({
+        query: `SELECT pg_catalog.pg_terminate_backend(pid) AS terminated FROM pg_catalog.pg_stat_activity WHERE usename = '${role}' AND pid <> pg_catalog.pg_backend_pid()`,
+      }),
+    });
+    check(Array.isArray(rows) && rows.every((row) => row?.terminated === true));
+  }
+  await soleOwnedRole();
+  check((await sessions()).length === 0);
+  const cleanupRequestedAt = exactTimestamp(clock());
+  let cleanupFailed = false;
+  try {
+    // Successful DELETE responses may have no JSON even when status is 200.
+    // The SQL inventory below, not the response body, proves removal.
+    await request(
+      fetchImpl,
+      token,
+      `/v1/projects/${STAGING.ref}/cli/login-role`,
+      {
+        method: "DELETE",
+      },
+      true,
+    );
+  } catch {
+    cleanupFailed = true;
+  }
+  const cleanupReceivedAt = exactTimestamp(clock());
+  const verified = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+  check(!cleanupFailed && verified.roleCount === 0 && verified.roleNames.length === 0);
+  return {
+    cleanupRequestedAt,
+    cleanupReceivedAt,
+    verifiedAt: verified.receivedAt,
+    roleDigest: canonicalDigest(role),
+    poststateInventoryDigest: verified.inventoryDigest,
+    poststateRoleCount: 0,
+    exactRoleAbsent: true,
+  };
+}
+
+// Default cleanup remains exact-role SQL. The explicit maintenance mode is a
+// separate operator-authorized path; unknown POST outcomes never invoke DELETE.
 export async function withStagingLoginRole(
-  { token, operation } = {},
+  { token, operation, cleanupMode = "exact-role" } = {},
   {
     fetchImpl = fetch,
     clock = () => new Date().toISOString(),
     readInventory = readStagingCliRoleInventory,
     create = createStagingLoginRole,
-    cleanup = removeAndVerifyStagingLoginRole,
+    cleanup,
   } = {},
 ) {
   try {
-    check(TOKEN.test(token) && typeof operation === "function");
+    check(
+      TOKEN.test(token) &&
+        typeof operation === "function" &&
+        ["exact-role", EXCLUSIVE_STAGING_MAINTENANCE].includes(cleanupMode),
+    );
+    const cleanupOwnedRole =
+      cleanup ??
+      (cleanupMode === EXCLUSIVE_STAGING_MAINTENANCE
+        ? removeExclusiveStagingLoginRole
+        : removeAndVerifyStagingLoginRole);
     const prestate = await readInventory({ token, fetchImpl, clock });
     check(
       prestate?.roleCount === 0 &&
@@ -371,7 +500,7 @@ export async function withStagingLoginRole(
       );
     } finally {
       if (postAttempted && createdRole) {
-        cleanupEvidence = await cleanup({
+        cleanupEvidence = await cleanupOwnedRole({
           token,
           role: createdRole,
           fetchImpl,
@@ -385,6 +514,7 @@ export async function withStagingLoginRole(
     return {
       output,
       lifecycle: {
+        ...(cleanupMode === EXCLUSIVE_STAGING_MAINTENANCE ? { cleanupMode } : {}),
         prestateRequestedAt: prestate.requestedAt,
         prestateReceivedAt: prestate.receivedAt,
         prestateInventoryDigest: prestate.inventoryDigest,

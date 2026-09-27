@@ -77,7 +77,7 @@ export async function listGroupReadinessDocuments(): Promise<GroupDocumentInput[
     )
     .eq("org_id", orgId)
     .not("group_id", "is", null)
-    .in("doc_type", ["w9", "coi", "voided_check"]);
+    .in("doc_type", ["w9", "coi"]);
   if (error) throw error;
   return currentGroupReadinessDocuments(camelizeRow<GroupReadinessDocumentRow[]>(data ?? []));
 }

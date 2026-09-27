@@ -9,7 +9,7 @@
 // run on the recorded wire writes AND the UI. (Supersedes the E4.1 skipped
 // placeholders this file used to hold — the single-case form contract stays
 // pinned by unified-case-status TS-105.)
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

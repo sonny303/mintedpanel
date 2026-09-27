@@ -10,7 +10,7 @@
 //   TS-52  Manual one-off case against an in-network payer: same key and
 //          dedupe, generation_run_id stays NULL, and a repeat attempt at the
 //          key blocks with a link to the existing case.
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

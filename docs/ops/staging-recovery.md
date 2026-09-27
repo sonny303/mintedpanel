@@ -1,13 +1,23 @@
 # Staging recovery — G2 boundary and runbook
 
 This slice supplies local encryption, a fixed staging credential provider, an
-owned backup coordinator, an isolated database restore executor and evidence
-guards. A live run remains evidence, not an effect of merging this code. The
-coordinator requires an authenticated Supabase CLI token source and a separately
-protected age identity. A database restore proves the database boundary; an
-operational local Auth/REST service still requires separately reviewed service
-containers and replacement local keys. Product/schema repairs remain outside
-this task. Production backup and recovery evidence is separate and unverified.
+owned backup coordinator, an isolated database restore executor, the reviewed
+local Auth/REST qualifier and evidence guards. A live run remains evidence, not
+an effect of merging this code. The coordinator requires an authenticated
+Supabase CLI token source and a separately protected age identity. The latest
+local run used the old pre-cleanup capture method, passed the full recovery
+suite 321/321 and verified the local Auth/REST boundary only. Its success and
+cleanup receipts are retained at:
+
+- `/Users/ar/Codex-Minted/recovery-qualify-core-20260923-Ki8PJ9/auth-rest.json`
+- `/Users/ar/Codex-Minted/recovery-qualify-core-20260923-Ki8PJ9/auth-rest-89414b39111817b9-cleanup.json`
+
+The run ID is `89414b39111817b9`; its receipt binds the current recovery-core
+code hashes. The isolated target was destroyed with zero remaining resources.
+
+Hosted service/configuration parity, production recovery and the remaining full
+recovery gates are unverified. Product/schema repairs remain outside this task.
+Production backup and recovery evidence is separate and unverified.
 
 ## Fixed source and runtime
 
@@ -61,7 +71,15 @@ that exact role to `NOLOGIN` with an epoch expiry, and drop that exact role. The
 identifier is accepted only by the fixed `cli_login_[A-Za-z0-9_]{1,80}` grammar
 and is quoted by the fixed query. A fresh read-only inventory must prove the
 created role absent. A different concurrently created CLI role is preserved.
-The project-wide login-role DELETE endpoint is never used.
+Default operation never uses the project-wide login-role DELETE endpoint.
+For an explicitly approved exclusive staging CLI maintenance window only, pass
+`--exclusive-staging-maintenance`. This mode verifies the sole created role,
+rejects foreign CLI sessions/roles, terminates only its own remaining sessions,
+rechecks zero sessions, invokes the fixed staging provider cleanup endpoint,
+and verifies empty poststate. The exclusive window is essential because an
+inventory check cannot prevent another operator creating a role immediately
+afterward. Never enable this mode automatically or use it against production.
+Unknown login-POST outcomes still fail closed without bulk deletion.
 
 If the POST outcome is uncertain and no validated role name was received, the
 coordinator does not retry or guess a role and does not call a bulk cleanup. It
@@ -343,17 +361,22 @@ target identity evidence only; it does not export, restore or claim recovery PAS
 4. Initialize the pinned local platform baseline while empty. The executor
    creates a separate `minted_recovery` database from `template0`, then streams
    the authenticated custom archive into `pg_restore --single-transaction
---exit-on-error`. Do not
-   reuse hosted passwords, JWTs or server keys locally. Do not attach unreviewed
-   Auth/REST peers: their pinned images, task ownership and outbound isolation
-   need a collector extension and independent review. The current DB-only guard
-   cannot itself prove an operational Auth service.
+--exit-on-error`. Do not reuse hosted passwords, JWTs or server keys locally.
+   The reviewed Auth/REST peers use pinned images, task ownership and outbound
+   isolation on the same internal-only network. The successful local run used
+   the old pre-cleanup capture method and does not establish hosted parity.
 5. Start the recovery clock at detection, before preparation. Re-authenticate
    every age stream and compare its bytes and SHA-256 with `capture.json`.
    `restore.mjs` fixes the Docker context/socket, image, local database, role and
    executable paths. Before the first named-resource creation attempt, it writes
    a private `restore-<runId>-journal.json` containing the stable run ID and exact
-   resource name. It accepts no host, connection URL, SQL or image override:
+   resource name. It accepts no host, connection URL, SQL or image override.
+   The original peer-start failure was the database's default
+   `listen_addresses=localhost`, which left Auth/REST unable to connect. The
+   bounded fix starts the disposable database with `listen_addresses=*` on the
+   Docker `--internal` network only; no host port is published. Readiness still
+   probes `127.0.0.1` inside the database container, while peers use internal
+   service aliases.
 
    ```sh
    node scripts/recovery/restore.mjs restore \
@@ -367,17 +390,17 @@ target identity evidence only; it does not export, restore or claim recovery PAS
    triggers, extension versions, roles and memberships. It also checks outbound
    subscriptions/foreign objects and large objects. The sanitized result is
    written as `restore.json`; a failure publishes no PASS. The direct executor
-   emits `REHEARSED_ONLY` with a nested `RESTORE_VERIFIED_ONLY`, a null release
-   context digest and the unresolved capture/qualifier prerequisites. These
-   records are deliberately not a release G0 backup or recovery PASS. They emit
-   an empty `qualifiedRecoveryScopes` array and
-   `COMPLETE_RECOVERY_SCOPE_VERIFICATION` until every category in the complete
-   inventory is collected and canonically compared.
+   continues to emit `REHEARSED_ONLY` with a nested `RESTORE_VERIFIED_ONLY`, a
+   null release context digest and an empty `qualifiedRecoveryScopes` array.
+   The separately reviewed local Auth/REST qualifier completed the 321-test
+   local run above, but neither receipt is a release G0 backup or recovery PASS.
 7. Auth rows, Storage metadata and Vault metadata are included in the table
    integrity comparison. Storage object bytes and Vault key recovery must be
-   proved separately when either source inventory is nonempty. An operational
-   Auth login and cross-tenant denial test still require the separately reviewed
-   local Auth/REST service boundary; the DB-only executor does not claim them.
+   proved separately when either source inventory is nonempty. The local
+   Auth/REST qualifier verified password login, refresh, identity lookup and
+   cross-tenant denial for the synthetic fixture. Hosted parity, production
+   recovery, Storage object bytes, Vault key recovery and the remaining full
+   recovery gates remain unverified.
 8. On every failure after the journal, cleanup discovers container, network and
    volume independently by exact name and both ownership labels. It refuses a
    foreign resource, attempts all owned removals even when one fails, rechecks
@@ -437,3 +460,23 @@ meets the target and its retrieval/identity/key procedure is proved. This G2
 evidence cannot qualify a production database backup. G0 release records also
 need independent release-context binding and trusted evidence collection before
 any promotion can become eligible.
+
+## September 23 authorized staging maintenance
+
+The owner explicitly approved an exclusive staging CLI window, staging data only.
+The initial sole expired login was removed and empty inventory verified at
+2026-09-23T03:58:50.920Z. The repaired maintenance adapter then captured a fresh
+encrypted snapshot and verified zero temporary roles at 04:02:35.502Z.
+A capture is not restore qualification; the rehearsal and remaining release
+gates must still pass before schema alignment. Production is outside this run.
+
+The exclusive CLI window closed at 2026-09-23 04:27:39 UTC after a fresh
+read-only check confirmed zero temporary CLI roles and zero CLI sessions.
+Further qualification uses the isolated local snapshot; another project-wide
+CLI cleanup requires a new exclusive maintenance window.
+
+The isolated database rehearsal passed at 2026-09-23 04:31:19 UTC for 92 physical
+tables and 2,034 rows, with both sequences unchanged. Public access, role, structure
+and extension-owner comparisons passed. The successful comparison target is
+retained. The receipt stays `REHEARSED_ONLY`, with no qualified global recovery
+scope; the service-level and release-context prerequisites are not silently cleared.

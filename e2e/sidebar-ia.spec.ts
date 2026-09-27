@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E6.1 F6.1.1 / TS-106 + TS-121 — the six-item sidebar over the mock harness,
 // using the 11-org seed universe (seed-universe.md). Supersedes the E0.9 IA

@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E1.7b hotfix — SOP portal-task integrity over the mock harness. The Chrome
 // extension closes exactly ONE task per portal submission, so a task whose

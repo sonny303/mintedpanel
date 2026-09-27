@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // Payer & Cases design bundle, screen 2 (Slice B) — Add / Edit Payer over the
 // mock harness, one test per designed state:

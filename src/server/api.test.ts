@@ -172,6 +172,15 @@ describe("handleApiRequest error handling — 500 for internal faults, no mask, 
     expect(res.status).toBe(403);
     expect((await body(res)).error).toBe("Your role cannot modify providers");
   });
+
+  it("fails closed when an authenticated context snapshot cannot resolve", async () => {
+    authenticateUserMock.mockResolvedValue({ userId: "u1", db: {} } as never);
+    const res = await handleApiRequest(GET("/api/providers"));
+    expect(res.status).toBe(500);
+    expect((await body(res)).error).toBe("Internal server error");
+    expect(authenticateMock).not.toHaveBeenCalled();
+    expect(listMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("handleApiRequest — /api/me/orgs (user-scoped auth, no org resolution)", () => {
@@ -448,5 +457,32 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     expect(res.status).toBe(404);
     expect(await body(res)).toEqual({ data: null, error: "Not found", meta: null });
     expect(authenticateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects forged actor transport on access routes before dispatch", async () => {
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/me/access-context?actorUserId=other-user", {
+        method: "GET",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await body(res)).error).toContain("Actor identity");
+    expect(authenticateUserMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects forged actor fields in a revoke body", async () => {
+    authenticateUserMock.mockResolvedValue({ userId: "u1" } as never);
+    const res = await handleApiRequest(
+      new Request(
+        "https://x.test/api/internal/client-access/44444444-4444-4444-8444-444444444444/revoke",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ actorUserId: "other-user" }),
+        },
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect((await body(res)).error).toContain("Actor identity");
   });
 });

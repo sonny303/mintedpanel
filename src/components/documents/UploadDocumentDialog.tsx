@@ -29,6 +29,10 @@ import {
   DOCUMENT_MIME_TYPES,
   checkDocumentFile,
   expirationDateError,
+  formatUploadDocumentFileName,
+  normalizeDocumentFileName,
+  signedDateError,
+  utcTodayIso,
   vaultPickerKinds,
 } from "@/lib/documents";
 import { useUploadDocument } from "@/hooks/useDocuments";
@@ -64,6 +68,8 @@ export function UploadDocumentDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<DocumentKind | "">(replaceTarget?.docType ?? presetKind ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [fileNameEdited, setFileNameEdited] = useState(false);
   const [effectiveDate, setEffectiveDate] = useState(replaceTarget?.effectiveDate ?? "");
   const [expirationDate, setExpirationDate] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +77,20 @@ export function UploadDocumentDialog({
   const kindLocked = Boolean(replaceTarget) || Boolean(presetKind);
   const kinds = vaultPickerKinds(ownerType);
   const expirationRequired = kind !== "" && DOCUMENT_KIND_META[kind].expirationRequired;
+  const isSignedDate = kind !== "" && DOCUMENT_KIND_META[kind].dateKind === "signed";
+  const signedDateInvalid = isSignedDate && Boolean(signedDateError(effectiveDate, utcTodayIso()));
+
+  const defaultFileName = (selected: File, selectedKind: DocumentKind | "") =>
+    selectedKind
+      ? formatUploadDocumentFileName(
+          ownerName,
+          ownerType,
+          ownerId,
+          selectedKind,
+          selected.name,
+          selected.type,
+        )
+      : selected.name;
 
   const submit = () => {
     if (!kind) {
@@ -86,6 +106,13 @@ export function UploadDocumentDialog({
       setError(fileError);
       return;
     }
+    if (isSignedDate) {
+      const signedError = signedDateError(effectiveDate, utcTodayIso());
+      if (signedError) {
+        setError(signedError);
+        return;
+      }
+    }
     const expError = expirationDateError(kind, expirationDate || null);
     if (expError) {
       setError(expError);
@@ -99,7 +126,8 @@ export function UploadDocumentDialog({
         kind,
         file,
         effectiveDate: effectiveDate || null,
-        expirationDate: expirationDate || null,
+        expirationDate: isSignedDate ? null : expirationDate || null,
+        fileName,
         familyId: replaceTarget?.documentFamilyId ?? null,
         caseId: caseId ?? null,
       },
@@ -140,7 +168,15 @@ export function UploadDocumentDialog({
             <Label htmlFor="doc-kind">Document kind</Label>
             <Select
               value={kind || undefined}
-              onValueChange={(v) => setKind(v as DocumentKind)}
+              onValueChange={(v) => {
+                const selectedKind = v as DocumentKind;
+                setKind(selectedKind);
+                setEffectiveDate("");
+                setExpirationDate("");
+                if (file && !fileNameEdited) {
+                  setFileName(defaultFileName(file, selectedKind));
+                }
+              }}
               disabled={kindLocked}
             >
               <SelectTrigger id="doc-kind">
@@ -163,33 +199,71 @@ export function UploadDocumentDialog({
               ref={fileInputRef}
               type="file"
               accept={DOCUMENT_MIME_TYPES.join(",")}
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const selected = e.target.files?.[0] ?? null;
+                setFile(selected);
+                const preserveCustomName = fileNameEdited && Boolean(selected);
+                setFileNameEdited(preserveCustomName);
+                setFileName(
+                  selected
+                    ? preserveCustomName
+                      ? normalizeDocumentFileName(fileName, selected.name, selected.type)
+                      : defaultFileName(selected, kind)
+                    : "",
+                );
+              }}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="doc-file-name">File name</Label>
+            <Input
+              id="doc-file-name"
+              value={fileName}
+              onChange={(e) => {
+                setFileName(e.target.value);
+                setFileNameEdited(true);
+              }}
+              disabled={!file}
+            />
+          </div>
+
+          {isSignedDate ? (
             <div className="space-y-1.5">
-              <Label htmlFor="doc-effective">Effective date</Label>
+              <Label htmlFor="doc-signed">Signed date (required)</Label>
               <DatePicker
-                id="doc-effective"
+                id="doc-signed"
                 value={effectiveDate}
                 onChange={setEffectiveDate}
-                ariaLabel="Effective date"
+                ariaLabel="Signed date"
+                invalid={signedDateInvalid}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-expiration">
-                Expiration date{expirationRequired ? " (required)" : ""}
-              </Label>
-              <DatePicker
-                id="doc-expiration"
-                value={expirationDate}
-                onChange={setExpirationDate}
-                ariaLabel="Expiration date"
-                invalid={expirationRequired && !expirationDate}
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-effective">Effective date</Label>
+                <DatePicker
+                  id="doc-effective"
+                  value={effectiveDate}
+                  onChange={setEffectiveDate}
+                  ariaLabel="Effective date"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-expiration">
+                  Expiration date{expirationRequired ? " (required)" : ""}
+                </Label>
+                <DatePicker
+                  id="doc-expiration"
+                  value={expirationDate}
+                  onChange={setExpirationDate}
+                  ariaLabel="Expiration date"
+                  invalid={expirationRequired && !expirationDate}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {error ? (
             <div
