@@ -102,6 +102,7 @@ const dbRow = {
   field_type: "text",
   notes: null,
   status: "approved",
+  learned_via: "manual",
   created_at: "2026-07-01T00:00:00Z",
   updated_at: "2026-07-02T00:00:00Z",
 };
@@ -153,6 +154,7 @@ describe("portal field map service — injected server context", () => {
       "notes",
       "status",
       "control_options",
+      "learned_via",
       "created_at",
       "updated_at",
     ]) {
@@ -178,10 +180,47 @@ describe("portal field map service — injected server context", () => {
       hardcodedValue: null,
       fieldType: "text",
       status: "approved",
+      learnedVia: "manual",
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-02T00:00:00Z",
     });
     expect(rows[0]).not.toHaveProperty("portal_key");
+  });
+
+  it("retries the legacy projection only when the additive provenance column is absent", async () => {
+    const missingColumn = {
+      code: "42703",
+      message: "column portal_field_maps.learned_via does not exist",
+    };
+    const { db, captures } = makeFakeDb([
+      { data: null, error: missingColumn },
+      { data: [{ ...dbRow, learned_via: undefined }] },
+    ]);
+
+    const rows = await listPortalFieldMaps(ctxWith(db), { portalKey: "availity" });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.learnedVia).toBeUndefined();
+    expect(captures).toHaveLength(2);
+    expect(captures[0]?.selectCols).toContain("learned_via");
+    expect(captures[1]?.selectCols).not.toContain("learned_via");
+    expect(captures.map((capture) => capture.or)).toEqual([
+      "org_id.is.null,org_id.eq.org-1",
+      "org_id.is.null,org_id.eq.org-1",
+    ]);
+    expect(captures.map((capture) => capture.filters)).toEqual([
+      [["portal_key", "availity"]],
+      [["portal_key", "availity"]],
+    ]);
+  });
+
+  it("does not retry the old projection for an unrelated database error", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: null, error: { code: "42501", message: "permission denied" } },
+    ]);
+
+    await expect(listPortalFieldMaps(ctxWith(db))).rejects.toMatchObject({ code: "42501" });
+    expect(captures).toHaveLength(1);
   });
 
   it("returns [] when the query yields no rows", async () => {

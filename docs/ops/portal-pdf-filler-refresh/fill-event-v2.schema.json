@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mintedpanel.invalid/contracts/fill-event-v2.schema.json",
+  "title": "Incomplete non-normative Minted fill event V2 schema stub",
+  "description": "R0 design stub only; not authorized for implementation. Expected and actual values are absent, but R1 must finalize attempt semantics, stable map/target/frame identity, qualified not_found evidence, counter reconciliation, and all API, browser, and shared-test producer/reader paths before this schema is normative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "caseId",
+    "providerId",
+    "portalKey",
+    "fillMode",
+    "startedAt",
+    "completedAt",
+    "schemaVersion",
+    "pageStepId",
+    "fieldsAttempted",
+    "fieldsVerified",
+    "fieldsRejected",
+    "fieldOutcomes"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "caseId": { "type": "string", "format": "uuid" },
+    "providerId": { "type": "string", "format": "uuid" },
+    "portalKey": { "type": "string", "maxLength": 160 },
+    "fillMode": { "enum": ["web", "pdf"] },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "schemaVersion": { "const": 2 },
+    "pageStepId": { "type": ["string", "null"], "maxLength": 128 },
+    "fieldsAttempted": { "type": "integer", "minimum": 0 },
+    "fieldsVerified": { "type": "integer", "minimum": 0 },
+    "fieldsRejected": { "type": "integer", "minimum": 0 },
+    "fieldOutcomes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outcome"],
+        "properties": {
+          "mapId": { "type": "string", "format": "uuid" },
+          "pageStepId": { "type": "string", "maxLength": 128 },
+          "outcome": {
+            "enum": [
+              "verified",
+              "unchanged",
+              "write_rejected",
+              "unverified",
+              "needs_value",
+              "needs_mapping",
+              "manual",
+              "other_page",
+              "hidden",
+              "page_unknown",
+              "not_found",
+              "option_mismatch",
+              "unsupported"
+            ]
+          },
+          "reasonCode": {
+            "enum": [
+              "mask_reverted",
+              "readback_mismatch",
+              "readback_unavailable",
+              "missing_value",
+              "mapping_required",
+              "manual_required",
+              "other_page",
+              "field_hidden",
+              "page_unknown",
+              "target_missing",
+              "frame_inaccessible",
+              "context_changed",
+              "option_missing",
+              "unsupported_control",
+              "invalid_format"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

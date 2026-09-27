@@ -5,6 +5,8 @@ import { fixture, hash, NOW } from "../release/test-fixtures.mjs";
 import { canonicalDigest } from "../release/contract.mjs";
 import { DeliveryError, PRODUCTION_ALIASES, STAGING_ALIASES } from "./boundary.mjs";
 import { executeDelivery, receiptBinding } from "./controller.mjs";
+import { createMigrationExecutor } from "../migrations/delivery.mjs";
+import { CLI_VERSION } from "../migrations/runner.mjs";
 
 function simulator(target = "production", additive = true) {
   const fixtureValue = fixture(target, additive);
@@ -209,6 +211,59 @@ test("simulator: no-change database plan never invokes the migration executor", 
   await s.run();
   assert.equal(s.state.operations.includes("database"), false);
 });
+
+for (const fail of [false, true]) {
+  test(`migration runner adapter holds release lease and ${fail ? "blocks promotion on schema failure" : "verifies schema before promotion"}`, async () => {
+    const s = simulator();
+    const context = s.bundle.record.context;
+    const reconciliation = {
+      status: "reconciled",
+      systemIdentifier: "1234567890123456789",
+      baselineVersions: context.baseline.migrations.map((item) => item.id),
+      baselineSchemaDigest: context.baseline.schemaDigest,
+      resultSchemaDigest: context.migrationPlan.resultSchemaDigest,
+      inventory: context.migrationPlan.inventory,
+    };
+    s.services.applyMigration = createMigrationExecutor({
+      bundle: s.bundle,
+      reconciliation,
+      inventory: context.migrationPlan.inventory,
+      database: {
+        version: async () => CLI_VERSION,
+        snapshot: async () => ({
+          systemIdentifier: reconciliation.systemIdentifier,
+          versions: s.state.snapshot.observed.baseline.migrations.map((item) => item.id),
+          schemaDigest: s.state.snapshot.observed.baseline.schemaDigest,
+        }),
+        push: async ({ dryRun }) => {
+          assert.equal(s.state.held, true);
+          if (!dryRun) {
+            s.state.operations.push("runner-applied");
+            s.state.snapshot.observed.baseline.migrations = structuredClone(
+              context.migrationPlan.inventory,
+            );
+            if (!fail)
+              s.state.snapshot.observed.baseline.schemaDigest =
+                context.migrationPlan.resultSchemaDigest;
+          }
+        },
+      },
+    });
+    if (fail) {
+      await assert.rejects(s.run, {
+        code: "DELIVERY_STOPPED_LEASE_RETAINED",
+        reason: "SCHEMA_POSTCHECK_FAILED",
+      });
+      assert.equal(s.state.operations.includes("promote"), false);
+      assert.equal(s.state.held, true);
+    } else {
+      assert.equal((await s.run()).status, "DELIVERED");
+      assert.ok(
+        s.state.operations.indexOf("runner-applied") < s.state.operations.indexOf("promote"),
+      );
+    }
+  });
+}
 
 for (const field of [
   "targetConfigurationDigest",
