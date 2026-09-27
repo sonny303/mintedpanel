@@ -34,6 +34,7 @@ import { useIsAdmin } from "@/lib/permissions";
 import type { Payer, PayerContact, PayerContactPurpose } from "@/types";
 
 const PURPOSES: PayerContactPurpose[] = ["credentialing", "enrollment", "escalation", "general"];
+const REACHABILITY_ERROR = "A contact needs an email address or a phone number.";
 
 const PURPOSE_LABELS: Record<PayerContactPurpose, string> = {
   credentialing: "Credentialing",
@@ -79,11 +80,19 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
     setFormError(null);
   };
 
+  const updateReachability = (patch: Pick<ContactDraft, "email"> | Pick<ContactDraft, "phone">) => {
+    const nextDraft = { ...draft, ...patch };
+    setDraft(nextDraft);
+    if (nextDraft.email.trim() || nextDraft.phone.trim()) {
+      setFormError((current) => (current === REACHABILITY_ERROR ? null : current));
+    }
+  };
+
   const handleAdd = () => {
     // The RPC enforces reachability too; asking here keeps the round trip off
     // the obviously-incomplete path.
     if (draft.email.trim() === "" && draft.phone.trim() === "") {
-      setFormError("A contact needs an email address or a phone number.");
+      setFormError(REACHABILITY_ERROR);
       return;
     }
     setFormError(null);
@@ -189,7 +198,7 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
               <Input
                 id="contact-email"
                 value={draft.email}
-                onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                onChange={(e) => updateReachability({ email: e.target.value })}
                 placeholder="name@payer.com"
                 className="h-9"
               />
@@ -201,7 +210,7 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
               <Input
                 id="contact-phone"
                 value={draft.phone}
-                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                onChange={(e) => updateReachability({ phone: e.target.value })}
                 placeholder="555-555-0100"
                 className="h-9"
               />
