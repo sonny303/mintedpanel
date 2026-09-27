@@ -99,17 +99,17 @@ The local [facility import CSV](ux-audit-facility-import.csv) is a synthetic tes
 
 ## Bite-sized PR plan after audit
 
-| Order | Branch / draft PR scope                                                                           | Implementation and review proof                                             | Overlap                                            |
-| ----- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| 1     | `feature/ux-accessible-actions` — names for note add and Template Wizard remove controls          | Sol 6/xhigh; independent Astra/high; accessibility tree and keyboard checks | Button render sites do not overlap #435.           |
-| 2     | `feature/ux-inline-error-reset` — document dialog stale validation only                           | Sol 6/xhigh; Astra/high; wrong→corrected input and resubmit test            | None of #432–#436.                                 |
-| 2a    | `feature/ux-contact-error-reset` — org person and payer contact stale errors                      | Sol 6/xhigh; Astra/high; corrected fields clear errors                      | None of #432–#436.                                 |
-| 3     | `feature/ux-audit-user-label` — stable Audit Log user names                                       | Sol 6/xhigh; Astra/high; fresh load/filter/reopen                           | None.                                              |
-| 4     | `feature/ux-insurance-date-order` — policy chronological validation                               | Sol 6/xhigh; Astra/high; invalid and valid save cases                       | None.                                              |
-| 5     | `feature/ux-license-date-order` — provider license chronological validation                       | Sol 6/xhigh; Astra/high; invalid and valid save cases                       | Rebase/check #435 before PR.                       |
-| 6     | `feature/ux-nested-date-escape` — restore page interaction on nested picker Escape                | Sol 6/xhigh; Astra/high; browser regression for both approval/enrollment    | None, but interaction risk merits separate review. |
-| 7     | `feature/ux-manual-case-payer-catalog` — requirements-backed picker scope                         | Sol 6/xhigh; Astra/high; org-scoped catalog tests                           | None.                                              |
-| Later | Roster grain create contract; contract matrix hosted diagnosis; primary facility removal decision | Investigate first; do not bundle with small fixes                           | #434 and hosted release boundaries.                |
+| Order | Branch / draft PR scope                                                                                       | Implementation and review proof                                             | Overlap                                            |
+| ----- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
+| 1     | `feature/ux-accessible-actions` — names for note add and Template Wizard remove controls                      | Sol 6/xhigh; independent Astra/high; accessibility tree and keyboard checks | Button render sites do not overlap #435.           |
+| 2     | `feature/ux-inline-error-reset` — document dialog stale validation only                                       | Sol 6/xhigh; Astra/high; wrong→corrected input and resubmit test            | None of #432–#436.                                 |
+| 2a    | `feature/ux-contact-error-reset` — org person and payer contact stale errors                                  | Sol 6/xhigh; Astra/high; corrected fields clear errors                      | None of #432–#436.                                 |
+| 3     | `feature/ux-audit-user-label` — stable Audit Log user names                                                   | Sol 6/xhigh; Astra/high; fresh load/filter/reopen                           | None.                                              |
+| 4     | `feature/ux-insurance-date-order` — policy chronological validation                                           | Sol 6/xhigh; Astra/high; invalid and valid save cases                       | None.                                              |
+| 5     | `feature/ux-license-date-order` — provider license chronological validation                                   | Sol 6/xhigh; Astra/high; invalid and valid save cases                       | Rebase/check #435 before PR.                       |
+| 6     | `feature/ux-nested-date-escape` — restore page interaction on nested picker Escape                            | Sol 6/xhigh; Astra/high; browser regression for both approval/enrollment    | None, but interaction risk merits separate review. |
+| 7     | `feature/ux-manual-case-payer-catalog` — requirements-backed picker scope                                     | Sol 6/xhigh; Astra/high; org-scoped catalog tests                           | None.                                              |
+| Later | Contract matrix staging alignment packet; primary facility removal decision; blocked-fixture interaction pass | Owner decision and new staging evidence before any hosted or product change | Hosted release and synthetic-fixture boundaries.   |
 
 ### Draft PR tracker
 
