@@ -37,9 +37,8 @@ import {
 } from "@/hooks/useProviders";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { usePayers, useSops } from "@/hooks/useAdmin";
-import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { resolveCaseFacilityId } from "@/lib/caseFacility";
-import { networkPayerIdsFromTargets } from "@/lib/payerSetup";
+import { manualCasePayers } from "@/lib/payerSetup";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
@@ -61,7 +60,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const facilityAssignmentsQ = useProviderAssignments();
   const facilitiesQ = useFacilities();
   const payersQ = usePayers();
-  const targetsQ = usePayerNetworkTargets();
   const templatesQ = useSops();
   const casesQ = useCases();
   const createCase = useCreateCase();
@@ -89,12 +87,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     const assignedProviderIds = new Set(currentProviderAssignments.map((a) => a.providerId));
     return roster.filter((p) => assignedProviderIds.has(p.id));
   }, [currentProviderAssignments, roster]);
-  const payers = useMemo(() => {
-    const inNetwork = networkPayerIdsFromTargets(targetsQ.data ?? []);
-    return (payersQ.data ?? []).filter(
-      (p) => (p.status ?? "active") === "active" && inNetwork.has(p.id),
-    );
-  }, [payersQ.data, targetsQ.data]);
+  const payers = useMemo(() => manualCasePayers(payersQ.data ?? []), [payersQ.data]);
 
   // TE-6: the group select offers the provider's groups from
   // provider_group_assignments (un-ended memberships, the E1.3 semantic).
@@ -137,7 +130,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     facilityAssignmentsQ.isLoading ||
     facilitiesQ.isLoading ||
     payersQ.isLoading ||
-    targetsQ.isLoading ||
     templatesQ.isLoading ||
     casesQ.isLoading;
   const failed =
@@ -147,7 +139,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     facilityAssignmentsQ.isError ||
     facilitiesQ.isError ||
     payersQ.isError ||
-    targetsQ.isError ||
     templatesQ.isError ||
     casesQ.isError;
   const prerequisitesReady = providers.length > 0 && payers.length > 0;
@@ -159,7 +150,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     void facilityAssignmentsQ.refetch();
     void facilitiesQ.refetch();
     void payersQ.refetch();
-    void targetsQ.refetch();
     void templatesQ.refetch();
     void casesQ.refetch();
   };

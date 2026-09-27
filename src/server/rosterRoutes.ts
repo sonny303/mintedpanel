@@ -110,6 +110,8 @@ function safeError(error: unknown): Response {
   }
   if (/roster_(row_limit_exceeded|artifact_limit_exceeded)/.test(message))
     return noStore(fail(413, "Roster exceeds the 5,000 row or 3 MiB artifact limit"));
+  if (/roster_location_scope_required/.test(message))
+    return noStore(fail(422, "Select at least one location for this roster grain"));
   if (
     /reason_too_short|mapping_invalid|location_scope_required|provider_grain_group_ambiguous/.test(
       message,
@@ -306,6 +308,10 @@ export function handleCreateRosterMapping(body: unknown, ctx: AuthContext): Prom
   if (blocked) return Promise.resolve(blocked);
   const input = validateCreateBody(body);
   if (!input) return Promise.resolve(noStore(fail(422, "Roster mapping request is invalid")));
+  if (input.grain !== "provider" && !input.selectedFacilityIds?.length)
+    return Promise.resolve(
+      noStore(fail(422, "Select at least one location for this roster grain")),
+    );
   return run(
     async () => {
       const template = await getRosterMappingTemplate(dataCtx(ctx), input.templateId);

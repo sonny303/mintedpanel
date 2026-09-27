@@ -21,7 +21,7 @@ export const Route = createFileRoute("/groups/$groupId/")({
   component: GroupHubPage,
 });
 
-function GroupHubPage() {
+export function GroupHubPage() {
   const { groupId } = Route.useParams();
   const canWrite = useCanWrite();
   const groupsQ = useProviderGroups();
@@ -30,9 +30,12 @@ function GroupHubPage() {
   const group = (groupsQ.data ?? []).find((g) => g.id === groupId);
   if (!group) return null; // the layout renders the not-found state
 
-  const facilityCount = (facilitiesQ.data ?? []).filter(
-    (f) => f.isActive && f.groupId === groupId,
-  ).length;
+  const facilityCount = facilitiesQ.data?.filter((f) => f.isActive && f.groupId === groupId).length;
+  const facilityDetail = facilitiesQ.isError
+    ? "Location count unavailable — practice locations, go-live dates, CSV import."
+    : facilityCount === undefined
+      ? "Loading location count — practice locations, go-live dates, CSV import."
+      : `${facilityCount} active ${facilityCount === 1 ? "location" : "locations"} — practice locations, go-live dates, CSV import.`;
   const targetedPayerCount = new Set(
     (targetsQ.data ?? [])
       .filter((t) => t.groupId === groupId && t.status === "active")
@@ -44,7 +47,7 @@ function GroupHubPage() {
       to: "/groups/$groupId/facilities" as const,
       icon: Building2,
       label: "Facilities",
-      detail: `${facilityCount} active ${facilityCount === 1 ? "location" : "locations"} — practice locations, go-live dates, CSV import.`,
+      detail: facilityDetail,
     },
     {
       to: "/groups/$groupId/payer-network" as const,

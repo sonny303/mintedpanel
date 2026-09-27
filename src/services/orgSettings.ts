@@ -5,6 +5,7 @@ import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
+import { hasValidPolicyDateOrder, POLICY_DATE_ORDER_ERROR } from "@/lib/insurancePolicyDates";
 import type { AdaCompliance, AppRole, Facility, Organization, ProviderGroup } from "@/types";
 import type { FacilityHours } from "@/lib/facilityHours";
 import type { Database } from "@/integrations/supabase/types";
@@ -437,6 +438,13 @@ function validatePolicyInput(input: InsurancePolicyInput | Partial<InsurancePoli
   if ("policyEndDate" in input && input.policyEndDate !== undefined && !input.policyEndDate) {
     throw new Error("End date is required");
   }
+  if (
+    input.policyStartDate &&
+    input.policyEndDate &&
+    !hasValidPolicyDateOrder(input.policyStartDate, input.policyEndDate)
+  ) {
+    throw new Error(POLICY_DATE_ORDER_ERROR);
+  }
 }
 
 export async function createGroupInsurancePolicy(
@@ -479,6 +487,15 @@ export async function updateGroupInsurancePolicy(
   const orgId = requireActiveOrg();
   validatePolicyInput(patch);
   const before = await getInsurancePolicy(id);
+  if (
+    before &&
+    !hasValidPolicyDateOrder(
+      patch.policyStartDate ?? before.policyStartDate,
+      patch.policyEndDate ?? before.policyEndDate,
+    )
+  ) {
+    throw new Error(POLICY_DATE_ORDER_ERROR);
+  }
   const payload: InsuranceUpdate = {};
   if (patch.groupId !== undefined) payload.group_id = patch.groupId;
   if (patch.insuranceType !== undefined) payload.insurance_type = patch.insuranceType;

@@ -2,8 +2,8 @@
 // → catalog Setup (2026-08-13). There is no org↔payer assignment. Payer Setup
 // lists the global catalog. Group attach (`payer_network_targets`) is the
 // operational grain and lives on Groups → Payer Network. `activeOrgPayers`
-// still means "payers this org's groups already work with" for generation,
-// attach pickers, and the manual-case door — never for Setup.
+// still means "payers this org's groups already work with" for generation
+// and attach pickers. The manual-case exception uses the full visible catalog.
 import { PRE_CRED_PAYER_NAME } from "./statusLabels";
 import type { Payer, PayerNetworkTarget } from "@/types";
 
@@ -50,10 +50,19 @@ export function catalogSetupPayers(
   return sortByPayerName(out);
 }
 
+/** F2.1.4: a manual exception can name any active, org-visible payer even
+ * when no group has attached it. The caller's listPayers read enforces the
+ * own-org plus global scope; this only removes non-caseable catalog rows. */
+export function manualCasePayers(payers: readonly Payer[]): Payer[] {
+  return payers
+    .filter((payer) => passesCatalogFilters(payer) && (payer.status ?? "active") === "active")
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
  * Payers this org's groups already work with: a catalog payer with ≥1 ACTIVE
  * payer_network_targets row — never an org_payer_assignments row (OPA-RETIRE).
- * Used by generation, attach pickers, and the manual-case door. Payer Setup
+ * Used by generation and attach pickers. Payer Setup
  * uses `catalogSetupPayers` instead.
  */
 export function activeOrgPayers(
