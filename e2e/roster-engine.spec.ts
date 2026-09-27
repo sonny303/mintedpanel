@@ -35,7 +35,9 @@ const TEMPLATE = {
   schemaVersion: 1,
   verified: false,
   verificationStatus: "draft_pending_payer_spec" as const,
-  grains: ["provider", "provider_location_tin"] as Array<"provider" | "provider_location_tin">,
+  grains: ["provider", "provider_location", "provider_location_tin"] as Array<
+    "provider" | "provider_location" | "provider_location_tin"
+  >,
   columns: [
     { key: "individual_npi", header: "Individual NPI", required: true, targetType: "npi" as const },
     {
@@ -331,4 +333,93 @@ test("roster mapping saves scope, records an override, and downloads an immutabl
   await expect(exportedRow).toContainText("Example provider roster");
   await expect(page.getByText("Draft payer schema")).toBeVisible();
   await expect(page.getByText(USER_ID)).toBeVisible();
+});
+
+test("catalog requires explicit locations for both location grains and posts the selected scope", async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const creates: Array<Record<string, unknown>> = [];
+  await context.route(/\/(rest|auth)\/v1\//, mockSupabase);
+  await context.route("**/rest/v1/facilities**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([{ id: FACILITY_ID, org_id: ORG_ID, name: "West Clinic", state: "NC" }]),
+    }),
+  );
+  await context.route("**/api/rosters/**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const json = (data: unknown, status = 200) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ data, error: null, meta: null }),
+      });
+    if (url.pathname === "/api/rosters/templates") return json([TEMPLATE]);
+    if (url.pathname === "/api/rosters/mappings" && request.method() === "GET") return json([]);
+    if (url.pathname === "/api/rosters/mappings" && request.method() === "POST") {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      creates.push(body);
+      return json(
+        {
+          mapping: {
+            ...makeMapping(),
+            grain: body.grain,
+            selectedFacilityIds: body.selectedFacilityIds,
+          },
+          template: TEMPLATE,
+          sourceOptions: SOURCE_OPTIONS,
+        },
+        201,
+      );
+    }
+    if (url.pathname === `/api/rosters/mappings/${MAPPING_ID}`) {
+      return json({ mapping: makeMapping(), template: TEMPLATE, sourceOptions: SOURCE_OPTIONS });
+    }
+    if (url.pathname === `/api/rosters/mappings/${MAPPING_ID}/preview`) {
+      return json({
+        mappingId: MAPPING_ID,
+        revision: 1,
+        inputFingerprint: "test",
+        rowCount: 0,
+        rows: [],
+      });
+    }
+    return json(null, 404);
+  });
+  await page.addInitScript(
+    ([authKey, session, orgId]) => {
+      localStorage.setItem(authKey as string, JSON.stringify(session));
+      localStorage.setItem(
+        "minted-panel-active-org",
+        JSON.stringify({ state: { activeOrgId: orgId }, version: 0 }),
+      );
+    },
+    [AUTH_KEY, SESSION, ORG_ID] as const,
+  );
+
+  for (const grain of ["Provider + location", "Provider + location + TIN"] as const) {
+    await page.goto("/reporting/rosters/templates");
+    await page.getByRole("combobox", { name: `Grain for ${TEMPLATE.name}` }).click();
+    await page.getByRole("option", { name: grain, exact: true }).click();
+    const mapFields = page.getByRole("button", { name: /Map fields/ });
+    await expect(mapFields).toBeDisabled();
+    expect(creates).toHaveLength(grain === "Provider + location" ? 0 : 1);
+    await page.getByRole("button", { name: `Locations for ${TEMPLATE.name}` }).click();
+    await page.getByRole("checkbox", { name: "West Clinic" }).check();
+    await expect(mapFields).toBeEnabled();
+    await mapFields.click();
+    await expect(page.getByRole("heading", { name: "Source scope" })).toBeVisible();
+    expect(creates.at(-1)).toMatchObject({
+      grain: grain === "Provider + location" ? "provider_location" : "provider_location_tin",
+      selectedFacilityIds: [FACILITY_ID],
+    });
+  }
+
+  await page.goto("/reporting/rosters/templates");
+  await page.getByRole("button", { name: /Map fields/ }).click();
+  await expect(page.getByRole("heading", { name: "Source scope" })).toBeVisible();
+  expect(creates.at(-1)).toMatchObject({ grain: "provider", selectedFacilityIds: [] });
 });

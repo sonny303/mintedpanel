@@ -22,12 +22,17 @@ import {
   commitRosterExport,
   getIdempotentRosterExport,
   getRosterExportFile,
+  getRosterMappingRecord,
+  getRosterMappingTemplate,
   getRosterSourceSnapshot,
   listRosterExportSnapshots,
   listRosterOverrides,
+  listRosterSourceOptions,
   recordRosterOverride,
+  saveRosterMapping,
 } from "@/services/rosterEngineData";
 import {
+  handleCreateRosterMapping,
   handleRosterDownload,
   handleRosterExport,
   handleRosterHistory,
@@ -40,6 +45,7 @@ const USER_ID = "11111111-1111-4111-8111-111111111111";
 const TEMPLATE_ID = "44444444-4444-4444-8444-444444444444";
 const MAPPING_ID = "55555555-5555-4555-8555-555555555555";
 const PROVIDER_ID = "66666666-6666-4666-8666-666666666666";
+const FACILITY_ID = "77777777-7777-4777-8777-777777777777";
 const FINGERPRINT = "a".repeat(64);
 const IDEMPOTENCY_KEY = "77777777-7777-4777-8777-777777777777";
 
@@ -156,6 +162,87 @@ beforeEach(() => {
 });
 
 describe("roster API route governance", () => {
+  it.each(["provider_location", "provider_location_tin"] as const)(
+    "rejects %s creation without an explicit location before persistence",
+    async (grain) => {
+      const response = await handleCreateRosterMapping(
+        { templateId: TEMPLATE_ID, name: "Scoped mapping", grain, selectedProviderIds: [] },
+        ctx(),
+      );
+
+      expect(response.status).toBe(422);
+      expect((await envelope(response)).error).toMatch(/Select at least one location/);
+      expect(getRosterMappingTemplate).not.toHaveBeenCalled();
+      expect(saveRosterMapping).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["provider_location", "provider_location_tin"] as const)(
+    "passes an explicit %s location scope to the org-bound save",
+    async (grain) => {
+      vi.mocked(getRosterMappingTemplate).mockResolvedValue({
+        ...template,
+        grains: [grain],
+      });
+      vi.mocked(saveRosterMapping).mockResolvedValue({ ...mapping, grain });
+      vi.mocked(getRosterMappingRecord).mockResolvedValue({ ...mapping, grain });
+      vi.mocked(listRosterSourceOptions).mockResolvedValue({
+        providers: [],
+        facilities: [
+          { id: FACILITY_ID, label: "West Clinic", state: "NC", groupId: null, groupLabel: null },
+        ],
+        groups: [],
+      });
+      const response = await handleCreateRosterMapping(
+        {
+          templateId: TEMPLATE_ID,
+          name: "Scoped mapping",
+          grain,
+          selectedProviderIds: [],
+          selectedFacilityIds: [FACILITY_ID],
+        },
+        ctx("specialist", "org-current"),
+      );
+
+      expect(response.status).toBe(201);
+      expect(saveRosterMapping).toHaveBeenCalledWith(
+        expect.objectContaining({ orgId: "org-current", actorId: USER_ID }),
+        expect.objectContaining({ grain, selectedFacilityIds: [FACILITY_ID] }),
+        null,
+        null,
+      );
+    },
+  );
+
+  it("keeps provider-grain creation valid with no locations", async () => {
+    vi.mocked(getRosterMappingTemplate).mockResolvedValue(template);
+    vi.mocked(saveRosterMapping).mockResolvedValue(mapping);
+    vi.mocked(getRosterMappingRecord).mockResolvedValue(mapping);
+    vi.mocked(listRosterSourceOptions).mockResolvedValue({
+      providers: [],
+      facilities: [],
+      groups: [],
+    });
+
+    const response = await handleCreateRosterMapping(
+      {
+        templateId: TEMPLATE_ID,
+        name: "Provider mapping",
+        grain: "provider",
+        selectedProviderIds: [],
+      },
+      ctx(),
+    );
+
+    expect(response.status).toBe(201);
+    expect(saveRosterMapping).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: ORG_ID, actorId: USER_ID }),
+      expect.objectContaining({ grain: "provider", selectedFacilityIds: [] }),
+      null,
+      null,
+    );
+  });
+
   it("keeps history scoped to the authenticated organization and returns frozen template status", async () => {
     vi.mocked(listRosterExportSnapshots).mockResolvedValue([snapshot]);
     const response = await handleRosterHistory(ctx("billing", "org-caller"));

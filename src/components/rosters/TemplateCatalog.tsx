@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, ArrowUpRight, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -22,6 +24,7 @@ import {
   useRosterMappings,
   useRosterTemplates,
 } from "@/hooks/useRosterEngine";
+import { useFacilities } from "@/hooks/useLookups";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { useCanWrite } from "@/lib/permissions";
 import { formatRosterDisplayDate } from "@/lib/rosterDisplay";
@@ -42,11 +45,26 @@ export function TemplateCatalog() {
   const templatesQ = useRosterTemplates();
   const mappingsQ = useRosterMappings();
   const createMapping = useCreateRosterMapping();
+  const facilitiesQ = useFacilities();
   const [grains, setGrains] = useState<Record<string, RosterGrain>>({});
+  const [facilityIdsByTemplate, setFacilityIdsByTemplate] = useState<Record<string, string[]>>({});
 
   function startMapping(templateId: string, templateName: string, grain: RosterGrain) {
+    const selectedFacilityIds =
+      grain === "provider"
+        ? []
+        : (facilityIdsByTemplate[templateId] ?? []).filter((id) =>
+            facilitiesQ.data?.some((facility) => facility.id === id),
+          );
+    if (grain !== "provider" && selectedFacilityIds.length === 0) return;
     createMapping.mutate(
-      { templateId, name: `${templateName} mapping`, grain, selectedProviderIds: [] },
+      {
+        templateId,
+        name: `${templateName} mapping`,
+        grain,
+        selectedProviderIds: [],
+        selectedFacilityIds,
+      },
       {
         onSuccess: (detail) =>
           navigate({ to: "/reporting/rosters/mapping/$id", params: { id: detail.mapping.id } }),
@@ -100,6 +118,7 @@ export function TemplateCatalog() {
               <TableHead className="h-9 min-w-64">Payer template</TableHead>
               <TableHead className="h-9">Columns</TableHead>
               <TableHead className="h-9 min-w-44">Export grain</TableHead>
+              <TableHead className="h-9 min-w-48">Locations</TableHead>
               <TableHead className="h-9 min-w-48">Schema status</TableHead>
               <TableHead className="h-9 text-right">Action</TableHead>
             </TableRow>
@@ -107,6 +126,10 @@ export function TemplateCatalog() {
           <TableBody>
             {templates.map((template) => {
               const grain = grains[template.id] ?? template.grains[0];
+              const selectedFacilityIds = facilityIdsByTemplate[template.id] ?? [];
+              const validFacilityIds = selectedFacilityIds.filter((id) =>
+                facilitiesQ.data?.some((facility) => facility.id === id),
+              );
               const isPending =
                 createMapping.isPending && createMapping.variables?.templateId === template.id;
               return (
@@ -144,6 +167,75 @@ export function TemplateCatalog() {
                     </Select>
                   </TableCell>
                   <TableCell>
+                    {grain === "provider" ? (
+                      <span className="text-[11px] text-muted-foreground">
+                        Set in mapping if needed
+                      </span>
+                    ) : (
+                      <div className="space-y-1">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!canWrite || facilitiesQ.isLoading || facilitiesQ.isError}
+                              aria-label={`Locations for ${template.name}`}
+                            >
+                              {validFacilityIds.length > 0
+                                ? `${validFacilityIds.length} location${validFacilityIds.length === 1 ? "" : "s"} selected`
+                                : "Select locations"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="start"
+                            className="max-h-64 space-y-1 overflow-y-auto p-2 shadow-none"
+                          >
+                            {(facilitiesQ.data ?? []).length === 0 ? (
+                              <p className="p-2 text-[11px] text-muted-foreground">
+                                No locations are available in this organization.
+                              </p>
+                            ) : (
+                              facilitiesQ.data?.map((facility) => (
+                                <label
+                                  key={facility.id}
+                                  className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-muted"
+                                >
+                                  <Checkbox
+                                    checked={selectedFacilityIds.includes(facility.id)}
+                                    onCheckedChange={(checked) =>
+                                      setFacilityIdsByTemplate((current) => ({
+                                        ...current,
+                                        [template.id]:
+                                          checked === true
+                                            ? [...(current[template.id] ?? []), facility.id]
+                                            : (current[template.id] ?? []).filter(
+                                                (id) => id !== facility.id,
+                                              ),
+                                      }))
+                                    }
+                                  />
+                                  <span className="min-w-0 flex-1 truncate text-[12px]">
+                                    {facility.name}
+                                  </span>
+                                  {facility.state ? (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {facility.state}
+                                    </span>
+                                  ) : null}
+                                </label>
+                              ))
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                        {validFacilityIds.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            Select at least one location
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     {template.verified ? (
                       <RosterStatus tone="success">Payer schema verified</RosterStatus>
                     ) : (
@@ -153,7 +245,12 @@ export function TemplateCatalog() {
                   <TableCell className="text-right">
                     <Button
                       size="sm"
-                      disabled={!canWrite || !grain || createMapping.isPending}
+                      disabled={
+                        !canWrite ||
+                        !grain ||
+                        createMapping.isPending ||
+                        (grain !== "provider" && validFacilityIds.length === 0)
+                      }
                       onClick={() => grain && startMapping(template.id, template.name, grain)}
                       title={canWrite ? undefined : "Billing members have read-only access."}
                     >
@@ -173,6 +270,10 @@ export function TemplateCatalog() {
         </Table>
       </div>
       {createMapping.isError ? <RosterError error={createMapping.error} /> : null}
+      {facilitiesQ.isError &&
+      templates.some((template) => (grains[template.id] ?? template.grains[0]) !== "provider") ? (
+        <RosterError error={facilitiesQ.error} retry={() => void facilitiesQ.refetch()} />
+      ) : null}
       {!canWrite ? (
         <p className="text-[12px] text-muted-foreground">
           Billing members can review templates and export history. Mapping requires a specialist or
