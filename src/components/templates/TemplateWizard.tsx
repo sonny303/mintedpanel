@@ -1510,7 +1510,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       ) : null}
 
       {/* Footer nav */}
-      <div className="mt-6 flex items-center justify-between border-t border-[#E8E5E0] pt-4">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-[#E8E5E0] pt-4">
         <Button
           variant="outline"
           onClick={() => setStep((s) => Math.max(1, s - 1))}
@@ -1519,34 +1519,46 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           <ChevronLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        {canGoNext ? (
-          <Button
-            onClick={() => setStep((s) => Math.min(3, s + 1))}
-            style={{ backgroundColor: "#1B4D3E" }}
-            className="text-white hover:opacity-90"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
-        ) : canEdit ? (
-          <Button
-            onClick={handleSaveClick}
-            disabled={saving}
-            style={{ backgroundColor: "#1B4D3E" }}
-            className="text-white hover:opacity-90"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saving
-              ? "Saving…"
-              : !isEdit
-                ? "Create template"
-                : contentChanged || isFallback
-                  ? "Publish"
-                  : "Save match key"}
-          </Button>
-        ) : (
-          <span />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit ? (
+            <Button
+              variant="outline"
+              onClick={() => void handleSaveDraft()}
+              disabled={saveDraftMut.isPending}
+            >
+              <FileEdit className="h-4 w-4 mr-2" />
+              {saveDraftMut.isPending ? "Saving…" : "Save draft"}
+            </Button>
+          ) : null}
+          {canGoNext ? (
+            <Button
+              onClick={() => setStep((s) => Math.min(3, s + 1))}
+              style={{ backgroundColor: "#1B4D3E" }}
+              className="text-white hover:opacity-90"
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-2" />
+            </Button>
+          ) : canEdit ? (
+            <Button
+              onClick={handleSaveClick}
+              disabled={saving}
+              style={{ backgroundColor: "#1B4D3E" }}
+              className="text-white hover:opacity-90"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saving
+                ? "Saving…"
+                : !isEdit
+                  ? "Create template"
+                  : contentChanged || isFallback
+                    ? "Publish"
+                    : "Save match key"}
+            </Button>
+          ) : (
+            <span />
+          )}
+        </div>
       </div>
 
       {publishOpen ? (
