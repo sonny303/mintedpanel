@@ -21,10 +21,10 @@ import {
 } from "@/components/ui/table";
 import {
   useCreateRosterMapping,
+  useRosterFacilityOptions,
   useRosterMappings,
   useRosterTemplates,
 } from "@/hooks/useRosterEngine";
-import { useFacilities } from "@/hooks/useLookups";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { useCanWrite } from "@/lib/permissions";
 import { formatRosterDisplayDate } from "@/lib/rosterDisplay";
@@ -45,7 +45,7 @@ export function TemplateCatalog() {
   const templatesQ = useRosterTemplates();
   const mappingsQ = useRosterMappings();
   const createMapping = useCreateRosterMapping();
-  const facilitiesQ = useFacilities();
+  const facilitiesQ = useRosterFacilityOptions();
   const [grains, setGrains] = useState<Record<string, RosterGrain>>({});
   const [facilityIdsByTemplate, setFacilityIdsByTemplate] = useState<Record<string, string[]>>({});
 
@@ -56,7 +56,11 @@ export function TemplateCatalog() {
         : (facilityIdsByTemplate[templateId] ?? []).filter((id) =>
             facilitiesQ.data?.some((facility) => facility.id === id),
           );
-    if (grain !== "provider" && selectedFacilityIds.length === 0) return;
+    if (
+      grain !== "provider" &&
+      (facilitiesQ.isFetching || facilitiesQ.isError || selectedFacilityIds.length === 0)
+    )
+      return;
     createMapping.mutate(
       {
         templateId,
@@ -178,7 +182,7 @@ export function TemplateCatalog() {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={!canWrite || facilitiesQ.isLoading || facilitiesQ.isError}
+                              disabled={!canWrite || facilitiesQ.isFetching || facilitiesQ.isError}
                               aria-label={`Locations for ${template.name}`}
                             >
                               {validFacilityIds.length > 0
@@ -249,7 +253,10 @@ export function TemplateCatalog() {
                         !canWrite ||
                         !grain ||
                         createMapping.isPending ||
-                        (grain !== "provider" && validFacilityIds.length === 0)
+                        (grain !== "provider" &&
+                          (facilitiesQ.isFetching ||
+                            facilitiesQ.isError ||
+                            validFacilityIds.length === 0))
                       }
                       onClick={() => grain && startMapping(template.id, template.name, grain)}
                       title={canWrite ? undefined : "Billing members have read-only access."}

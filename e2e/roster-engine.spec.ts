@@ -423,3 +423,62 @@ test("catalog requires explicit locations for both location grains and posts the
   await expect(page.getByRole("heading", { name: "Source scope" })).toBeVisible();
   expect(creates.at(-1)).toMatchObject({ grain: "provider", selectedFacilityIds: [] });
 });
+
+test("catalog blocks location mapping when the org facility list exceeds its selection limit", async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const facilityRows = Array.from({ length: 5001 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    org_id: ORG_ID,
+    name: `Clinic ${String(index).padStart(4, "0")}`,
+    state: "NC",
+  }));
+  let createCount = 0;
+  const pageOffsets: number[] = [];
+  await context.route(/\/(rest|auth)\/v1\//, mockSupabase);
+  await context.route("**/rest/v1/facilities**", (route) => {
+    const url = new URL(route.request().url());
+    const from = Number(url.searchParams.get("offset") ?? 0);
+    const pageSize = Number(url.searchParams.get("limit") ?? 500);
+    pageOffsets.push(from);
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(facilityRows.slice(from, from + pageSize)),
+    });
+  });
+  await context.route("**/api/rosters/**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "POST") createCount += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: url.pathname === "/api/rosters/templates" ? [TEMPLATE] : [],
+        error: null,
+        meta: null,
+      }),
+    });
+  });
+  await page.addInitScript(
+    ([authKey, session, orgId]) => {
+      localStorage.setItem(authKey as string, JSON.stringify(session));
+      localStorage.setItem(
+        "minted-panel-active-org",
+        JSON.stringify({ state: { activeOrgId: orgId }, version: 0 }),
+      );
+    },
+    [AUTH_KEY, SESSION, ORG_ID] as const,
+  );
+
+  await page.goto("/reporting/rosters/templates");
+  await page.getByRole("combobox", { name: `Grain for ${TEMPLATE.name}` }).click();
+  await page.getByRole("option", { name: "Provider + location", exact: true }).click();
+  await expect(
+    page.getByText("Roster location options exceed the 5,000 record selection limit"),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Map fields/ })).toBeDisabled();
+  expect(pageOffsets).toContain(5000);
+  expect(createCount).toBe(0);
+});
