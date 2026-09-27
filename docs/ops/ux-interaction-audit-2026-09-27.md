@@ -32,7 +32,7 @@ The [route ledger](ux-interaction-routes-2026-09-27.tsv) identifies 38 active ad
 | [#435](https://github.com/sonny303/mintedpanel/pull/435) | Provider detail read recovery | Provider license fix must account for the same route file. |
 | [#436](https://github.com/sonny303/mintedpanel/pull/436) | Group facilities read recovery | No duplicate facilities loader fix proposed. |
 
-The PRs were open and unmerged when the target was checked; their code is **not** part of the deployed SHA. Local branch diffs confirm the scopes above. A later live GitHub refresh failed due network access, so current PR status must be refreshed before opening new PRs.
+The PRs remain open drafts in a fresh GitHub check on 2026-09-27; their code is **not** part of the deployed SHA. Local branch diffs confirm the scopes above.
 
 ## Date-control cross-app pass
 
