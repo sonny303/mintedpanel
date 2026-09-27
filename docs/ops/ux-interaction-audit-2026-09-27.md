@@ -1,0 +1,100 @@
+# Minted Panel staging UX interaction audit — 2026-09-27
+
+## Target, boundaries, and evidence
+
+| Item | Verified value |
+| --- | --- |
+| Admin staging URL | `https://staging.mintedpanel.com` |
+| Vercel project | `mintedpanel-staging-web` (`prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch`) |
+| Alias deployment | `dpl_EMpTv6SShNE11MRiHaLhHEyY5PWx`, READY, resolved from the staging alias |
+| Deployed source | `main` at `2ea77b7a26083ed2cf90504f96d11601d88882d1`; local `origin/main` matches |
+| Role | Signed-in Admin (Sowmya S) |
+| Synthetic write scope | `UX Audit Synthetic 2026-09-27` organization only; fictional names, `example.test` contacts, two groups, two facilities, one provider, one synthetic payer, two cases |
+| Method | Browser actions and accessibility/screenshot observations on deployed staging; matching source and requirements inspected separately. No external payer submission, real messages, customer data changes, merge, or deployment. |
+
+The [route ledger](ux-interaction-routes-2026-09-27.tsv) identifies 38 active admin page routes and their remaining gates. The [control ledger](ux-interaction-controls-2026-09-27.tsv) gives each inventoried actionable control a location, expected result, observed result, evidence, source pointer, and `TESTED`, `FAILED`, or `BLOCKED` status. `TESTED` means the recorded interaction was exercised, not that the entire page is defect-free. `FAILED` is observed staging behavior. `BLOCKED` names the exact unverified action or missing fixture. A page load alone never completes coverage.
+
+**Control totals:** 447 inventoried; 378 `TESTED`, 23 `FAILED`, 46 `BLOCKED`. No inventoried control lacks a status. Complete interaction coverage is **not** claimed because blocked controls remain, including the contracts matrix and file uploads. Repeated rows for one failure represent different controls or retests, not unique defects.
+
+## Product and route cross-check
+
+- Requirements used: `E6.1-sidebar-surface-restructure.md` (six starting points and legacy redirects), `E6.5-payer-setup-consolidation.md`, `E2.1-case-creation-4part-key.md` F2.1.4 (manual payer catalog), `E4.0-payer-pipeline.md` (governed approval/denial dates), `E1.2-facilities-locations.md`, `provider-roster-engine-wp1.3-requirements.md`, and `group-contract-workflow-spike.md` (matrix grain and tentative/confirmed/expiration dates).
+- Source route scan found 92 file routes: 35 legacy redirect stubs and 57 other routes, including wrappers and public/token/dev surfaces. The six sidebar destinations, their active child routes, onboarding, generation, run history, tasks, roster mapping/validation/export/history, and the account route are in the route ledger. Public `/contact`, `/share/$token`, `/capture/$token`, `/ssn-intake/$token`, authentication, and `/dev/*` are not admin workspace pages. `/share/$token` was used only to verify a synthetic organization-scoped link and its revocation.
+- The legacy `admin/templates` list redirects to Payer Setup; `/admin/templates/new` remains the authoring page. Legacy `/admin/payers/*`, `/admin/portals`, `/admin/audit`, `/home`, `/work`, `/portfolio`, `/reports`, `/progress`, and other retired routes redirect to the newer homes. Redirect source was inspected; these are not counted as extra UX pages.
+
+### Open PR boundary
+
+| PR | Open draft scope | This audit's separation |
+| --- | --- | --- |
+| [#432](https://github.com/sonny303/mintedpanel/pull/432) | Earlier selected-journey audit | This is a new systematic ledger and finding set. |
+| [#433](https://github.com/sonny303/mintedpanel/pull/433) | Groups read recovery | No duplicate group loader fix proposed. |
+| [#434](https://github.com/sonny303/mintedpanel/pull/434) | Empty provider roster export | No duplicate empty-export fix proposed. |
+| [#435](https://github.com/sonny303/mintedpanel/pull/435) | Provider detail read recovery | Provider license fix must account for the same route file. |
+| [#436](https://github.com/sonny303/mintedpanel/pull/436) | Group facilities read recovery | No duplicate facilities loader fix proposed. |
+
+The PRs were open and unmerged when the target was checked; their code is **not** part of the deployed SHA. Local branch diffs confirm the scopes above. A later live GitHub refresh failed due network access, so current PR status must be refreshed before opening new PRs.
+
+## Date-control cross-app pass
+
+| Surface | Control type | Observed interaction | Result / limit |
+| --- | --- | --- | --- |
+| Provider DOB, graduation, onboarding start/license | Native `date` inputs | ISO value/keyboard entry; impossible Feb 30 rejected by browser; valid DOB and graduation saved/reopened; license dates saved/reopened | Native browser popup month/year UI **blocked** after in-app browser tab crashed opening a native policy date popup. Typed/native values were still tested. |
+| Group insurance | Native `date` inputs | Effective Jan 1 2026 and expiration Jan 1 2025 saved; corrected to Jan 1 2027 | **FAILED:** reversed interval accepted and displayed Expired. |
+| Audit Log From/To | Native `date` inputs | Set, clear separately, reject impossible Feb 30, filter results | `TESTED`; native popup visual/month-year comparison blocked as above. |
+| Payer Setup overview/contact/Manage | No date input in the live controls or matching payer-admin source | Payer detail tabs and management dialogs inspected | Payer Setup itself has no calendar to compare. Its contract-related workflow is the separate Reporting Center matrix. |
+| Contract matrix drawer | Native `date` inputs for Tentative, Effective, Expiration | Source inspected | **BLOCKED:** matrix load failure prevents opening any payer/state cell and testing date selection, validation, save/reopen. |
+| Facility go-live and assignment start | Shared custom `DatePicker` | Previous/next month; Sep 30 and Sep 1 selected; optional go-live cleared by selected-day click; saved and reopened; Cancel discarded a draft clear | `TESTED`; trigger renders `MMM d, yyyy`. |
+| Case submitted, expected/confirmed effective, contract executed, approval | Shared custom `DatePicker` | Day selection; keyboard Tab/Enter/Right/PageDown/Shift+PageDown in approval; case dates saved/reopened | **FAILED:** Escape from nested Contract executed calendar can close the dialog while leaving the page pointer-locked. Final approval blocked without payer decision. |
+| Provider enrollment fact and document metadata | Shared custom `DatePicker` | Picker opens, month navigation and document draft date selection; document effective Sep 1 and expiration Aug 1 accepted as draft | Enrollment Escape reproduces pointer lock. Document upload final chronology behavior is **source-only risk** because file chooser prevented save. |
+
+The app currently mixes browser-native `mm/dd/yyyy` presentation with custom `MMM d, yyyy` picker triggers. Shared custom component use does **not** make behavior consistent: the nested Escape defect and field-specific chronological validation differ by workflow. Source-only contract/document date risks remain separate from observed saved-data defects.
+
+## Ranked findings — smallest safe fix through human review
+
+| ID / severity / lane | Reproduce on staging; expected → actual; impact | Evidence and deployed source | PR boundary |
+| --- | --- | --- | --- |
+| **F01 · P2 · small agent fix** | Provider → Internal Notes → use `+`; Template Wizard → custom action Add field/remove and Add step/remove. Icon controls should have accessible names → Notes add, field remove, and step remove expose unnamed buttons. Screen-reader/voice users cannot identify actions reliably. | Ledger `V053`, `T007`, `T011`; AX tree plus screenshot. `src/routes/providers.$id.index.tsx`, `src/components/templates/TemplateWizard.tsx`. | Separate tiny accessibility PR; no overlap with #432–#436 except provider route file in #435, so rebase/check that file. |
+| **F02 · P3 · small agent fix** | Provider Groups & facilities with every available group already joined → `+ Add group` disabled with no visible reason; add a second group and remove it, and control enables again. Expected explanation such as “All groups assigned.” Admin cannot tell whether permission, loading, or eligibility prevents action. | `V024`, `V055–V057`; AX and screenshot. `src/components/providers/GroupsFacilitiesPanel.tsx`. | Standalone copy/disabled-reason PR. |
+| **F03 · P2 · small agent fix** | Reporting Center → Audit Log → User filter before narrowing Action → raw `7be296c5` appears although row actor displays Sowmya S; after `UPDATE` filtering it resolves. Expected stable human name. Raw ID makes auditing hard to scan. | `R012`; AX filter observations. `src/components/reporting/AuditLogReport.tsx:208` uses a UUID fallback when building user options. | Separate label-stability PR. |
+| **F04 · P2 · small agent fix** | Submit empty Add person, Payer Add contact, group document Upload, or provider document Upload; fill the missing field. Expected inline error to clear when valid → stale required error remains until resubmit. This presents valid input as invalid and slows correction. | `O005`, `P037`, `V051`, `W070`; staged screenshots/AX. `src/components/org/PartiesManager.tsx`, `src/components/payer-admin/PayerOverviewTab.tsx`, `src/components/documents/UploadDocumentDialog.tsx`. | Split into document dialog and person/contact form PRs for review size. |
+| **F05 · P2 · small agent fix** | Group → Add policy: effective Jan 1 2026, expiration Jan 1 2025 → Save. Provider → Licenses: issued Jan 1 2026, expiration Jan 1 2025 → Save. Expected end date on/after start or issue → both save successfully; policy shows Expired and license becomes expired. Chronologically impossible credentials can enter operational records. Corrected fixture dates to Jan 1 2027. | `I003–I004`, `V031–V032`; saved/reopened staging AX. `src/components/groups/InsurancePanel.tsx:201`, `src/routes/providers.$id.index.tsx` license editor. | Two small validation PRs; provider route conflict-check against #435. |
+| **F06 · P2 · scoped agent fix** | Create global synthetic payer; in synthetic org, open manual case before attaching payer. Expected full org-visible catalog per E2.1 F2.1.4 → only attached Tricare offered; synthetic payer appears after attachment. Manual exception path cannot create a case for an unattached catalog payer. | `C004`; staged before/after selector. `src/components/cases/ManualCaseModal.tsx:88–95`. | Requirements-backed case picker PR; verify case creation authorization remains org-scoped. |
+| **F07 · P2 · diagnose then agent fix** | Roster Engine → BCBS NC Roster → select advertised `Provider + location` grain → Map fields. Expected mapping editor to open → “Roster request is incomplete or invalid”; Provider grain opens it. This blocks location-grain roster setup. | `R031–R032`; reproduced again with two synthetic groups/facilities. `src/components/rosters/TemplateCatalog.tsx:40–48` starts mapping with empty scope; `src/services/rosterEngineData.ts:342` calls save RPC. Exact backend rejection cause not proven. | Separate roster mapping PR after a focused create-contract test; #434 addresses a different empty provider export path. |
+| **F08 · P1 · agent fix with independent review** | Case → Update status → Approved → open Contract executed calendar → Escape; or Provider → Enrollments → Add enrollment → open Effective date → Escape. Expected picker/dialog to close and page to remain clickable → dialog closes, `document.body.style.pointerEvents` remains `none`, and all clicks fail until reload. Admin can lose in-progress work. | `C019`, `V040`; staging AX, screenshot, DOM-backed pointer style in two workflows. `src/components/cases/CaseStatusDialogs.tsx`, `src/components/providers/EnrollmentsPanel.tsx`, `src/components/DatePicker.tsx`. | One focused nested-dialog interaction PR with browser regression proof. |
+| **F09 · P2 · human product decision** | Provider Groups & facilities → Remove sole primary facility. Expected impact/confirmation before an action that removes generation eligibility → assignment removed immediately; provider showed no facility until restored. This can silently remove cases from candidate generation. | `V028–V029`; staging AX and screenshot, assignment restored Sep 1. `src/components/providers/GroupsFacilitiesPanel.tsx:321`. | Decide whether removal requires confirmation and whether an eligible replacement must be chosen first; then implement. |
+| **F10 · P1 · hosted diagnosis / human review** | Reporting Center → Group Contracts Matrix → Retry, with synthetic group, facility, and payer target present. Expected payer × state grid → repeated “Failed to load group contracts matrix.” Every matrix control and contract date is inaccessible. | `R001–R003`, `R046`, `R063`, `K001–K011`; staging AX. `src/components/reports/GroupContractsMatrix.tsx:118–141` combines groups/payers/contracts queries and hides which failed. The failing query/schema cause is not proven. | Diagnose staging read/schema/RLS before proposing code or migration; no hosted change without release approval. |
+
+### Source-only risks, not observed staging defects
+
+| Risk | Source evidence | Why not a confirmed staging defect |
+| --- | --- | --- |
+| Contract matrix cells are clickable `<td>` with no keyboard role/tabIndex; Audit Log expansion and insurance policy rows use clickable rows similarly. | `src/components/reports/GroupContractsMatrix.tsx:306`, `src/components/reporting/AuditLogReport.tsx:397`, `src/components/groups/InsurancePanel.tsx:133–135`. | Matrix never loaded; keyboard activation of these exact rows was not completed. |
+| Document upload checks required expiration but does not compare expiration to effective date; contract drawer accepts three native date strings without chronological relationship checks in its save handler. | `src/components/documents/UploadDocumentDialog.tsx:94–122`, `src/lib/documents.ts:223–231`, `src/components/reports/ContractDetailDrawer.tsx:90–111`. | Document file chooser blocked final save; contract drawer blocked by matrix failure. Draft document dates alone are insufficient to assert saved invalid data. |
+
+## Blocked controls and exact reason
+
+| Gate | Affected controls | Next fixture or access needed |
+| --- | --- | --- |
+| In-app browser file chooser failure | Group/facility/provider CSV imports, document uploads, import preview/commit, expiration-tracked document report | A working browser upload path for a locally prepared synthetic CSV/PDF. No staging upload failure is asserted. |
+| Native browser date popup crashed in-app tab | Visual month/year navigation and popup keyboard comparison for native inputs | Admin staging session in Chrome or a browser where native popup stays open. Typed native values were tested. |
+| Contract matrix load error | Group/payer filter, every matrix cell, drawer status/notes/dates, Save/Cancel | Repair/diagnose failed staging read, then rerun matrix control ledger. |
+| No safe factual payer artifact | Final Approved, issued payer IDs, enrollment fact, external submission | A clearly labeled synthetic approved/issued-ID fixture or approved testing convention. We did not fabricate a real payer decision. |
+| No inbound lead or verified payer workbook | Lead Convert/Dismiss; roster immutable export/download | Synthetic lead via a safe internal fixture path; current payer workbook/schema approval and complete mapping. Public `/contact` submission would send a real inquiry. |
+| Preservation and access boundaries | Permanent case deletion, real-organization switching, real admin account save/sign-out, provider termination, active fixture deactivation, public intake sharing | Only a dedicated disposable fixture and/or a specific final-action authorization where appropriate. Confirmation steps were exercised where available. |
+
+The local [facility import CSV](ux-audit-facility-import.csv) is a synthetic test fixture prepared for the blocked upload path; it was not imported into staging.
+
+## Bite-sized PR plan after audit
+
+| Order | Branch / draft PR scope | Implementation and review proof | Overlap |
+| --- | --- | --- | --- |
+| 1 | `feature/ux-accessible-actions` — names for note add and Template Wizard remove controls | Sol 6/xhigh; independent Astra/high; accessibility tree and keyboard checks | Check provider route against #435. |
+| 2 | `feature/ux-inline-error-reset` — document dialog stale validation only | Sol 6/xhigh; Astra/high; wrong→corrected input and resubmit test | None of #432–#436. |
+| 3 | `feature/ux-audit-user-label` — stable Audit Log user names | Sol 6/xhigh; Astra/high; fresh load/filter/reopen | None. |
+| 4 | `feature/ux-insurance-date-order` — policy chronological validation | Sol 6/xhigh; Astra/high; invalid and valid save cases | None. |
+| 5 | `feature/ux-license-date-order` — provider license chronological validation | Sol 6/xhigh; Astra/high; invalid and valid save cases | Rebase/check #435 before PR. |
+| 6 | `feature/ux-nested-date-escape` — restore page interaction on nested picker Escape | Sol 6/xhigh; Astra/high; browser regression for both approval/enrollment | None, but interaction risk merits separate review. |
+| 7 | `feature/ux-manual-case-payer-catalog` — requirements-backed picker scope | Sol 6/xhigh; Astra/high; org-scoped catalog tests | None. |
+| Later | Roster grain create contract; contract matrix hosted diagnosis; primary facility removal decision | Investigate first; do not bundle with small fixes | #434 and hosted release boundaries. |
+
+Every implementation PR is a separate feature branch from the verified base, small enough to review on its own, linked from this audit index, and left in draft. No merge or deployment is authorized.
