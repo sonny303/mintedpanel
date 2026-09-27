@@ -163,6 +163,16 @@ function ProviderRecordPage() {
   if (providerQ.isLoading) {
     return <div className="h-40 animate-pulse rounded-md bg-mp-muted" />;
   }
+  if (providerQ.isError) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[13px] text-muted-foreground">Couldn't load this provider.</p>
+        <Button variant="outline" onClick={() => void providerQ.refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
   const provider = providerQ.data;
   if (!provider) {
     return <p className="text-[13px] text-muted-foreground">Provider not found.</p>;
