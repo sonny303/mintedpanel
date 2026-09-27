@@ -99,10 +99,12 @@ The local [facility import CSV](ux-audit-facility-import.csv) is a synthetic tes
 
 ### Draft PR tracker
 
-| Finding                         | Draft PR                                                 | Review state                                                       |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
-| F03 · Audit Log user label      | [#438](https://github.com/sonny303/mintedpanel/pull/438) | Sol 6/xhigh implementation; independent Astra/high review complete |
-| F05 · Group policy date order   | [#439](https://github.com/sonny303/mintedpanel/pull/439) | Sol 6/xhigh implementation; independent Astra/high review complete |
-| F02 · Disabled Add group reason | [#440](https://github.com/sonny303/mintedpanel/pull/440) | Sol 6/xhigh implementation; independent Astra/high review complete |
+| Finding                          | Draft PR                                                 | Review state                                                       |
+| -------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| F03 · Audit Log user label       | [#438](https://github.com/sonny303/mintedpanel/pull/438) | Sol 6/xhigh implementation; independent Astra/high review complete |
+| F05 · Group policy date order    | [#439](https://github.com/sonny303/mintedpanel/pull/439) | Sol 6/xhigh implementation; independent Astra/high review complete |
+| F02 · Disabled Add group reason  | [#440](https://github.com/sonny303/mintedpanel/pull/440) | Sol 6/xhigh implementation; independent Astra/high review complete |
+| F01 · Accessible icon actions    | [#441](https://github.com/sonny303/mintedpanel/pull/441) | Sol 6/xhigh implementation; independent Astra/high review complete |
+| F04 · Document field error reset | [#442](https://github.com/sonny303/mintedpanel/pull/442) | Sol 6/xhigh implementation; independent Astra/high review complete |
 
 Every implementation PR is a separate feature branch from the verified base, small enough to review on its own, linked from this audit index, and left in draft. No merge or deployment is authorized.
