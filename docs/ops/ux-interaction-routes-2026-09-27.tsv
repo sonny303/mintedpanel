@@ -1,0 +1,40 @@
+route	status	reachability	page_observation	remaining_gap	source
+/account	TESTED	Account menu	Loaded admin profile; dirty draft discarded on refresh	Real account save and sign-out blocked	src/routes/account.tsx
+/admin/payer-admin/setup	TESTED	Sidebar Payer Setup	Catalog search, filters, pagination and empty states exercised	Archived-row inclusion lacks archived fixture	src/routes/admin.payer-admin.setup.tsx
+/admin/payer-admin/setup/$payerId	TESTED	Payer Setup row	Synthetic payer overview, contacts, tabs, scorecard and manage dialogs exercised	Final archive/merge blocked to preserve fixture	src/routes/admin.payer-admin.setup_.$payerId.tsx
+/admin/payers/new	TESTED	Payer Setup Add payer	Synthetic payer created with validation and fields	None	src/routes/admin.payers_.new.tsx
+/admin/templates/new	TESTED	Payer Setup Author template	Wizard steps, controls, validation and cancellation exercised	Saved draft unclear; publish and external form training not exercised	src/routes/admin.templates.new.tsx
+/admin/templates/$id	BLOCKED	Saved template edit link	No verified saved template fixture from synthetic wizard	Requires safe saved template fixture	src/routes/admin.templates.$id.tsx
+/cases	TESTED	Sidebar Cases	Queue, filters, pivots and manual case creation exercised	External submission blocked	src/routes/cases.index.tsx
+/cases/$id	TESTED	Case row	Synthetic cases C-1071/C-1072 details, tasks, dates, status and touch controls exercised	Approval, permanent delete and external work blocked	src/routes/cases.$id.tsx
+/generation	TESTED	Provider Generate cases	Synthetic candidate preview, exclusions and one confirmed run exercised	None for synthetic eligible candidate	src/routes/generation.tsx
+/generation/runs	TESTED	Generation Run history	One synthetic run listed and opened	None	src/routes/generation_.runs.index.tsx
+/generation/runs/$runId	TESTED	Run history Open run	Immutable candidate disposition and case link displayed	None	src/routes/generation_.runs.$runId.tsx
+/groups	FAILED	Sidebar Groups	Two synthetic groups listed; second group opened; fresh staging AX showed no Create group action	Explicit Create group requirement fails in multiple-record state; zero/one states and post-save destination need live retest	src/routes/groups.index.tsx
+/groups/$groupId	TESTED	Group list row	Facts, facilities, payer network, insurance and documents displayed	Document upload blocked by chooser	src/routes/groups.$groupId.index.tsx
+/groups/$groupId/facilities	TESTED	Group Facilities card	Filters, accordions, edit, deactivate confirmation and CSV guidance exercised	CSV preview blocked by chooser	src/routes/groups.$groupId.facilities.tsx
+/groups/$groupId/payer-network	TESTED	Group Payer Network card	Targets, provider expansion, IDs and removal confirmation exercised	Actual payer-issued ID unavailable	src/routes/groups.$groupId.payer-network.tsx
+/import/$runId	BLOCKED	CSV upload completion	No import run created because browser chooser failed	Preview and commit blocked by IAB file chooser	src/routes/import.$runId.tsx
+/onboarding	TESTED	Organization switcher Add organization	New synthetic org created; validation and share dialog exercised	External onboarding share blocked	src/routes/onboarding.index.tsx
+/onboarding/wizard	TESTED	Org Detail Open setup wizard	Synthetic org/group/facility/provider/assignment/payer workflow exercised	CSV/document upload and external share blocked	src/routes/onboarding.wizard.tsx
+/org-detail	TESTED	Sidebar Org Detail	Members and roles, add/edit/remove synthetic person, setup link exercised	Real admin role change blocked	src/routes/org-detail.tsx
+/providers	TESTED	Sidebar Providers	Search, filters, export, import accordion and provider navigation exercised	CSV preview blocked by chooser	src/routes/providers.index.tsx
+/providers/$id	TESTED	Provider row	Seven sections, identity, licenses, groups/facilities, cases, notes and dialogs exercised	Vault entry, factual enrollment, document upload and termination blocked	src/routes/providers.$id.index.tsx
+/reporting	TESTED	Sidebar Reporting Center	All report cards inventoried and destination pages opened	Contract matrix child fails	src/routes/reporting.index.tsx
+/reporting/portfolio	TESTED	Reporting card	Synthetic org row, filters and scoped share create/revoke exercised	None for synthetic share cycle	src/routes/reporting.portfolio.tsx
+/reporting/launches	TESTED	Reporting card	Synthetic go-live and at-risk row loaded	No page-specific action controls	src/routes/reporting.launches.tsx
+/reporting/facilities-without-providers	TESTED	Reporting card	Synthetic unstaffed facility loaded	No page-specific action controls	src/routes/reporting.facilities-without-providers.tsx
+/reporting/locations-per-group	TESTED	Reporting card	Both synthetic group counts loaded	No page-specific action controls	src/routes/reporting.locations-per-group.tsx
+/reporting/denials	TESTED	Reporting card	Synthetic denial, provider/payer pivots, CSV and case navigation exercised	None for synthetic denial fixture	src/routes/reporting.denials.tsx
+/reporting/billing-readiness	TESTED	Reporting card	Synthetic provider lookup, filters, change feed and digest export exercised	No actual newly billable event fixture	src/routes/reporting.billing-readiness.tsx
+/reporting/expiring-credentials	TESTED	Reporting card	Empty state loaded	No uploaded expiration-tracked document because chooser failed	src/routes/reporting.expiring-credentials.tsx
+/reporting/rosters/templates	TESTED	Reporting card	Template selection and mapping entry exercised	Provider+location grain mapping error requires follow-up	src/routes/reporting.rosters.templates.tsx
+/reporting/rosters/mapping/$id	TESTED	Roster template Map fields	Synthetic mapping selection, one mapped field, transform and save exercised	Unmapped required fields remain	src/routes/reporting.rosters.mapping.$id.tsx
+/reporting/rosters/validation/$id	TESTED	Mapping Review validation	Issue list, errors filter, refresh and one test override exercised	Hard errors remain	src/routes/reporting.rosters.validation.$id.tsx
+/reporting/rosters/export/$id	TESTED	Validation Export	Format selection and disabled export reason inspected	19 hard errors and unverified payer workbook block file creation	src/routes/reporting.rosters.export.$id.tsx
+/reporting/rosters/history	TESTED	Roster Engine Export history	Empty state loaded	No immutable export fixture while validation blocks export	src/routes/reporting.rosters.history.tsx
+/reporting/contracts-matrix	FAILED	Reporting card	Failed to load group contracts matrix after Retry	All in-matrix controls including contract date drawer blocked	src/routes/reporting.contracts-matrix.tsx
+/reporting/audit-log	TESTED	Reporting card	Date filters, action/entity/user, reset and event expansion exercised	User filter raw UUID defect	src/routes/reporting.audit-log.tsx
+/reporting/leads	TESTED	Reporting card	No inbound leads empty state loaded	Convert/dismiss require lead; public inquiry would send real message	src/routes/reporting.leads.tsx
+/tasks/$id	TESTED	Case task link	Synthetic SOP task detail opened	External execution blocked	src/routes/tasks.$id.tsx
+/global	TESTED	Shared app shell (not a distinct URL)	Sidebar, global provider search, account menu and org switcher inventoried	Real organization switching and sign-out blocked	src/components/layout/AppShell.tsx
