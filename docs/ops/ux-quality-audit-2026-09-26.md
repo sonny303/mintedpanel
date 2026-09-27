@@ -1,6 +1,6 @@
 # UX quality audit — source baseline and ranked repair queue
 
-Baseline: `origin/main` at `2ea77b7` (2026-09-26). This is a source and existing-test review. The public staging alias responded, but authenticated admin reporting remains unverified until a synthetic admin signs in. No production or customer data was used.
+Baseline: `origin/main` at `2ea77b7` (2026-09-26). This is a source and existing-test review plus read-only inspection of the current `staging.mintedpanel.com` alias with an admin session. The alias's deployed source SHA was not available from the browser. No data was changed or copied into the report.
 
 ## Requirements
 
@@ -14,11 +14,11 @@ Baseline: `origin/main` at `2ea77b7` (2026-09-26). This is a source and existing
 
 | Journey | Entry and completion checked in source | Finding status | Runtime status |
 | --- | --- | --- | --- |
-| Provider roster → create → record | Roster actions, create result/toasts, record read | UX-03 to UX-05 | Synthetic browser tests exist; staging pending |
-| Groups → hub → facilities | Single-group redirect, empty state, breadcrumb, facility list | UX-01, UX-02 | Synthetic browser tests exist; staging pending |
+| Provider roster → create → record | Roster actions, create result/toasts, record read | UX-03 to UX-05 | Roster loaded in admin staging; UX-05 reproduced with a no-match filter. Create and record not exercised. |
+| Groups → hub → facilities | Single-group redirect, empty state, breadcrumb, facility list | UX-01, UX-02 | Admin staging loaded the single-group hub; facilities page and failed-read paths not exercised. |
 | Payer Setup → payer detail | Catalog/readiness loading and error paths | No new finding | Staging pending |
-| Cases → detail → task | List read failure, detail retry, task retry, mutation feedback | No new finding | Staging pending |
-| Reporting Center → billing readiness | Report entry, source-read failure and retry | No new finding | Admin staging pending |
+| Cases → detail → task | List read failure, detail retry, task retry, mutation feedback | No new finding | Empty cases list loaded in admin staging; detail and task not exercised. |
+| Reporting Center → billing readiness | Report entry, source-read failure and retry | No new finding | Admin staging passed entry, lookup orientation, Change Feed empty state, and return to Reporting Center. Forced read failure not exercised. |
 | Facility deactivate | Confirmation and mutation feedback inspected | No new finding | Staging pending |
 | Provider create validation | Required name fields and mutation failure feedback inspected | No new finding | Staging pending |
 
@@ -34,7 +34,7 @@ Priority ranks user impact; lane ranks change risk. `S` means a small route-leve
 | UX-02 | P1 · high confidence | `GroupFacilitiesContent.tsx` derives empty facilities and zero provider counts from failed queries. | A group can appear to have no locations or providers, suppressing the Generate cases entry. | M / agent draft PR after UX-01 | Failed facility/assignment reads are explicit; no derived zero state is shown until required reads succeed. |
 | UX-03 | P1 · high confidence | `providers.$id.index.tsx` renders “Provider not found” whenever the provider query has no data, including `isError`. | A transient read failure is presented as a deleted or inaccessible provider. | S / agent draft PR | Read failure has a distinct message and Retry; actual missing record keeps the current not-found outcome. |
 | UX-04 | P1 · high confidence | `providers.index.tsx` checks only the provider read for error; group, facility assignment, license, and case reads fall back to empty arrays. | The roster can display false zero counts, missing groups/licenses, or misleading gaps. | M / human product review | Agree which derived columns fail closed together before changing the page. |
-| UX-05 | P2 · high confidence | `providers.index.tsx` shows Export roster with zero matching rows; `handleExportRoster` returns without feedback. | The primary export control can appear broken after filtering. | S / agent draft PR | Export is visibly unavailable with zero matches and works for one or more matches. |
+| UX-05 | P2 · high confidence | `providers.index.tsx` shows Export roster with zero matching rows; `handleExportRoster` returns without feedback. Admin staging reproduced: a no-match search left Export enabled and clicking it showed no change. | The primary export control can appear broken after filtering. | S / agent draft PR | Export is visibly unavailable with zero matches and works for one or more matches. |
 
 ## Repair order and handoff
 
@@ -45,6 +45,6 @@ Priority ranks user impact; lane ranks change risk. `S` means a small route-leve
 
 ## Staging qualification still needed
 
-- Identify the current Vercel staging deployment and served source SHA, then sign in with a synthetic admin account.
-- Verify Reporting Center orientation, report entry, billing-readiness load/error feedback, and return path.
+- Identify the served source SHA of the current Vercel staging alias; the browser did not expose it.
+- Verify billing-readiness error feedback with a safe synthetic failure scenario; normal admin entry and return passed.
 - Owner preview/UAT sign-off for changed journeys after the draft PRs are ready.
