@@ -418,46 +418,6 @@ function seedAuth(context: {
   );
 }
 
-test("F05: license editor blocks reversed dates inline and accepts equal dates", async ({
-  context,
-  page,
-}) => {
-  const fixtures = baseFixtures();
-  const { handler, requests } = makeHandler(fixtures);
-  await context.route(/\/(rest|auth)\/v1\//, handler);
-  await seedAuth(context);
-
-  await page.goto("/providers/pr-brooke#licenses");
-  await expect(page.getByRole("heading", { name: "Licenses" })).toBeVisible({ timeout: 30000 });
-  await page.getByRole("button", { name: "Add license" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add license" });
-  await dialog.getByRole("combobox", { name: "State" }).click();
-  await page.getByRole("option", { name: "CO", exact: true }).click();
-  await dialog.getByLabel("Issued").fill("2026-01-01");
-  await dialog.getByLabel("Expires").fill("2025-01-01");
-
-  await expect(dialog.getByRole("alert")).toHaveText(
-    "Expiration date must be on or after issue date.",
-  );
-  await expect(dialog.getByLabel("Expires")).toHaveAttribute("aria-invalid", "true");
-  await dialog.getByRole("button", { name: "Add license" }).click();
-  expect(requests.filter((r) => r.path === "state_licenses" && r.method !== "GET")).toEqual([]);
-
-  await dialog.getByLabel("Expires").fill("2026-01-01");
-  await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Add license" }).click();
-  await expect(dialog).toHaveCount(0);
-  expect(fixtures.state_licenses).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        state: "CO",
-        issue_date: "2026-01-01",
-        expiration_date: "2026-01-01",
-      }),
-    ]),
-  );
-});
-
 test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field; + Add facility persists; denial history preserved on the cases panel", async ({
   context,
   page,
@@ -889,4 +849,44 @@ test("MP-20/34: create and edit gender while preserving an existing legacy value
   expect(clearGenderPatches).toHaveLength(1);
   expect(clearGenderPatches[0].body).toEqual({ gender: null });
   expect(fixtures.providers.find((provider) => provider.id === "pr-brooke")?.gender).toBeNull();
+});
+
+test("F05: license editor blocks reversed dates inline and accepts equal dates", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  const { handler, requests } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/pr-brooke#licenses");
+  await expect(page.getByRole("heading", { name: "Licenses" })).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Add license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add license" });
+  await dialog.getByRole("combobox", { name: "State" }).click();
+  await page.getByRole("option", { name: "CO", exact: true }).click();
+  await dialog.getByLabel("Issued").fill("2026-01-01");
+  await dialog.getByLabel("Expires").fill("2025-01-01");
+
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Expiration date must be on or after issue date.",
+  );
+  await expect(dialog.getByLabel("Expires")).toHaveAttribute("aria-invalid", "true");
+  await dialog.getByRole("button", { name: "Add license" }).click();
+  expect(requests.filter((r) => r.path === "state_licenses" && r.method !== "GET")).toEqual([]);
+
+  await dialog.getByLabel("Expires").fill("2026-01-01");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Add license" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(fixtures.state_licenses).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        state: "CO",
+        issue_date: "2026-01-01",
+        expiration_date: "2026-01-01",
+      }),
+    ]),
+  );
 });
