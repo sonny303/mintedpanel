@@ -10,7 +10,7 @@ route	status	reachability	page_observation	remaining_gap	source
 /generation	TESTED	Provider Generate cases	Synthetic candidate preview, exclusions and one confirmed run exercised	None for synthetic eligible candidate	src/routes/generation.tsx
 /generation/runs	TESTED	Generation Run history	One synthetic run listed and opened	None	src/routes/generation_.runs.index.tsx
 /generation/runs/$runId	TESTED	Run history Open run	Immutable candidate disposition and case link displayed	None	src/routes/generation_.runs.$runId.tsx
-/groups	TESTED	Sidebar Groups	Two synthetic groups listed; second group opened	None	src/routes/groups.index.tsx
+/groups	FAILED	Sidebar Groups	Two synthetic groups listed; second group opened; fresh staging AX showed no Create group action	Explicit Create group requirement fails in multiple-record state; zero/one states and post-save destination need live retest	src/routes/groups.index.tsx
 /groups/$groupId	TESTED	Group list row	Facts, facilities, payer network, insurance and documents displayed	Document upload blocked by chooser	src/routes/groups.$groupId.index.tsx
 /groups/$groupId/facilities	TESTED	Group Facilities card	Filters, accordions, edit, deactivate confirmation and CSV guidance exercised	CSV preview blocked by chooser	src/routes/groups.$groupId.facilities.tsx
 /groups/$groupId/payer-network	TESTED	Group Payer Network card	Targets, provider expansion, IDs and removal confirmation exercised	Actual payer-issued ID unavailable	src/routes/groups.$groupId.payer-network.tsx
