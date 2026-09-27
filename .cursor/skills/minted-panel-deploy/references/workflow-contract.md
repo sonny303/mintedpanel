@@ -7,17 +7,17 @@ the source.
 
 ## Identities
 
-| | |
-| --- | --- |
-| Repository | `sonny303/mintedpanel` |
-| Production approver | GitHub user id `261707544` only |
-| Production Vercel project | `prj_ILhPJbkyaiptdVA8DtsmNyw3tiub` |
-| Staging Vercel project | `prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch` |
-| Vercel team | `team_230fpJ9MgCj9ssW3LiIckfyA` |
-| Production Supabase | `fkvuhfsqcmujywzgczmc` |
-| Staging Supabase | `vmznysvietfaddakkegt` |
-| Production aliases | `mintedpanel.com`, `www.mintedpanel.com`, `mintedpanel.vercel.app` |
-| Staging aliases (intended) | `mintedpanel-staging.vercel.app`, `staging.mintedpanel.com` |
+|                            |                                                                    |
+| -------------------------- | ------------------------------------------------------------------ |
+| Repository                 | `sonny303/mintedpanel`                                             |
+| Production approver        | GitHub user id `261707544` only                                    |
+| Production Vercel project  | `prj_ILhPJbkyaiptdVA8DtsmNyw3tiub`                                 |
+| Staging Vercel project     | `prj_1t7NkRJMkjTuFXEBEP4GjfN4B6Ch`                                 |
+| Vercel team                | `team_230fpJ9MgCj9ssW3LiIckfyA`                                    |
+| Production Supabase        | `fkvuhfsqcmujywzgczmc`                                             |
+| Staging Supabase           | `vmznysvietfaddakkegt`                                             |
+| Production aliases         | `mintedpanel.com`, `www.mintedpanel.com`, `mintedpanel.vercel.app` |
+| Staging aliases (intended) | `mintedpanel-staging.vercel.app`, `staging.mintedpanel.com`        |
 
 Stable staging aliases may still be on the production project's Preview.
 Refresh a live readback before claiming cutover. See

@@ -23,13 +23,13 @@ dispatching or explaining a failure. Do not rediscover this from chat memory.
 
 ## Confirm this process
 
-| Step | What actually happens |
-| --- | --- |
-| Merge / push `main` | CI only. No Vercel deployment. |
-| Staging | Dispatch `staging-delivery.yml` with `ci_run_id` + `source_sha`. |
-| Production | Dispatch `production-release.yml` with `staging_run_id`. |
-| Owner approval | GitHub Environment `Production`, sole reviewer user id `261707544`, on that same run. |
-| Publish | Not reached. `scripts/delivery/cli.mjs` throws `HOSTED_ACTIVATION_BLOCKED` before any provider call. |
+| Step                | What actually happens                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| Merge / push `main` | CI only. No Vercel deployment.                                                                       |
+| Staging             | Dispatch `staging-delivery.yml` with `ci_run_id` + `source_sha`.                                     |
+| Production          | Dispatch `production-release.yml` with `staging_run_id`.                                             |
+| Owner approval      | GitHub Environment `Production`, sole reviewer user id `261707544`, on that same run.                |
+| Publish             | Not reached. `scripts/delivery/cli.mjs` throws `HOSTED_ACTIVATION_BLOCKED` before any provider call. |
 
 `prepare` must succeed before the `production` job is queued (`needs: prepare`).
 A failed prepare never asks for Production approval. Flipping
@@ -82,11 +82,11 @@ A failed prepare never asks for Production approval. Flipping
 Two source gates, plus the hosted Git link. The dashboard Git toggle does not
 replace the file.
 
-| Gate | Where | What fails if you flip it |
-| --- | --- | --- |
-| File | `vercel.json` → `git.deploymentEnabled: false` | Vercel creates no Git deployment for any branch while this commit is what it reads. |
-| Test | `scripts/release/source-controls.test.mjs`, assertion `config.git?.deploymentEnabled === false` | CI job **Release guardrails** (`npm run test:release`). Deleting the `git` block fails too (`undefined !== false`). Vercel would then default Git deploys to enabled. |
-| Hosted link | `vercel git disconnect` readback | Source `false` is not proof the project Git link is gone. Staging readiness wants the link absent **and** the source flag false. |
+| Gate        | Where                                                                                           | What fails if you flip it                                                                                                                                             |
+| ----------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File        | `vercel.json` → `git.deploymentEnabled: false`                                                  | Vercel creates no Git deployment for any branch while this commit is what it reads.                                                                                   |
+| Test        | `scripts/release/source-controls.test.mjs`, assertion `config.git?.deploymentEnabled === false` | CI job **Release guardrails** (`npm run test:release`). Deleting the `git` block fails too (`undefined !== false`). Vercel would then default Git deploys to enabled. |
+| Hosted link | `vercel git disconnect` readback                                                                | Source `false` is not proof the project Git link is gone. Staging readiness wants the link absent **and** the source flag false.                                      |
 
 `gitProviderOptions.createDeployments = "disabled"` only controls GitHub
 deployment records. It does not stop Vercel builds.
