@@ -56,6 +56,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -293,6 +294,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
       - name: Install postgres client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -340,6 +345,9 @@ jobs:
             psql -v ON_ERROR_STOP=1 -f "$f"
             echo "::endgroup::"
           done
+
+      - name: Verify portal field-map flywheel RPC on disposable PostgreSQL
+        run: node scripts/security/verify-portal-field-map-learning.mjs
 
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
