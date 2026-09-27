@@ -171,6 +171,13 @@ export function UploadDocumentDialog({
               onValueChange={(v) => {
                 const selectedKind = v as DocumentKind;
                 setKind(selectedKind);
+                setError((current) =>
+                  current === "Choose a document kind" ||
+                  (kind && current === expirationDateError(kind, null)) ||
+                  (isSignedDate && current === signedDateError("", utcTodayIso()))
+                    ? null
+                    : current,
+                );
                 setEffectiveDate("");
                 setExpirationDate("");
                 if (file && !fileNameEdited) {
@@ -202,6 +209,9 @@ export function UploadDocumentDialog({
               onChange={(e) => {
                 const selected = e.target.files?.[0] ?? null;
                 setFile(selected);
+                if (selected) {
+                  setError((current) => (current === "Choose a file to upload" ? null : current));
+                }
                 const preserveCustomName = fileNameEdited && Boolean(selected);
                 setFileNameEdited(preserveCustomName);
                 setFileName(
@@ -234,7 +244,14 @@ export function UploadDocumentDialog({
               <DatePicker
                 id="doc-signed"
                 value={effectiveDate}
-                onChange={setEffectiveDate}
+                onChange={(next) => {
+                  setEffectiveDate(next);
+                  if (next) {
+                    setError((current) =>
+                      current === signedDateError("", utcTodayIso()) ? null : current,
+                    );
+                  }
+                }}
                 ariaLabel="Signed date"
                 invalid={signedDateInvalid}
               />
@@ -257,7 +274,14 @@ export function UploadDocumentDialog({
                 <DatePicker
                   id="doc-expiration"
                   value={expirationDate}
-                  onChange={setExpirationDate}
+                  onChange={(next) => {
+                    setExpirationDate(next);
+                    if (next && kind) {
+                      setError((current) =>
+                        current === expirationDateError(kind, null) ? null : current,
+                      );
+                    }
+                  }}
                   ariaLabel="Expiration date"
                   invalid={expirationRequired && !expirationDate}
                 />
