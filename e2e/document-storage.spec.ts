@@ -714,6 +714,8 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await dialog.getByRole("combobox").click();
   await page.getByRole("option", { name: "W-9" }).click();
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("W-9 requires a signed date");
   const uploadIntentCount = () =>
     rec.apiCalls.filter((call) => call.path.endsWith("/upload-intent")).length;
   expect(uploadIntentCount()).toBe(0);
