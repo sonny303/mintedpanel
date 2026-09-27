@@ -214,6 +214,16 @@ export function GroupsFacilitiesPanel({
                 />
               ) : null}
             </div>
+            {canWrite &&
+            groupsQ.isSuccess &&
+            groupAssignQ.isSuccess &&
+            addableGroups.length === 0 ? (
+              <p className="mb-2.5 text-[12.5px] text-muted-foreground">
+                {groupsQ.data.some((g) => g.isActive)
+                  ? "All active groups are already assigned to this provider."
+                  : "No active groups are available to add."}
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-1.5">
               {myGroups.map((g) => (
                 <span
