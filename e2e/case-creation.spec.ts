@@ -7,7 +7,7 @@
 //   TS-51  Denial → reapply on the SAME case: reapply flips Denied → In
 //          Progress (recorded in the unified history) and appends tasks
 //          restamped from the current SOP — no second case is ever created.
-//   TS-52  Manual one-off case against an in-network payer: same key and
+//   TS-52  Manual one-off case against an unattached payer: same key and
 //          dedupe, generation_run_id stays NULL, and a repeat attempt at the
 //          key blocks with a link to the existing case.
 import { test, expect, type Route } from "./fixtures/legacy-access-context";
@@ -15,6 +15,7 @@ import { test, expect, type Route } from "./fixtures/legacy-access-context";
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_SHELBY = "33333333-3333-4333-8333-333333333333";
+const ORG_OTHER = "44444444-4444-4444-8444-444444444444";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -114,6 +115,7 @@ const payerRow = (id: string, name: string, orgId: string | null = null) => ({
   states: ["NC"],
   aliases: [],
   status: "active",
+  archived_at: null,
   payer_slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
   is_active: true,
   created_at: "2026-07-10T00:00:00Z",
@@ -166,8 +168,8 @@ const STATUS_CONFIGS = [
 ];
 
 // Jane works at clinics of BOTH groups; both groups target BCBS-NC in NC —
-// the TS-50 two-group scenario. Cigna-NC starts WITHOUT a target so TS-52 can
-// attach it as the in-network one-off (OPA-RETIRE: the picker is targets-only).
+// the TS-50 two-group scenario. Cigna-NC has no target for the TS-52 manual
+// exception path.
 function makeFixtures() {
   return {
     organizations: [
@@ -545,10 +547,19 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
       return true;
     };
 
+    // The payer list's own-org-or-global predicate is the manual picker's
+    // visibility boundary. Other `or` expressions are outside this harness.
+    const payerScope = url.searchParams
+      .get("or")
+      ?.match(/^\(org_id\.eq\.([^,]+),org_id\.is\.null\)$/);
+    const rows = (fixtures[table] ?? []).filter(
+      (r) =>
+        matchFilters(r) &&
+        (table !== "payers" || !payerScope || r.org_id === payerScope[1] || r.org_id === null),
+    );
     // NB: this repo's supabase-js maybeSingle()/single() fetch ARRAYS with
     // Accept: */* and enforce row count client-side — so embeds must ride
     // the array path too, not just vnd.pgrst.object.
-    const rows = (fixtures[table] ?? []).filter((r) => matchFilters(r));
     const out = table === "credential_cases" ? rows.map(enrichCase) : rows;
     if (wantsObject) {
       if (out.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
@@ -692,23 +703,14 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
   await expect(page.getByText("Original submission")).toBeVisible();
 });
 
-test("TS-52: a manual one-off case against an in-network payer gets the same key discipline and a NULL run id; the key then blocks with a link", async ({
+test("TS-52: a manual one-off case against an unattached payer gets the same key discipline and a NULL run id; the key then blocks with a link", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures();
-  // OPA-RETIRE: ManualCaseModal offers only payers with an active target.
-  // Seed Cigna into the network so the one-off path still exercises the
-  // run-less create + key block (the old assignment-without-target hatch is gone).
-  (fixtures.payer_network_targets as Array<Record<string, unknown>>).push({
-    id: "t-cigna",
-    org_id: ORG_SHELBY,
-    payer_id: "pay-cigna",
-    group_id: "g-1",
-    state: "NC",
-    status: "active",
-    created_at: "2026-07-12T00:00:00Z",
-  });
+  expect(fixtures.payer_network_targets.some((target) => target.payer_id === "pay-cigna")).toBe(
+    false,
+  );
   const { handler, writes } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
@@ -770,6 +772,7 @@ test("manual case replaces empty selectors with provider and payer setup actions
 }) => {
   const fixtures = makeFixtures();
   fixtures.providers = [];
+  fixtures.payers = [];
   fixtures.org_payer_assignments = [];
   fixtures.payer_network_targets = [];
   const { handler } = makeHandler(fixtures);
@@ -818,12 +821,19 @@ test("manual case directs providers without group assignments back to the roster
   await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
 });
 
-test("manual case excludes a payer with no active network target (targets-only picker)", async ({
+test("manual case offers unattached own-org and global payers but excludes inactive and foreign rows", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures();
-  fixtures.payers = [payerRow("pay-legacy", "Legacy Org Payer", ORG_SHELBY)];
+  fixtures.payers = [
+    payerRow("pay-legacy", "Legacy Org Payer", ORG_SHELBY),
+    payerRow("pay-global", "Global Payer"),
+    { ...payerRow("pay-archived", "Archived Payer"), archived_at: "2026-07-27T00:00:00Z" },
+    { ...payerRow("pay-merged", "Merged Payer"), status: "merged" },
+    payerRow("pay-setup", "Pre-Credentialing Setup"),
+    payerRow("pay-foreign", "Foreign Org Payer", ORG_OTHER),
+  ];
   fixtures.org_payer_assignments = [];
   fixtures.payer_network_targets = [];
   const { handler } = makeHandler(fixtures);
@@ -834,9 +844,19 @@ test("manual case excludes a payer with no active network target (targets-only p
   await page.getByRole("button", { name: "New case" }).click();
   const dialog = page.getByRole("dialog");
 
-  await expect(dialog.getByText("Add a payer to this organization")).toBeVisible();
-  await expect(dialog.getByRole("combobox", { name: "Payer" })).toHaveCount(0);
-  await expect(page.getByRole("option", { name: "Legacy Org Payer" })).toHaveCount(0);
+  const payerPicker = dialog.getByRole("combobox", { name: "Payer" });
+  await payerPicker.click();
+  await expect(page.getByRole("option", { name: "Legacy Org Payer" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Global Payer" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Archived Payer" })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Merged Payer" })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Pre-Credentialing Setup" })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Foreign Org Payer" })).toHaveCount(0);
+  await page.getByRole("option", { name: "Legacy Org Payer" }).click();
+  await expect(payerPicker).toContainText("Legacy Org Payer");
+  await payerPicker.click();
+  await page.getByRole("option", { name: "Global Payer" }).click();
+  await expect(payerPicker).toContainText("Global Payer");
 });
 
 test("manual case distinguishes prerequisite query failures from empty data", async ({

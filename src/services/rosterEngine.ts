@@ -1,7 +1,10 @@
-// Authenticated browser facade for the narrowly approved /api/rosters/* API.
-// The server resolves the organization and actor again from the verified JWT.
+// Authenticated browser facade for the narrowly approved /api/rosters/* API,
+// plus an RLS-scoped facility option read. The server resolves the organization
+// and actor again from the verified JWT for roster mutations.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { requireActiveOrg } from "@/lib/audit";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import type {
   CreateRosterMappingInput,
   RosterExportFormat,
@@ -19,6 +22,42 @@ import type {
 interface ApiEnvelope<T> {
   data: T | null;
   error: string | null;
+}
+
+export interface RosterFacilityOption {
+  id: string;
+  name: string;
+  state: string | null;
+}
+
+// Match the roster source-option ceiling. The extra record detects overflow
+// rather than presenting a silently truncated set of selectable locations.
+export async function listRosterFacilityOptions(
+  ctx: { db: SupabaseClient<Database>; orgId: string } = {
+    db: supabase,
+    orgId: requireActiveOrg(),
+  },
+): Promise<RosterFacilityOption[]> {
+  const pageSize = 500;
+  const limit = 5000;
+  const rows: RosterFacilityOption[] = [];
+  for (let from = 0; from <= limit; from += pageSize) {
+    const to = Math.min(from + pageSize - 1, limit);
+    const { data, error } = await ctx.db
+      .from("facilities")
+      .select("id,name,state")
+      .eq("org_id", ctx.orgId)
+      .order("name")
+      .order("id")
+      .range(from, to);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (rows.length > limit)
+      throw new Error("Roster location options exceed the 5,000 record selection limit");
+    if (page.length < to - from + 1) return rows;
+  }
+  throw new Error("Roster location options exceed the 5,000 record selection limit");
 }
 
 async function rosterApiFetch<T>(path: string, init?: RequestInit): Promise<T> {

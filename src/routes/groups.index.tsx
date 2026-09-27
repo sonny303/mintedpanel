@@ -5,6 +5,8 @@
 import { Link, Navigate, createFileRoute } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
@@ -14,7 +16,7 @@ export const Route = createFileRoute("/groups/")({
   component: GroupsIndexPage,
 });
 
-function GroupsIndexPage() {
+export function GroupsIndexPage() {
   const groupsQ = useProviderGroups();
   const facilitiesQ = useFacilities();
 
@@ -23,6 +25,27 @@ function GroupsIndexPage() {
       <div className="space-y-6">
         <PageHeader title="Groups" />
         <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+
+  if (groupsQ.isError) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Groups" />
+        <Card className="border-[#E8E5E0]">
+          <CardContent className="p-4">
+            <EmptyState
+              message="Failed to load provider groups"
+              description="The group list is unavailable. Retry to load it."
+              action={
+                <Button variant="outline" size="sm" onClick={() => void groupsQ.refetch()}>
+                  Retry
+                </Button>
+              }
+            />
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -36,8 +59,14 @@ function GroupsIndexPage() {
     return <Navigate to="/groups/$groupId" params={{ groupId: activeGroups[0].id }} replace />;
   }
 
-  const facilityCount = (groupId: string) =>
-    (facilitiesQ.data ?? []).filter((f) => f.isActive && f.groupId === groupId).length;
+  const facilityLabel = (groupId: string) => {
+    if (facilitiesQ.isError) return "Facility count unavailable";
+    if (facilitiesQ.isLoading) return "Loading facilities";
+    const count = (facilitiesQ.data ?? []).filter(
+      (f) => f.isActive && f.groupId === groupId,
+    ).length;
+    return `${count} ${count === 1 ? "facility" : "facilities"}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -45,6 +74,14 @@ function GroupsIndexPage() {
         title="Groups"
         description="Provider groups — the entity your contracts, facilities, and payer network hang off."
       />
+      {activeGroups.length > 0 && facilitiesQ.isError ? (
+        <div role="alert" className="flex items-center justify-between gap-4 text-[13px]">
+          <span>Facility counts are unavailable. Groups can still be opened.</span>
+          <Button variant="outline" size="sm" onClick={() => void facilitiesQ.refetch()}>
+            Retry facilities
+          </Button>
+        </div>
+      ) : null}
       {activeGroups.length === 0 ? (
         <Card className="border-[#E8E5E0]">
           <CardContent className="space-y-2 p-6">
@@ -81,7 +118,7 @@ function GroupsIndexPage() {
                     (g.states ?? []).length > 0
                       ? `Operating in ${(g.states ?? []).join(", ")}`
                       : null,
-                    `${facilityCount(g.id)} ${facilityCount(g.id) === 1 ? "facility" : "facilities"}`,
+                    facilityLabel(g.id),
                   ]
                     .filter(Boolean)
                     .join(" · ")}

@@ -31,6 +31,7 @@ export function CaseNotesPanel({
             variant="ghost"
             size="icon"
             className="h-6 w-6 text-muted-foreground"
+            aria-label={open ? "Close new internal note form" : "Add internal note"}
             onClick={() => setOpen((v) => !v)}
           >
             <Plus className="w-4 h-4" />

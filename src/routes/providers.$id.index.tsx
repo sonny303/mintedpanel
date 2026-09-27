@@ -77,6 +77,7 @@ import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import { isValidEmail } from "@/lib/contactValidation";
 import { isValidNpi } from "@/lib/providerGroup";
+import { hasValidLicenseDateOrder, LICENSE_DATE_ORDER_ERROR } from "@/lib/licenseDates";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -162,6 +163,16 @@ function ProviderRecordPage() {
 
   if (providerQ.isLoading) {
     return <div className="h-40 animate-pulse rounded-md bg-mp-muted" />;
+  }
+  if (providerQ.isError) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[13px] text-muted-foreground">Couldn't load this provider.</p>
+        <Button variant="outline" onClick={() => void providerQ.refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
   const provider = providerQ.data;
   if (!provider) {
@@ -816,6 +827,9 @@ function LicenseDialog({
     license !== null &&
     draft.expirationDate !== (draft.storedExpirationDate ?? "") &&
     draft.verifiedStatus !== "unverified";
+  const dateOrderError = hasValidLicenseDateOrder(draft.issueDate, draft.expirationDate)
+    ? null
+    : LICENSE_DATE_ORDER_ERROR;
 
   const save = () => {
     if (requiresReload || update.isPending) return;
@@ -823,6 +837,7 @@ function LicenseDialog({
       setError("State is required.");
       return;
     }
+    if (dateOrderError) return;
     if (expected && licenseDraftsEqual(draft, initialDraft)) {
       onClose();
       return;
@@ -924,8 +939,19 @@ function LicenseDialog({
                 type="date"
                 value={draft.expirationDate}
                 onChange={(e) => set({ expirationDate: e.target.value })}
+                aria-invalid={Boolean(dateOrderError)}
+                aria-describedby={dateOrderError ? "license-expires-error" : undefined}
                 className="h-9"
               />
+              {dateOrderError ? (
+                <p
+                  id="license-expires-error"
+                  role="alert"
+                  className="mt-1 text-[12px] text-[#B91C1C]"
+                >
+                  {dateOrderError}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label htmlFor="license-psv" className="text-[12px]">

@@ -560,12 +560,18 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
   // date is blocked client-side (and would be a 422 server-side + DB CHECK).
   await panel.getByRole("button", { name: "Upload" }).click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Choose a document kind");
   await dialog.getByRole("combobox").click();
   // The provider grain offers provider kinds only — no W-9/CMS-460 (D1).
   await expect(page.getByRole("option", { name: "State License" })).toBeVisible();
   await expect(page.getByRole("option", { name: "W-9" })).toHaveCount(0);
   await page.getByRole("option", { name: "State License" }).click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Choose a file to upload");
   await dialog.locator("#doc-file").setInputFiles(FAKE_PDF);
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await expect(dialog.locator("#doc-file-name")).toHaveValue(
     "Brooke Ostrander - State License.pdf",
   );
@@ -579,6 +585,7 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
     .getByRole("button", { name: new RegExp(`${monthName} 28th`) })
     .first()
     .click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
 
   // v1 lands: intent -> signed PUT -> finalize, and the table re-derives.
@@ -650,13 +657,19 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
   await panel.getByRole("button", { name: "Upload" }).click();
 
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Choose a document kind");
   await dialog.getByRole("combobox").click();
   // The group grain: W-9/CMS-460/Voided Check/COI — never State License (D1).
   await expect(page.getByRole("option", { name: "W-9" })).toBeVisible();
   await expect(page.getByRole("option", { name: "CMS-460" })).toBeVisible();
   await expect(page.getByRole("option", { name: "State License" })).toHaveCount(0);
   await page.getByRole("option", { name: "COI" }).click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Choose a file to upload");
   await dialog.locator("#doc-file").setInputFiles({ ...FAKE_PDF, name: "coi.pdf" });
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await expect(dialog.locator("#doc-file-name")).toHaveValue(
     "Outer Banks Rehab Group LLC - COI.pdf",
   );
@@ -696,6 +709,13 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
   // requesting an upload intent.
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(dialog).toContainText("W-9 requires a signed date");
+  await dialog.getByRole("combobox").click();
+  await page.getByRole("option", { name: "CMS-460" }).click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("combobox").click();
+  await page.getByRole("option", { name: "W-9" }).click();
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("W-9 requires a signed date");
   const uploadIntentCount = () =>
     rec.apiCalls.filter((call) => call.path.endsWith("/upload-intent")).length;
   expect(uploadIntentCount()).toBe(0);
@@ -703,6 +723,7 @@ test("MP-22/MP-15: W-9 signed dates and custom filenames survive upload, reselec
     .toISOString()
     .slice(0, 10);
   await chooseCalendarDate(page, "Signed date", futureSignedDate);
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(dialog).toContainText("Signed date cannot be in the future");
   expect(uploadIntentCount()).toBe(0);
