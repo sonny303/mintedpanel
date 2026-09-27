@@ -124,5 +124,6 @@ The local [facility import CSV](ux-audit-facility-import.csv) is a synthetic tes
 | F05 · Provider license date order | [#444](https://github.com/sonny303/mintedpanel/pull/444) | Sol 6/xhigh implementation; independent Astra/high review complete |
 | F06 · Manual case payer catalog   | [#445](https://github.com/sonny303/mintedpanel/pull/445) | Sol 6/xhigh implementation; independent Astra/high review complete |
 | F04 · Person/contact error reset  | [#446](https://github.com/sonny303/mintedpanel/pull/446) | Sol 6/xhigh implementation; independent Astra/high review complete |
+| F07 · Roster location scope       | [#447](https://github.com/sonny303/mintedpanel/pull/447) | Sol 6/xhigh implementation; independent Astra/high review complete |
 
 Every implementation PR is a separate feature branch from the verified base, small enough to review on its own, linked from this audit index, and left in draft. No merge or deployment is authorized.
