@@ -724,6 +724,36 @@ test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-
   ).toHaveLength(0);
 });
 
+test("DatePicker Escape closes the enrollment calendar before its dialog and releases the page", async ({
+  context,
+  page,
+}) => {
+  const { handler } = makeHandler(baseFixtures());
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/pr-brooke");
+  await page.getByRole("tab", { name: "Enrollments" }).click();
+  await page.getByRole("button", { name: "+ Add enrollment" }).click();
+  const dialog = page.getByRole("dialog", { name: "Record an enrollment fact" });
+  await dialog.getByRole("button", { name: "Effective date" }).click();
+  const calendar = page.getByRole("dialog").filter({ has: page.getByRole("grid") });
+  await expect(calendar).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(calendar).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Effective date" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() => page.locator("body").evaluate((body) => body.style.pointerEvents))
+    .toBe("");
+  await page.getByRole("tab", { name: "Cases" }).click();
+  await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible();
+});
+
 test("TS-129: the roster's no-facility gap pill deep-links the focused Groups & facilities section", async ({
   context,
   page,
