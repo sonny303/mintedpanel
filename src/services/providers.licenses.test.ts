@@ -156,6 +156,38 @@ const save = (
 ) => updateProviderWithLicenses("p1", { patch: {}, licenseCommands });
 
 describe("P03 explicit commands and persisted outcomes", () => {
+  it.each(["add", "update"])(
+    "blocks a %s with expiration before issue without writes",
+    async (type) => {
+      const f = fixture();
+      const row = f.rows.state_licenses[0];
+      const reversed = { issueDate: "2026-01-01", expirationDate: "2025-01-01" };
+      const command =
+        type === "add"
+          ? { type: "add" as const, values: { ...values(license("new", "AZ")), ...reversed } }
+          : updateCommand(row, reversed);
+
+      await expect(save([command])).rejects.toThrow(
+        "Expiration date must be on or after issue date.",
+      );
+      expect(f.requests.filter((request) => request.method !== "GET")).toEqual([]);
+      expect(transport.audit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["2026-01-01", "2027-01-01"])(
+    "allows expiration %s when correcting a previously reversed license",
+    async (expirationDate) => {
+      const f = fixture();
+      const row = f.rows.state_licenses[0];
+      row.issue_date = "2026-01-01";
+      row.expiration_date = "2025-01-01";
+
+      await save([updateCommand(row, { expirationDate })]);
+      expect(row.expiration_date).toBe(expirationDate);
+    },
+  );
+
   it("adds to a successfully empty list", async () => {
     const f = fixture();
     f.rows.state_licenses = [];
