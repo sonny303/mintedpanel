@@ -44,6 +44,7 @@
 //                  rows that belong to no org
 //   documentupload cross-org owner honored on upload-intent/finalize instead
 //               of 404 before any signing/insert (ASD BITE-ASD-04)   (25b, 26)
+//   learning   AI mapping promotion ignores writer/evidence checks          (20b, 20c)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -86,6 +87,7 @@ export const LEAK_MODES = [
   "providers",
   "spoof",
   "fieldmaps",
+  "learning",
   "profile",
   "fillevents",
   "cases",
@@ -1505,6 +1507,28 @@ export async function createMockApiServer(options = {}) {
       let rows = PORTALS.filter((r) => r.orgId === null || r.orgId === orgId || leak === "portals");
       if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
       return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- /api/portal-field-maps/batch-learn ---
+    if (/^\/api\/portal-field-maps\/batch-learn\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing" && leak !== "learning") {
+        return envelope(res, 403, null, "Your role cannot save AI field mappings");
+      }
+      const body = (await readBody(req)) ?? {};
+      if (leak === "learning") {
+        return envelope(res, 200, {
+          inserted_count: 1,
+          confirmed_saved_count: 1,
+          preserved_count: 0,
+          results: [],
+        });
+      }
+      const foreignCase = CASES.find((row) => row.id === body.case_id && row.orgId !== orgId);
+      if (foreignCase || !body.fill_session_id) {
+        return envelope(res, 404, null, "Submission evidence not found");
+      }
+      return envelope(res, 404, null, "Submission evidence not found");
     }
 
     // --- /api/portal-field-maps ---

@@ -1599,6 +1599,8 @@ export interface PortalFieldMap {
   sortOrder?: number | null;
   /** E6.10 — captured option vocabulary `{ value, label }[]`. Null = never captured. */
   controlOptions?: { value: string; label: string }[] | null;
+  /** Flywheel provenance is additive so pre-migration readers remain compatible. */
+  learnedVia?: "manual" | "nano" | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -33,6 +33,16 @@ export interface PortalFieldMapFilters {
 
 const PORTAL_FIELD_MAP_COLUMNS =
   "id, org_id, portal_key, url_pattern, page_step, map_type, selector, selector_fallbacks, source, token, hardcoded_value, transform, field_type, notes, status, control_options, created_at, updated_at";
+const PORTAL_FIELD_MAP_FILL_COLUMNS = `${PORTAL_FIELD_MAP_COLUMNS}, learned_via`;
+
+function isMissingLearnedViaColumn(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: unknown; message?: unknown; details?: unknown };
+  const missingColumn = [row.message, row.details].some(
+    (value) => typeof value === "string" && /learned_via/i.test(value),
+  );
+  return missingColumn && (row.code === "42703" || row.code === "PGRST204");
+}
 
 // Global catalog rows plus the caller's own org overrides. Another org's
 // org-scoped rows can never match the filter.
@@ -40,14 +50,23 @@ export async function listPortalFieldMaps(
   ctx: PortalFieldMapServiceCtx,
   filters: PortalFieldMapFilters = {},
 ): Promise<PortalFieldMap[]> {
-  let query = ctx.db
-    .from("portal_field_maps")
-    .select(PORTAL_FIELD_MAP_COLUMNS)
-    .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
-    .order("portal_key", { ascending: true })
-    .order("created_at", { ascending: true });
-  if (filters.portalKey) query = query.eq("portal_key", filters.portalKey);
-  const { data, error } = await query;
+  const queryRows = async (columns: string) => {
+    let query = ctx.db
+      .from("portal_field_maps")
+      .select(columns)
+      .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+      .order("portal_key", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (filters.portalKey) query = query.eq("portal_key", filters.portalKey);
+    return query;
+  };
+  let { data, error } = await queryRows(PORTAL_FIELD_MAP_FILL_COLUMNS);
+  // A staged extension deployment can read from a database before the additive
+  // flywheel migration is applied. Retry only that precise schema-cache/column
+  // error; all other failures remain visible to the caller.
+  if (error && isMissingLearnedViaColumn(error)) {
+    ({ data, error } = await queryRows(PORTAL_FIELD_MAP_COLUMNS));
+  }
   if (error) throw error;
   const rows = camelizeRow<PortalFieldMap[]>(data ?? []);
   // DB rows hold whatever form a human pasted ("{{provider.firstName}}" or

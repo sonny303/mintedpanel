@@ -1,6 +1,9 @@
 # Migration baseline & the repo-first rule
 
-_Last updated 2026-07-04._
+_Historical baseline captured 2026-07-04. Operating policy updated 2026-09-23._
+
+Current runner and reconciliation requirements: [Migration tracking](ops/migration-tracking.md).
+The historical counts below are not current hosted verification.
 
 ## What happened
 
@@ -98,9 +101,9 @@ same change**, and the repo is authoritative for _new_ migrations:
 
 1. Write the change as a new file in `supabase/migrations/`
    (`YYYYMMDDHHMMSS_<slug>.sql`). Never edit the baseline or an archived file.
-2. Apply the **identical** SQL to hosted — via the Supabase MCP `apply_migration`
-   (which also records it in the hosted migration history) or `supabase db push`.
-   Same SQL both places; do not hand-edit hosted so it diverges from the file.
+2. Deploy committed SQL through the version-tracking CI release runner after
+   reviewed reconciliation. Do not use the hosted SQL Editor, Table Editor,
+   ad hoc MCP DDL, or local `db push` as the normal deployment path.
 3. Guard statements that depend on hosted-only objects or elevated privileges so a
    clean repo-only rebuild still passes — `to_regclass('public.x')`,
    `ADD COLUMN IF NOT EXISTS`, `CREATE ... IF NOT EXISTS`, exception-guarded event
@@ -111,6 +114,7 @@ same change**, and the repo is authoritative for _new_ migrations:
 5. Keep `SCHEMA.md` in step, and re-verify with the fingerprint recipe above when a
    change is large enough to warrant it.
 
-The additive rule still holds: don't drop or rewrite existing objects; layer new
-migrations on top. If the live DB and the repo ever disagree again, the live DB is
-truth — regenerate a baseline from it rather than trusting stale files.
+The additive rule still holds: do not drop or rewrite existing objects; layer new
+migrations on top. If hosted state and the repository disagree, block release and
+reconcile the actual objects and history against the reviewed requirements. Do not
+blindly regenerate a baseline or mark missing changes applied.

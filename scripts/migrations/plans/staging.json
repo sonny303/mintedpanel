@@ -1,0 +1,9 @@
+{
+  "status": "reconciliation-required",
+  "blockers": [
+    "Capture current database identity, catalog and ledger",
+    "Reconcile historical baseline and duplicate version 20260903210000",
+    "Verify protected backup and isolated populated upgrade rehearsal",
+    "Commit reviewed inventory, baselineVersions and before/after schema digests"
+  ]
+}
