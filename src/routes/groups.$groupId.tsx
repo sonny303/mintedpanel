@@ -6,6 +6,7 @@
 import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProviderGroups } from "@/hooks/useLookups";
 
@@ -19,7 +20,7 @@ function areaLabel(pathname: string): string | null {
   return null;
 }
 
-function GroupLayout() {
+export function GroupLayout() {
   const { groupId } = Route.useParams();
   const groupsQ = useProviderGroups();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -27,6 +28,24 @@ function GroupLayout() {
   const area = areaLabel(pathname);
 
   if (groupsQ.isLoading) return <Skeleton className="h-40 w-full" />;
+  if (groupsQ.isError) {
+    return (
+      <div className="max-w-3xl">
+        <EmptyState
+          message="Failed to load provider group"
+          description="The group is unavailable. Retry to load it."
+          action={
+            <Button variant="outline" size="sm" onClick={() => void groupsQ.refetch()}>
+              Retry
+            </Button>
+          }
+        />
+        <Link to="/groups" className="text-[13px] font-medium text-[#1B4D3E] underline">
+          Back to Groups
+        </Link>
+      </div>
+    );
+  }
   if (!group) {
     return (
       <div className="max-w-3xl">
