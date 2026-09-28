@@ -24,7 +24,7 @@ export interface FillSessionServiceCtx {
 export interface FillEventInput {
   // Client-generated idempotency id (UUID); becomes fill_sessions.id.
   id: string;
-  caseId: string;
+  caseId?: string | null;
   providerId?: string | null;
   portalKey: string;
   fillMode?: FillMode;
@@ -132,12 +132,20 @@ export async function recordFillEvent(
   if (!UUID_RE.test(input.id ?? "")) {
     return reject(422, "id must be a client-generated UUID (the idempotency key)");
   }
-  if (!UUID_RE.test(input.caseId ?? "")) return reject(422, "caseId must be a UUID");
+  if (input.caseId != null && !UUID_RE.test(input.caseId)) {
+    return reject(422, "caseId must be a UUID");
+  }
   if (input.providerId != null && !UUID_RE.test(input.providerId)) {
     return reject(422, "providerId must be a UUID");
   }
+  if (!input.caseId && !input.providerId) {
+    return reject(422, "At least one of caseId or providerId is required");
+  }
   if (input.taskId != null && !UUID_RE.test(input.taskId)) {
     return reject(422, "taskId must be a UUID");
+  }
+  if (input.taskId != null && input.caseId == null) {
+    return reject(422, "taskId requires caseId; ad hoc fills cannot complete tasks");
   }
   if (typeof input.portalKey !== "string" || input.portalKey.trim() === "") {
     return reject(422, "portalKey is required");
@@ -156,7 +164,7 @@ export async function recordFillEvent(
   }
 
   // ---- org validation, all BEFORE any write (the isolation contract) ----
-  if (!(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
+  if (input.caseId != null && !(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
     return reject(404, "Case not found");
   }
   if (input.providerId != null && !(await belongsToOrg(ctx, "providers", input.providerId))) {
@@ -192,7 +200,7 @@ export async function recordFillEvent(
   const row: Record<string, unknown> = {
     id: input.id,
     org_id: ctx.orgId,
-    case_id: input.caseId,
+    case_id: input.caseId ?? null,
     provider_id: input.providerId ?? null,
     portal_key: input.portalKey,
     fill_mode: fillMode,

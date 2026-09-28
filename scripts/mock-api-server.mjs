@@ -1591,18 +1591,23 @@ export async function createMockApiServer(options = {}) {
       if (leak !== "fillevents") {
         // Real contract: validate ownership BEFORE the idempotency lookup or
         // any write. A cross-org case/provider is a 404, nothing stored.
-        const caseOk = CASES.some((c) => c.id === body.caseId && c.orgId === orgId);
-        if (!caseOk) return envelope(res, 404, null, "Case not found");
-        const providerOk =
-          body.providerId == null ||
-          PROVIDERS.some((p) => p.id === body.providerId && p.orgId === orgId);
-        if (!providerOk) return envelope(res, 404, null, "Provider not found");
+        if (body.caseId != null) {
+          const caseOk = CASES.some((c) => c.id === body.caseId && c.orgId === orgId);
+          if (!caseOk) return envelope(res, 404, null, "Case not found");
+        }
+        if (body.providerId != null) {
+          const providerOk = PROVIDERS.some((p) => p.id === body.providerId && p.orgId === orgId);
+          if (!providerOk) return envelope(res, 404, null, "Provider not found");
+        }
+        if (!body.caseId && !body.providerId) {
+          return envelope(res, 422, null, "At least one of caseId or providerId is required");
+        }
       }
       if (fillSessions.has(key)) return envelope(res, 200, fillSessions.get(key));
       const session = {
         id: body.id,
         orgId,
-        caseId: body.caseId,
+        caseId: body.caseId ?? null,
         providerId: body.providerId ?? null,
         portalKey: body.portalKey,
         fillMode: body.fillMode ?? "web",
