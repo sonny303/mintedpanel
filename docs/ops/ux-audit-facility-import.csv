@@ -1,0 +1,2 @@
+facility_name,group_name,group_tin,group_npi,street,suite,city,state,zip,county,phone,fax,email,appointment_phone,contact_name,accepting_new_patients,languages_offered,interpreter_languages,ada_accessible,ada_notes
+UX Audit Import Facility,UX Audit Test Group,99-9887766,1234567893,200 Test Way,,Denver,CO,80202,Denver,303-555-0177,,ux-import@example.test,303-555-0177,UX Audit,true,English,Spanish,true,Synthetic fixture only

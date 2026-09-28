@@ -2375,7 +2375,9 @@ export type Database = {
       };
       portal_field_maps: {
         Row: {
+          auto_promoted_at: string | null;
           confidence: number | null;
+          confidence_score: number | null;
           control_options: Json | null;
           created_at: string;
           display_label: string | null;
@@ -2384,6 +2386,7 @@ export type Database = {
           form_section: string | null;
           hardcoded_value: string | null;
           id: string;
+          learned_via: string;
           map_type: string;
           notes: string | null;
           org_id: string | null;
@@ -2401,7 +2404,9 @@ export type Database = {
           url_pattern: string | null;
         };
         Insert: {
+          auto_promoted_at?: string | null;
           confidence?: number | null;
+          confidence_score?: number | null;
           control_options?: Json | null;
           created_at?: string;
           display_label?: string | null;
@@ -2410,6 +2415,7 @@ export type Database = {
           form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
+          learned_via?: string;
           map_type: string;
           notes?: string | null;
           org_id?: string | null;
@@ -2427,7 +2433,9 @@ export type Database = {
           url_pattern?: string | null;
         };
         Update: {
+          auto_promoted_at?: string | null;
           confidence?: number | null;
+          confidence_score?: number | null;
           control_options?: Json | null;
           created_at?: string;
           display_label?: string | null;
@@ -2436,6 +2444,7 @@ export type Database = {
           form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
+          learned_via?: string;
           map_type?: string;
           notes?: string | null;
           org_id?: string | null;
@@ -4600,6 +4609,19 @@ export type Database = {
       };
       document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
+      learn_portal_field_maps_from_touch: {
+        Args: {
+          p_actor_id: string;
+          p_case_id: string;
+          p_fill_session_id: string;
+          p_mappings: Json;
+          p_org_id: string;
+          p_portal_key: string;
+          p_provider_id: string;
+          p_url_pattern: string;
+        };
+        Returns: Json;
+      };
       insert_contact_party:
         | { Args: { p: Json; p_uid: string }; Returns: string }
         | {

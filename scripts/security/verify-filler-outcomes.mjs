@@ -156,7 +156,7 @@ try {
   const migrations = readdirSync(`${root}supabase/migrations`)
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  if (!migrations.includes("20260926052400_filler_outcome_v2_contract.sql")) {
+  if (!migrations.includes("20261001120100_filler_outcome_v2_contract.sql")) {
     fail("FILLER_MIGRATION_REQUIRED");
   }
 

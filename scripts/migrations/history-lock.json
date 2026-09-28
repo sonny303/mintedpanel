@@ -1,0 +1,567 @@
+[
+  {
+    "id": "20260704210000",
+    "path": "supabase/migrations/20260704210000_baseline_live_schema.sql",
+    "sha256": "b95a9562c499e52acb9a7f98aba6c219c9aca32482add3c2ed18ebf0a62c2dc4"
+  },
+  {
+    "id": "20260705190000",
+    "path": "supabase/migrations/20260705190000_audit_log_read_action_type.sql",
+    "sha256": "b59429ec6fd4b996cc34669a7a2cea25c31f64dc00a60d768ba895a25c0ec69a"
+  },
+  {
+    "id": "20260706120000",
+    "path": "supabase/migrations/20260706120000_cleanup_surfaces_schema.sql",
+    "sha256": "44819718463439337ec8b32d44963d28578800b03136d1572b5e4df5cc4f917a"
+  },
+  {
+    "id": "20260707060000",
+    "path": "supabase/migrations/20260707060000_global_catalog_org_assignment.sql",
+    "sha256": "67f4b1d85ebcc44f8ca9fceebc6720a2197350ba3f27f0df07630a60bf762aa4"
+  },
+  {
+    "id": "20260707120000",
+    "path": "supabase/migrations/20260707120000_touchlog_entry_types.sql",
+    "sha256": "96f0a323377c8469853d24a386cb203dcfa2c1d9665cbe2f050fa4191394aa26"
+  },
+  {
+    "id": "20260707120100",
+    "path": "supabase/migrations/20260707120100_migrate_notes_to_touchlog.sql",
+    "sha256": "b0dc0dce9cc4f3b432ee73957e439a80fd3ef005810574e092ec4a8feedfa00f"
+  },
+  {
+    "id": "20260707120200",
+    "path": "supabase/migrations/20260707120200_case_payer_reference_id.sql",
+    "sha256": "50163049dbcadd4d40a977d398a140cf33774a1d5e8429829b92a36717ca9059"
+  },
+  {
+    "id": "20260707130000",
+    "path": "supabase/migrations/20260707130000_communication_event_batch_touchpoint.sql",
+    "sha256": "903029a914da202ebc9ae09243ea912f3eae89b487695a089004cf917091c53a"
+  },
+  {
+    "id": "20260707140000",
+    "path": "supabase/migrations/20260707140000_create_organization_rpc.sql",
+    "sha256": "b3a4b0b17f3f624a1196891261122338cf8b9b1b387f9cb99e52a3bfc2c9e299"
+  },
+  {
+    "id": "20260707150000",
+    "path": "supabase/migrations/20260707150000_reference_only_flag.sql",
+    "sha256": "a370e9f1a2cc9ef587525d9b7d3e8f65ea1c406d6cf8590c4424d7c53771859d"
+  },
+  {
+    "id": "20260708120000",
+    "path": "supabase/migrations/20260708120000_org_lifecycle_state.sql",
+    "sha256": "e1aa3b462759c1925d88822e665ebfa17676479b7c0e47012b4aa8dcb26e30d4"
+  },
+  {
+    "id": "20260709120000",
+    "path": "supabase/migrations/20260709120000_party_model_foundation.sql",
+    "sha256": "68cb848836cc4c43dbecefcc7fc7ec62e65d4edc20dc6102ad195aabef8e23b8"
+  },
+  {
+    "id": "20260709120100",
+    "path": "supabase/migrations/20260709120100_create_organization_rpc_v2.sql",
+    "sha256": "603f49d4de0deafd2432e6a9e35a380ec5f30c25dae01ab33409334b272f4b6c"
+  },
+  {
+    "id": "20260709130000",
+    "path": "supabase/migrations/20260709130000_create_organization_rpc_v3_contacts.sql",
+    "sha256": "8b60f6161e34601f17b5f5f19abb17c542c3660d6cf4e451c0e762d4fe415020"
+  },
+  {
+    "id": "20260709140000",
+    "path": "supabase/migrations/20260709140000_party_capture_links.sql",
+    "sha256": "2db27f1b22aa9d2fcb402af898a1ada386bbee165b6a098082a6137f248a9948"
+  },
+  {
+    "id": "20260709140100",
+    "path": "supabase/migrations/20260709140100_inbound_leads.sql",
+    "sha256": "b3b9308412cb30c878470cba6c85337ddd9fa015d6c50c00d6a3eba5aecd698b"
+  },
+  {
+    "id": "20260709150000",
+    "path": "supabase/migrations/20260709150000_report_shares.sql",
+    "sha256": "66aa5457b190d026c059021d99f850470f778ecd3bab15b295588bd5042363cf"
+  },
+  {
+    "id": "20260710120000",
+    "path": "supabase/migrations/20260710120000_stage0_grant_hardening.sql",
+    "sha256": "b203038aeab713299c9d8f03113dcf775012a212d2d02e3f0f214d3d8960a565"
+  },
+  {
+    "id": "20260710130000",
+    "path": "supabase/migrations/20260710130000_public_rpc_rate_limiting.sql",
+    "sha256": "c42dfc716cb690d3c5a7f69e37ae1f988408a4466e832dd9e1dbb754f7cdd37a"
+  },
+  {
+    "id": "20260710140000",
+    "path": "supabase/migrations/20260710140000_fk_index_coverage.sql",
+    "sha256": "c9632e603e793252be771898d64bc58c1d92c2e0978acab3414d122bdb3a9692"
+  },
+  {
+    "id": "20260710150000",
+    "path": "supabase/migrations/20260710150000_not_null_check_floor.sql",
+    "sha256": "19a28253ece692d22ccedea591aaca508f428a9905e16cd6fc0545b4ac718787"
+  },
+  {
+    "id": "20260710160000",
+    "path": "supabase/migrations/20260710160000_state_format_checks.sql",
+    "sha256": "02f8c4dbbf92645c7e150b21e2a540ce4ab2052560c4d21f7bed974294492744"
+  },
+  {
+    "id": "20260710170000",
+    "path": "supabase/migrations/20260710170000_structural_constraints.sql",
+    "sha256": "873a86462e17c744292fd70062739547a9bd302bd48ffad7945e52f43a27fd0f"
+  },
+  {
+    "id": "20260710180000",
+    "path": "supabase/migrations/20260710180000_validate_integrity_checks.sql",
+    "sha256": "facb6b8c814d01b0a5741b3e35957817e467b5278681b32acdd6147188afd214"
+  },
+  {
+    "id": "20260712120000",
+    "path": "supabase/migrations/20260712120000_provider_group_assignments.sql",
+    "sha256": "d044e6813645d70f815dd4ff822182f6f0c35ffb78868aece61e688f663b1d99"
+  },
+  {
+    "id": "20260712120100",
+    "path": "supabase/migrations/20260712120100_state_license_psv.sql",
+    "sha256": "4c45c3e46b7d4d1a7d51ea577037d4657654501ccbf14000ccc38e121ecc6ef9"
+  },
+  {
+    "id": "20260712150000",
+    "path": "supabase/migrations/20260712150000_pfa_start_date_check.sql",
+    "sha256": "cdeaffbfe1ab51bc78dcf539f94d10c73eba16c5c7214ee68e80c40d01fb85a0"
+  },
+  {
+    "id": "20260712150100",
+    "path": "supabase/migrations/20260712150100_set_primary_assignment_rpc.sql",
+    "sha256": "0928deb36d4633d81f3828b0ee8ea4451107494320944d93fcb9a70c8b8c2295"
+  },
+  {
+    "id": "20260712150200",
+    "path": "supabase/migrations/20260712150200_audit_log_delete_action_type.sql",
+    "sha256": "9018fedd6e6718155f1f7e9961c8075c2b75b48944b91706590d99fbbd26a2d3"
+  },
+  {
+    "id": "20260712180000",
+    "path": "supabase/migrations/20260712180000_payer_catalog_columns.sql",
+    "sha256": "c91a0355b8362abab37859b84e704044915b2c1978ca83fa0f3ba7a82754ea17"
+  },
+  {
+    "id": "20260712180100",
+    "path": "supabase/migrations/20260712180100_payer_catalog_changes.sql",
+    "sha256": "d7d7a5dab1128477befc217e81edbcd78cb3043f758fb682ea70e11ccc22eb34"
+  },
+  {
+    "id": "20260712180200",
+    "path": "supabase/migrations/20260712180200_payer_catalog_rpcs.sql",
+    "sha256": "f5587ae3566d33a2143d7645cc3918d652560c06ab53ebc3d417a6f1fabfe8b5"
+  },
+  {
+    "id": "20260712190000",
+    "path": "supabase/migrations/20260712190000_payer_network_targets.sql",
+    "sha256": "da16432d9df00018952b470458bd3fdc7a5402fb06a140e679450e4d45b1011f"
+  },
+  {
+    "id": "20260713120000",
+    "path": "supabase/migrations/20260713120000_sop_template_versions.sql",
+    "sha256": "d337aefdb2a96f446494a6c3fe82ba0806028161359a0e845b8da525b3b2b7c0"
+  },
+  {
+    "id": "20260713130000",
+    "path": "supabase/migrations/20260713130000_case_generation_exclusions.sql",
+    "sha256": "57787c34b3607277bf7be8aa1488568cacb7e3b1630e36d666c2e5a8c1e35254"
+  },
+  {
+    "id": "20260713150000",
+    "path": "supabase/migrations/20260713150000_case_key_4part.sql",
+    "sha256": "fd821becbc04540d43d64926b95015688f901705bb3344efe5c87295b2d54ce5"
+  },
+  {
+    "id": "20260713150100",
+    "path": "supabase/migrations/20260713150100_case_generation_runs.sql",
+    "sha256": "c96b2dc5f0967ab9c235793133e25afe43933af38b9f6205fea5ca6d5e29ea46"
+  },
+  {
+    "id": "20260713150200",
+    "path": "supabase/migrations/20260713150200_create_case_with_tasks_generation.sql",
+    "sha256": "f8f82472bf6219108b90e594f7bf0d7b3bd8da6165e63e602d5e24a8b6207ba6"
+  },
+  {
+    "id": "20260713170000",
+    "path": "supabase/migrations/20260713170000_case_generation_run_rows.sql",
+    "sha256": "7c64ce8087307109257ec8de686b2a7beab8fb95ea0efbb38fac964e6f7729aa"
+  },
+  {
+    "id": "20260713180000",
+    "path": "supabase/migrations/20260713180000_import_runs_rows_staging.sql",
+    "sha256": "c6a211a44ad24abe2696467b48341b2103760149bbfc43b5a2a155e6f6d562ef"
+  },
+  {
+    "id": "20260713190000",
+    "path": "supabase/migrations/20260713190000_provider_verification_state.sql",
+    "sha256": "aeafbf6d4ab8fc7726c0faf022eaafd9999163f2c788027116e05290830fb611"
+  },
+  {
+    "id": "20260713191000",
+    "path": "supabase/migrations/20260713191000_commit_import_run.sql",
+    "sha256": "b8e326087cfb546bddb65cd9af1a1a62f23740d96a9ce8f1f941d480351ccc80"
+  },
+  {
+    "id": "20260714120000",
+    "path": "supabase/migrations/20260714120000_import_runs_entity_kind.sql",
+    "sha256": "285070a5b6c7bb14a960d2a5328ece4a5d482a0d5b826ce9674c24e0556e1bbd"
+  },
+  {
+    "id": "20260715120000",
+    "path": "supabase/migrations/20260715120000_payer_pipeline_state.sql",
+    "sha256": "91601f111d6783e99a34bc354d597baa2279cdbbdfe993961eda07e560269422"
+  },
+  {
+    "id": "20260715120100",
+    "path": "supabase/migrations/20260715120100_payer_provider_id.sql",
+    "sha256": "4f43407529ef4e05d3c1ced904026f2c1947c3abd4da285895f6eb8c8c481ce8"
+  },
+  {
+    "id": "20260715120200",
+    "path": "supabase/migrations/20260715120200_denial_reason_codes.sql",
+    "sha256": "9f92c29df3f5c067b885eebfdd18a3d6e67f1b5e04baa4f7146b3a320c60a9f9"
+  },
+  {
+    "id": "20260715120300",
+    "path": "supabase/migrations/20260715120300_payer_pipeline_history.sql",
+    "sha256": "4af38468eedef5176be9ecc284133c6024aa61d33f52ba696380441789262f98"
+  },
+  {
+    "id": "20260715120400",
+    "path": "supabase/migrations/20260715120400_advance_payer_pipeline.sql",
+    "sha256": "ed139d7aafd48312c5b66e197b37ed940c05f84a6c28d05a937f533a4d1112ba"
+  },
+  {
+    "id": "20260715120500",
+    "path": "supabase/migrations/20260715120500_payer_provider_ids_split.sql",
+    "sha256": "0e292a05b93ec2b195817a1d336678acd5b0d565a1d703bfb602442ccdca7da7"
+  },
+  {
+    "id": "20260715130000",
+    "path": "supabase/migrations/20260715130000_structured_touches.sql",
+    "sha256": "10a58ef1b1281d2597d115f0e66de8fa76ed77030a90eeacb6d7f9fc6fd0c5ae"
+  },
+  {
+    "id": "20260715140000",
+    "path": "supabase/migrations/20260715140000_e42_payer_resolution_id.sql",
+    "sha256": "607eb90890817114ef4a1b1274d7d079176ef1afd2812cacba3b3b2d6521c2d8"
+  },
+  {
+    "id": "20260715140100",
+    "path": "supabase/migrations/20260715140100_e42_next_best_action_configs.sql",
+    "sha256": "74b7e1abc19fbc1abe4a216ab49b688da8d94662ede1ee0cdca9f1eb99b87e2c"
+  },
+  {
+    "id": "20260715140200",
+    "path": "supabase/migrations/20260715140200_e42_sop_template_drafts.sql",
+    "sha256": "ed87b009acd2d3e8b0e08f27c1a1e565564def5bee973b98644988412d0625a6"
+  },
+  {
+    "id": "20260715140300",
+    "path": "supabase/migrations/20260715140300_e42_execution_type_required_attrs.sql",
+    "sha256": "2e9015dbd1841a8a7dd818caab4e062699eb7cc39bf6487b93ac1beb48677430"
+  },
+  {
+    "id": "20260715140400",
+    "path": "supabase/migrations/20260715140400_e42_generation_release_scope.sql",
+    "sha256": "02cf6a883fdaabe8a0ab9d6e112080e7779b65d3ef364b179cffc9edc9a03aa3"
+  },
+  {
+    "id": "20260715140500",
+    "path": "supabase/migrations/20260715140500_e42_fill_test_markers.sql",
+    "sha256": "6c5cbf23c94e61973e4a99994188ba69e83650eb55e06173148eab2416cdc842"
+  },
+  {
+    "id": "20260715140600",
+    "path": "supabase/migrations/20260715140600_e42_create_case_execution_type.sql",
+    "sha256": "9e07abfa8db958738e888a33137fe43a6a0c7d5365ca0fd9da544157071c9568"
+  },
+  {
+    "id": "20260715160000",
+    "path": "supabase/migrations/20260715160000_org_payer_assignment_lifecycle.sql",
+    "sha256": "7c7979aad362234ece23fdbc5915a20b32df8524cc3bbe81707dce2cfbf55547"
+  },
+  {
+    "id": "20260716120000",
+    "path": "supabase/migrations/20260716120000_e42_sop_resolution_hardening.sql",
+    "sha256": "ca54a8b76bcd26f226997911b4a213ac00baa26059a92413a9347f7422b4947b"
+  },
+  {
+    "id": "20260716190000",
+    "path": "supabase/migrations/20260716190000_org_payer_settings.sql",
+    "sha256": "1fe6d2214729d76beed01ad382cc9e28b5d50a279f65f0e411b90c30f3af80f2"
+  },
+  {
+    "id": "20260716191000",
+    "path": "supabase/migrations/20260716191000_catalog_review_platform_only.sql",
+    "sha256": "0c2cd0b47d53e76d9bf7ae303ba50cb93531e55d7d1dafb140a338e6beb45a3d"
+  },
+  {
+    "id": "20260717120000",
+    "path": "supabase/migrations/20260717120000_ssn_vault.sql",
+    "sha256": "aae68b8c2d9c1a872ceb6cf6f43035666198bc44f95478e8ed56b3c2334164e7"
+  },
+  {
+    "id": "20260717120100",
+    "path": "supabase/migrations/20260717120100_ssn_intake_links.sql",
+    "sha256": "e811b6f148c4b472faacb045162ec19d377024e08993d6a7b215bdade5d25fcc"
+  },
+  {
+    "id": "20260717150000",
+    "path": "supabase/migrations/20260717150000_e45_provider_documents_activation.sql",
+    "sha256": "e1128248bbaa6727a057e904892f7557bfee45b0ecf8886136cf775ca83e60c5"
+  },
+  {
+    "id": "20260717150100",
+    "path": "supabase/migrations/20260717150100_e45_document_storage_bucket.sql",
+    "sha256": "17c263526a9b846357bc980f62082050c0160a17a2ef30d9dca472ff8fb4c64d"
+  },
+  {
+    "id": "20260717221914",
+    "path": "supabase/migrations/20260717221914_payer_dead_column_drop_superseding.sql",
+    "sha256": "5554800fd9d5d0126287a13eff5246298c2ef5277b70743f369c01e48e7d1a39"
+  },
+  {
+    "id": "20260718020000",
+    "path": "supabase/migrations/20260718020000_ssn_vault_key_via_supabase_vault.sql",
+    "sha256": "7c2e05a9ea20f60ef815179c37cec94b656f7b3c69b2852c3374e570b6759dad"
+  },
+  {
+    "id": "20260718120000",
+    "path": "supabase/migrations/20260718120000_payers_org_write_lockdown.sql",
+    "sha256": "3b7bf90d62c4f07fc32460722f06bf17ac2d82e3edc63ef6c0bdd761bd611b26"
+  },
+  {
+    "id": "20260719120000",
+    "path": "supabase/migrations/20260719120000_e60_unified_case_status.sql",
+    "sha256": "427b77e32eb0a3d0c1f98a0338716013afa39bcb1159a7e2ad33e9bb158dc3ad"
+  },
+  {
+    "id": "20260719120100",
+    "path": "supabase/migrations/20260719120100_e60_set_case_status_rpc.sql",
+    "sha256": "b8a7eeecaad120e41a74091053e593a659212e4397280d4d731359c605d3f50c"
+  },
+  {
+    "id": "20260719120200",
+    "path": "supabase/migrations/20260719120200_e60_auto_status_transitions.sql",
+    "sha256": "f8d7bc1914b670904ff906a05090828e74e12c1ea78d673a14790e53e2c2f326"
+  },
+  {
+    "id": "20260719150000",
+    "path": "supabase/migrations/20260719150000_e62_enrollment_facts.sql",
+    "sha256": "86653501b880dc2802a228d90ac3de60e7bbb91f0e9ff122f7de2ec9aa33a6ba"
+  },
+  {
+    "id": "20260719150100",
+    "path": "supabase/migrations/20260719150100_e62_import_payer_attach_kind.sql",
+    "sha256": "afc25eb2b615ed84428822dddb4dc39b8cce46f58ed38005f29d95a7e2df3e57"
+  },
+  {
+    "id": "20260719160000",
+    "path": "supabase/migrations/20260719160000_e63_run_row_dispositions.sql",
+    "sha256": "878339b7b3a63fac9b2c7f2b49ab51724a041a727b0384a3839a5432ad8cbdb9"
+  },
+  {
+    "id": "20260719170000",
+    "path": "supabase/migrations/20260719170000_e65_global_authoring.sql",
+    "sha256": "74b83d0142e473873a8be113ce41a7c0e0a5ea31edaf36a6fa6c12bb7c074108"
+  },
+  {
+    "id": "20260719190000",
+    "path": "supabase/migrations/20260719190000_grant_floor_hardening.sql",
+    "sha256": "dbddbf57decbdbc7834f50ca9d1198a2524840b0f02797dfe22abd614ad303c2"
+  },
+  {
+    "id": "20260720230000",
+    "path": "supabase/migrations/20260720230000_payer_issued_enrollment_ids.sql",
+    "sha256": "e6f8bc286cc7c7a2964bb7eccc36b1ba99c8fba56a22a75d3a9f50dd56952c13"
+  },
+  {
+    "id": "20260721120000",
+    "path": "supabase/migrations/20260721120000_party_role_label_terminology.sql",
+    "sha256": "c298e496a17b7ec978baeae60c124142d2bfb194819feb4cf11bfdc2e841543a"
+  },
+  {
+    "id": "20260722120000",
+    "path": "supabase/migrations/20260722120000_case_number.sql",
+    "sha256": "3cf712398905b9b75513242e4cd63f95134567a4f81bfde7f59ee81f85fa35b9"
+  },
+  {
+    "id": "20260727120000",
+    "path": "supabase/migrations/20260727120000_e67_payer_manual_setup.sql",
+    "sha256": "0f8f90cb337b59f2bc1e86e2160e9266e12fab9e20f545bc0535926c0ef836ca"
+  },
+  {
+    "id": "20260727120100",
+    "path": "supabase/migrations/20260727120100_e67_fallback_template_unlock.sql",
+    "sha256": "4afe705c224fb9204a915651db01ff73ecdfbd30cebb98f7e3745a0b26e8cde4"
+  },
+  {
+    "id": "20260727120200",
+    "path": "supabase/migrations/20260727120200_e67_payer_contacts.sql",
+    "sha256": "2b55baa3129c2be9c05ba8e60d287d92c19f1a9b65f600916681977d0eca90d6"
+  },
+  {
+    "id": "20260727150000",
+    "path": "supabase/migrations/20260727150000_e68_payer_archive.sql",
+    "sha256": "23576430e10438d3fb658a1090a0564a071b033c7db92236f74c45e4bc11fd2a"
+  },
+  {
+    "id": "20260727150100",
+    "path": "supabase/migrations/20260727150100_e68_merge_payer.sql",
+    "sha256": "8f588ac6ccca0163907036f2b6843225198cf4e35d581d1784a35a31936326cd"
+  },
+  {
+    "id": "20260727150200",
+    "path": "supabase/migrations/20260727150200_e68_case_status_missing_ack.sql",
+    "sha256": "bdb5c1814bac578080dfbdcbe828ced9b0f352d25d9575a087a9ea22e30a81cc"
+  },
+  {
+    "id": "20260728120000",
+    "path": "supabase/migrations/20260728120000_s61_provider_field_verifications.sql",
+    "sha256": "d50f10a28f03d8306c90b787bcd6d170d2bdae99327a164d3aebc9080f4e785e"
+  },
+  {
+    "id": "20260728160041",
+    "path": "supabase/migrations/20260728160041_s61_fix_provider_org_match_ambiguity.sql",
+    "sha256": "5a21cb1a03f94c56b7397ed20ba0bc89977ec68b274fa315a60f410608894fd1"
+  },
+  {
+    "id": "20260729120000",
+    "path": "supabase/migrations/20260729120000_group_insurance_coverage_level.sql",
+    "sha256": "50a4d9e151d3916d8dde0df2ed813ad4f305ad50a1ed5e184d941cac26e76908"
+  },
+  {
+    "id": "20260807120000",
+    "path": "supabase/migrations/20260807120000_org_intake_no_default_sales_rep.sql",
+    "sha256": "75937571e3fb6b2feb9d98b60403e18639e1db7e87792a4116e11f9c185f5d07"
+  },
+  {
+    "id": "20260807130000",
+    "path": "supabase/migrations/20260807130000_people_contact_roles.sql",
+    "sha256": "5185702ddc5b889cd2df57db94ab6612e5f011de482285700d6a35a0751ae57a"
+  },
+  {
+    "id": "20260807130100",
+    "path": "supabase/migrations/20260807130100_people_contact_role_rpcs.sql",
+    "sha256": "e6c9d39c4b5680f21de0e78f7d2b7e1a938333a4bca359efadf98507ebc6dc4d"
+  },
+  {
+    "id": "20260807150937",
+    "path": "supabase/migrations/20260807150937_harden_party_role_tenant_integrity.sql",
+    "sha256": "b8c6a8e263f4cc3de74323a4c95b2a442c40892ecc29c51ca9a1b211e69a9405"
+  },
+  {
+    "id": "20260807160000",
+    "path": "supabase/migrations/20260807160000_e69_field_registry.sql",
+    "sha256": "96308aa1386aadaf953b90baaac31c1ff4ac92c4ac01b87ee4fcada53365c7a3"
+  },
+  {
+    "id": "20260807160100",
+    "path": "supabase/migrations/20260807160100_e69_shared_registry_rpcs.sql",
+    "sha256": "767254ae992895e63f822bbfc60e26357751a28d888822b01fc9fc2e4a1f441f"
+  },
+  {
+    "id": "20260807170000",
+    "path": "supabase/migrations/20260807170000_e69_datafields_to_registry.sql",
+    "sha256": "b6fc60cedb364816e0128ff40b6fb575f0574f435ff6b77dbb7a955aa6247542"
+  },
+  {
+    "id": "20260809120100",
+    "path": "supabase/migrations/20260809120100_slice6_global_sop_read_without_assignment.sql",
+    "sha256": "5c1e1285b81f4359198cbbdec74ed9efff1cfec7a827cc40e355f3f51b12fd18"
+  },
+  {
+    "id": "20260810120000",
+    "path": "supabase/migrations/20260810120000_purge_unreferenced_catalog_payers.sql",
+    "sha256": "69b2f9d499077637870ebff7ad97881b063f67c72be1962dee9eb9f739ff749b"
+  },
+  {
+    "id": "20260810143000",
+    "path": "supabase/migrations/20260810143000_bite_cap02_shared_propose_presentation_refresh.sql",
+    "sha256": "c54cd1681e95dc43a917ea920f9145ea79fe04ebcad7a772a49aa851d5989780"
+  },
+  {
+    "id": "20260810220000",
+    "path": "supabase/migrations/20260810220000_opa_retire_assignment_gate.sql",
+    "sha256": "6ef3f368f0bd3da7beeacc77c8275ab743946939698d7b3d0ac6c6e034414523"
+  },
+  {
+    "id": "20260812130000",
+    "path": "supabase/migrations/20260812130000_payer_contacts_select_opa_retire.sql",
+    "sha256": "36bb10babac801383c77f590b0b33b0b52ecd73857530b588cae626722223859"
+  },
+  {
+    "id": "20260812140000",
+    "path": "supabase/migrations/20260812140000_sop_template_multi_state.sql",
+    "sha256": "152aea8e739f067afd63b99523d876c4edba67961d9341ec86c9bee014f8aec0"
+  },
+  {
+    "id": "20260813120000",
+    "path": "supabase/migrations/20260813120000_e610_control_options.sql",
+    "sha256": "aa6ef97916a178aa27e487b98bb79ec7b9f66abae69518bdf19c7a9e3506f0fb"
+  },
+  {
+    "id": "20260814180000",
+    "path": "supabase/migrations/20260814180000_author_global_sop_returns_jsonb.sql",
+    "sha256": "75c07e54df7f9f5e2eda27bd3d9b321ded39e3e28a6cfe0129f4b1fd9adac771"
+  },
+  {
+    "id": "20260816120000",
+    "path": "supabase/migrations/20260816120000_profile_name_split_and_title.sql",
+    "sha256": "9f9e6f0f23c8cd3943b291478f84e463e886039b6e9efba94e8ada2d009ec6eb"
+  },
+  {
+    "id": "20260824153000",
+    "path": "supabase/migrations/20260824153000_provider_documents_cp575_kind.sql",
+    "sha256": "f8b09570606c1b3c3438a9a127560b5f4a016c560016788899f0f39197ebf351"
+  },
+  {
+    "id": "20260824170000",
+    "path": "supabase/migrations/20260824170000_payer_forms.sql",
+    "sha256": "373046f8e6e1b5b9b6416c8efaef610dc12e14cca5f87832bfba606078dde205"
+  },
+  {
+    "id": "20260825120000",
+    "path": "supabase/migrations/20260825120000_e611_pdf_field_maps.sql",
+    "sha256": "a357b4cccae4a35db81bf3139bf007fe3bec9c8a256358085d1f30b9455c95dd"
+  },
+  {
+    "id": "20260827120000",
+    "path": "supabase/migrations/20260827120000_e11_case_facilities.sql",
+    "sha256": "ea31538a4041f6c9edcfa27c42c71e3a0e2435ad7ad9b1456fdc0a2abf798bd5"
+  },
+  {
+    "id": "20260903210000",
+    "path": "supabase/migrations/20260903210000_delete_case_rpc.sql",
+    "sha256": "f8b4a075629ad7121bc3340bc1fcf1af8fd2750ae510d26f6d942b1560fb2ad2"
+  },
+  {
+    "id": "20260903210000",
+    "path": "supabase/migrations/20260903210000_delete_org_sop_template.sql",
+    "sha256": "863152fb62f4656835068b9867473b956473a4f2c1631d23c2e61d7cd80f50c7"
+  },
+  {
+    "id": "20260918172142",
+    "path": "supabase/migrations/20260918172142_p01_vault_authorization.sql",
+    "sha256": "1bf7c2d9e5ad5e2c8c855a3cf8ba07012e8b02f1776d8c5bfa9bf9f0f8bde8d0"
+  },
+  {
+    "id": "20260919033009",
+    "path": "supabase/migrations/20260919033009_provider_csv_add_provider_parity.sql",
+    "sha256": "f23989450277e449e33d7eecf436000aeeefa78c4f97dc869b090085db598279"
+  },
+  {
+    "id": "20260921220000",
+    "path": "supabase/migrations/20260921220000_fix_case_generation_run_rows_created_case_check.sql",
+    "sha256": "4a4bd131404896e340671e1b32df0beec427e661ad6fc65461835a2459882484"
+  }
+]

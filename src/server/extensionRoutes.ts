@@ -8,6 +8,7 @@ import {
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
+import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
 import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -142,12 +143,25 @@ export async function handleProviderProfile(
     if (!STATE_RE.test(stateRaw)) return fail(422, "state must be a two-letter code");
     state = stateRaw.toUpperCase();
   }
-  const caseIdPresent = url.searchParams.has("case_id");
-  const caseIdRaw = url.searchParams.get("case_id");
-  if (caseIdPresent && (!caseIdRaw || !UUID_RE.test(caseIdRaw))) {
-    return fail(422, "case_id must be a UUID");
+  const hasSnakeCaseId = url.searchParams.has("case_id");
+  const hasCamelCaseId = url.searchParams.has("caseId");
+  let caseId: string | undefined;
+
+  if (hasSnakeCaseId) {
+    const caseIdRaw = url.searchParams.get("case_id");
+    if (!caseIdRaw || !UUID_RE.test(caseIdRaw)) {
+      return fail(422, "case_id must be a UUID");
+    }
+    caseId = caseIdRaw;
+  } else if (hasCamelCaseId) {
+    const caseIdRaw = url.searchParams.get("caseId");
+    if (caseIdRaw != null && caseIdRaw !== "") {
+      if (!UUID_RE.test(caseIdRaw)) return fail(404, "Case not found for this provider");
+      caseId = caseIdRaw;
+    }
   }
-  const caseId = caseIdRaw ?? undefined;
+
+  const caseIdPresent = hasSnakeCaseId || (hasCamelCaseId && caseId != null);
 
   // Explicit facility selection for the facility.*/assignment.* tokens. A
   // non-UUID can't be a facility — same early 404 the set-membership check
@@ -161,10 +175,17 @@ export async function handleProviderProfile(
     if (!UUID_RE.test(facilityIdRaw)) return fail(404, "Facility not found for this provider");
     facilityId = facilityIdRaw;
   }
+  const groupIdRaw = url.searchParams.get("groupId");
+  let groupId: string | undefined;
+  if (groupIdRaw != null && groupIdRaw !== "") {
+    if (!UUID_RE.test(groupIdRaw)) return fail(404, "Group not found for this provider");
+    groupId = groupIdRaw;
+  }
 
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
+    groupId,
     caseId,
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
@@ -172,6 +193,9 @@ export async function handleProviderProfile(
   // the isolation gate's assertion 11. Not a read: no audit row, no data.
   if (result.kind === "facility_not_found") {
     return fail(404, "Facility not found for this provider");
+  }
+  if (result.kind === "group_not_found") {
+    return fail(404, "Group not found for this provider or case");
   }
   const { profile, needsFacility } = result;
 
@@ -433,6 +457,23 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
     null,
     result.kind === "created" ? 201 : 200,
   );
+}
+
+// POST /api/portal-field-maps/batch-learn — only accepted, high-confidence,
+// value-free AI suggestions after a successful portal submission are eligible.
+// Actor and tenant are always taken from the authenticated context. The RPC
+// repeats evidence and ownership checks and commits maps + audit atomically.
+export async function handleBatchLearnPortalFieldMaps(
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot save AI field mappings");
+  const result = await batchLearnPortalFieldMaps(
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },
+    body,
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok(result.response, { total: result.response.confirmed_saved_count });
 }
 
 // GET /api/cases — two additive modes over the same org-scoped route:

@@ -8,6 +8,7 @@ vi.mock("@/services/portalFieldMaps", () => ({
   listSharedFieldMaps: vi.fn(),
   proposeFieldMap: vi.fn(),
 }));
+vi.mock("@/services/portalFieldMapLearning", () => ({ batchLearnPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({
   recordFillEvent: vi.fn(),
@@ -40,6 +41,7 @@ import {
   listSharedFieldMaps,
   proposeFieldMap,
 } from "@/services/portalFieldMaps";
+import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
 import { listPortalsForApi } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2 } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -61,6 +63,7 @@ import {
   handleListSharedFieldMaps,
   handleListPortals,
   handleProposeFieldMap,
+  handleBatchLearnPortalFieldMaps,
   handleCompleteTaskStep,
   handleCreateFillEvent,
   handleListProviderCases,
@@ -76,6 +79,7 @@ import {
 const listMapsMock = vi.mocked(listPortalFieldMaps);
 const listSharedMapsMock = vi.mocked(listSharedFieldMaps);
 const proposeMapMock = vi.mocked(proposeFieldMap);
+const batchLearnMapMock = vi.mocked(batchLearnPortalFieldMaps);
 const listPortalsMock = vi.mocked(listPortalsForApi);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const supportsFillEventV2Mock = vi.mocked(supportsFillEventV2);
@@ -163,7 +167,7 @@ describe("provider profile handler", () => {
         provider: { id: PROVIDER_ID } as never,
         tokens: [],
         unresolved: [],
-        facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+        facilities: [{ id: FACILITY_ID, name: "Main Clinic", state: "MO" }],
         selected_facility_id: FACILITY_ID,
         case_id: null,
         ...profile,
@@ -199,7 +203,7 @@ describe("provider profile handler", () => {
       provider: { id: PROVIDER_ID },
       tokens: USER_TOKENS,
       unresolved: [],
-      facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+      facilities: [{ id: FACILITY_ID, name: "Main Clinic", state: "MO" }],
       selected_facility_id: FACILITY_ID,
       case_id: null,
     });
@@ -421,14 +425,20 @@ describe("me orgs handler", () => {
 
 describe("portal field maps handler", () => {
   it("returns the rows with meta.total", async () => {
-    listMapsMock.mockResolvedValue([{ id: "m1" }, { id: "m2" }] as never);
+    listMapsMock.mockResolvedValue([
+      { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
+      { id: "m2" },
+    ] as never);
     const res = await handleListPortalFieldMaps(
       new URL("https://x.test/api/portal-field-maps"),
       ctx(),
     );
     expect(res.status).toBe(200);
     const b = await body(res);
-    expect(b.data).toEqual([{ id: "m1" }, { id: "m2" }]);
+    expect(b.data).toEqual([
+      { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
+      { id: "m2" },
+    ]);
     expect(b.meta).toEqual({ total: 2 });
   });
 
@@ -475,6 +485,56 @@ describe("portal field maps handler", () => {
 
     expect((await body(res)).meta).toEqual({ total: 0, fill_event_schema_version: 2 });
     expect(supportsFillEventV2Mock).toHaveBeenCalledWith({ db });
+  });
+});
+
+describe("portal field map batch-learn handler", () => {
+  const INPUT = {
+    case_id: "11111111-1111-4111-8111-111111111111",
+    provider_id: "22222222-2222-4222-8222-222222222222",
+    fill_session_id: "33333333-3333-4333-8333-333333333333",
+    portal_key: "availity",
+    page_url: "https://portal.example/forms/application?case=private#step",
+    mappings: [
+      { selector: "#provider-npi", token: "provider.npi", confidence: 0.91, field_type: "text" },
+    ],
+  };
+
+  it("calls the service with actor and org from auth context and returns confirmed receipt counts", async () => {
+    batchLearnMapMock.mockResolvedValue({
+      kind: "ok",
+      response: {
+        inserted_count: 1,
+        confirmed_saved_count: 1,
+        preserved_count: 0,
+        results: [{ selector: "#provider-npi", token: "provider.npi", outcome: "inserted" }],
+      },
+    });
+    const c = ctx();
+    const res = await handleBatchLearnPortalFieldMaps(INPUT, c);
+    expect(res.status).toBe(200);
+    expect(batchLearnMapMock).toHaveBeenCalledWith(
+      { db: c.db, orgId: "org-1", userId: "u1" },
+      INPUT,
+    );
+    expect((await body(res)).data).toMatchObject({ inserted_count: 1, confirmed_saved_count: 1 });
+  });
+
+  it("refuses billing before the service is called", async () => {
+    const res = await handleBatchLearnPortalFieldMaps(INPUT, ctx("billing"));
+    expect(res.status).toBe(403);
+    expect(batchLearnMapMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces validation and stale-evidence rejections without logging request contents", async () => {
+    batchLearnMapMock.mockResolvedValue({
+      kind: "rejected",
+      status: 404,
+      message: "Submission evidence not found",
+    });
+    const res = await handleBatchLearnPortalFieldMaps(INPUT, ctx());
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Submission evidence not found");
   });
 });
 

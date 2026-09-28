@@ -7,6 +7,7 @@
 import { useMemo, useState, Fragment } from "react";
 import { Link } from "@tanstack/react-router";
 import { fmtDateTime } from "@/lib/format";
+import { auditUserOptions } from "@/lib/auditUserOptions";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
@@ -202,13 +203,7 @@ export function AuditLogReport() {
     return allRows.filter((r) => new Date(r.ts) <= end);
   }, [allRows, dateTo]);
 
-  const users = useMemo(() => {
-    const m = new Map<string, string>();
-    allRows.forEach((r) => {
-      if (r.userId) m.set(r.userId, r.userName ?? r.userId.slice(0, 8));
-    });
-    return Array.from(m.entries()).map(([id, name]) => ({ id, name }));
-  }, [allRows]);
+  const users = useMemo(() => auditUserOptions(allRows), [allRows]);
 
   const entityTypes = useMemo(() => {
     return Array.from(new Set(allRows.map((r) => r.entityType))).sort();

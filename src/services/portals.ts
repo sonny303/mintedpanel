@@ -393,3 +393,38 @@ export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
   });
   return after;
 }
+
+/** Update or set the payer attached to a portal (org or global). */
+export async function updatePortalPayer(portal: Portal, payerId: string | null): Promise<Portal> {
+  let after: Portal;
+  if (portal.orgId === null) {
+    if (payerId === null) throw new Error("Global portals must have an attached payer");
+    after = await upsertGlobalPortal({
+      id: portal.id,
+      name: portal.name,
+      portalKey: portal.portalKey,
+      payerId,
+      formUrl: portal.formUrl,
+    });
+  } else {
+    const orgId = requireActiveOrg();
+    const { data, error } = await supabase
+      .from("portals")
+      .update({ payer_id: payerId } as never)
+      .eq("id", portal.id)
+      .eq("org_id", orgId)
+      .select(PORTAL_COLUMNS)
+      .single();
+    if (error) throw error;
+    after = camelizeRow<Portal>(data);
+  }
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal",
+    entityId: portal.id,
+    before: { payerId: portal.payerId },
+    after: { payerId: after.payerId },
+    description: `Updated attached payer for portal ${after.name}`,
+  });
+  return after;
+}

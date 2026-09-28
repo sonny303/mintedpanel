@@ -42,6 +42,9 @@ jobs:
       - name: Verify delivery controls (simulation)
         run: node --test scripts/delivery/*.test.mjs
 
+      - name: Require reconciled migration history and schema plan
+        run: node scripts/migrations/cli.mjs readiness staging
+
       - name: Admit exact successful main source
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { StatusPill } from "@/components/StatusPill";
 import { fmtDate } from "@/lib/format";
-import { documentKindLabel, familyHistory } from "@/lib/documents";
+import { documentKindLabel, familyHistory, signedDateAge, utcTodayIso } from "@/lib/documents";
 import type { ProviderDocument } from "@/types";
 import { DocumentDownloadButton } from "./DocumentDownloadButton";
 
@@ -40,6 +40,7 @@ export function DocumentHistoryDialog({
 }: DocumentHistoryDialogProps) {
   const versions = familyHistory(documents, familyId);
   const kind = versions[0] ? documentKindLabel(versions[0].docType) : "Document";
+  const today = utcTodayIso();
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl border-[#E8E5E0] shadow-none">
@@ -54,32 +55,50 @@ export function DocumentHistoryDialog({
             <TableRow>
               <TableHead className="h-9">Version</TableHead>
               <TableHead className="h-9">File</TableHead>
-              <TableHead className="h-9">Expires</TableHead>
+              <TableHead className="h-9">
+                {versions[0]?.docType === "w9" ? "Signed" : "Expires"}
+              </TableHead>
               <TableHead className="h-9">Uploaded</TableHead>
               <TableHead className="h-9">By</TableHead>
               <TableHead className="h-9 text-right">Download</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {versions.map((v) => (
-              <TableRow key={v.id} className="h-10">
-                <TableCell className="tabular-nums">
-                  v{v.versionNumber}
-                  {v.id === currentId ? (
-                    <StatusPill status="green" label="Current" className="ml-2" />
-                  ) : null}
-                </TableCell>
-                <TableCell className="max-w-[220px] truncate">{v.fileName}</TableCell>
-                <TableCell className="tabular-nums">{fmtDate(v.expirationDate)}</TableCell>
-                <TableCell className="tabular-nums">{fmtDate(v.createdAt)}</TableCell>
-                <TableCell>
-                  {v.uploadedBy ? (uploaderNames.get(v.uploadedBy) ?? "—") : "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DocumentDownloadButton documentId={v.id} fileName={v.fileName} />
-                </TableCell>
-              </TableRow>
-            ))}
+            {versions.map((v) => {
+              const signedAge = v.docType === "w9" ? signedDateAge(v.effectiveDate, today) : null;
+              const signedDateText = v.effectiveDate
+                ? `Signed ${fmtDate(v.effectiveDate) === "—" ? v.effectiveDate : fmtDate(v.effectiveDate)} · age unavailable`
+                : "Signed date not set";
+              return (
+                <TableRow key={v.id} className="h-10">
+                  <TableCell className="tabular-nums">
+                    v{v.versionNumber}
+                    {v.id === currentId ? (
+                      <StatusPill status="green" label="Current" className="ml-2" />
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="max-w-[220px] truncate">{v.fileName}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {v.docType === "w9" ? (
+                      signedAge ? (
+                        <StatusPill status={signedAge.tone} label={signedAge.label} />
+                      ) : (
+                        signedDateText
+                      )
+                    ) : (
+                      fmtDate(v.expirationDate)
+                    )}
+                  </TableCell>
+                  <TableCell className="tabular-nums">{fmtDate(v.createdAt)}</TableCell>
+                  <TableCell>
+                    {v.uploadedBy ? (uploaderNames.get(v.uploadedBy) ?? "—") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DocumentDownloadButton documentId={v.id} fileName={v.fileName} />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </DialogContent>

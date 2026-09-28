@@ -92,6 +92,7 @@ const EXPECTED_FAILS = {
   // The field-map leak breaks both the shared-catalog reads and the
   // propose-only write's org scoping (20a).
   fieldmaps: ["20a", "5b", "5c"],
+  learning: ["20b", "20c"],
   profile: ["6"],
   caseprofile: ["6b"],
   fillevents: ["7", "7b"],

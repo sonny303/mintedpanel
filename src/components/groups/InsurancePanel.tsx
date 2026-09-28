@@ -32,6 +32,7 @@ import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { fmtDate } from "@/lib/format";
+import { hasValidPolicyDateOrder, POLICY_DATE_ORDER_ERROR } from "@/lib/insurancePolicyDates";
 import {
   useCreateGroupInsurancePolicy,
   useGroupInsurancePolicies,
@@ -193,6 +194,10 @@ function InsurancePolicyEditModal({
   const [endDate, setEndDate] = useState(policy?.policyEndDate ?? "");
   const [notes, setNotes] = useState(policy?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
+  const dateOrderError =
+    startDate && endDate && !hasValidPolicyDateOrder(startDate, endDate)
+      ? POLICY_DATE_ORDER_ERROR
+      : null;
 
   const createMut = useCreateGroupInsurancePolicy(groupId);
   const updateMut = useUpdateGroupInsurancePolicy(policy?.id ?? "", groupId);
@@ -200,6 +205,7 @@ function InsurancePolicyEditModal({
 
   const handleSave = () => {
     setError(null);
+    if (dateOrderError) return;
     const input: InsurancePolicyInput = {
       groupId,
       insuranceType,
@@ -326,8 +332,15 @@ function InsurancePolicyEditModal({
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
+                aria-invalid={Boolean(dateOrderError)}
+                aria-describedby={dateOrderError ? "policy-end-error" : undefined}
                 className="h-9"
               />
+              {dateOrderError ? (
+                <p id="policy-end-error" role="alert" className="mt-1 text-[12px] text-[#B91C1C]">
+                  {dateOrderError}
+                </p>
+              ) : null}
             </div>
           </div>
           <div>

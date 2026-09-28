@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import {
+  downloadDocumentFile,
   getDocumentDownload,
   listGroupDocuments,
   listOrgDocuments,
@@ -83,5 +84,14 @@ export function useUploadDocument() {
 export function useDocumentDownload() {
   return useMutation({
     mutationFn: (documentId: string) => getDocumentDownload(documentId),
+  });
+}
+
+/** Audited signed download with bytes fetched before browser handoff. */
+export function useDownloadDocumentFile() {
+  return useMutation({
+    gcTime: 0,
+    mutationFn: ({ documentId, fileName }: { documentId: string; fileName: string }) =>
+      downloadDocumentFile(documentId, fileName),
   });
 }

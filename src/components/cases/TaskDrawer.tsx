@@ -59,6 +59,8 @@ interface TaskDrawerProps {
   caseTasks?: Task[];
   providerName?: string;
   groupName?: string | null;
+  payerName?: string | null;
+  state?: string | null;
   /** Exact route-owned case context. The drawer only exposes it to the active,
    * incomplete online-form step when the task identifiers match. */
   portalHandoff?: PortalHandoffContext;
@@ -99,6 +101,8 @@ export function TaskDrawer({
   caseTasks = [],
   providerName = "this provider",
   groupName = null,
+  payerName = null,
+  state = null,
   portalHandoff,
 }: TaskDrawerProps) {
   const navigate = useNavigate();
@@ -355,6 +359,8 @@ export function TaskDrawer({
                                 caseId={task.caseId}
                                 providerId={task.providerId}
                                 groupId={groupId}
+                                providerName={providerName}
+                                groupName={groupName}
                                 portalHandoff={stepPortalHandoff}
                               />
                             )}
@@ -383,6 +389,8 @@ export function TaskDrawer({
                   providerName={providerName}
                   groupId={groupId}
                   groupName={groupName}
+                  payerName={payerName}
+                  state={state}
                   caseId={task.caseId}
                   tasks={caseTasks.length > 0 ? caseTasks : [task]}
                 />

@@ -392,6 +392,8 @@ function CaseDetailPage() {
               groupName={c?.group?.name ?? null}
               refreshPdfTokenValues={refreshCasePdfTokenValues}
               pdfContextKey={pdfContextKey}
+              payerName={c?.payer?.name ?? null}
+              state={c?.state ?? null}
               portalHandoff={{
                 caseId: c.id,
                 providerId: c.providerId,
