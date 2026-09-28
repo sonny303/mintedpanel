@@ -6,7 +6,7 @@
 // task set is regenerated from the CURRENT SOP version (Model A: new work
 // gets latest) via the same pickTemplate/resolveTemplate tier every creation
 // surface uses, appended after the case's existing tasks.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { RotateCcw } from "lucide-react";
 import {
@@ -17,6 +17,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { isAllStates, templateStates } from "@/lib/sopMatchKey";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
@@ -33,11 +42,43 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
   const templatesQ = useSops();
   const reapply = useReapplyCase();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+
+  const autoTemplate = useMemo(() => {
+    return pickTemplate(templatesQ.data ?? [], c.payerId, c.state, c.groupId);
+  }, [templatesQ.data, c.payerId, c.state, c.groupId]);
+
+  const candidateTemplates = useMemo(() => {
+    const all = templatesQ.data ?? [];
+    return all.filter((t) => {
+      if (t.archived) return false;
+      if (t.payerId !== c.payerId) return false;
+      if (t.groupId !== null && c.groupId !== null && t.groupId !== c.groupId) return false;
+      const states = templateStates(t);
+      if (states.length > 0 && !isAllStates(states) && !states.includes(c.state)) return false;
+      return true;
+    });
+  }, [templatesQ.data, c.payerId, c.groupId, c.state]);
+
+  const templateOptions = useMemo(() => {
+    const list = [...candidateTemplates];
+    if (autoTemplate && !list.some((t) => t.id === autoTemplate.id)) {
+      list.push(autoTemplate);
+    }
+    return list;
+  }, [candidateTemplates, autoTemplate]);
+
+  const effectiveTemplate = useMemo(() => {
+    if (selectedTemplateId) {
+      return (templatesQ.data ?? []).find((t) => t.id === selectedTemplateId) ?? null;
+    }
+    return autoTemplate;
+  }, [selectedTemplateId, templatesQ.data, autoTemplate]);
 
   if (c.caseStatus !== "denied" || !canEdit) return null;
 
   const run = () => {
-    const template = pickTemplate(templatesQ.data ?? [], c.payerId, c.state, c.groupId);
+    const template = effectiveTemplate;
     const resolved =
       template && c.provider ? resolveTemplate(template, c.provider, c.group, null, null) : [];
     // Append after the case's existing tasks so the combined checklist keeps
@@ -95,6 +136,29 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
               regenerated from the current SOP. Existing tasks, touches, and the prior denial are
               kept.
             </p>
+            {templateOptions.length > 0 ? (
+              <div className="space-y-1.5 pt-2">
+                <Label htmlFor="reapply-template">Template to apply</Label>
+                <Select
+                  value={effectiveTemplate?.id ?? ""}
+                  onValueChange={(val) => setSelectedTemplateId(val)}
+                >
+                  <SelectTrigger id="reapply-template">
+                    <SelectValue placeholder="Select a template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templateOptions.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                        {t.taskDefinitions?.length
+                          ? ` (${t.taskDefinitions.length} task${t.taskDefinitions.length === 1 ? "" : "s"})`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmOpen(false)}>
                 Cancel
