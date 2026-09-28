@@ -17,7 +17,7 @@
 //
 // Collapsed by default: Step 2/3 typing latency must not pay for this content
 // (the FormStepPanel contract).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronDown, FileDown, FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import { useTrainGlobalFieldMap } from "@/hooks/useGlobalAuthoring";
 import { useFillPayerForm, usePayerFormDownload } from "@/hooks/usePayerForms";
 import { mockValueForToken } from "@/lib/mockFillProfile";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
+import { createFillRunGuard } from "@/lib/fillRunGuard";
 import { registryCoverage, sectionRenamePatches, type RegistryRow } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
 import { filterMappingTokens, isPdfFillableToken } from "@/lib/fillTokenReach";
@@ -62,6 +63,18 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   const trainMut = useTrainGlobalFieldMap();
   const renameMut = useUpdateSharedFieldRegistry();
   const sampleFill = useFillPayerForm();
+  const sampleContextKey = `${familyId}:${formId}`;
+  const sampleRunGuard = useRef(createFillRunGuard(sampleContextKey));
+  sampleRunGuard.current.setContext(sampleContextKey);
+  const sampleRunGuardInstance = sampleRunGuard.current;
+  const clearSamplePendingRecording = sampleFill.clearPendingRecording;
+  useEffect(() => {
+    sampleRunGuardInstance.activate();
+    return () => {
+      sampleRunGuardInstance.invalidate();
+      clearSamplePendingRecording("", formId, true);
+    };
+  }, [clearSamplePendingRecording, familyId, formId, sampleRunGuardInstance]);
 
   const maps = useMemo(
     () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey && m.status !== "retired"),
@@ -209,6 +222,7 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   );
 
   async function runSampleFill() {
+    const runToken = sampleRunGuard.current.capture();
     try {
       const result = await sampleFill.mutateAsync({
         formId,
@@ -219,10 +233,20 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
         tokenValues: sampleValues,
         fileStem: "SAMPLE-do-not-send",
         isTest: true,
+        isCurrent: () => sampleRunGuard.current.isCurrent(runToken),
       });
+      if (!sampleRunGuard.current.isCurrent(runToken)) return;
+      if (result.recordingRetried) {
+        toast.success(
+          result.needsReviewCount > 0
+            ? `Sample result saved. ${result.needsReviewCount} field${result.needsReviewCount === 1 ? " still needs" : "s still need"} review${result.rejectedCount > 0 ? `, including ${result.rejectedCount} writer rejection${result.rejectedCount === 1 ? "" : "s"}` : ""}; the sample PDF was already downloaded.`
+            : "Sample fill result saved. The sample PDF was already downloaded.",
+        );
+        return;
+      }
       // The mutation already planned the fill to run it — reuse that instead
       // of recomputing the same plan from the same inputs a second time.
-      const base = `Sample filled ${result.written} of ${result.plan.entries.length} fields — synthetic data, do not send`;
+      const base = `PDF writer accepted ${result.written} field${result.written === 1 ? "" : "s"}; ${result.rejectedCount} rejected or unresolved; ${result.needsReviewCount} still need review. Writer acceptance is not readback-verified. Synthetic sample; do not send.`;
       // A real case cannot resolve these either. Saying so on the sample is
       // the whole point of DYN-TOKEN-01.
       if (unreachableSampleCount > 0) {
@@ -233,11 +257,23 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
         toast.success(base);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not run the sample fill");
+      if (!sampleRunGuard.current.isCurrent(runToken)) return;
+      if (sampleFill.hasPendingRecording("", formId, true)) {
+        const summary = sampleFill.getPendingRecordingSummary("", formId, true);
+        const review = summary?.needsReviewCount ?? 0;
+        const rejected = summary?.rejectedCount ?? 0;
+        toast.error(
+          `The sample PDF was downloaded, but its outcome record is pending${review > 0 ? `; ${review} field${review === 1 ? " still needs" : "s still need"} review` : ""}${rejected > 0 ? `, including ${rejected} writer rejection${rejected === 1 ? "" : "s"}` : ""}. Retry recording; this will not generate another PDF.`,
+        );
+      } else {
+        toast.error(err instanceof Error ? err.message : "Could not run the sample fill");
+      }
     }
   }
 
   const busy = download.isPending || importMut.isPending;
+  const sampleRecordingPending = sampleFill.hasPendingRecording("", formId, true);
+  const samplePendingSummary = sampleFill.getPendingRecordingSummary("", formId, true);
   const stateLabel =
     maps.length === 0
       ? { label: "Fields not imported", tone: "neutral" as const }
@@ -301,6 +337,29 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
               </p>
             ) : null}
 
+            {canEdit && maps.length === 0 && sampleRecordingPending ? (
+              <div className="border-t border-[#E8E5E0] pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[12px]"
+                  onClick={() => void runSampleFill()}
+                  disabled={sampleFill.isPending}
+                >
+                  {sampleFill.isPending ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Retry sample recording
+                </Button>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  The sample PDF is already downloaded. Retry saves its value-free outcome record;
+                  it will not generate another copy.
+                </p>
+              </div>
+            ) : null}
+
             {maps.length > 0 ? (
               <>
                 <FieldRegistryList
@@ -331,11 +390,12 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
                       ) : (
                         <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
                       )}
-                      Download a sample fill
+                      {sampleRecordingPending ? "Retry sample recording" : "Download a sample fill"}
                     </Button>
                     <p className="mt-1 text-[12px] text-muted-foreground">
-                      Fills this exact blank with made-up sample data so you can see where every
-                      value lands. Never send it to a payer.
+                      {sampleRecordingPending
+                        ? `The sample PDF is already downloaded. ${samplePendingSummary?.needsReviewCount ?? 0} field${samplePendingSummary?.needsReviewCount === 1 ? " still needs" : "s still need"} review${(samplePendingSummary?.rejectedCount ?? 0) > 0 ? `, including ${samplePendingSummary?.rejectedCount} writer rejection${samplePendingSummary?.rejectedCount === 1 ? "" : "s"}` : ""}. Retry saves its value-free outcome record without generating another copy.`
+                        : "Fills this exact blank with made-up sample data so you can see where every value lands. Writer acceptance is not readback-verified. Never send it to a payer."}
                     </p>
                   </div>
                 ) : null}

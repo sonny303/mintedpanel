@@ -1,85 +1,266 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mintedpanel.invalid/contracts/fill-event-v2.schema.json",
-  "title": "Incomplete non-normative Minted fill event V2 schema stub",
-  "description": "R0 design stub only; not authorized for implementation. Expected and actual values are absent, but R1 must finalize attempt semantics, stable map/target/frame identity, qualified not_found evidence, counter reconciliation, and all API, browser, and shared-test producer/reader paths before this schema is normative.",
+  "title": "Minted fill event V2 metadata",
+  "description": "Value-free fill outcome metadata. Runtime validators additionally enforce reconciled counters and case-insensitive uniqueness of the mapId/targetKey/frameKey tuple.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "id",
-    "caseId",
-    "providerId",
-    "portalKey",
-    "fillMode",
-    "startedAt",
-    "completedAt",
     "schemaVersion",
-    "pageStepId",
     "fieldsAttempted",
     "fieldsVerified",
     "fieldsRejected",
     "fieldOutcomes"
   ],
   "properties": {
-    "id": { "type": "string", "format": "uuid" },
-    "caseId": { "type": "string", "format": "uuid" },
-    "providerId": { "type": "string", "format": "uuid" },
-    "portalKey": { "type": "string", "maxLength": 160 },
-    "fillMode": { "enum": ["web", "pdf"] },
-    "startedAt": { "type": "string", "format": "date-time" },
-    "completedAt": { "type": "string", "format": "date-time" },
     "schemaVersion": { "const": 2 },
-    "pageStepId": { "type": ["string", "null"], "maxLength": 128 },
-    "fieldsAttempted": { "type": "integer", "minimum": 0 },
-    "fieldsVerified": { "type": "integer", "minimum": 0 },
-    "fieldsRejected": { "type": "integer", "minimum": 0 },
+    "fieldsAttempted": { "type": "integer", "minimum": 0, "maximum": 250 },
+    "fieldsVerified": { "type": "integer", "minimum": 0, "maximum": 250 },
+    "fieldsRejected": { "type": "integer", "minimum": 0, "maximum": 250 },
     "fieldOutcomes": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["outcome"],
-        "properties": {
-          "mapId": { "type": "string", "format": "uuid" },
-          "pageStepId": { "type": "string", "maxLength": 128 },
-          "outcome": {
-            "enum": [
-              "verified",
-              "unchanged",
-              "write_rejected",
-              "unverified",
-              "needs_value",
-              "needs_mapping",
-              "manual",
-              "other_page",
-              "hidden",
-              "page_unknown",
-              "not_found",
-              "option_mismatch",
-              "unsupported"
-            ]
-          },
-          "reasonCode": {
-            "enum": [
-              "mask_reverted",
-              "readback_mismatch",
-              "readback_unavailable",
-              "missing_value",
-              "mapping_required",
-              "manual_required",
-              "other_page",
-              "field_hidden",
-              "page_unknown",
-              "target_missing",
-              "frame_inaccessible",
-              "context_changed",
-              "option_missing",
-              "unsupported_control",
-              "invalid_format"
-            ]
-          }
-        }
+      "maxItems": 250,
+      "items": { "$ref": "#/$defs/fieldOutcome" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "opaqueKey": {
+      "type": "string",
+      "pattern": "^[tfs]_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "notFoundEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepKnown", "frameAccessible", "pageSettled", "searchComplete", "targetAbsent"],
+      "properties": {
+        "stepKnown": { "const": true },
+        "frameAccessible": { "const": true },
+        "pageSettled": { "const": true },
+        "searchComplete": { "const": true },
+        "targetAbsent": { "const": true }
       }
+    },
+    "fieldOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapId",
+        "targetKey",
+        "frameKey",
+        "stepKey",
+        "attempted",
+        "outcome",
+        "reasonCode"
+      ],
+      "properties": {
+        "mapId": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "targetKey": { "allOf": [{ "$ref": "#/$defs/opaqueKey" }], "pattern": "^t_" },
+        "frameKey": {
+          "oneOf": [
+            { "allOf": [{ "$ref": "#/$defs/opaqueKey" }], "pattern": "^f_" },
+            { "type": "null" }
+          ]
+        },
+        "stepKey": {
+          "oneOf": [
+            { "allOf": [{ "$ref": "#/$defs/opaqueKey" }], "pattern": "^s_" },
+            { "type": "null" }
+          ]
+        },
+        "attempted": { "type": "boolean" },
+        "outcome": {
+          "enum": [
+            "verified",
+            "unchanged",
+            "write_rejected",
+            "unverified",
+            "needs_value",
+            "needs_mapping",
+            "manual",
+            "other_page",
+            "hidden",
+            "page_unknown",
+            "not_found",
+            "option_mismatch",
+            "unsupported"
+          ]
+        },
+        "reasonCode": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "mask_reverted",
+            "readback_mismatch",
+            "readback_unavailable",
+            "missing_value",
+            "mapping_required",
+            "manual_required",
+            "other_page",
+            "field_hidden",
+            "page_unknown",
+            "target_missing",
+            "frame_inaccessible",
+            "context_changed",
+            "option_missing",
+            "unsupported_control",
+            "invalid_format",
+            "ambiguous_target",
+            "setter_unavailable",
+            "setter_rejected",
+            "unchanged_value"
+          ]
+        },
+        "notFoundEvidence": { "$ref": "#/$defs/notFoundEvidence" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "outcome": { "const": "verified" } } },
+          "then": {
+            "required": ["mapId"],
+            "properties": {
+              "mapId": { "$ref": "#/$defs/uuid" },
+              "attempted": { "const": true },
+              "reasonCode": { "const": null }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "unchanged" } } },
+          "then": {
+            "required": ["mapId"],
+            "properties": {
+              "mapId": { "$ref": "#/$defs/uuid" },
+              "attempted": { "const": false },
+              "reasonCode": { "const": "unchanged_value" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "write_rejected" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": true },
+              "reasonCode": {
+                "enum": ["mask_reverted", "readback_mismatch", "invalid_format", "setter_rejected"]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "unverified" } } },
+          "then": {
+            "properties": {
+              "reasonCode": {
+                "enum": [
+                  "readback_unavailable",
+                  "frame_inaccessible",
+                  "context_changed",
+                  "setter_unavailable"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "needs_value" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "enum": ["missing_value", "invalid_format"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "needs_mapping" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "enum": ["mapping_required", "ambiguous_target"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "manual" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "const": "manual_required" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "other_page" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "const": "other_page" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "hidden" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "const": "field_hidden" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "page_unknown" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "const": "page_unknown" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "not_found" } } },
+          "then": {
+            "required": ["mapId", "stepKey", "frameKey", "notFoundEvidence"],
+            "properties": {
+              "mapId": { "$ref": "#/$defs/uuid" },
+              "stepKey": { "allOf": [{ "$ref": "#/$defs/opaqueKey" }], "pattern": "^s_" },
+              "frameKey": { "allOf": [{ "$ref": "#/$defs/opaqueKey" }], "pattern": "^f_" },
+              "attempted": { "const": false },
+              "reasonCode": { "const": "target_missing" },
+              "notFoundEvidence": { "$ref": "#/$defs/notFoundEvidence" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "option_mismatch" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "const": "option_missing" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "unsupported" } } },
+          "then": {
+            "properties": {
+              "attempted": { "const": false },
+              "reasonCode": { "const": "unsupported_control" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "outcome": { "not": { "const": "not_found" } } }
+          },
+          "then": { "not": { "required": ["notFoundEvidence"] } }
+        }
+      ]
     }
   }
 }

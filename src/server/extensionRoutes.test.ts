@@ -5,11 +5,15 @@ import type { ProviderProfile, ProviderProfileResult } from "@/services/provider
 
 vi.mock("@/services/portalFieldMaps", () => ({
   listPortalFieldMaps: vi.fn(),
+  listSharedFieldMaps: vi.fn(),
   proposeFieldMap: vi.fn(),
 }));
 vi.mock("@/services/portalFieldMapLearning", () => ({ batchLearnPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
-vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
+vi.mock("@/services/fillSessions", () => ({
+  recordFillEvent: vi.fn(),
+  supportsFillEventV2: vi.fn(),
+}));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
 // The org contact families ride the same profile response (2026-08-07). Mocked
 // like every other service here so the handler tests stay free of a DB fake.
@@ -32,10 +36,14 @@ vi.mock("@/services/extensionViewPrefs", () => ({
   putExtensionViewPrefs: vi.fn(),
 }));
 
-import { listPortalFieldMaps, proposeFieldMap } from "@/services/portalFieldMaps";
+import {
+  listPortalFieldMaps,
+  listSharedFieldMaps,
+  proposeFieldMap,
+} from "@/services/portalFieldMaps";
 import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
 import { listPortalsForApi } from "@/services/portals";
-import { recordFillEvent } from "@/services/fillSessions";
+import { recordFillEvent, supportsFillEventV2 } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
@@ -52,6 +60,7 @@ import {
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
+  handleListSharedFieldMaps,
   handleListPortals,
   handleProposeFieldMap,
   handleBatchLearnPortalFieldMaps,
@@ -68,10 +77,12 @@ import {
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
+const listSharedMapsMock = vi.mocked(listSharedFieldMaps);
 const proposeMapMock = vi.mocked(proposeFieldMap);
 const batchLearnMapMock = vi.mocked(batchLearnPortalFieldMaps);
 const listPortalsMock = vi.mocked(listPortalsForApi);
 const recordFillEventMock = vi.mocked(recordFillEvent);
+const supportsFillEventV2Mock = vi.mocked(supportsFillEventV2);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
 const searchCasesMock = vi.mocked(searchOrgCases);
@@ -122,6 +133,7 @@ async function body(res: Response): Promise<ApiEnvelope<unknown>> {
 beforeEach(() => {
   vi.clearAllMocks();
   catalogMock.mockResolvedValue(CATALOG);
+  supportsFillEventV2Mock.mockResolvedValue(false);
 });
 
 describe("provider profile handler", () => {
@@ -399,6 +411,40 @@ describe("portal field maps handler", () => {
     expect(listMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
       portalKey: "availity",
     });
+  });
+
+  it("advertises V2 only when the authenticated database exposes the new columns", async () => {
+    listMapsMock.mockResolvedValue([] as never);
+    supportsFillEventV2Mock.mockResolvedValue(true);
+    const authenticated = ctx();
+
+    const res = await handleListPortalFieldMaps(
+      new URL("https://x.test/api/portal-field-maps"),
+      authenticated,
+    );
+
+    expect((await body(res)).meta).toEqual({ total: 0, fill_event_schema_version: 2 });
+    expect(supportsFillEventV2Mock).toHaveBeenCalledWith({ db: authenticated.db });
+  });
+
+  it("advertises the same checked capability on the shared field-map route", async () => {
+    listSharedMapsMock.mockResolvedValue([] as never);
+    supportsFillEventV2Mock.mockResolvedValue(true);
+    const db = {} as UserContext["db"];
+    const user: UserContext = {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db,
+    };
+
+    const res = await handleListSharedFieldMaps(
+      new URL("https://x.test/api/shared-field-maps"),
+      user,
+    );
+
+    expect((await body(res)).meta).toEqual({ total: 0, fill_event_schema_version: 2 });
+    expect(supportsFillEventV2Mock).toHaveBeenCalledWith({ db });
   });
 });
 
