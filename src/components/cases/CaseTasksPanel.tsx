@@ -63,6 +63,8 @@ export function CaseTasksPanel({
   groupId = null,
   providerName = "this provider",
   groupName = null,
+  payerName = null,
+  state = null,
   portalHandoff,
 }: {
   tasks: Task[];
@@ -73,6 +75,8 @@ export function CaseTasksPanel({
   groupId?: string | null;
   providerName?: string;
   groupName?: string | null;
+  payerName?: string | null;
+  state?: string | null;
   portalHandoff?: CasePortalHandoffData;
 }) {
   const canEdit = useCanWrite();
@@ -355,6 +359,8 @@ export function CaseTasksPanel({
         caseTasks={tasks}
         providerName={providerName}
         groupName={groupName}
+        payerName={payerName}
+        state={state}
         portalHandoff={drawerPortalHandoff}
       />
 

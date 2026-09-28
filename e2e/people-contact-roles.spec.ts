@@ -531,3 +531,48 @@ test("TS-143: a new person is captured with a split name and no cross-org reuse 
     phone_extension: "204",
   });
 });
+
+test("O005: Add person clears corrected field errors without hiding other required errors", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  const recorded: Recorded[] = [];
+  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, recorded));
+  await bootWorkspace(context);
+
+  await page.goto("/org-detail");
+  await page.getByRole("button", { name: /Add person/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Add person$/ }).click();
+  await expect(dialog.getByText("First name is required")).toBeVisible();
+  await expect(dialog.getByText("Last name is required")).toBeVisible();
+  await expect(dialog.getByText("Email is required")).toBeVisible();
+  expect(recorded.filter((r) => r.table === "parties" && r.method === "POST")).toHaveLength(0);
+
+  await dialog.locator("#new-party-first-name").fill("Dana");
+  await expect(dialog.getByText("First name is required")).toHaveCount(0);
+  await expect(dialog.getByText("Last name is required")).toBeVisible();
+
+  await dialog.locator("#new-party-email").fill("invalid");
+  await expect(dialog.getByText("Email is required")).toHaveCount(0);
+  await expect(dialog.getByText("Enter a valid email address")).toBeVisible();
+  await dialog.locator("#new-party-email").fill("dana@example.test");
+  await expect(dialog.getByText("Enter a valid email address")).toHaveCount(0);
+  await expect(dialog.getByText("Last name is required")).toBeVisible();
+
+  await dialog.locator("#new-party-last-name").fill("Reyes");
+  await dialog.locator("#new-party-phone").fill("503-555-0150");
+  await dialog.locator("#new-party-line1").fill("500 NW Everett St");
+  await dialog.locator("#new-party-city").fill("Portland");
+  await dialog.locator("#new-party-zip").fill("97209");
+  await dialog.locator("#new-party-state").click();
+  await page.getByRole("option", { name: "OR", exact: true }).click();
+  await expect(dialog.getByText("Last name is required")).toHaveCount(0);
+  await dialog.getByRole("button", { name: /^Add person$/ }).click();
+  await expect(dialog.getByText("Choose a role for this person.")).toBeVisible();
+  await dialog.getByRole("combobox").last().click();
+  await page.getByRole("option", { name: /Billing Contact/ }).click();
+  await expect(dialog.getByText("Choose a role for this person.")).toHaveCount(0);
+  expect(recorded.filter((r) => r.table === "parties" && r.method === "POST")).toHaveLength(0);
+});

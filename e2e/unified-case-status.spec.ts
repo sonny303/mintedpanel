@@ -700,6 +700,38 @@ test("TS-105 (Slice D retarget): Approved asks for exactly what the payer issues
   expect(denyRpc?.body?.p_reason_code_id).toBe("reason-panel");
 });
 
+test("DatePicker Escape closes the contract calendar before the approval dialog and releases the case page", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.credential_cases.push(caseRow("case-escape", { case_status: "in_review" }));
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_DILLON);
+
+  await page.goto("/cases/case-escape");
+  await page.getByRole("button", { name: "Update" }).click();
+  await page.getByRole("menuitem", { name: "Approved" }).click();
+  const dialog = page.getByRole("dialog", { name: "Approve case" });
+  await dialog.getByRole("button", { name: "Contract executed date" }).click();
+  const calendar = page.getByRole("dialog").filter({ has: page.getByRole("grid") });
+  await expect(calendar).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(calendar).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Contract executed date" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() => page.locator("body").evaluate((body) => body.style.pointerEvents))
+    .toBe("");
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page.getByRole("menuitem", { name: "Approved" })).toBeVisible();
+});
+
 test("Slice D (screen 5, both IDs): silence is rejected by the RPC and surfaced; the “Didn't receive” ack approves with the ID NULL; the enrollment reads Awaiting ID and links the capturing case", async ({
   context,
   page,

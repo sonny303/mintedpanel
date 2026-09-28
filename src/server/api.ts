@@ -50,6 +50,7 @@ const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 // `/api/tasks/:id/steps` — the S4.3 step tick (the one /api task-state write).
 const TASK_STEPS_ROUTE = /^\/api\/tasks\/([^/]+)\/steps\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
+const PORTAL_FIELD_MAPS_BATCH_LEARN_ROUTE = /^\/api\/portal-field-maps\/batch-learn\/?$/;
 // E6.9 F6.9.8: the ORG-FREE shared propose path. A separate route rather than
 // a mode flag on the org one, because the two run on different guards.
 const SHARED_FIELD_MAPS_ROUTE = /^\/api\/shared-field-maps\/?$/;
@@ -116,6 +117,43 @@ export function isApiRequest(pathname: string): boolean {
 async function readJsonBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+// Learning receipts are intentionally small and contain only identifiers and
+// mapping metadata. Cap the streamed body before JSON parsing so the new route
+// has an actual memory/work bound even when Content-Length is absent or false.
+async function readBoundedJsonBody(request: Request, maxBytes: number): Promise<unknown> {
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) return null;
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  try {
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
   } catch {
     return null;
   }
@@ -382,6 +420,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const providersMatch =
     profileMatch || ssnReleaseMatch || caqhMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
+  const isBatchLearnFieldMaps = PORTAL_FIELD_MAPS_BATCH_LEARN_ROUTE.test(pathname);
   const isPortals = PORTALS_ROUTE.test(pathname);
   const taskStepsMatch = pathname.match(TASK_STEPS_ROUTE);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
@@ -418,6 +457,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !caqhMatch &&
     !providersMatch &&
     !isFieldMaps &&
+    !isBatchLearnFieldMaps &&
     !isPortals &&
     !taskStepsMatch &&
     !isFillEvents &&
@@ -671,6 +711,13 @@ async function routeApiRequest(request: Request): Promise<Response> {
         ctx,
         new Date().toISOString().slice(0, 10),
       );
+    }
+    if (isBatchLearnFieldMaps) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      const body = await readBoundedJsonBody(request, 16 * 1024);
+      if (body == null) return fail(422, "Request body must be valid JSON under 16 KB");
+      return await routes.handleBatchLearnPortalFieldMaps(body, ctx);
     }
     if (isFieldMaps) {
       if (method !== "GET" && method !== "POST") return fail(405, "Method not allowed");

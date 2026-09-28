@@ -23,6 +23,7 @@ import {
   type UpdateProviderField,
 } from "@/components/providers/providerFormShared";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
+import { PROVIDER_GENDER_OPTIONS, PROVIDER_GENDER_UNSET_VALUE } from "@/lib/providerGender";
 
 interface SectionProps {
   form: ProviderFormState;
@@ -45,6 +46,26 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
           value={form.credentials}
           onChange={(e) => update("credentials", e.target.value)}
         />
+      </Field>
+      <Field label="Gender">
+        <Select
+          value={form.gender || PROVIDER_GENDER_UNSET_VALUE}
+          onValueChange={(value) =>
+            update("gender", value === PROVIDER_GENDER_UNSET_VALUE ? "" : value)
+          }
+        >
+          <SelectTrigger aria-label="Gender">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={PROVIDER_GENDER_UNSET_VALUE}>Not set</SelectItem>
+            {PROVIDER_GENDER_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
       <Field label="Date of birth">
         <Input

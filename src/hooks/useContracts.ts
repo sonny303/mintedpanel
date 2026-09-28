@@ -6,7 +6,9 @@ import {
   createContract,
   getContract,
   listContracts,
+  updateContract,
   updateContractStatus,
+  upsertContract,
   type ContractFilters,
   type ContractInput,
 } from "@/services/contracts";
@@ -60,6 +62,33 @@ export function useUpdateContractStatus() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["contracts", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.contract(orgId, vars.contractId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useUpdateContract() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ contractId, patch }: { contractId: string; patch: Partial<ContractInput> }) =>
+      updateContract(contractId, patch),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["contracts", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.contract(orgId, vars.contractId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useUpsertContract() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: ContractInput) => upsertContract(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contracts", orgId] });
+      qc.invalidateQueries({ queryKey: ["contract", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

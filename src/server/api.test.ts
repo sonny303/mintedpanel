@@ -16,6 +16,7 @@ vi.mock("./extensionRoutes", () => ({
   handleProviderProfile: vi.fn(),
   handleListPortalFieldMaps: vi.fn(),
   handleProposeFieldMap: vi.fn(),
+  handleBatchLearnPortalFieldMaps: vi.fn(),
   handleCreateFillEvent: vi.fn(),
   handleListProviderCases: vi.fn(),
   handleCaseContext: vi.fn(),
@@ -32,6 +33,7 @@ import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleProposeFieldMap,
+  handleBatchLearnPortalFieldMaps,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
@@ -51,6 +53,7 @@ const getMock = vi.mocked(handleGetProvider);
 const profileMock = vi.mocked(handleProviderProfile);
 const fieldMapsMock = vi.mocked(handleListPortalFieldMaps);
 const proposeFieldMapMock = vi.mocked(handleProposeFieldMap);
+const batchLearnFieldMapsMock = vi.mocked(handleBatchLearnPortalFieldMaps);
 const fillEventsMock = vi.mocked(handleCreateFillEvent);
 const casesMock = vi.mocked(handleListProviderCases);
 const caseContextMock = vi.mocked(handleCaseContext);
@@ -425,6 +428,35 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     expect(fieldMapsMock).not.toHaveBeenCalled();
   });
 
+  it("dispatches bounded POST /api/portal-field-maps/batch-learn to its dedicated handler", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
+    batchLearnFieldMapsMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    const payload = { mappings: [{ selector: "#npi", token: "provider.npi" }] };
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/portal-field-maps/batch-learn", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(batchLearnFieldMapsMock).toHaveBeenCalledWith(payload, expect.anything());
+    expect(proposeFieldMapMock).not.toHaveBeenCalled();
+  });
+
+  it("bounds the batch-learn JSON body before dispatch", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/portal-field-maps/batch-learn", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ padding: "x".repeat(17 * 1024) }),
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(batchLearnFieldMapsMock).not.toHaveBeenCalled();
+  });
+
   it("wrong methods on the extension routes are 405", async () => {
     authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
     // POST /api/portal-field-maps is now the propose-only write, so DELETE
@@ -433,6 +465,8 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
       new Request("https://x.test/api/portal-field-maps", { method: "DELETE" }),
     );
     expect(deleteMaps.status).toBe(405);
+    const getBatchLearn = await handleApiRequest(GET("/api/portal-field-maps/batch-learn"));
+    expect(getBatchLearn.status).toBe(405);
     const getFills = await handleApiRequest(GET("/api/fill-events"));
     expect(getFills.status).toBe(405);
     const postCases = await handleApiRequest(

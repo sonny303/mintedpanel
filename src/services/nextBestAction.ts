@@ -233,7 +233,7 @@ export async function getNextBestAction(
       )
       .eq("org_id", orgId)
       .not("group_id", "is", null)
-      .in("doc_type", ["w9", "coi", "voided_check"]),
+      .in("doc_type", ["w9", "coi"]),
     db.from("group_insurance_policies").select("group_id, policy_end_date").eq("org_id", orgId),
     db
       .from("contracts")

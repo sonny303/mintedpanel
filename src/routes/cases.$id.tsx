@@ -232,6 +232,8 @@ function CaseDetailPage() {
                 c?.provider ? `${c.provider.firstName} ${c.provider.lastName}` : "this provider"
               }
               groupName={c?.group?.name ?? null}
+              payerName={c?.payer?.name ?? null}
+              state={c?.state ?? null}
               portalHandoff={{
                 caseId: c.id,
                 providerId: c.providerId,

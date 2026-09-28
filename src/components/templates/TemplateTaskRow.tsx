@@ -491,6 +491,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                       size="icon"
                       onClick={() => removeStep(task.id, step.id)}
                       className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Remove step ${stepIdx + 1} from action ${taskIdx + 1}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -723,6 +724,7 @@ function StepModeBody({
                         variant="ghost"
                         onClick={() => removeDataField(taskId, step.id, i)}
                         className="text-muted-foreground hover:text-destructive"
+                        aria-label={`Remove data field ${field.label || i + 1} from ${step.label || "this step"}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

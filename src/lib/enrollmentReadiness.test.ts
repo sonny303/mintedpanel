@@ -74,7 +74,7 @@ describe("provider checklist", () => {
     const rows = evaluateEnrollmentReadiness(baseInput());
     expect(rows[0].ready).toBe(true);
     expect(rows[0].openGaps).toBe(0);
-    expect(rows[0].checks).toHaveLength(11);
+    expect(rows[0].checks).toHaveLength(10);
   });
 
   it("license expiration is date-only inclusive: today passes, yesterday fails", () => {
@@ -172,6 +172,29 @@ describe("provider checklist", () => {
 });
 
 describe("group checklist (computed once per group × state, TE-7)", () => {
+  it("a missing voided check does not affect readiness or hide other group gaps", () => {
+    const withoutVoidedCheck = baseInput({
+      groupDocuments: [
+        { groupId: "g-1", docType: "w9", expirationDate: null },
+        { groupId: "g-1", docType: "coi", expirationDate: null },
+      ],
+    });
+    const readyRow = evaluateEnrollmentReadiness(withoutVoidedCheck)[0];
+    expect(readyRow.ready).toBe(true);
+    expect(readyRow.openGaps).toBe(0);
+    expect(readyRow.checks.map((c) => c.key)).not.toContain("voided_check");
+
+    const otherGroupGaps = baseInput({ groupDocuments: [], facilities: [] });
+    const gapRow = evaluateEnrollmentReadiness(otherGroupGaps)[0];
+    expect(gapRow.ready).toBe(false);
+    expect(gapRow.openGaps).toBe(3);
+    expect(gapRow.checks.filter((c) => !c.pass).map((c) => c.key)).toEqual([
+      "state_facility",
+      "w9",
+      "group_coi",
+    ]);
+  });
+
   it("TS-44 core: target state without a group facility is a group red item", () => {
     const input = baseInput({ facilities: [{ groupId: "g-1", state: "SC", isActive: true }] });
     const c = check(input, "state_facility");
@@ -360,7 +383,7 @@ describe("group contract check (E2.0 TE-8 — optional, additive)", () => {
   it("emits no group_contract check when the contracts input is omitted", () => {
     const rows = evaluateEnrollmentReadiness(baseInput());
     expect(rows[0].checks.some((c) => c.key === "group_contract")).toBe(false);
-    expect(rows[0].checks).toHaveLength(11);
+    expect(rows[0].checks).toHaveLength(10);
   });
 
   it("passes when a contract at the exact group × payer × state is Contracted", () => {

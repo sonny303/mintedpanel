@@ -8,6 +8,7 @@ import {
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
+import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
 import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -150,16 +151,34 @@ export async function handleProviderProfile(
     if (!UUID_RE.test(facilityIdRaw)) return fail(404, "Facility not found for this provider");
     facilityId = facilityIdRaw;
   }
+  const groupIdRaw = url.searchParams.get("groupId");
+  let groupId: string | undefined;
+  if (groupIdRaw != null && groupIdRaw !== "") {
+    if (!UUID_RE.test(groupIdRaw)) return fail(404, "Group not found for this provider");
+    groupId = groupIdRaw;
+  }
+
+  const caseIdRaw = url.searchParams.get("caseId");
+  let caseId: string | undefined;
+  if (caseIdRaw != null && caseIdRaw !== "") {
+    if (!UUID_RE.test(caseIdRaw)) return fail(404, "Case not found for this provider");
+    caseId = caseIdRaw;
+  }
 
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
+    groupId,
+    caseId,
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
   // A facilityId outside the caller's org or this provider's facility set —
   // the isolation gate's assertion 11. Not a read: no audit row, no data.
   if (result.kind === "facility_not_found") {
     return fail(404, "Facility not found for this provider");
+  }
+  if (result.kind === "group_not_found") {
+    return fail(404, "Group not found for this provider or case");
   }
   const { profile, needsFacility } = result;
 
@@ -420,6 +439,23 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
     null,
     result.kind === "created" ? 201 : 200,
   );
+}
+
+// POST /api/portal-field-maps/batch-learn — only accepted, high-confidence,
+// value-free AI suggestions after a successful portal submission are eligible.
+// Actor and tenant are always taken from the authenticated context. The RPC
+// repeats evidence and ownership checks and commits maps + audit atomically.
+export async function handleBatchLearnPortalFieldMaps(
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot save AI field mappings");
+  const result = await batchLearnPortalFieldMaps(
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },
+    body,
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok(result.response, { total: result.response.confirmed_saved_count });
 }
 
 // GET /api/cases — two additive modes over the same org-scoped route:

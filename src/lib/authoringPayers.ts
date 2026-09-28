@@ -2,17 +2,14 @@
 //
 // The Template Editor authors GLOBAL templates (payer-and-cases §2.4), so its
 // payer universe is the GLOBAL CATALOG, not "my network". Those two diverged
-// the moment create_payer gained p_assign_to_org: a payer authored with
-// assignToOrg = false has no org_payer_assignments row, so the RLS-gated
-// listPayers read cannot see it — the editor would render its match-key payer
-// as "—" on the very template being written for it, and a context-free create
-// could not pick it at all.
+// the moment create_payer gained p_assign_to_org: a payer authored without an
+// org assignment was absent from the old RLS-gated listPayers read. The union
+// let the editor render and select that payer for a global template.
 //
-// The fix is a read-path union, not another RLS widening: listPayers stays the
-// assignment-gated "my network" list that feeds the manual-case picker and
-// attach eligibility, and the catalog comes from list_global_payers (the
-// SECURITY DEFINER browse read, the same source Payer Detail resolves from for
-// exactly this reason).
+// This read-path union still keeps authoring complete. OPA-RETIRE later made
+// every global row visible to listPayers, and the manual-case picker now uses
+// that org-visible read directly. list_global_payers remains the independent
+// catalog source for this authoring view.
 //
 // Org-tier rows are kept in the union because legacy org-scoped payer rows
 // exist in local seed fixtures and their (legacy, still-editable) templates

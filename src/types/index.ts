@@ -1115,6 +1115,16 @@ export interface CaseGenerationRunRow {
   createdAt: string;
 }
 
+export type ContractingStatusLabel =
+  | "Not Started"
+  | "Application Submitted"
+  | "In Progress (Contract Signed)"
+  | "In-Network"
+  | "Denied"
+  | "Denied - Appealed"
+  | "Denied - Reapplied"
+  | "Out of Network";
+
 export interface Contract {
   id: string;
   orgId: string;
@@ -1122,7 +1132,9 @@ export interface Contract {
   payerId: string | null;
   state: string;
   effectiveDate: string | null;
+  tentativeEffectiveDate?: string | null;
   expirationDate: string | null;
+  specialty?: string | null;
   notes: string | null;
   contractingStatusId: string | null;
   createdAt: string;
@@ -1589,6 +1601,8 @@ export interface PortalFieldMap {
   sortOrder?: number | null;
   /** E6.10 — captured option vocabulary `{ value, label }[]`. Null = never captured. */
   controlOptions?: { value: string; label: string }[] | null;
+  /** Flywheel provenance is additive so pre-migration readers remain compatible. */
+  learnedVia?: "manual" | "nano" | null;
   createdAt: string;
   updatedAt: string;
 }

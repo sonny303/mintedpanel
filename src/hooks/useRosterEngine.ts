@@ -8,6 +8,7 @@ import {
   exportRosterMapping,
   getRosterMapping,
   getRosterMappingPreview,
+  listRosterFacilityOptions,
   listRosterExportHistory,
   listRosterMappings,
   listRosterTemplates,
@@ -33,6 +34,16 @@ export function useRosterTemplates() {
   return useQuery({
     queryKey: rosterKey(orgId, "templates"),
     queryFn: listRosterTemplates,
+    enabled: orgId !== "no-org",
+    staleTime: 60_000,
+  });
+}
+
+export function useRosterFacilityOptions() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: rosterKey(orgId, "facility-options"),
+    queryFn: () => listRosterFacilityOptions(),
     enabled: orgId !== "no-org",
     staleTime: 60_000,
   });
