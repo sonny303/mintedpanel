@@ -30,7 +30,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { ProfileToken } from "@/services/providerProfile";
-import { composeFullName } from "@/lib/personName";
+import { resolveUserTokenValues } from "@/lib/userTokenValues";
 import type { AuthContext } from "./guard";
 
 export interface ResolvedUserTokens {
@@ -45,15 +45,6 @@ interface UserProfileRow {
   title: string | null;
   full_name: string | null;
   email: string | null;
-}
-
-function metadataString(meta: Record<string, unknown> | null, key: string): string | null {
-  const value = meta?.[key];
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-function clean(value: string | null | undefined): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
 /** Read the caller's own profile row. A failure here is non-fatal: resolution
@@ -79,48 +70,17 @@ async function readOwnProfile(
 export async function resolveUserTokens(
   ctx: Pick<AuthContext, "userId" | "email" | "userMetadata" | "db">,
 ): Promise<ResolvedUserTokens> {
-  const notes: string[] = [];
   const profile = await readOwnProfile(ctx.db, ctx.userId);
-
-  const firstName = clean(profile?.first_name);
-  const lastName = clean(profile?.last_name);
-  const title = clean(profile?.title);
-
-  // Composed parts win; then the stored display name (rows predating the
-  // 2026-08-16 split keep theirs, which was never backfilled); then auth
-  // metadata, for a user whose profile row is somehow empty.
-  const composed = clean(composeFullName({ firstName, lastName }));
-  const name =
-    composed ??
-    clean(profile?.full_name) ??
-    metadataString(ctx.userMetadata, "full_name") ??
-    metadataString(ctx.userMetadata, "name");
-  if (name == null) {
-    notes.push("user.name resolved to empty: set your name on the Account page");
-  }
-  if (firstName == null) {
-    notes.push("user.firstName resolved to empty: set your name on the Account page");
-  }
-  if (lastName == null) {
-    notes.push("user.lastName resolved to empty: set your name on the Account page");
-  }
-  if (title == null) {
-    notes.push("user.title resolved to empty: set your title on the Account page");
-  }
-
-  const email = clean(ctx.email) ?? clean(profile?.email);
-  if (email == null) {
-    notes.push("user.email resolved to empty: the JWT carries no email claim");
-  }
-
-  return {
-    tokens: [
-      { token: "user.name", value: name ?? "" },
-      { token: "user.firstName", value: firstName ?? "" },
-      { token: "user.lastName", value: lastName ?? "" },
-      { token: "user.title", value: title ?? "" },
-      { token: "user.email", value: email ?? "" },
-    ],
-    notes,
-  };
+  return resolveUserTokenValues(
+    profile
+      ? {
+          firstName: profile.first_name,
+          lastName: profile.last_name,
+          title: profile.title,
+          fullName: profile.full_name,
+          email: profile.email,
+        }
+      : null,
+    { email: ctx.email, userMetadata: ctx.userMetadata },
+  );
 }

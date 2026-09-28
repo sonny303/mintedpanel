@@ -35,8 +35,11 @@
 //                          Fixtures for assertion 13 (submission-touch
 //                          task-ownership isolation): a Kansas case (valid POST
 //                          target) + a South Park task id (the cross-org task_id
-//                          that must 404). Both must be set or assertion 13 is
-//                          skipped; the in-sandbox mock run always sets them.
+//                          that must 404). KANSAS_CASE_ID also enables 6a,
+//                          which proves the profile endpoint echoes the
+//                          authorized case binding. Both must be set or
+//                          assertion 13 is skipped; the in-sandbox mock run
+//                          always sets them.
 //   KANSAS_ORG             the Kansas org id, for the propose-only field-map
 //                          write pair (20/20a): the created row must be scoped
 //                          to it. Skipped when unset; the mock run always sets
@@ -433,6 +436,35 @@ function looksLikeVercelGate(r) {
     "6. Kansas GET profile of a South Park provider -> 404, no data",
     prof.status === 404 && !profLeaked,
     `status=${prof.status} dataPresent=${profLeaked}`,
+    { leak: true },
+  );
+
+  // A valid case is echoed on the profile response, while a real Kansas
+  // provider paired to another org's case remains an indistinguishable 404.
+  // This closes case binding independently from the provider-id boundary 6.
+  if (env.KANSAS_CASE_ID) {
+    const caseBoundProfile = await apiGet(
+      `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?case_id=${encodeURIComponent(env.KANSAS_CASE_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "6a. Kansas profile echoes the authorized case_id",
+      caseBoundProfile.status === 200 &&
+        caseBoundProfile.body?.data?.case_id === env.KANSAS_CASE_ID,
+      `status=${caseBoundProfile.status} caseId=${caseBoundProfile.body?.data?.case_id ?? "null"}`,
+    );
+  } else {
+    console.log("SKIP  6a. Kansas profile case binding — KANSAS_CASE_ID not set");
+  }
+
+  const foreignCaseProfile = await apiGet(
+    `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?case_id=${encodeURIComponent(env.SOUTHPARK_CASE_ID)}`,
+    { token: kansasTok },
+  );
+  check(
+    "6b. Kansas profile paired with a South Park case -> 404, no data",
+    foreignCaseProfile.status === 404 && foreignCaseProfile.body?.data == null,
+    `status=${foreignCaseProfile.status} dataPresent=${foreignCaseProfile.body?.data != null}`,
     { leak: true },
   );
 

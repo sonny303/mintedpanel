@@ -32,8 +32,10 @@ import { useMarkPayerFormSent, useRemovePayerFormFromCase } from "@/hooks/useTas
 import { usePortalFieldMaps } from "@/hooks/usePortals";
 import { payerFormDisplayName, type ResolvedPayerFormPointer } from "@/lib/payerForms";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
-import { createFillRunGuard } from "@/lib/fillRunGuard";
+import { createFillRunGuard, createFillRunLatch } from "@/lib/fillRunGuard";
 import { planPayerFormFill } from "@/lib/payerFormFill";
+import { runExclusivePdfFill } from "@/lib/pdfFillRun";
+import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import type { RegistryRow } from "@/lib/fieldRegistry";
 import type { Task } from "@/types";
 
@@ -42,12 +44,16 @@ export function PayerFormActionRow({
   pointer,
   canEdit,
   tokenValues,
+  refreshTokenValues,
+  pdfContextKey,
 }: {
   task: Task;
   pointer: ResolvedPayerFormPointer;
   canEdit: boolean;
   /** The case's resolved token values — what a fill can write. */
   tokenValues?: Record<string, string>;
+  refreshTokenValues?: RefreshPdfTokenValues;
+  pdfContextKey: string;
 }) {
   const download = usePayerFormDownload();
   const markSent = useMarkPayerFormSent();
@@ -58,9 +64,12 @@ export function PayerFormActionRow({
   const portalKey = pdfFormPortalKey(pointer.familyId);
   const mapsQ = usePortalFieldMaps(portalKey);
   const fill = useFillPayerForm();
+  const fillLatch = useRef(createFillRunLatch());
+  const [refreshingFillContext, setRefreshingFillContext] = useState(false);
   const contextKey = [
     task.caseId ?? "",
     task.providerId ?? "",
+    pdfContextKey,
     pointer.familyId,
     pointer.formId,
   ].join(":");
@@ -94,7 +103,7 @@ export function PayerFormActionRow({
 
   const label = payerFormDisplayName(pointer);
   const sent = task.status === "completed";
-  const canFill = Boolean(pointer.formId) && plan.fill.length > 0;
+  const canFill = Boolean(pointer.formId) && (plan.fill.length > 0 || rows.length > 0);
   const recordingPending = fill.hasPendingRecording(task.caseId ?? "", pointer.formId);
   const pendingSummary = fill.getPendingRecordingSummary(task.caseId ?? "", pointer.formId);
   const canRetryRecording = Boolean(pointer.formId) && recordingPending;
@@ -112,16 +121,35 @@ export function PayerFormActionRow({
     const wasRecordingPending = fill.hasPendingRecording(task.caseId ?? "", pointer.formId);
     const runToken = runGuard.current.capture();
     try {
-      const result = await fill.mutateAsync({
-        formId: pointer.formId,
-        familyId: pointer.familyId,
-        caseId: task.caseId ?? "",
-        providerId: task.providerId,
-        rows,
-        tokenValues: values,
-        fileStem: `${label.replace(/[^\w.-]+/g, "-")}-filled`,
-        isCurrent: () => runGuard.current.isCurrent(runToken),
-      });
+      const execution = await runExclusivePdfFill(
+        fillLatch.current,
+        async () => {
+          const currentRun = () => runGuard.current.isCurrent(runToken);
+          const freshValues =
+            wasRecordingPending || !refreshTokenValues
+              ? values
+              : await refreshTokenValues(values, currentRun);
+          if (!currentRun()) return null;
+          if (!wasRecordingPending && planPayerFormFill(rows, freshValues).fill.length === 0) {
+            toast.error("No mapped fields have current values. Complete the form manually.");
+            return null;
+          }
+          return fill.mutateAsync({
+            formId: pointer.formId,
+            familyId: pointer.familyId,
+            caseId: task.caseId ?? "",
+            providerId: task.providerId,
+            rows,
+            tokenValues: freshValues,
+            fileStem: `${label.replace(/[^\w.-]+/g, "-")}-filled`,
+            isCurrent: currentRun,
+          });
+        },
+        () => setRefreshingFillContext(true),
+        () => setRefreshingFillContext(false),
+      );
+      if (!execution.started || !execution.value) return;
+      const result = execution.value;
       if (!runGuard.current.isCurrent(runToken)) return;
       if (result.recordingRetried) {
         toast.success(
@@ -208,14 +236,14 @@ export function PayerFormActionRow({
             variant="outline"
             className="h-8"
             onClick={runFill}
-            disabled={fill.isPending}
+            disabled={fill.isPending || refreshingFillContext}
             title={
               canRetryRecording
                 ? "Retry saving the previous fill result without generating another PDF"
                 : `Writes ${plan.fill.length} mapped field${plan.fill.length === 1 ? "" : "s"}; ${plan.manualLabels.length + plan.fieldsSkipped.length} left for you`
             }
           >
-            {fill.isPending ? (
+            {fill.isPending || refreshingFillContext ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="mr-1 h-4 w-4" />

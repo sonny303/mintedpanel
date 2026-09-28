@@ -118,14 +118,30 @@ describe("PortalStepLink mounted variants", () => {
     expect(html).toContain("Open portal directly");
   });
 
-  it("renders a recovery picker for a stale selection when one valid location remains", () => {
+  it("requires a choice when the primary mirror is absent from the authoritative case locations", () => {
     const html = renderToStaticMarkup(
       <PortalStepLink
         portalKey="regional_enrollment"
         handoff={handoff({
-          caseFacilityId: "99999999-8888-4777-8666-555555555555",
-          facilities: [{ id: PRIMARY_ID, name: "Main" }],
+          caseFacilityId: PRIMARY_ID,
+          facilities: [{ id: SECONDARY_ID, name: "Uptown" }],
           selectedFacilityId: undefined,
+        })}
+      />,
+    );
+    expect(html).toContain('aria-label="Location for this work"');
+    expect(html).toContain("Choose a location before sending this case to the extension.");
+    expect(html).toContain('<button type="button" disabled=""');
+  });
+
+  it("blocks an explicitly selected location after it disappears from the authoritative set", () => {
+    const html = renderToStaticMarkup(
+      <PortalStepLink
+        portalKey="regional_enrollment"
+        handoff={handoff({
+          caseFacilityId: PRIMARY_ID,
+          facilities: [{ id: PRIMARY_ID, name: "Main" }],
+          selectedFacilityId: SECONDARY_ID,
         })}
       />,
     );
@@ -166,7 +182,7 @@ describe("PortalStepLink mounted variants", () => {
     expect(noUrl).not.toContain("Work in portal");
   });
 
-  it("does not mount a location picker when every location disappeared, so handoff stays blocked", () => {
+  it("keeps an empty authoritative location set location-free despite a stale primary mirror", () => {
     const html = renderToStaticMarkup(
       <PortalStepLink
         portalKey="regional_enrollment"
@@ -178,8 +194,9 @@ describe("PortalStepLink mounted variants", () => {
       />,
     );
     expect(html).not.toContain('aria-label="Location for this work"');
-    expect(html).toContain("The selected location is no longer available");
-    expect(html).toContain('<button type="button" disabled=""');
+    expect(html).not.toContain("The selected location is no longer available");
+    expect(html).toContain('data-facility-id="omitted"');
+    expect(html).not.toContain('<button type="button" disabled=""');
     expect(html).toContain("Open portal directly");
   });
 

@@ -1060,7 +1060,10 @@ export interface CaseFacility {
 // A case's location joined to the Facility row, for display (case detail /
 // editor). One row per case_facilities row.
 export interface CaseFacilityWithDetail extends CaseFacility {
-  facility: Pick<Facility, "id" | "name" | "street" | "city" | "state" | "zip" | "isActive">;
+  facility: Pick<
+    Facility,
+    "id" | "name" | "street" | "suite" | "city" | "state" | "zip" | "isActive"
+  >;
 }
 
 // E2.1 TE-2 — one row per confirmed generation batch (who/when/counts).
