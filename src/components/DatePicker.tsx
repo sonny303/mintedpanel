@@ -42,6 +42,7 @@ export function DatePicker({ id, value, onChange, ariaLabel, invalid }: DatePick
     // same keypress as this portalled popover. Handle it at window capture so
     // both Radix layers see a consumed event, then close only the picker.
     const closePickerOnEscape = (event: KeyboardEvent) => {
+      if (document.documentElement.hasAttribute("data-access-verifying")) return;
       if (event.key !== "Escape") return;
       event.preventDefault();
       setOpen(false);

@@ -18,16 +18,20 @@ import type { EnrollmentAudience, EnrollmentContext } from "@/services/clientAcc
 
 let registeredQueryClient: QueryClient | null = null;
 let accessContextAbortController: AbortController | null = null;
+let passiveAccessContextRefresh: Promise<EnrollmentContext | null> | null = null;
 let revisionObserverRegistered = false;
+let authStateListenerRegistered = false;
+let authCallbackGeneration = 0;
 let lifecycleListenersRegistered = false;
 
 function invalidateProtectedWork({
   resetRevision = false,
-}: { resetRevision?: boolean } = {}): void {
+  clearQueries = true,
+}: { resetRevision?: boolean; clearQueries?: boolean } = {}): void {
   accessContextAbortController?.abort();
   accessContextAbortController = null;
   void registeredQueryClient?.cancelQueries();
-  registeredQueryClient?.clear();
+  if (clearQueries) registeredQueryClient?.clear();
   if (resetRevision) resetContextRevision();
   else beginContextRefresh();
 }
@@ -86,7 +90,9 @@ interface AuthState {
     audience?: Exclude<EnrollmentAudience, null>;
     orgId?: string | null;
     expectedRevision?: string;
+    preserveCurrentContext?: boolean;
   }) => Promise<EnrollmentContext | null>;
+  revalidateAccessContext: () => Promise<EnrollmentContext | null>;
   selectAccessContext: (input: {
     audience: Exclude<EnrollmentAudience, null>;
     orgId: string;
@@ -120,57 +126,76 @@ export const useAuthStore = create<AuthState>()(
 
       init: async () => {
         set({ initError: null });
+        const bootstrapAuthGeneration = authCallbackGeneration;
+        if (!authStateListenerRegistered) {
+          authStateListenerRegistered = true;
+          supabase.auth.onAuthStateChange((event, session) => {
+            // Keep Supabase's auth callback synchronous. Context resolution can
+            // call Supabase again and must start after the SDK releases its lock.
+            const transition = prepareAuthStateChange(event, session);
+            if (!transition) return;
+            authCallbackGeneration += 1;
+            setTimeout(() => void transition.finish().catch(() => undefined), 0);
+          });
+        }
         try {
           const { data, error } = await supabase.auth.getSession();
           if (error) throw error;
-          invalidateProtectedWork({ resetRevision: true });
-          set({
-            session: data.session,
-            user: data.session?.user ?? null,
-            memberships: [],
-            membershipsLoading: Boolean(data.session),
-            activeOrgId: data.session ? get().activeOrgId : null,
-            fullName: data.session ? get().fullName : null,
-            accessContext: null,
-            selectionHint: null,
-            accessContextError: null,
-            accessContextLoading: false,
-          });
-          if (data.session) {
-            let membershipsReady = true;
-            try {
-              await get().loadMemberships();
-            } catch {
-              set({ initError: "Can't reach Minted Panel. Check your connection." });
-              membershipsReady = false;
-            }
-            if (membershipsReady) {
+          if (bootstrapAuthGeneration === authCallbackGeneration) {
+            invalidateProtectedWork({ resetRevision: true });
+            set({
+              session: data.session,
+              user: data.session?.user ?? null,
+              memberships: [],
+              membershipsLoading: Boolean(data.session),
+              activeOrgId: data.session ? get().activeOrgId : null,
+              fullName: data.session ? get().fullName : null,
+              accessContext: null,
+              selectionHint: null,
+              accessContextError: null,
+              accessContextLoading: false,
+            });
+            if (data.session) {
+              let membershipsReady = true;
               try {
-                await get().loadAccessContext();
+                await get().loadMemberships();
               } catch {
-                // loadAccessContext stores its own explicit retryable error.
+                if (bootstrapAuthGeneration === authCallbackGeneration) {
+                  set({ initError: "Can't reach Minted Panel. Check your connection." });
+                }
+                membershipsReady = false;
               }
+              if (membershipsReady && bootstrapAuthGeneration === authCallbackGeneration) {
+                try {
+                  await get().loadAccessContext();
+                } catch {
+                  // loadAccessContext stores its own explicit retryable error.
+                }
+              }
+            } else {
+              set({
+                membershipsLoading: false,
+                memberships: [],
+                activeOrgId: null,
+                fullName: null,
+              });
             }
-          } else {
-            set({ membershipsLoading: false, memberships: [], activeOrgId: null, fullName: null });
           }
         } catch {
-          set({ initError: "Can't reach Minted Panel. Check your connection." });
+          if (bootstrapAuthGeneration === authCallbackGeneration) {
+            set({ initError: "Can't reach Minted Panel. Check your connection." });
+          }
         } finally {
           set({ initialized: true });
         }
 
-        supabase.auth.onAuthStateChange(async (event, session) => {
-          await applyAuthStateChange(event, session);
-        });
-
         if (!lifecycleListenersRegistered && typeof window !== "undefined") {
           lifecycleListenersRegistered = true;
           const refresh = () => {
-            const state = useAuthStore.getState();
-            if (state.session && !state.accessContextLoading) {
-              void state.loadAccessContext().catch(() => undefined);
-            }
+            void useAuthStore
+              .getState()
+              .revalidateAccessContext()
+              .catch(() => undefined);
           };
           window.addEventListener("focus", refresh);
           document.addEventListener("visibilitychange", () => {
@@ -276,11 +301,20 @@ export const useAuthStore = create<AuthState>()(
         const requestUserId = get().user?.id ?? null;
         const requestAuthGeneration = get().authGeneration;
         const expectedRevision = options?.expectedRevision ?? previous?.contextRevision ?? "";
-        invalidateProtectedWork();
-        accessContextAbortController = new AbortController();
-        const signal = accessContextAbortController.signal;
+        const preserveCurrentContext = Boolean(options?.preserveCurrentContext && previous);
+        const interruptedActiveQueryKeys = preserveCurrentContext
+          ? (
+              registeredQueryClient
+                ?.getQueryCache()
+                .findAll({ type: "active", fetchStatus: "fetching" }) ?? []
+            ).map((query) => query.queryKey)
+          : [];
+        invalidateProtectedWork({ clearQueries: !preserveCurrentContext });
+        const controller = new AbortController();
+        accessContextAbortController = controller;
+        const signal = controller.signal;
         set({
-          accessContext: null,
+          accessContext: preserveCurrentContext ? previous : null,
           accessContextLoading: true,
           accessContextError: null,
           contextEpoch: epoch,
@@ -328,7 +362,9 @@ export const useAuthStore = create<AuthState>()(
           }
           if (get().contextEpoch !== epoch || get().authGeneration !== requestAuthGeneration)
             return null;
-          if (requestUserId && context.actorUserId !== requestUserId) return null;
+          if (requestUserId && context.actorUserId !== requestUserId) {
+            throw new Error("The verified account changed while access was being resolved");
+          }
           if (
             options?.audience &&
             options.orgId &&
@@ -336,16 +372,40 @@ export const useAuthStore = create<AuthState>()(
           ) {
             throw new Error("The selected access context was not returned by the server");
           }
+          const sameVerifiedContext = Boolean(
+            previous &&
+            previous.actorUserId === context.actorUserId &&
+            previous.audience === context.audience &&
+            previous.selectedOrgId === context.selectedOrgId &&
+            previous.contextRevision === context.contextRevision,
+          );
+          if (preserveCurrentContext && !sameVerifiedContext) {
+            registeredQueryClient?.clear();
+            await get().loadMemberships();
+            if (get().contextEpoch !== epoch || get().authGeneration !== requestAuthGeneration) {
+              return null;
+            }
+          }
+          if (accessContextAbortController === controller) accessContextAbortController = null;
           setContextRevision(context.contextRevision);
           set({
             accessContext: context,
             accessContextLoading: false,
             accessContextError: null,
           });
+          if (preserveCurrentContext && sameVerifiedContext && interruptedActiveQueryKeys.length) {
+            for (const queryKey of interruptedActiveQueryKeys) {
+              void registeredQueryClient
+                ?.refetchQueries({ queryKey, exact: true, type: "active" })
+                .catch(() => undefined);
+            }
+          }
           return context;
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError") return null;
           if (get().contextEpoch === epoch && get().authGeneration === requestAuthGeneration) {
+            if (accessContextAbortController === controller) accessContextAbortController = null;
+            registeredQueryClient?.clear();
             set({
               accessContext: null,
               accessContextLoading: false,
@@ -359,6 +419,22 @@ export const useAuthStore = create<AuthState>()(
 
       selectAccessContext: async (input) => {
         return get().loadAccessContext(input);
+      },
+
+      revalidateAccessContext: async () => {
+        if (passiveAccessContextRefresh) return passiveAccessContextRefresh;
+        const current = get();
+        if (!current.session || !current.user || current.accessContextLoading) return null;
+
+        const refresh = current.accessContext
+          ? current.loadAccessContext({ preserveCurrentContext: true })
+          : current.loadAccessContext();
+        passiveAccessContextRefresh = refresh;
+        try {
+          return await refresh;
+        } finally {
+          if (passiveAccessContextRefresh === refresh) passiveAccessContextRefresh = null;
+        }
       },
 
       setActiveOrg: (orgId) => {
@@ -445,18 +521,20 @@ export const useAuthStore = create<AuthState>()(
  * captured actor-bound request call the same routine after the response is
  * verified, without installing that response into the SDK client.
  */
-export async function applyAuthStateChange(
+type PreparedAuthTransition = { finish: () => Promise<boolean> };
+
+function prepareAuthStateChange(
   event: AuthChangeEvent,
   session: Session | null,
   expected?: { actorUserId: string; authGeneration: number },
-): Promise<boolean> {
+): PreparedAuthTransition | null {
   if (
     event !== "SIGNED_IN" &&
     event !== "SIGNED_OUT" &&
     event !== "USER_UPDATED" &&
     event !== "TOKEN_REFRESHED"
   ) {
-    return false;
+    return null;
   }
 
   const current = useAuthStore.getState();
@@ -465,12 +543,31 @@ export async function applyAuthStateChange(
     (current.user?.id !== expected.actorUserId ||
       current.authGeneration !== expected.authGeneration)
   ) {
-    return false;
+    return null;
+  }
+
+  const nextUserId = session?.user?.id ?? null;
+  if (
+    session &&
+    current.user?.id === nextUserId &&
+    (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")
+  ) {
+    useAuthStore.setState({ session, user: session.user });
+    const actorUserId = nextUserId;
+    const authGeneration = current.authGeneration;
+    return {
+      finish: async () => {
+        const latest = useAuthStore.getState();
+        if (latest.user?.id !== actorUserId || latest.authGeneration !== authGeneration)
+          return false;
+        await latest.revalidateAccessContext();
+        return true;
+      },
+    };
   }
 
   invalidateProtectedWork({ resetRevision: true });
   const previousUserId = current.user?.id ?? null;
-  const nextUserId = session?.user?.id ?? null;
   const sameActor = Boolean(previousUserId && nextUserId && previousUserId === nextUserId);
   const previousContext = current.accessContext;
   const selectionHint =
@@ -497,44 +594,61 @@ export async function applyAuthStateChange(
     contextEpoch: eventEpoch,
     authGeneration,
   });
-  if (session) {
-    // Start context resolution before membership I/O can yield. A later auth
-    // event aborts this request, and actor/generation guards prevent stale
-    // results from committing.
-    const contextPromise = useAuthStore
-      .getState()
-      .loadAccessContext()
-      .catch(() => undefined);
-    let membershipsReady = true;
-    try {
-      await useAuthStore.getState().loadMemberships();
-    } catch {
-      if (useAuthStore.getState().authGeneration === authGeneration) {
-        useAuthStore.setState({ initError: "Can't reach Minted Panel. Check your connection." });
+  return {
+    finish: async () => {
+      if (useAuthStore.getState().authGeneration !== authGeneration) return false;
+      if (session) {
+        // Start context resolution before membership I/O can yield. A later auth
+        // event aborts this request, and actor/generation guards prevent stale
+        // results from committing.
+        const contextPromise = useAuthStore
+          .getState()
+          .loadAccessContext()
+          .catch(() => undefined);
+        let membershipsReady = true;
+        try {
+          await useAuthStore.getState().loadMemberships();
+        } catch {
+          if (useAuthStore.getState().authGeneration === authGeneration) {
+            useAuthStore.setState({
+              initError: "Can't reach Minted Panel. Check your connection.",
+            });
+          }
+          membershipsReady = false;
+        }
+        if (membershipsReady && useAuthStore.getState().authGeneration === authGeneration) {
+          await contextPromise;
+          if (useAuthStore.getState().authGeneration === authGeneration) {
+            useAuthStore.setState({ initError: null });
+          }
+        }
+      } else {
+        useAuthStore.setState({
+          memberships: [],
+          membershipsLoading: false,
+          activeOrgId: null,
+          fullName: null,
+          initError: null,
+          accessContext: null,
+          accessContextError: null,
+          accessContextLoading: false,
+        });
+        // Event-driven sign-outs must drop the previous principal's cache just
+        // like signOut() does; invalidateProtectedWork already cleared it.
       }
-      membershipsReady = false;
-    }
-    if (membershipsReady && useAuthStore.getState().authGeneration === authGeneration) {
-      await contextPromise;
-      if (useAuthStore.getState().authGeneration === authGeneration) {
-        useAuthStore.setState({ initError: null });
-      }
-    }
-  } else {
-    useAuthStore.setState({
-      memberships: [],
-      membershipsLoading: false,
-      activeOrgId: null,
-      fullName: null,
-      initError: null,
-      accessContext: null,
-      accessContextError: null,
-      accessContextLoading: false,
-    });
-    // Event-driven sign-outs must drop the previous principal's cache just
-    // like signOut() does; invalidateProtectedWork already cleared it.
-  }
-  return true;
+      return true;
+    },
+  };
+}
+
+export async function applyAuthStateChange(
+  event: AuthChangeEvent,
+  session: Session | null,
+  expected?: { actorUserId: string; authGeneration: number },
+): Promise<boolean> {
+  const transition = prepareAuthStateChange(event, session, expected);
+  if (!transition) return false;
+  return transition.finish();
 }
 
 export function useActiveMembership(): MembershipEntry | null {

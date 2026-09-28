@@ -209,3 +209,80 @@ test("the org's only sales rep role can be removed", async ({ context, page }) =
   await expect(page.getByText("This is the only sales rep", { exact: false })).toHaveCount(0);
   await expect(zebCard.getByLabel("Remove Sales Rep role")).toHaveCount(0, { timeout: 10000 });
 });
+
+test("returning to the app preserves an open Add person draft during same-context verification", async ({
+  context,
+  page,
+}) => {
+  await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
+  await context.addInitScript(
+    ([authKey, session, orgId]) => {
+      localStorage.setItem(authKey as string, JSON.stringify(session));
+      localStorage.setItem(
+        "minted-panel-active-org",
+        JSON.stringify({ state: { activeOrgId: orgId }, version: 0 }),
+      );
+    },
+    [AUTH_KEY, SESSION, ORG_A] as const,
+  );
+
+  await page.goto("/get-started");
+  const addPerson = page.getByRole("button", { name: "Add person" }).first();
+  await expect(addPerson).toBeVisible({ timeout: 30000 });
+  await addPerson.click();
+
+  const firstName = page.locator("#new-party-first-name");
+  await firstName.fill("Ada");
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __resumeAccessContextCheck?: () => void;
+      __accessContextRequestCount?: number;
+    };
+    const originalFetch = window.fetch.bind(window);
+    let held = false;
+    testWindow.__accessContextRequestCount = 0;
+    window.fetch = async (input, init) => {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url = new URL(rawUrl, window.location.href);
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : "GET")
+      ).toUpperCase();
+      if (url.pathname === "/api/me/access-context" && method === "GET") {
+        testWindow.__accessContextRequestCount = (testWindow.__accessContextRequestCount ?? 0) + 1;
+        if (!held) {
+          held = true;
+          await new Promise<void>((resolve) => {
+            testWindow.__resumeAccessContextCheck = resolve;
+          });
+        }
+      }
+      return originalFetch(input, init);
+    };
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+
+  await expect(page.getByText("Verifying your access…")).toBeVisible();
+  await expect(firstName).toHaveValue("Ada");
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[role="dialog"]')).toBeVisible();
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & { __resumeAccessContextCheck?: () => void };
+    testWindow.__resumeAccessContextCheck?.();
+  });
+
+  await expect(page.getByText("Verifying your access…")).toHaveCount(0);
+  await expect(firstName).toHaveValue("Ada");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __accessContextRequestCount?: number }).__accessContextRequestCount,
+      ),
+    )
+    .toBe(1);
+});

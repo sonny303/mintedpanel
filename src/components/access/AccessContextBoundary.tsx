@@ -1,8 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
-import type { EnrollmentClientOrg, EnrollmentStaffOrg } from "@/services/clientAccess";
+import type {
+  EnrollmentClientOrg,
+  EnrollmentContext,
+  EnrollmentStaffOrg,
+} from "@/services/clientAccess";
 
 interface AccessContextBoundaryProps {
   children: ReactNode;
@@ -56,6 +61,67 @@ function DeniedState({ title, message }: { title: string; message: string }) {
         </Button>
       </div>
     </BoundaryFrame>
+  );
+}
+
+function AccessRevalidationShield() {
+  const shieldRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const shield = shieldRef.current;
+    if (!shield) return;
+
+    const activeElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const snapshots = Array.from(document.body.children)
+      .filter((element) => element !== shield)
+      .map((element) => ({
+        element,
+        wasInert: element.hasAttribute("inert"),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      }));
+    const hadVerificationMarker = document.documentElement.hasAttribute("data-access-verifying");
+    document.documentElement.setAttribute("data-access-verifying", "");
+    for (const { element } of snapshots) {
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+
+    const blockKeyboard = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", blockKeyboard, true);
+    activeElement?.blur();
+    shield.focus();
+
+    return () => {
+      window.removeEventListener("keydown", blockKeyboard, true);
+      if (!hadVerificationMarker) document.documentElement.removeAttribute("data-access-verifying");
+      for (const { element, wasInert, ariaHidden } of snapshots) {
+        if (!wasInert) element.removeAttribute("inert");
+        if (ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", ariaHidden);
+      }
+      if (activeElement?.isConnected) activeElement.focus({ preventScroll: true });
+    };
+  }, []);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      ref={shieldRef}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background p-4"
+      role="status"
+      aria-live="polite"
+      tabIndex={-1}
+    >
+      <div className="w-full max-w-lg rounded-md border border-border bg-card p-6 text-[13px] text-muted-foreground">
+        Verifying your access…
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -273,8 +339,30 @@ export function AccessContextBoundary({ children }: AccessContextBoundaryProps) 
 
   if (!session) return <>{children}</>;
   if (error) return <FailureState message={error} />;
-  if (loading || membershipsLoading || !context) return <LoadingState />;
+  if (!context || (membershipsLoading && !loading)) return <LoadingState />;
 
+  const contextKey = [
+    context.actorUserId,
+    context.audience ?? "unselected",
+    context.selectedOrgId ?? "unselected",
+    context.contextRevision,
+  ].join(":");
+  const revalidating = loading;
+  return (
+    <div key={contextKey} className="contents" aria-busy={revalidating || undefined}>
+      <ResolvedAccessContext context={context}>{children}</ResolvedAccessContext>
+      {revalidating ? <AccessRevalidationShield /> : null}
+    </div>
+  );
+}
+
+function ResolvedAccessContext({
+  context,
+  children,
+}: {
+  context: EnrollmentContext;
+  children: ReactNode;
+}) {
   const hasStaff = context.staffOrgs.length > 0;
   const hasClient = context.clientOrgs.length > 0;
   const selectedClientOrg =

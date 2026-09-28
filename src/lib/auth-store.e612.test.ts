@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 
 vi.mock("@/integrations/supabase/externalClient", () => ({
   supabase: {
@@ -90,7 +90,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-let authListener: ((event: string, nextSession: unknown) => Promise<void> | void) | undefined;
+let authListener: ((event: string, nextSession: unknown) => void) | undefined;
 
 beforeAll(async () => {
   vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null }, error: null });
@@ -159,8 +159,8 @@ describe("E6.12 auth lifecycle", () => {
       .mockResolvedValueOnce(context(ACTOR_B, "rev-b", ORG_B));
 
     expect(authListener).toBeDefined();
-    const oldTransition = authListener!("SIGNED_IN", session(ACTOR_A, "a@example.test"));
-    const nextTransition = authListener!("SIGNED_IN", session(ACTOR_B, "b@example.test"));
+    const oldTransition = applyAuthStateChange("SIGNED_IN", session(ACTOR_A, "a@example.test"));
+    const nextTransition = applyAuthStateChange("SIGNED_IN", session(ACTOR_B, "b@example.test"));
     try {
       await expect(
         Promise.race([
@@ -172,12 +172,12 @@ describe("E6.12 auth lifecycle", () => {
             ),
           ),
         ]),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
     } finally {
       oldContext.resolve(context(ACTOR_A, "rev-a", ORG_A));
     }
 
-    await expect(oldTransition).resolves.toBeUndefined();
+    await expect(oldTransition).resolves.toBe(true);
     expect(useAuthStore.getState().user).toMatchObject({ id: ACTOR_B });
     expect(useAuthStore.getState().accessContext).toMatchObject({
       actorUserId: ACTOR_B,
@@ -194,7 +194,7 @@ describe("E6.12 auth lifecycle", () => {
     registerQueryClient(queryClient);
 
     const oldLoad = useAuthStore.getState().loadAccessContext();
-    await authListener?.("SIGNED_OUT", null);
+    await applyAuthStateChange("SIGNED_OUT", null);
     delayed.resolve(context(ACTOR_A, "rev-late", ORG_A));
     await expect(oldLoad).resolves.toBeNull();
 
@@ -210,10 +210,146 @@ describe("E6.12 auth lifecycle", () => {
   it("refreshes context for TOKEN_REFRESHED and keeps the new identity epoch", async () => {
     fetchContextMock.mockResolvedValueOnce(context(ACTOR_A, "rev-refreshed", ORG_A));
 
-    await authListener?.("TOKEN_REFRESHED", session(ACTOR_A, "a@example.test"));
+    await applyAuthStateChange("TOKEN_REFRESHED", session(ACTOR_A, "a@example.test"));
 
     expect(fetchContextMock).toHaveBeenCalledOnce();
     expect(useAuthStore.getState().accessContext?.contextRevision).toBe("rev-refreshed");
+  });
+
+  it("invalidates an actor switch synchronously and starts SDK reads after the auth callback returns", async () => {
+    const queryClient = new QueryClient();
+    registerQueryClient(queryClient);
+    queryClient.setQueryData(["cases", ORG_A], [{ id: "case-a" }]);
+    useAuthStore.setState({ accessContext: context(ACTOR_A, "rev-a", ORG_A) });
+    fetchContextMock.mockResolvedValueOnce(context(ACTOR_B, "rev-b", ORG_B));
+
+    expect(authListener).toBeDefined();
+    const result = authListener!("SIGNED_IN", session(ACTOR_B, "b@example.test"));
+
+    expect(result).toBeUndefined();
+    expect(useAuthStore.getState()).toMatchObject({
+      user: { id: ACTOR_B },
+      accessContext: null,
+    });
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    expect(fetchContextMock).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      expect(fetchContextMock).toHaveBeenCalledOnce();
+      expect(useAuthStore.getState().accessContext?.actorUserId).toBe(ACTOR_B);
+    });
+  });
+
+  it("does not restore a stale bootstrap session after a sign-out callback", async () => {
+    const delayedSession = deferred<{ data: { session: unknown }; error: null }>();
+    vi.mocked(supabase.auth.getSession).mockReturnValueOnce(delayedSession.promise as never);
+    useAuthStore.setState({
+      session: session(ACTOR_A, "a@example.test"),
+      user: { id: ACTOR_A, email: "a@example.test" } as never,
+      accessContext: context(ACTOR_A, "rev-a", ORG_A),
+    });
+
+    const initialization = useAuthStore.getState().init();
+    authListener!("SIGNED_OUT", null);
+    delayedSession.resolve({ data: { session: session(ACTOR_A, "a@example.test") }, error: null });
+    await initialization;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(useAuthStore.getState()).toMatchObject({
+      session: null,
+      user: null,
+      accessContext: null,
+      memberships: [],
+    });
+  });
+
+  it("preserves an unchanged context and coalesces passive checks while verification is pending", async () => {
+    const queryClient = new QueryClient();
+    registerQueryClient(queryClient);
+    const established = {
+      ...context(ACTOR_A, "rev-stable"),
+      audience: null,
+      selectedOrgId: null,
+    } satisfies EnrollmentContext;
+    queryClient.setQueryData(["cases", ORG_A], [{ id: "current-case" }]);
+    useAuthStore.setState({ accessContext: established });
+    const verification = deferred<EnrollmentContext>();
+    fetchContextMock.mockReturnValueOnce(verification.promise);
+
+    const first = useAuthStore.getState().revalidateAccessContext();
+    const second = useAuthStore.getState().revalidateAccessContext();
+
+    expect(useAuthStore.getState()).toMatchObject({
+      accessContext: established,
+      accessContextLoading: true,
+    });
+    expect(queryClient.getQueryData(["cases", ORG_A])).toEqual([{ id: "current-case" }]);
+    expect(fetchContextMock).toHaveBeenCalledOnce();
+    verification.resolve(established);
+    await Promise.all([first, second]);
+
+    expect(useAuthStore.getState()).toMatchObject({
+      accessContext: established,
+      accessContextLoading: false,
+    });
+    expect(queryClient.getQueryData(["cases", ORG_A])).toEqual([{ id: "current-case" }]);
+  });
+
+  it("clears protected cache and refreshes memberships when revalidation reports revoked access", async () => {
+    const queryClient = new QueryClient();
+    registerQueryClient(queryClient);
+    queryClient.setQueryData(["cases", ORG_A], [{ id: "protected-case" }]);
+    useAuthStore.setState({ accessContext: context(ACTOR_A, "rev-granted", ORG_A) });
+    const revoked = {
+      ...context(ACTOR_A, "rev-revoked"),
+      audience: null,
+      selectedOrgId: null,
+      clientOrgs: [],
+    } satisfies EnrollmentContext;
+    fetchContextMock.mockResolvedValueOnce(revoked);
+    const loadMemberships = vi.fn().mockResolvedValue(undefined);
+    useAuthStore.setState({ loadMemberships });
+
+    await useAuthStore.getState().revalidateAccessContext();
+
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    expect(loadMemberships).toHaveBeenCalledOnce();
+    expect(useAuthStore.getState().accessContext).toMatchObject({
+      audience: null,
+      selectedOrgId: null,
+      contextRevision: "rev-revoked",
+      clientOrgs: [],
+    });
+  });
+
+  it("restarts an interrupted active read after unchanged-context verification", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    registerQueryClient(queryClient);
+    const established = {
+      ...context(ACTOR_A, "rev-stable"),
+      audience: null,
+      selectedOrgId: null,
+    } satisfies EnrollmentContext;
+    useAuthStore.setState({ accessContext: established });
+    const delayedRead = deferred<string>();
+    let readCount = 0;
+    const observer = new QueryObserver(queryClient, {
+      queryKey: ["cases", ORG_A],
+      queryFn: () => {
+        readCount += 1;
+        return readCount === 1 ? delayedRead.promise : Promise.resolve("fresh");
+      },
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    await vi.waitFor(() => expect(readCount).toBe(1));
+    fetchContextMock.mockResolvedValueOnce(established);
+
+    await useAuthStore.getState().revalidateAccessContext();
+    await vi.waitFor(() => expect(readCount).toBe(2));
+    await vi.waitFor(() => expect(queryClient.getQueryData(["cases", ORG_A])).toBe("fresh"));
+    delayedRead.resolve("stale");
+    unsubscribe();
   });
 
   it("preserves a valid secondary client org across refresh, then drops it after revocation", async () => {
@@ -277,7 +413,7 @@ describe("E6.12 auth lifecycle", () => {
       .mockResolvedValueOnce(discoveryAfterRevocation);
     selectContextMock.mockResolvedValueOnce(selectedSecondary);
 
-    await authListener?.("TOKEN_REFRESHED", session(ACTOR_A, "a@example.test"));
+    await applyAuthStateChange("TOKEN_REFRESHED", session(ACTOR_A, "a@example.test"));
 
     expect(selectContextMock).toHaveBeenCalledWith(
       {
@@ -293,7 +429,7 @@ describe("E6.12 auth lifecycle", () => {
     });
     expect(useAuthStore.getState().activeOrgId).toBe(ORG_B);
 
-    await authListener?.("TOKEN_REFRESHED", session(ACTOR_A, "a@example.test"));
+    await applyAuthStateChange("TOKEN_REFRESHED", session(ACTOR_A, "a@example.test"));
 
     expect(selectContextMock).toHaveBeenCalledOnce();
     expect(useAuthStore.getState().accessContext).toMatchObject({
@@ -325,7 +461,7 @@ describe("E6.12 auth lifecycle", () => {
     });
     fetchContextMock.mockResolvedValueOnce(context(ACTOR_B, "rev-b", ORG_B));
 
-    const transition = authListener!("SIGNED_IN", session(ACTOR_B, "b@example.test"));
+    const transition = applyAuthStateChange("SIGNED_IN", session(ACTOR_B, "b@example.test"));
     await vi.waitFor(() => {
       expect(useAuthStore.getState().accessContext?.actorUserId).toBe(ACTOR_B);
     });
@@ -343,7 +479,7 @@ describe("E6.12 auth lifecycle", () => {
     });
 
     delayedMemberships.resolve();
-    await expect(transition).resolves.toBeUndefined();
+    await expect(transition).resolves.toBe(true);
   });
 
   it("rejects an expected actor/generation mismatch without clearing state or query cache", async () => {
