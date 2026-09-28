@@ -32,6 +32,12 @@ const CATALOG = [
   { token: "user.name", table: "auth", column: "user_metadata.full_name" },
   { token: "user.email", table: "auth", column: "jwt.email" },
   { token: "provider.ssnLast4", table: "providers", column: "ssn_last4" },
+  { token: "provider.fullName", table: "providers", column: "composite" },
+  { token: "provider.fullNameWithCredentials", table: "providers", column: "composite" },
+  { token: "provider.lastFirst", table: "providers", column: "composite" },
+  { token: "facility.streetAddress", table: "facilities", column: "composite" },
+  { token: "facility.fullAddress", table: "facilities", column: "composite" },
+  { token: "billingContact.fullName", table: "parties", column: "fullName" },
   { token: "provider.email", table: "providers", column: "email" },
   { token: "group.credentialingEmail", table: "provider_groups", column: "credentialing_email" },
   { token: "group.billingEmail", table: "provider_groups", column: "billing_email" },
@@ -54,6 +60,20 @@ describe("filterAuthoringTokens", () => {
     const kept = filterAuthoringTokens(CATALOG).map((e) => e.token);
     for (const token of AUTHORING_EXCLUDED_TOKENS) {
       expect(isResolvableToken(token)).toBe(true);
+      expect(kept).not.toContain(token);
+    }
+  });
+
+  it("keeps fill-only computed/contact values out of SOP authoring", () => {
+    const kept = filterAuthoringTokens(CATALOG).map((e) => e.token);
+    for (const token of [
+      "provider.fullName",
+      "provider.fullNameWithCredentials",
+      "provider.lastFirst",
+      "facility.streetAddress",
+      "facility.fullAddress",
+      "billingContact.fullName",
+    ]) {
       expect(kept).not.toContain(token);
     }
   });

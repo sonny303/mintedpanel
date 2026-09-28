@@ -46,6 +46,16 @@ export async function fillAndDownloadPdf(
   tokenValues: Record<string, string>,
   fileStem: string,
 ): Promise<PdfAnalysis> {
+  const prepared = await preparePdfFill(file, dictionary, tokenValues);
+  downloadPdfOutput(prepared.output, fileStem);
+  return prepared.analysis;
+}
+
+export async function preparePdfFill(
+  file: File,
+  dictionary: FieldDictionaryEntry[],
+  tokenValues: Record<string, string>,
+): Promise<{ analysis: PdfAnalysis; output: Uint8Array }> {
   const { PDFDocument, PDFTextField, PDFDropdown, PDFCheckBox } = await import("pdf-lib");
   const bytes = await file.arrayBuffer();
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
@@ -71,8 +81,11 @@ export async function fillAndDownloadPdf(
   }
 
   const output = await doc.save();
+  return { analysis: { fieldNames, ...plan }, output };
+}
+
+export function downloadPdfOutput(output: Uint8Array, fileStem: string): void {
   triggerDownload(output, `${fileStem}-filled.pdf`);
-  return { fieldNames, ...plan };
 }
 
 function triggerDownload(bytes: Uint8Array, fileName: string) {

@@ -1288,6 +1288,19 @@ async function main() {
     `status_${documentFinalize.response.status}`,
   );
   const documentId = documentFinalize.body.data.id;
+  const { PROFILE_HTTP } = await import("/tmp/e612-profile-http-fixtures.mjs");
+  const { runE612ProfileHttpProbes } = await import("/tmp/e612-profile-http-probes.mjs");
+  await runE612ProfileHttpProbes({
+    id,
+    tokens,
+    request,
+    headers,
+    assert,
+    app,
+    rest,
+    anonKey,
+    fixtures: PROFILE_HTTP,
+  });
   const { runE613HttpProbes } = await import("/tmp/e613-http-probes.mjs");
   await runE613HttpProbes({
     id,

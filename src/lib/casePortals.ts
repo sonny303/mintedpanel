@@ -4,7 +4,7 @@
 // bare `portalKey`), resolved against the org's portals registry to a name +
 // formUrl. Pure and tested; the UI resolves the button target from this.
 import { normalizePortalKey } from "@/lib/tokenFormat";
-import type { Portal, SOPStep, Task, TaskStatus } from "@/types";
+import type { Facility, Portal, SOPStep, Task, TaskStatus } from "@/types";
 
 export interface CasePortalTarget {
   portalKey: string;
@@ -65,24 +65,15 @@ export interface HandoffFacilityOption {
   name: string;
 }
 
-/** Preserve the exact legacy credential_cases facility when the optional
- * case_facilities relation is present but has no corresponding row. The joined
- * facility must prove the same ID; failed/loading child reads still block in
- * resolveHandoffFacility before these options are considered. */
+/** The case_facilities relation is authoritative. Keep this small projection
+ * helper for callers that build portal options, but never append the legacy
+ * credential_cases.facility_id mirror when it is absent from that set. */
 export function handoffFacilityOptions(
   facilities: readonly HandoffFacilityOption[],
-  caseFacilityId: string | null,
-  joinedCaseFacility: HandoffFacilityOption | null,
+  _caseFacilityId: string | null,
+  _joinedCaseFacility: HandoffFacilityOption | null,
 ): HandoffFacilityOption[] {
-  const options = [...facilities];
-  if (
-    caseFacilityId !== null &&
-    joinedCaseFacility?.id === caseFacilityId &&
-    !options.some((facility) => facility.id === caseFacilityId)
-  ) {
-    options.push(joinedCaseFacility);
-  }
-  return options;
+  return [...facilities];
 }
 
 export type HandoffFacilityResolution =
@@ -91,6 +82,57 @@ export type HandoffFacilityResolution =
       status: "blocked";
       reason: "loading" | "load_failed" | "selection_required" | "selection_invalid";
     };
+
+export interface CasePdfScope {
+  id: string;
+  orgId: string;
+  providerId: string;
+  groupId: string | null;
+  state: string;
+}
+
+export function isSameCasePdfScope(left: CasePdfScope, right: CasePdfScope): boolean {
+  return (
+    left.id === right.id &&
+    left.orgId === right.orgId &&
+    left.providerId === right.providerId &&
+    left.groupId === right.groupId &&
+    left.state === right.state
+  );
+}
+
+export type FreshCasePdfFacilityResolution =
+  | { status: "ready"; facilityId: string | undefined; facility: Facility | null }
+  | {
+      status: "blocked";
+      reason: "selection_required" | "selection_invalid" | "facility_unavailable";
+    };
+
+/** Reconcile generation-time case membership with the current full facility
+ * projection. An explicit removed choice fails closed; only a valid primary
+ * mirror may initialize a location when no explicit choice exists. */
+export function resolveFreshCasePdfFacility(
+  caseFacilities: readonly HandoffFacilityOption[],
+  fullFacilities: readonly Facility[],
+  primaryFacilityId: string | null,
+  selectedFacilityId: string | undefined,
+): FreshCasePdfFacilityResolution {
+  const contains = (id: string) => caseFacilities.some((facility) => facility.id === id);
+  let facilityId = selectedFacilityId;
+  if (facilityId !== undefined && !contains(facilityId)) {
+    return { status: "blocked", reason: "selection_invalid" };
+  }
+  if (facilityId === undefined && primaryFacilityId && contains(primaryFacilityId)) {
+    facilityId = primaryFacilityId;
+  }
+  if (facilityId === undefined && caseFacilities.length > 0) {
+    return { status: "blocked", reason: "selection_required" };
+  }
+  if (facilityId === undefined) return { status: "ready", facilityId, facility: null };
+  const facility = fullFacilities.find((row) => row.id === facilityId) ?? null;
+  if (!facility) return { status: "blocked", reason: "facility_unavailable" };
+  return { status: "ready", facilityId, facility };
+}
 
 /** Resolve the launch location without a primary-location fallback. An
  * explicit selection always wins while valid; if it becomes stale the caller
@@ -112,13 +154,24 @@ export function resolveHandoffFacility(
       : { status: "blocked", reason: "selection_invalid" };
   }
   if (caseFacilityId !== null) {
-    return hasFacility(caseFacilityId)
-      ? { status: "ready", facilityId: caseFacilityId }
-      : { status: "blocked", reason: "selection_invalid" };
+    if (hasFacility(caseFacilityId)) return { status: "ready", facilityId: caseFacilityId };
   }
   if (facilities.length === 0) return { status: "ready", facilityId: undefined };
-  if (facilities.length === 1) return { status: "ready", facilityId: facilities[0].id };
   return { status: "blocked", reason: "selection_required" };
+}
+
+export function shouldShowCaseFacilityPicker(
+  loadState: HandoffFacilityLoadState,
+  facilities: readonly HandoffFacilityOption[],
+  resolution: HandoffFacilityResolution,
+): boolean {
+  return (
+    loadState === "ready" &&
+    facilities.length > 0 &&
+    (facilities.length > 1 ||
+      (resolution.status === "blocked" &&
+        (resolution.reason === "selection_required" || resolution.reason === "selection_invalid")))
+  );
 }
 
 /** The launcher is narrower than the step body: only the active incomplete

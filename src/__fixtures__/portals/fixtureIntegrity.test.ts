@@ -143,7 +143,7 @@ describe("R0 synthetic portal fixture integrity", () => {
     );
   });
 
-  it("pins a V2 metadata schema without any expected, actual, or raw value property", () => {
+  it("pins the frozen V2 metadata schema without expected, actual, or raw value properties", () => {
     const schema = JSON.parse(
       readFileSync(path.join(contractRoot, "fill-event-v2.schema.json"), "utf8"),
     ) as {
@@ -154,18 +154,17 @@ describe("R0 synthetic portal fixture integrity", () => {
     } & {
       properties: {
         schemaVersion: { const: number };
-        fieldOutcomes: { items: { properties: Record<string, unknown> } };
       };
+      $defs: { fieldOutcome: { properties: Record<string, unknown> } };
     };
     const v2Keys = [
       ...Object.keys(schema.properties),
-      ...Object.keys(schema.properties.fieldOutcomes.items.properties),
+      ...Object.keys(schema.$defs.fieldOutcome.properties),
     ];
     expect(schema.properties.schemaVersion.const).toBe(2);
-    expect(schema.title).toMatch(/incomplete non-normative/i);
-    expect(schema.description).toMatch(/not authorized for implementation/i);
-    expect(schema.description).toMatch(/attempt semantics.*map\/target\/frame identity/i);
-    expect(schema.properties.fieldOutcomes.items.properties.outcome).toBeDefined();
+    expect(schema.title).toMatch(/fill event v2 metadata/i);
+    expect(schema.description).toMatch(/value-free/i);
+    expect(schema.$defs.fieldOutcome.properties.outcome).toBeDefined();
     expect(v2Keys).not.toContain("expectedValue");
     expect(v2Keys).not.toContain("actualValue");
     expect(v2Keys).not.toContain("value");
