@@ -67,9 +67,11 @@ export interface OpenProviderCase {
   latestNote: CaseLatestNote | null;
   lastSubmittedAt: string | null;
   portalTasks: OpenProviderCasePortalTask[];
+  groupId?: string | null;
 }
 
-const CASE_COLUMNS = "id, state, submitted_date, payer_reference_id, case_status, payers(name)";
+const CASE_COLUMNS =
+  "id, state, submitted_date, payer_reference_id, case_status, group_id, payers(name)";
 
 interface CaseRow {
   id: string;
@@ -77,6 +79,7 @@ interface CaseRow {
   submitted_date: string | null;
   payer_reference_id: string | null;
   case_status: string | null;
+  group_id: string | null;
   payers: { name: string | null } | null;
 }
 
@@ -213,7 +216,7 @@ export async function listOpenProviderCases(
 
   const rows = open.map<OpenProviderCase>((row) => {
     const note = latestNoteByCase.get(row.id);
-    return {
+    const item: OpenProviderCase = {
       id: row.id,
       payerName: row.payers?.name ?? null,
       state: row.state,
@@ -224,6 +227,10 @@ export async function listOpenProviderCases(
       lastSubmittedAt: lastSubmittedByCase.get(row.id) ?? null,
       portalTasks: portalTasksByCase.get(row.id) ?? [],
     };
+    if (row.group_id != null) {
+      item.groupId = row.group_id;
+    }
+    return item;
   });
 
   // Deterministic dropdown order: payer name, then state (nameless payers last).

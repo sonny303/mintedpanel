@@ -152,16 +152,34 @@ export async function handleProviderProfile(
     if (!UUID_RE.test(facilityIdRaw)) return fail(404, "Facility not found for this provider");
     facilityId = facilityIdRaw;
   }
+  const groupIdRaw = url.searchParams.get("groupId");
+  let groupId: string | undefined;
+  if (groupIdRaw != null && groupIdRaw !== "") {
+    if (!UUID_RE.test(groupIdRaw)) return fail(404, "Group not found for this provider");
+    groupId = groupIdRaw;
+  }
+
+  const caseIdRaw = url.searchParams.get("caseId");
+  let caseId: string | undefined;
+  if (caseIdRaw != null && caseIdRaw !== "") {
+    if (!UUID_RE.test(caseIdRaw)) return fail(404, "Case not found for this provider");
+    caseId = caseIdRaw;
+  }
 
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
+    groupId,
+    caseId,
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
   // A facilityId outside the caller's org or this provider's facility set —
   // the isolation gate's assertion 11. Not a read: no audit row, no data.
   if (result.kind === "facility_not_found") {
     return fail(404, "Facility not found for this provider");
+  }
+  if (result.kind === "group_not_found") {
+    return fail(404, "Group not found for this provider or case");
   }
   const { profile, needsFacility } = result;
 

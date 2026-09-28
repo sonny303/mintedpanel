@@ -154,7 +154,7 @@ describe("provider profile handler", () => {
         provider: { id: PROVIDER_ID } as never,
         tokens: [],
         unresolved: [],
-        facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+        facilities: [{ id: FACILITY_ID, name: "Main Clinic", state: "MO" }],
         selected_facility_id: FACILITY_ID,
         ...profile,
       },
@@ -189,7 +189,7 @@ describe("provider profile handler", () => {
       provider: { id: PROVIDER_ID },
       tokens: USER_TOKENS,
       unresolved: [],
-      facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+      facilities: [{ id: FACILITY_ID, name: "Main Clinic", state: "MO" }],
       selected_facility_id: FACILITY_ID,
     });
     // Facility auto-selected, so no needs_facility; the only meta is the
