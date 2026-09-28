@@ -122,8 +122,9 @@ For #412, a scan of values removed by its diff against every tracked file in
 the current PR tree found no residual occurrences of the removed email, three
 tax-ID-like tokens, 18 street-address-like tokens or four of five NPI-like
 tokens. The fifth NPI-like token appears in 66 files, including an explicitly
-named synthetic identity probe and design-system examples; it is a shared
-synthetic fixture. The current-tree scrub does not remove prior Git history.
+named synthetic identity probe and design-system examples. It is a sequential
+placeholder with an invalid NPI checksum. The current-tree scrub does not
+remove prior Git history.
 The historical exposure disposition remains a separate owner decision before
 calling the privacy work complete.
 
