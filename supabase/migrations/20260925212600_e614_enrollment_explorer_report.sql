@@ -34,14 +34,14 @@ AS $$
       CASE WHEN snapshot IS NULL THEN NULL
         ELSE private.e613_source_fingerprint(snapshot) END AS fingerprint
     FROM current_sources
-  ), validity AS MATERIALIZED (
-    SELECT batch.scope_id, batch.revision_id, batch.source_valid
-    FROM private.e613_revision_source_batch(COALESCE((
-      SELECT jsonb_agg(jsonb_build_object('scope_id', request.scope_id,
-        'revision_id', request.revision_id)) FROM requested request
-    ), '[]'::jsonb)) batch
   ), material AS (
     SELECT link.scope_id, link.revision_id,
+      COALESCE(bool_and(
+        current.snapshot IS NOT NULL
+        AND link.source_fingerprint = current.fingerprint
+        AND NOT (link.source_kind = 'fact'
+          AND current.snapshot ->> 'expired_at' IS NOT NULL)
+      ) FILTER (WHERE link.source_kind IS NOT NULL), true) AS source_valid,
       COALESCE(jsonb_agg(jsonb_build_object(
         'sourceKind', link.source_kind,
         'sourceId', link.source_id,
@@ -58,10 +58,9 @@ AS $$
     GROUP BY link.scope_id, link.revision_id
   )
   SELECT request.scope_id, request.revision_id,
-    COALESCE(validity.source_valid, true),
+    COALESCE(material.source_valid, true),
     encode(sha256(convert_to(COALESCE(material.reference_material, '[]'::jsonb)::text, 'UTF8')), 'hex')
   FROM requested request
-  LEFT JOIN validity USING (scope_id, revision_id)
   LEFT JOIN material USING (scope_id, revision_id)
 $$;
 
@@ -180,8 +179,21 @@ BEGIN
       COALESCE(provider.is_test_provider, false) AS is_test_provider
     FROM private.enrollment_scopes scope
     JOIN authorized_groups group_row ON group_row.id = scope.group_id
-    JOIN private.enrollment_scope_revisions revision
-      ON revision.scope_id = scope.id AND revision.org_id = scope.org_id
+    JOIN LATERAL (
+      SELECT selected.*
+      FROM private.enrollment_scope_revisions selected
+      WHERE selected.scope_id = scope.id AND selected.org_id = scope.org_id
+        AND selected.id = CASE WHEN COALESCE((p_filters ->> 'historical')::boolean, false)
+          THEN COALESCE((SELECT publication.revision_id
+            FROM private.enrollment_summary_publications publication
+            WHERE publication.scope_id = scope.id AND publication.org_id = scope.org_id
+            ORDER BY CASE WHEN EXISTS (SELECT 1 FROM private.publication_events event
+              WHERE event.summary_publication_id = publication.id
+                AND event.event_type = 'publication_revoked') THEN 1 ELSE 0 END,
+              publication.published_at DESC, publication.id DESC
+            LIMIT 1), scope.current_revision_id)
+          ELSE scope.current_revision_id END
+    ) revision ON true
     LEFT JOIN LATERAL (
       SELECT publication.* FROM private.enrollment_summary_publications publication
       WHERE publication.scope_id = scope.id
@@ -239,7 +251,6 @@ BEGIN
       AND (NULLIF(p_filters ->> 'facilityId', '') IS NULL OR scope.facility_id = (p_filters ->> 'facilityId')::uuid)
       AND (NULLIF(p_filters ->> 'productId', '') IS NULL OR scope.payer_product_id = (p_filters ->> 'productId')::uuid)
       AND (p_audience = 'staff' OR NOT COALESCE(provider.is_test_provider, false))
-      AND revision.id = scope.current_revision_id
       AND (p_audience = 'staff' OR summary.id IS NOT NULL)
       AND (p_audience = 'staff' OR NOT COALESCE(
         EXISTS (SELECT 1 FROM private.publication_events event
@@ -262,6 +273,7 @@ BEGIN
   ), projections AS MATERIALIZED (
     SELECT candidate.*,
       CASE
+        WHEN NOT candidate.source_valid THEN 'stale'
         WHEN p_audience = 'staff' AND candidate.is_current
           AND (candidate.summary_id IS NULL
             OR candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id) THEN 'draft'
@@ -271,7 +283,6 @@ BEGIN
         WHEN candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id
           AND COALESCE((p_filters ->> 'historical')::boolean, false) THEN 'superseded'
         WHEN candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id THEN 'stale'
-        WHEN NOT candidate.source_valid THEN 'stale'
         WHEN candidate.revision_status = 'approved' AND NOT (
           'enrollment_status' = ANY(candidate.supported_fields)
           AND 'product_id' = ANY(candidate.supported_fields)
@@ -287,12 +298,12 @@ BEGIN
         ELSE 'published'
       END AS publication_state,
       CASE
+        WHEN NOT candidate.source_valid THEN 'needs_verification'
         WHEN p_audience = 'staff' AND candidate.is_current
           AND (candidate.summary_id IS NULL
             OR candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id)
           THEN candidate.revision_status
-        WHEN NOT candidate.source_valid
-          OR (candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id
+        WHEN (candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id
             AND NOT COALESCE((p_filters ->> 'historical')::boolean, false))
           OR (candidate.revision_status = 'approved' AND NOT (
             'enrollment_status' = ANY(candidate.supported_fields)
@@ -309,7 +320,7 @@ BEGIN
           THEN candidate.published_status
         ELSE COALESCE(candidate.published_status, candidate.revision_status)
       END AS projected_status,
-      jsonb_build_object(
+      encode(sha256(convert_to(jsonb_build_object(
         'scopeId', candidate.scope_id, 'revisionId', candidate.revision_id,
         'current', candidate.is_current, 'sourceValid', candidate.source_valid,
         'sourceMaterialDigest', candidate.source_material_digest,
@@ -327,20 +338,20 @@ BEGIN
           'publishedAt', candidate.published_at),
         'proofs', COALESCE(candidate.proof_material, '[]'::jsonb),
         'publicationState', CASE
+          WHEN NOT candidate.source_valid THEN 'stale'
           WHEN p_audience = 'staff' AND candidate.is_current
             AND (candidate.summary_id IS NULL
               OR candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id) THEN 'draft'
           WHEN candidate.summary_id IS NULL THEN 'draft'
           WHEN candidate.summary_revoked THEN 'retracted'
           WHEN NOT candidate.is_current THEN 'superseded'
-          WHEN NOT candidate.source_valid THEN 'stale'
           WHEN candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id
             AND COALESCE((p_filters ->> 'historical')::boolean, false) THEN 'superseded'
           WHEN candidate.summary_revision_id IS DISTINCT FROM candidate.revision_id THEN 'stale'
           ELSE 'published' END,
         'labels', jsonb_build_array(candidate.group_name, candidate.payer_name,
           candidate.product_name, candidate.state, candidate.facility_name)
-      ) AS digest_material
+      )::text, 'UTF8')), 'hex') AS digest_material
     FROM scope_rows candidate
   ), section_coordinates AS MATERIALIZED (
     SELECT target.group_id, target.state
@@ -415,7 +426,7 @@ BEGIN
         WHERE pfa.org_id = p_org_id AND pfa.provider_id = provider.id
           AND pfa.facility_id = (p_filters ->> 'facilityId')::uuid
           AND (pfa.start_date IS NULL OR pfa.start_date <= CURRENT_DATE)
-          AND facility.group_id = assignment.group_id
+          AND facility.is_active AND facility.group_id = assignment.group_id
           AND (NULLIF(p_filters ->> 'state', '') IS NULL OR facility.state = upper(p_filters ->> 'state'))
       ) OR EXISTS (SELECT 1 FROM projections projection
         WHERE projection.provider_id = provider.id AND projection.group_id = assignment.group_id
@@ -431,7 +442,8 @@ BEGIN
         WHERE pfa.org_id = p_org_id AND pfa.provider_id = cohort.provider_id
           AND pfa.facility_id = (p_filters ->> 'facilityId')::uuid
           AND (pfa.start_date IS NULL OR pfa.start_date <= CURRENT_DATE)
-          AND facility.group_id = section.group_id AND facility.state = section.state
+          AND facility.is_active AND facility.group_id = section.group_id
+          AND facility.state = section.state
       ) OR EXISTS (SELECT 1 FROM projections projection
         WHERE projection.provider_id = cohort.provider_id
           AND projection.group_id = section.group_id AND projection.state = section.state
@@ -516,6 +528,14 @@ BEGIN
       'statuses', jsonb_build_array('not_started','in_progress','submitted','in_review',
         'action_required','approved','denied','not_pursuing','terminated','needs_verification')
     ) AS value
+  ), projection_digest_by_provider AS MATERIALIZED (
+    SELECT projection.provider_id,
+      encode(sha256(convert_to(string_agg(projection.digest_material, ''
+        ORDER BY projection.scope_id, projection.revision_created_at DESC,
+          projection.revision_id), 'UTF8')), 'hex') AS scopes_digest
+    FROM projections projection
+    JOIN selected_providers selected ON selected.provider_id = projection.provider_id
+    GROUP BY projection.provider_id
   ), provider_material AS MATERIALIZED (
     SELECT selected.provider_id, selected.first_name, selected.last_name,
       jsonb_build_object('providerId', selected.provider_id, 'firstName', selected.first_name,
@@ -542,11 +562,12 @@ BEGIN
             AND facility.org_id = assignment.org_id
           JOIN authorized_groups group_row ON group_row.id = facility.group_id
           WHERE assignment.org_id = p_org_id AND assignment.provider_id = selected.provider_id), '[]'::jsonb),
-        'scopes', COALESCE((SELECT jsonb_agg(projection.digest_material
-          ORDER BY projection.scope_id, projection.revision_created_at DESC, projection.revision_id)
-          FROM projections projection WHERE projection.provider_id = selected.provider_id), '[]'::jsonb)
+        'scopesDigest', COALESCE(projection_digest.scopes_digest,
+          encode(sha256(convert_to('[]', 'UTF8')), 'hex'))
       ) AS material
     FROM selected_providers selected
+    LEFT JOIN projection_digest_by_provider projection_digest
+      ON projection_digest.provider_id = selected.provider_id
   ), snapshot_digest AS MATERIALIZED (
     SELECT encode(sha256(convert_to(jsonb_build_object(
         'filters', p_filters,
@@ -614,7 +635,8 @@ BEGIN
         'scopeId', row.scope_id, 'facilityId', row.facility_id,
         'facilityLabel', row.facility_name, 'publicationState', row.publication_state,
         'historical', COALESCE((p_filters ->> 'historical')::boolean, false)
-          AND (row.summary_revision_id IS DISTINCT FROM row.revision_id OR row.summary_revoked),
+          AND (NOT row.is_current OR row.summary_revision_id IS DISTINCT FROM row.revision_id
+            OR row.summary_revoked),
         'status', row.projected_status
       ) ORDER BY lower(row.facility_name), row.facility_id, row.revision_created_at DESC) AS locations
     FROM page_scope_rows row
@@ -788,6 +810,7 @@ DECLARE
   v_context jsonb;
   v_scope private.enrollment_scopes%ROWTYPE;
   v_current_provider record;
+  v_labels jsonb;
   v_items jsonb;
   v_next jsonb;
   v_more boolean;
@@ -824,6 +847,25 @@ BEGIN
     SELECT 1 FROM private.enrollment_summary_publications publication
     WHERE publication.scope_id = p_scope_id AND publication.org_id = p_org_id
   ) THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'enrollment_not_found';
+  END IF;
+
+  SELECT jsonb_build_object(
+    'providerName', concat_ws(' ', provider.first_name, provider.last_name),
+    'groupLabel', group_row.name, 'payerLabel', payer.name,
+    'productLabel', product.display_name, 'facilityLabel', facility.name)
+    INTO v_labels
+  FROM public.providers provider
+  JOIN public.provider_groups group_row ON group_row.id = v_scope.group_id
+    AND group_row.org_id = p_org_id
+  JOIN private.payer_products product ON product.id = v_scope.payer_product_id
+    AND product.payer_id = v_scope.payer_id
+  JOIN public.payers payer ON payer.id = v_scope.payer_id
+    AND (payer.org_id IS NULL OR payer.org_id = p_org_id)
+  JOIN public.facilities facility ON facility.id = v_scope.facility_id
+    AND facility.org_id = p_org_id AND facility.group_id = v_scope.group_id
+  WHERE provider.id = v_scope.provider_id AND provider.org_id = p_org_id;
+  IF v_labels IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'enrollment_not_found';
   END IF;
 
@@ -959,6 +1001,9 @@ BEGIN
         'providerId', v_scope.provider_id, 'groupId', v_scope.group_id,
         'payerProductId', v_scope.payer_product_id, 'facilityId', v_scope.facility_id,
         'state', v_scope.state,
+        'providerName', v_labels ->> 'providerName', 'groupLabel', v_labels ->> 'groupLabel',
+        'payerLabel', v_labels ->> 'payerLabel', 'productLabel', v_labels ->> 'productLabel',
+        'facilityLabel', v_labels ->> 'facilityLabel',
         'status', CASE WHEN revision.historical_shell OR revision.missing_proof
           THEN 'needs_verification' ELSE revision.published_status END,
         'historicalStatus', CASE WHEN revision.historical_shell OR revision.missing_proof

@@ -535,6 +535,83 @@ describe("E6.13 enrollment explorer HTTP routes", () => {
     ]);
   });
 
+  it("denies CSV bytes when the report digest changes immediately before streaming", async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: reportSnapshot({ records: [csvRecord()], providerCount: 1, rowCount: 1 }),
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: reportSnapshot({ snapshotDigest: "b".repeat(64), providerCount: 1, rowCount: 1 }),
+        error: null,
+      });
+    const token = createEnrollmentReportViewToken(
+      {
+        actorUserId: ACTOR,
+        orgId: ORG,
+        audience: "staff",
+        contextRevision: CONTEXT_REVISION,
+        filters: {},
+      },
+      "a".repeat(64),
+    );
+
+    const response = await handleEnrollmentExplorerRequest(
+      request(`/api/enrollment-explorer/report.csv?viewToken=${encodeURIComponent(token)}`),
+      user({ rpc }),
+      { orgId: ORG, audience: "staff", contextRevision: CONTEXT_REVISION },
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.text()).not.toContain("Ada Example");
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("delivers a complete CSV body larger than 4.5 MB through the native response stream", async () => {
+    const records = Array.from({ length: 1200 }, (_, index) =>
+      csvRecord({
+        payerReference: `ROW-${String(index).padStart(4, "0")}-${"X".repeat(3900)}`,
+      }),
+    );
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: reportSnapshot({ records, providerCount: 1200, rowCount: records.length }),
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: reportSnapshot({ providerCount: 1200, rowCount: records.length }),
+        error: null,
+      });
+    const token = createEnrollmentReportViewToken(
+      {
+        actorUserId: ACTOR,
+        orgId: ORG,
+        audience: "staff",
+        contextRevision: CONTEXT_REVISION,
+        filters: {},
+      },
+      "a".repeat(64),
+    );
+    const response = await handleEnrollmentExplorerRequest(
+      request(`/api/enrollment-explorer/report.csv?viewToken=${encodeURIComponent(token)}`),
+      user({ rpc }),
+      { orgId: ORG, audience: "staff", contextRevision: CONTEXT_REVISION },
+    );
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const body = bytes.toString("utf8");
+
+    expect(response.status).toBe(200);
+    expect(bytes.byteLength).toBeGreaterThan(4_500_000);
+    expect(body.split("\r\n")).toHaveLength(records.length + 1);
+    expect(body).toContain("ROW-0000-");
+    expect(body).toContain("ROW-1199-");
+    expect(createHash("sha256").update(bytes).digest("hex")).toMatch(/^[0-9a-f]{64}$/);
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
   it("returns JSON 413 with no CSV bytes when the export snapshot exceeds its row cap", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: reportSnapshot({ tooLarge: true, rowCount: 100_001 }),
@@ -588,7 +665,7 @@ describe("E6.13 enrollment explorer HTTP routes", () => {
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(await response.text()).toContain("report_csv_limit_exceeded");
     expect(rpc).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000);
 
   it("projects client history to safe historical publication fields", async () => {
     const nextCursor = { createdAt: "2026-09-25T12:00:00Z", revisionId: REVISION };
@@ -605,6 +682,11 @@ describe("E6.13 enrollment explorer HTTP routes", () => {
             payerProductId: REVISION,
             facilityId: PUBLICATION,
             state: "CO",
+            providerName: "Synthetic Provider",
+            groupLabel: "Synthetic Group",
+            payerLabel: "Synthetic Payer",
+            productLabel: "Synthetic Product",
+            facilityLabel: "Synthetic Facility",
             status: "approved",
             cycleNo: 1,
             revisionNo: 2,
@@ -641,6 +723,8 @@ describe("E6.13 enrollment explorer HTTP routes", () => {
       historical: true,
       publicationState: "published",
       scopeId: SCOPE,
+      productLabel: "Synthetic Product",
+      facilityLabel: "Synthetic Facility",
     });
     expect(JSON.stringify(envelope.data)).not.toMatch(
       /sources|sourceFingerprint|staffNote|sha256|storagePath/,

@@ -11,6 +11,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
 import { profileHttpFixtureSql } from "./e612-profile-http-fixtures.mjs";
+import { e614HttpStreamFixtureSql } from "./e614-http-stream-fixtures.mjs";
 import { buildManifest } from "./e612-build-manifest.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -274,8 +275,20 @@ async function internalReady(base, path, expectedStatus = 200) {
       docker(["exec", names.gateway, "node", "-e", code]);
       return;
     } catch {
-      if (attempt === 119)
+      if (attempt === 119) {
+        if (base === "http://app:3000") {
+          emit(
+            `E612|HTTP|APP_STATE|${docker(["inspect", names.app, "--format", "{{.State.Status}}:{{.State.ExitCode}}"]).trim()}`,
+          );
+          const startupLog = docker(["logs", "--tail", "30", names.app]);
+          for (const line of startupLog
+            .split("\n")
+            .filter((item) => /error|cannot|failed/i.test(item))) {
+            emit(`E612|HTTP|APP_STARTUP|${line.replace(/[^A-Za-z0-9 .:_/-]/g, "_").slice(0, 240)}`);
+          }
+        }
         fail(`E612_HTTP_INTERNAL_SERVICE_NOT_READY_${base.replaceAll(/[^A-Za-z0-9]+/g, "_")}`);
+      }
     }
     await pause(250);
   }
@@ -291,6 +304,16 @@ function runInternalDriver() {
     "cp",
     `${root}scripts/security/e613-http-probes.mjs`,
     `${names.gateway}:/tmp/e613-http-probes.mjs`,
+  ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e614-http-stream-fixtures.mjs`,
+    `${names.gateway}:/tmp/e614-http-stream-fixtures.mjs`,
+  ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e614-http-stream-probes.mjs`,
+    `${names.gateway}:/tmp/e614-http-stream-probes.mjs`,
   ]);
   docker([
     "cp",
@@ -328,6 +351,7 @@ function runInternalDriver() {
     process.stdout.write(output);
     if (!output.includes("E612|HTTP|PASS")) fail("E612_HTTP_DRIVER_PASS_MARKER_MISSING");
     if (!output.includes("E613|HTTP|PASS")) fail("E613_HTTP_PROBE_PASS_MARKER_MISSING");
+    if (!output.includes("E614|HTTP|PASS")) fail("E614_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E612|PROFILE|PASS")) fail("E612_PROFILE_PROBE_PASS_MARKER_MISSING");
   } catch (error) {
     if (error.stdout) process.stdout.write(String(error.stdout));
@@ -588,6 +612,13 @@ ON CONFLICT (id) DO NOTHING;
   } catch {
     fail("E612_HTTP_SEED_FAILED_profile");
   }
+  try {
+    dbExec(e614HttpStreamFixtureSql());
+  } catch (error) {
+    const state = String(error?.stderr ?? "").match(/(?:ERROR|SQLSTATE)[: ]+([A-Z0-9]{5})/i)?.[1];
+    emit(`E614|HTTP|FIXTURE_SQLSTATE|${state ?? "unknown"}`);
+    fail("E614_HTTP_STREAM_SEED_FAILED");
+  }
 }
 
 const created = new Set();
@@ -831,7 +862,7 @@ try {
   await runInternalAuthorityReadRace();
 } catch (error) {
   const code =
-    error instanceof Error && /^E612_[A-Z0-9_-]+$/.test(error.message)
+    error instanceof Error && /^E61[24]_[A-Za-z0-9_-]+$/.test(error.message)
       ? error.message
       : "E612_HTTP_VERIFICATION_FAILED";
   process.stderr.write(`${code}\n`);

@@ -949,14 +949,7 @@ export interface EnrollmentScopeDetailStaff {
 export type EnrollmentScopeDetail = EnrollmentScopeDetailStaff | EnrollmentClientScopeSummary;
 
 /** E6.14 matrix/report contracts. Empty target cells are UI-only projections. */
-export type EnrollmentReportDiscipline =
-  | "PT"
-  | "PTA"
-  | "OT"
-  | "OTA"
-  | "SLP"
-  | "Other"
-  | "Unknown";
+export type EnrollmentReportDiscipline = "PT" | "PTA" | "OT" | "OTA" | "SLP" | "Other" | "Unknown";
 
 export type EnrollmentReportStatus = EnrollmentStatus | "needs_verification";
 
@@ -1001,11 +994,7 @@ export interface EnrollmentReportSection {
 }
 
 export type EnrollmentReportPublicationState =
-  | "published"
-  | "stale"
-  | "retracted"
-  | "superseded"
-  | "draft";
+  "published" | "stale" | "retracted" | "superseded" | "draft";
 
 export interface EnrollmentReportLocation {
   sectionKey: string;
@@ -1068,6 +1057,11 @@ export interface EnrollmentScopeHistoryStaffItem {
 }
 
 export interface EnrollmentScopeHistoryClientItem extends EnrollmentClientScopeSummary {
+  providerName: string;
+  groupLabel: string;
+  payerLabel: string;
+  productLabel: string;
+  facilityLabel: string;
   historical: true;
   publicationState: "published" | "retracted" | "superseded";
   publishedAt: string;

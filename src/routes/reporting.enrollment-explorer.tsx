@@ -99,9 +99,9 @@ function EnrollmentExplorerRoute() {
   const [exportReportInvalid, setExportReportInvalid] = useState(false);
   const reportInvalid =
     isConflict(report.error) || isAccessDenied(report.error) || exportReportInvalid;
-  const pages = report.data?.pages ?? [];
-  const firstPage = pages[0];
-  const providers = useMemo(() => deriveEnrollmentReportProviders(pages), [pages]);
+  const pages = report.data?.pages;
+  const firstPage = pages?.[0];
+  const providers = useMemo(() => deriveEnrollmentReportProviders(pages ?? []), [pages]);
   const [selectedScope, setSelectedScope] = useState<{
     location: EnrollmentReportLocation;
     provider: EnrollmentReportProvider;
@@ -132,6 +132,12 @@ function EnrollmentExplorerRoute() {
     exportController.current?.abort();
     setExportReportInvalid(false);
   }, [context?.orgId, context?.audience, context?.contextRevision]);
+  useEffect(() => {
+    if (!contextMatchesUrl || reportInvalid) {
+      setSelectedScope(null);
+      setLocationChoices(null);
+    }
+  }, [contextMatchesUrl, reportInvalid]);
   useEffect(() => {
     if (firstPage?.viewToken) setExportReportInvalid(false);
   }, [firstPage?.viewToken]);

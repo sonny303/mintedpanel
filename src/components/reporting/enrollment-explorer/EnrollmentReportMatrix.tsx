@@ -83,7 +83,7 @@ export function EnrollmentReportMatrix({
     count: providers.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
+    overscan: 4,
     getItemKey: (index) => providers[index]?.providerId ?? index,
   });
   const columnVirtualizer = useVirtualizer({
@@ -91,7 +91,7 @@ export function EnrollmentReportMatrix({
     count: columns.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => COLUMN_WIDTH,
-    overscan: 3,
+    overscan: 2,
     getItemKey: (index) => columns[index]?.key ?? index,
   });
   const mobileRowVirtualizer = useVirtualizer({
@@ -166,9 +166,9 @@ export function EnrollmentReportMatrix({
               })}
             </div>
             {virtualRows.map((virtualRow) => {
-            const provider = providers[virtualRow.index];
-            const providerLocations = locationsByProvider.get(provider.providerId);
-            return (
+              const provider = providers[virtualRow.index];
+              const providerLocations = locationsByProvider.get(provider.providerId);
+              return (
                 <div
                   key={provider.providerId}
                   role="row"
@@ -198,10 +198,10 @@ export function EnrollmentReportMatrix({
                   </div>
                   {virtualColumns.map((virtualColumn) => {
                     const column = columns[virtualColumn.index];
-                  const eligible = provider.sectionKeys.includes(column.sectionKey);
-                  const locations = eligible
-                    ? providerLocations?.get(column.sectionKey)?.get(column.productId) ?? []
-                    : [];
+                    const eligible = provider.sectionKeys.includes(column.sectionKey);
+                    const locations = eligible
+                      ? (providerLocations?.get(column.sectionKey)?.get(column.productId) ?? [])
+                      : [];
                     return (
                       <div
                         key={`${provider.providerId}:${column.key}`}

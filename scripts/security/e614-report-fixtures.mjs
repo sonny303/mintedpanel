@@ -29,6 +29,10 @@ export function e614ScaleFixtureSql({ orgId, groupId, payerId, actorId }) {
   return `
 BEGIN;
 SET CONSTRAINTS ALL DEFERRED;
+-- The deferred E6.13 revision audit guard checks every synthetic revision at
+-- commit. This fixture-only index keeps that integrity check linear at scale.
+CREATE INDEX e614_fixture_audit_guard_idx ON public.audit_log
+  (org_id, entity_type, entity_id, user_id, action_type, ((after ->> 'revisionId')));
 INSERT INTO public.facilities (id, org_id, group_id, name, state, is_active)
 VALUES ('${facilityA}', '${org}', '${group}', 'E614 Scale Location A', 'CO', TRUE),
        ('${facilityB}', '${org}', '${group}', 'E614 Scale Location B', 'CO', TRUE)
@@ -135,9 +139,9 @@ FROM e614_scale_rows row
 ON CONFLICT DO NOTHING;
 
 WITH canonical AS MATERIALIZED (
-  SELECT DISTINCT row.source_id,
+  SELECT row.source_id,
     private.e613_source_snapshot('case', row.source_id) AS snapshot
-  FROM e614_scale_rows row
+  FROM (SELECT DISTINCT source_id FROM e614_scale_rows) row
 ), linked AS (
   SELECT row.*, canonical.snapshot
   FROM e614_scale_rows row JOIN canonical USING (source_id)

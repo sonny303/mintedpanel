@@ -68,8 +68,16 @@ const CSV_FIELDS: readonly CsvField[] = [
 ];
 
 const utf8 = new TextEncoder();
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const SPREADSHEET_FORMULA = /^\s*[=+\-@]/;
+
+function replaceUnsafeControls(value: string): string {
+  return Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    return code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127
+      ? " "
+      : character;
+  }).join("");
+}
 
 export type EnrollmentReportCsvResult =
   | { ok: true; csv: string; rowCount: number; byteLength: number }
@@ -77,7 +85,7 @@ export type EnrollmentReportCsvResult =
 
 function csvValue(value: string | number | null): string {
   if (value == null) return "";
-  let safe = String(value).replace(CONTROL_CHARACTERS, " ");
+  let safe = replaceUnsafeControls(String(value));
   if (SPREADSHEET_FORMULA.test(safe)) safe = `'${safe}`;
   return `"${safe.replace(/"/g, '""')}"`;
 }

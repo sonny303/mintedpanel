@@ -218,7 +218,15 @@ function parseReportFilters(
   }
   if (raw.search != null && raw.search !== "") {
     const search = raw.search.trim();
-    if (!search || search.length > 120 || /[\u0000-\u001f\u007f]/.test(search)) return null;
+    if (
+      !search ||
+      search.length > 120 ||
+      Array.from(search).some((character) => {
+        const code = character.charCodeAt(0);
+        return code <= 31 || code === 127;
+      })
+    )
+      return null;
     filters.search = search;
   }
   if (raw.historical != null) {
@@ -434,6 +442,11 @@ const CLIENT_HISTORY_FIELDS = [
   "payerProductId",
   "facilityId",
   "state",
+  "providerName",
+  "groupLabel",
+  "payerLabel",
+  "productLabel",
+  "facilityLabel",
   "status",
   "historicalStatus",
   "clientSafeBlocker",
@@ -486,6 +499,15 @@ function projectClientHistoryItem(value: unknown): EnrollmentScopeHistoryClientI
     !REPORT_STATUSES.has(status)
   ) {
     throw new Error("History response contains an invalid client history state");
+  }
+  for (const key of [
+    "providerName",
+    "groupLabel",
+    "payerLabel",
+    "productLabel",
+    "facilityLabel",
+  ] as const) {
+    item[key] = string(value[key], `history.${key}`);
   }
   return {
     ...(item as unknown as EnrollmentScopeHistoryClientItem),

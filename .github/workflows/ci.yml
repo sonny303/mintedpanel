@@ -273,6 +273,7 @@ jobs:
       - name: Verify E6.14 enrollment report SQL contract and workload
         env:
           E614_DOCKER_CONTEXT: default
+          E614_SCALE: "1"
           E614_POSTGRES_IMAGE: postgres@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
         run: node scripts/security/e614-enrollment-report-native.mjs
 

@@ -23,6 +23,7 @@ const ARTIFACT_DIR = "test-results/e614-enrollment-explorer";
 const PERFORMANCE_PROVIDER_COUNT = 3_000;
 const PERFORMANCE_PAGE_SIZE = 50;
 const PERFORMANCE_PRODUCT_COUNT = 20;
+const PERFORMANCE_LOCATIONS_PER_PRODUCT = 2;
 
 declare global {
   interface Window {
@@ -209,18 +210,23 @@ function performancePage(url: URL): EnrollmentReportPage {
   const providers = Array.from({ length: PERFORMANCE_PAGE_SIZE }, (_, localIndex) => {
     const index = offset + localIndex;
     const cells = columns.map((column, productIndex) => {
-      const locations =
-        productIndex === index % PERFORMANCE_PRODUCT_COUNT
-          ? [0, 1].map((locationIndex) => ({
-              sectionKey: SECTION,
-              scopeId: syntheticUuid(100_000 + index * 2 + locationIndex),
-              facilityId: syntheticUuid(200_000 + locationIndex),
-              facilityLabel: `Facility ${locationIndex + 1}`,
-              publicationState: "published" as const,
-              historical: false,
-              status: "submitted" as const,
-            }))
-          : [];
+      const locations = Array.from(
+        { length: PERFORMANCE_LOCATIONS_PER_PRODUCT },
+        (_, locationIndex) => ({
+          sectionKey: SECTION,
+          scopeId: syntheticUuid(
+            100_000 +
+              index * PERFORMANCE_PRODUCT_COUNT * PERFORMANCE_LOCATIONS_PER_PRODUCT +
+              productIndex * PERFORMANCE_LOCATIONS_PER_PRODUCT +
+              locationIndex,
+          ),
+          facilityId: syntheticUuid(200_000 + locationIndex),
+          facilityLabel: `Facility ${locationIndex + 1}`,
+          publicationState: "published" as const,
+          historical: false,
+          status: "submitted" as const,
+        }),
+      );
       return {
         key: column.key,
         sectionKey: SECTION,
@@ -459,9 +465,9 @@ test("matrix filters stay URL/API aligned and location detail restores focus", a
   await expect(locationPicker).toBeVisible();
   await locationPicker.evaluate(async (element) => {
     await Promise.all(
-      element.getAnimations({ subtree: true }).map((animation) =>
-        animation.finished.catch(() => undefined),
-      ),
+      element
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished.catch(() => undefined)),
     );
   });
   await locationPicker.getByRole("button", { name: /Facility East/ }).click();
@@ -551,12 +557,18 @@ test("expired report view token hides retained rows and offers a visible refresh
   await seedAuth(context);
   await page.goto("/reporting/enrollment-explorer");
   await expect(page.getByRole("grid", { name: "Provider enrollment matrix" })).toBeVisible();
-  await page.getByRole("button", { name: "Load next 50 providers" }).click();
+  await page.getByTestId(`enrollment-cell-${PROVIDER}-${PRODUCT}`).click();
+  await expect(page.getByTestId("enrollment-scope-drawer")).toBeVisible();
+  await page
+    .locator("button")
+    .filter({ hasText: "Load next 50 providers" })
+    .evaluate((button) => (button as HTMLButtonElement).click());
 
   await expect(
     page.getByRole("alert").filter({ hasText: "Refresh before reviewing or downloading" }),
   ).toBeVisible();
   await expect(page.getByRole("grid", { name: "Provider enrollment matrix" })).toHaveCount(0);
+  await expect(page.getByTestId("enrollment-scope-drawer")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Download CSV" })).toHaveCount(0);
 });
 
@@ -574,12 +586,18 @@ test("report authorization denial hides retained rows and disables export", asyn
   await seedAuth(context);
   await page.goto("/reporting/enrollment-explorer");
   await expect(page.getByRole("grid", { name: "Provider enrollment matrix" })).toBeVisible();
-  await page.getByRole("button", { name: "Load next 50 providers" }).click();
+  await page.getByTestId(`enrollment-cell-${PROVIDER}-${PRODUCT}`).click();
+  await expect(page.getByTestId("enrollment-scope-drawer")).toBeVisible();
+  await page
+    .locator("button")
+    .filter({ hasText: "Load next 50 providers" })
+    .evaluate((button) => (button as HTMLButtonElement).click());
 
   await expect(
     page.getByRole("alert").filter({ hasText: "Access to this report is no longer valid" }),
   ).toBeVisible();
   await expect(page.getByRole("grid", { name: "Provider enrollment matrix" })).toHaveCount(0);
+  await expect(page.getByTestId("enrollment-scope-drawer")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Download CSV" })).toHaveCount(0);
 });
 
@@ -625,6 +643,14 @@ test("matrix remains bounded and scrolls for a synthetic 3,000-provider, 20-prod
   const derivedProviders = deriveEnrollmentReportProviders(syntheticPages);
   const derivationMs = performance.now() - deriveStartedAt;
   expect(derivedProviders).toHaveLength(PERFORMANCE_PROVIDER_COUNT);
+  const actualScopeLocations = derivedProviders.reduce(
+    (count, provider) =>
+      count + provider.cells.reduce((sum, cell) => sum + cell.locations.length, 0),
+    0,
+  );
+  expect(actualScopeLocations).toBe(
+    PERFORMANCE_PROVIDER_COUNT * PERFORMANCE_PRODUCT_COUNT * PERFORMANCE_LOCATIONS_PER_PRODUCT,
+  );
   await installNetwork(context, state, [], {
     pageFactory: (url) =>
       syntheticPages[
@@ -676,7 +702,7 @@ test("matrix remains bounded and scrolls for a synthetic 3,000-provider, 20-prod
       responsePageSize: PERFORMANCE_PAGE_SIZE,
       products: PERFORMANCE_PRODUCT_COUNT,
       compactCells: PERFORMANCE_PROVIDER_COUNT * PERFORMANCE_PRODUCT_COUNT,
-      scopeLocations: PERFORMANCE_PROVIDER_COUNT * 2,
+      scopeLocations: actualScopeLocations,
       pagesLoaded: PERFORMANCE_PROVIDER_COUNT / PERFORMANCE_PAGE_SIZE,
       productionProviderPageMergeMs: derivationMs,
       lastPageResponseToNextFrameMs: responseToFrameMs,
@@ -687,6 +713,7 @@ test("matrix remains bounded and scrolls for a synthetic 3,000-provider, 20-prod
   );
   expect(measurements.mountedRows).toBeLessThan(40);
   expect(measurements.mountedCells).toBeLessThan(500);
+  expect(measurements.scrollLongTasksMs.every((duration) => duration <= 50)).toBe(true);
   await page.screenshot({ path: `${ARTIFACT_DIR}/desktop-matrix-3000-loaded.png`, fullPage: true });
 });
 
@@ -964,4 +991,6 @@ test("staff capture saves the selected secondary facility id", async ({ context,
     state: "CO",
   });
   await expect(page.getByText(/Facility East/).last()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Save draft revision" })).toBeFocused();
 });

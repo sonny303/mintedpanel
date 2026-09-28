@@ -164,11 +164,9 @@ function StaffRevisionEditor({
     return [...byKey.entries()].map(([key, value]) => ({ key, ...value }));
   }, [detail.sources, sourceItems]);
   const [selectedLinks, setSelectedLinks] = useState<string[]>(() =>
-    detail.stale
-      ? []
-      : detail.sources.map(
-          (source) => `${source.sourceKind}:${source.sourceId}:${source.sourceFingerprint}`,
-        ),
+    detail.sources.map(
+      (source) => `${source.sourceKind}:${source.sourceId}:${source.sourceFingerprint}`,
+    ),
   );
   const currentFingerprints = new Map(
     sourceItems.map((item) => [`${item.sourceKind}:${item.sourceId}`, item.sourceFingerprint]),
@@ -244,8 +242,8 @@ function StaffRevisionEditor({
       </summary>
       {detail.stale ? (
         <p className="mt-2 rounded bg-amber-50 p-2 text-[11px] text-amber-900">
-          This source set is stale. Select current source fingerprints below or explicitly remove
-          invalid links before saving.
+          This source set is stale. Existing links remain selected. Replace changed fingerprints or
+          explicitly remove invalid links before saving.
         </p>
       ) : null}
       <form
@@ -400,7 +398,7 @@ function StaffRevisionEditor({
                 <label key={choice.key} className="flex gap-2 rounded border p-2 text-[10px]">
                   <input
                     type="checkbox"
-                    disabled={!isCurrent}
+                    disabled={!isCurrent && !selectedLinks.includes(choice.key)}
                     checked={selectedLinks.includes(choice.key)}
                     onChange={(event) =>
                       setSelectedLinks((current) =>
@@ -700,7 +698,8 @@ function StaffEnrollmentActions({
             variant="ghost"
             disabled={documentDownload.isPending}
             onClick={() => {
-              const preview = window.open("about:blank", "_blank", "noopener,noreferrer");
+              const preview = window.open("about:blank", "_blank");
+              if (preview) preview.opener = null;
               void documentDownload
                 .mutateAsync(selectedDocument.id)
                 .then((result) => {
@@ -807,6 +806,11 @@ function HistoryPanel({
                     {new Date(item.publishedAt).toLocaleDateString()} · historical
                   </span>
                 </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {item.providerName} · {item.groupLabel} · {item.payerLabel} · {item.productLabel}
+                  {" · "}
+                  {item.state} · {item.facilityLabel}
+                </p>
               </li>
             );
           }

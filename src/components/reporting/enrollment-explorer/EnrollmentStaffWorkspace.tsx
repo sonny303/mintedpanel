@@ -81,6 +81,7 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
     providerName: string;
     facilityLabel: string;
   } | null>(null);
+  const saveDraftButtonRef = useRef<HTMLButtonElement>(null);
   const syncedFilterGroup = useRef(filters.groupId);
 
   const groupsQ = useProviderGroups();
@@ -690,6 +691,7 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
           </fieldset>
           <div className="flex flex-wrap items-center gap-3">
             <Button
+              ref={saveDraftButtonRef}
               type="submit"
               size="sm"
               disabled={
@@ -934,6 +936,7 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
           onOpenChange={(open) => {
             if (!open) setSavedScope(null);
           }}
+          onRestoreFocus={() => saveDraftButtonRef.current?.focus()}
         />
       ) : null}
     </section>

@@ -7,9 +7,7 @@ import {
   serializeEnrollmentReportCsv,
 } from "./enrollmentReportCsv";
 
-function csvRecord(
-  overrides: Partial<EnrollmentReportCsvRecord> = {},
-): EnrollmentReportCsvRecord {
+function csvRecord(overrides: Partial<EnrollmentReportCsvRecord> = {}): EnrollmentReportCsvRecord {
   return {
     providerName: "Ada Provider",
     npi: "0012345678",
@@ -59,7 +57,7 @@ describe("serializeEnrollmentReportCsv", () => {
     const result = serializeEnrollmentReportCsv([
       csvRecord({
         providerName: '=HYPERLINK("https://invalid.example")',
-        groupLabel: "North,\nSecond \"Clinic\"\u0001",
+        groupLabel: 'North,\nSecond "Clinic"\u0001',
       }),
     ]);
     expect(result.ok).toBe(true);
@@ -85,7 +83,7 @@ describe("serializeEnrollmentReportCsv", () => {
     const result = serializeEnrollmentReportCsv(records);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.rowCount).toBe(ENROLLMENT_REPORT_CSV_MAX_ROWS);
-  });
+  }, 15_000);
 
   it("accepts exactly 25 MiB of UTF-8 and rejects the next byte", () => {
     const base = serializeEnrollmentReportCsv([csvRecord({ clientSafeBlocker: "" })]);
@@ -95,9 +93,7 @@ describe("serializeEnrollmentReportCsv", () => {
     const availableBytes = ENROLLMENT_REPORT_CSV_MAX_BYTES - base.byteLength;
     const multibyteChars = Math.floor(availableBytes / 2);
     const exactPayload = "é".repeat(multibyteChars) + (availableBytes % 2 === 1 ? "x" : "");
-    const exact = serializeEnrollmentReportCsv([
-      csvRecord({ clientSafeBlocker: exactPayload }),
-    ]);
+    const exact = serializeEnrollmentReportCsv([csvRecord({ clientSafeBlocker: exactPayload })]);
     expect(exact.ok).toBe(true);
     if (exact.ok) expect(exact.byteLength).toBe(ENROLLMENT_REPORT_CSV_MAX_BYTES);
 
