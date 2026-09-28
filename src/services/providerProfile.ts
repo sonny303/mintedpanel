@@ -332,7 +332,11 @@ export async function getProviderProfile(
       return { kind: "provider_not_found" };
     }
     caseContext = caseRow as unknown as ProfileCaseContext;
-    if (caseContext.group_id != null && options.groupId != null && options.groupId !== caseContext.group_id) {
+    if (
+      caseContext.group_id != null &&
+      options.groupId != null &&
+      options.groupId !== caseContext.group_id
+    ) {
       return { kind: "group_not_found" };
     }
   }
@@ -345,7 +349,8 @@ export async function getProviderProfile(
   // affiliated with it (either as primary group, case group, or via provider_group_assignments).
   if (groupId != null) {
     const isDirectlyLinked =
-      provider.group_id === groupId || (caseContext?.group_id != null && caseContext.group_id === groupId);
+      provider.group_id === groupId ||
+      (caseContext?.group_id != null && caseContext.group_id === groupId);
     if (!isDirectlyLinked) {
       const { data: assignmentRow, error: assignErr } = await db
         .from("provider_group_assignments")
