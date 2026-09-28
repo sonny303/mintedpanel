@@ -269,7 +269,11 @@ test("client Reporting Center exposes only Enrollment Explorer before internal h
   await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Find a provider/i })).toHaveCount(0);
   expect(state.seenTables.every((table) => ["profiles", "memberships"].includes(table))).toBe(true);
-  expect(state.seenTables.some((table) => /inbound_leads|cases|providers|provider_groups|facilities/i.test(table))).toBe(false);
+  expect(
+    state.seenTables.some((table) =>
+      /inbound_leads|cases|providers|provider_groups|facilities/i.test(table),
+    ),
+  ).toBe(false);
 });
 
 for (const scenario of [

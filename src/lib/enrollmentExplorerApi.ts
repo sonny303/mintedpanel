@@ -195,11 +195,9 @@ export function fetchEnrollmentReportPage(
   if (input.cursor) query.set("cursor", input.cursor);
   if (input.viewToken) query.set("viewToken", input.viewToken);
   const suffix = query.toString();
-  return request(
-    context,
-    `/api/enrollment-explorer/report/page${suffix ? `?${suffix}` : ""}`,
-    { signal: options?.signal },
-  );
+  return request(context, `/api/enrollment-explorer/report/page${suffix ? `?${suffix}` : ""}`, {
+    signal: options?.signal,
+  });
 }
 
 export function fetchEnrollmentScopeHistory(

@@ -67,7 +67,12 @@ export function useEnrollmentScopeHistory(scopeId: string | null, enabled: boole
     initialPageParam: null as string | null,
     queryFn: ({ pageParam, signal }) => {
       if (!context || !scopeId) throw new Error("Scope history is unavailable");
-      return fetchEnrollmentScopeHistory(context, scopeId, { cursor: pageParam, limit: 20 }, { signal });
+      return fetchEnrollmentScopeHistory(
+        context,
+        scopeId,
+        { cursor: pageParam, limit: 20 },
+        { signal },
+      );
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     staleTime: 0,
