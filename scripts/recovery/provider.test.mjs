@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { RecoveryError, STAGING } from "./contract.mjs";
+import { canonicalDigest } from "../release/contract.mjs";
 import {
+  cleanupExpiredStagingLoginRole,
   loadSupabaseAccessToken,
   decodeKeychainToken,
   observeStagingProvider,
@@ -350,6 +352,108 @@ test("unexpected preexisting CLI role fails before login-role POST", async () =>
   assert.equal(calls.length, 1);
   assert.ok(calls[0].url.endsWith("/database/query/read-only"));
   assert.equal(steps.length, 0);
+});
+
+const expiredRole = "cli_login_postgres";
+const expiredRoleDigest = canonicalDigest([expiredRole]);
+const expiredRoleSteps = () => [
+  { body: project, status: 200 },
+  { body: pooler, status: 200 },
+  { body: [{ rolname: expiredRole }], status: 201 },
+  {
+    body: [
+      {
+        rolname: expiredRole,
+        expires_at: "2026-09-17 04:00:00+00",
+        expired: true,
+        session_count: 0,
+      },
+    ],
+    status: 201,
+  },
+  { body: [{ rolname: expiredRole }], status: 201 },
+  { body: [{ rolname: expiredRole }], status: 201 },
+  { body: [], status: 201 },
+  { body: [{ rolname: expiredRole }], status: 201 },
+  { body: [], status: 201 },
+  { body: null, status: 204 },
+  { body: [], status: 201 },
+];
+
+test("approved expired staging role cleanup binds identity, expiry and empty poststate", async () => {
+  const calls = [];
+  const steps = expiredRoleSteps();
+  const result = await cleanupExpiredStagingLoginRole({
+    token,
+    expectedInventoryDigest: expiredRoleDigest,
+    fetchImpl: fetchSequence(steps, calls),
+    clock: () => now,
+  });
+  assert.equal(result.status, "EXPIRED_STAGING_ROLE_REMOVED");
+  assert.equal(result.projectRef, STAGING.ref);
+  assert.equal(result.cleanup.poststateRoleCount, 0);
+  assert.equal(result.cleanup.exactRoleAbsent, true);
+  assert.equal(calls.filter((call) => call.options.method === "DELETE").length, 1);
+  assert.ok(
+    calls.every((call) =>
+      call.url.startsWith(`https://api.supabase.com/v1/projects/${STAGING.ref}`),
+    ),
+  );
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, mutate] of [
+  ["unexpired role", (steps) => (steps[3].body[0].expired = false)],
+  ["active session", (steps) => (steps[3].body[0].session_count = 1)],
+  ["unexpected role", (steps) => (steps[2].body[0].rolname = "cli_login_other")],
+]) {
+  test(`expired staging role cleanup rejects ${label} before DELETE`, async () => {
+    const calls = [];
+    const steps = expiredRoleSteps();
+    mutate(steps);
+    await assert.rejects(
+      cleanupExpiredStagingLoginRole({
+        token,
+        expectedInventoryDigest: expiredRoleDigest,
+        fetchImpl: fetchSequence(steps, calls),
+        clock: () => now,
+      }),
+      RecoveryError,
+    );
+    assert.ok(calls.every((call) => call.options.method !== "DELETE"));
+  });
+}
+
+test("expired staging role cleanup rejects changed inventory digest before DELETE", async () => {
+  const calls = [];
+  const steps = expiredRoleSteps();
+  await assert.rejects(
+    cleanupExpiredStagingLoginRole({
+      token,
+      expectedInventoryDigest: "f".repeat(64),
+      fetchImpl: fetchSequence(steps, calls),
+      clock: () => now,
+    }),
+    RecoveryError,
+  );
+  assert.ok(calls.every((call) => call.options.method !== "DELETE"));
+});
+
+test("expired staging role cleanup rejects a newly active session without terminating it", async () => {
+  const calls = [];
+  const steps = expiredRoleSteps();
+  steps[6].body = [{ pid: 123, usename: expiredRole }];
+  await assert.rejects(
+    cleanupExpiredStagingLoginRole({
+      token,
+      expectedInventoryDigest: expiredRoleDigest,
+      fetchImpl: fetchSequence(steps, calls),
+      clock: () => now,
+    }),
+    RecoveryError,
+  );
+  assert.ok(calls.every((call) => call.options.method !== "DELETE"));
+  assert.ok(calls.every((call) => !call.options.body?.includes("pg_terminate_backend")));
 });
 
 for (const [label, mutate] of [
