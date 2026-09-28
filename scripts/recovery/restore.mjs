@@ -853,7 +853,7 @@ export function planLocalRoles(source, local) {
   return { rolesSql: statements.join("\n"), databaseSettingsSql: databaseStatements.join("\n") };
 }
 
-async function prepareArchiveExtensions(target, catalog, execute) {
+export async function prepareArchiveExtensions(target, catalog, execute) {
   check(Array.isArray(catalog.extensions) && Array.isArray(catalog.schemas));
   const desired = catalog.extensions.map((extension) => {
     check(typeof extension.version === "string" && /^[A-Za-z0-9_.-]+$/.test(extension.version));
@@ -896,28 +896,46 @@ async function prepareArchiveExtensions(target, catalog, execute) {
     ),
   );
   const precreate = desired.filter(
-    (extension) =>
-      extension.owner !== "postgres" && !current.some((row) => row.name === extension.name),
+    (extension) => !current.some((row) => row.name === extension.name),
   );
-  // The reviewed staging archive has one exceptional extension owner/schema.
-  // Reject a future topology change instead of silently expanding TOC omissions.
+  // pg_restore creates extensions as its login, not their source owner. Recreate
+  // only this observed staging topology before import, then retain the source
+  // owner when the archive's CREATE EXTENSION IF NOT EXISTS is skipped.
+  const supported = new Map([
+    ["pg_stat_statements", { owner: "postgres", schema: "extensions" }],
+    ["pgcrypto", { owner: "postgres", schema: "extensions" }],
+    ["uuid-ossp", { owner: "postgres", schema: "extensions" }],
+    ["supabase_vault", { owner: "supabase_admin", schema: "vault" }],
+  ]);
   check(
-    precreate.every(
-      (extension) =>
-        extension.name === "supabase_vault" &&
-        extension.schema === "vault" &&
-        extension.owner === "supabase_admin",
-    ),
+    precreate.every((extension) => {
+      const expected = supported.get(extension.name);
+      return expected && extension.owner === expected.owner && extension.schema === expected.schema;
+    }),
   );
-  const schemas = precreate.map((extension) => {
-    const schema = catalog.schemas.find((row) => row.name === extension.schema);
-    check(schema?.owner === extension.owner);
+  const schemas = [...new Set(precreate.map((extension) => extension.schema))].map((name) => {
+    const schema = catalog.schemas.find((row) => row.name === name);
+    check(
+      schema &&
+        precreate.every(
+          (extension) => extension.schema !== name || extension.owner === schema.owner,
+        ),
+    );
     return { name: schema.name, owner: schema.owner };
   });
+  for (const schema of schemas)
+    await query(
+      target,
+      `CREATE SCHEMA ${roleIdentifier(schema.name)} AUTHORIZATION ${roleIdentifier(schema.owner)};`,
+      DATABASE,
+      false,
+      execute,
+      "supabase_admin",
+    );
   for (const extension of precreate)
     await query(
       target,
-      `BEGIN; CREATE SCHEMA ${roleIdentifier(extension.schema)} AUTHORIZATION ${roleIdentifier(extension.owner)}; SET LOCAL ROLE ${roleIdentifier(extension.owner)}; CREATE EXTENSION ${roleIdentifier(extension.name)} WITH SCHEMA ${roleIdentifier(extension.schema)} VERSION ${sqlLiteral(extension.version)}; COMMIT;`,
+      `BEGIN; SET LOCAL ROLE ${roleIdentifier(extension.owner)}; CREATE EXTENSION ${roleIdentifier(extension.name)} WITH SCHEMA ${roleIdentifier(extension.schema)} VERSION ${sqlLiteral(extension.version)}; COMMIT;`,
       DATABASE,
       false,
       execute,
@@ -926,10 +944,9 @@ async function prepareArchiveExtensions(target, catalog, execute) {
   return schemas;
 }
 
-// PostgreSQL requires an event trigger's new owner to be a superuser. Hosted
-// Supabase can retain managed event triggers owned by its non-superuser postgres
-// role. Reproduce that ownership only inside the owned isolated restore target,
-// then remove every temporary elevation before any verification can succeed.
+// PostgreSQL can require a superuser for event-trigger ownership and for
+// pg_stat_statements creation under its source owner. Apply that elevation only
+// inside the owned isolated target, then remove it before verification.
 export async function restoreArchiveWithEventOwners(
   { target, workspace, identityPath, catalog },
   {
@@ -938,7 +955,11 @@ export async function restoreArchiveWithEventOwners(
     prepareExtensions = prepareArchiveExtensions,
   } = {},
 ) {
-  check(Array.isArray(catalog?.roles) && Array.isArray(catalog.eventTriggers));
+  check(
+    Array.isArray(catalog?.roles) &&
+      Array.isArray(catalog.eventTriggers) &&
+      Array.isArray(catalog.extensions),
+  );
   const roles = new Map(catalog.roles.map((role) => [String(role.oid), role]));
   const expected = catalog.eventTriggers
     .map((trigger) => {
@@ -950,11 +971,20 @@ export async function restoreArchiveWithEventOwners(
       return { name: trigger.evtname, owner: owner.rolname };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+  const statementExtension = catalog.extensions.find(
+    (extension) => extension.name === "pg_stat_statements",
+  );
+  const extensionOwners =
+    statementExtension?.owner === "postgres" && statementExtension.schema === "extensions"
+      ? ["postgres"]
+      : [];
   const elevated = [
     ...new Set(
-      expected
-        .filter((event) => !catalog.roles.find((role) => role.rolname === event.owner).rolsuper)
-        .map((event) => event.owner),
+      [...expected.map((event) => event.owner), ...extensionOwners].filter((name) => {
+        const role = catalog.roles.find((candidate) => candidate.rolname === name);
+        check(role && typeof role.rolsuper === "boolean");
+        return !role.rolsuper;
+      }),
     ),
   ];
   try {

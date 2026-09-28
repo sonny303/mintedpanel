@@ -9,6 +9,7 @@ import {
   destroyIsolatedTarget,
   discoverOwnedRecoveryResources,
   inspectSealedBackup,
+  prepareArchiveExtensions,
   prepareIsolatedTarget,
   rehearseStagingRestore,
 } from "./restore.mjs";
@@ -607,6 +608,7 @@ for (const archiveFails of [false, true]) {
         catalog: {
           roles: [roleFixture("postgres", 1), roleFixture("supabase_admin", 2, { rolsuper: true })],
           eventTriggers: [{ evtname: "managed_event", evtowner: 1 }],
+          extensions: [],
         },
       },
       {
@@ -635,6 +637,39 @@ for (const archiveFails of [false, true]) {
   });
 }
 
+test("isolated extension-owner elevation is removed before verification", async () => {
+  const { restoreArchiveWithEventOwners } = await import("./restore.mjs");
+  const calls = [];
+  await restoreArchiveWithEventOwners(
+    {
+      target: { containerId: "a".repeat(64) },
+      workspace: "/private/tmp/backup",
+      identityPath: "/private/tmp/identity",
+      catalog: {
+        roles: [roleFixture("postgres", 1), roleFixture("supabase_admin", 2, { rolsuper: true })],
+        eventTriggers: [],
+        extensions: [
+          { name: "pg_stat_statements", owner: "postgres", schema: "extensions", version: "1.11" },
+        ],
+      },
+    },
+    {
+      prepareExtensions: async () => [],
+      execute: async (_args, sql) => {
+        calls.push(sql);
+        if (sql.includes("FROM pg_catalog.pg_event_trigger")) return "[]";
+        if (sql.includes("FROM pg_catalog.pg_roles"))
+          return JSON.stringify([{ name: "postgres", superuser: false }]);
+        return "";
+      },
+      restoreStream: async () => calls.push("archive"),
+    },
+  );
+  assert.match(calls[0], /ALTER ROLE "postgres" SUPERUSER/);
+  assert.equal(calls[1], "archive");
+  assert.match(calls[2], /ALTER ROLE "postgres" NOSUPERUSER/);
+});
+
 test("isolated event-owner restore refuses changed ownership and residual elevation", async () => {
   const { restoreArchiveWithEventOwners } = await import("./restore.mjs");
   for (const corrupt of ["owner", "superuser"]) {
@@ -647,6 +682,7 @@ test("isolated event-owner restore refuses changed ownership and residual elevat
           catalog: {
             roles: [roleFixture("postgres", 1)],
             eventTriggers: [{ evtname: "managed_event", evtowner: 1 }],
+            extensions: [],
           },
         },
         {
@@ -701,6 +737,7 @@ test("uncertain local elevation still attempts exact revocation and skips archiv
         catalog: {
           roles: [roleFixture("postgres", 1)],
           eventTriggers: [{ evtname: "managed_event", evtowner: 1 }],
+          extensions: [],
         },
       },
       {
@@ -791,6 +828,58 @@ test("restore TOC omits only one exact precreated schema CREATE and preserves AC
   );
   assert.throws(() =>
     filterRestoreTableOfContents(toc + toc, [{ name: "vault", owner: "supabase_admin" }]),
+  );
+});
+
+test("isolated restore precreates the observed extensions under their source owners", async () => {
+  const extensions = [
+    { name: "plpgsql", version: "1.0", owner: "supabase_admin", schema: "pg_catalog" },
+    { name: "pg_stat_statements", version: "1.11", owner: "postgres", schema: "extensions" },
+    { name: "pgcrypto", version: "1.3", owner: "postgres", schema: "extensions" },
+    { name: "uuid-ossp", version: "1.1", owner: "postgres", schema: "extensions" },
+    { name: "supabase_vault", version: "0.3.1", owner: "supabase_admin", schema: "vault" },
+  ];
+  const catalog = {
+    extensions,
+    schemas: [
+      { name: "extensions", owner: "postgres" },
+      { name: "vault", owner: "supabase_admin" },
+    ],
+  };
+  const calls = [];
+  const execute = async (_args, sql) => {
+    calls.push(sql);
+    if (sql.includes("FROM pg_catalog.pg_extension e")) return JSON.stringify([extensions[0]]);
+    if (sql.includes("FROM pg_catalog.pg_available_extension_versions"))
+      return JSON.stringify(extensions.map(({ name, version }) => ({ name, version })));
+    return "";
+  };
+  const schemas = await prepareArchiveExtensions({ containerId: "a".repeat(64) }, catalog, execute);
+  assert.deepEqual(schemas, [
+    { name: "extensions", owner: "postgres" },
+    { name: "vault", owner: "supabase_admin" },
+  ]);
+  assert.equal(calls.filter((sql) => sql.startsWith("CREATE SCHEMA ")).length, 2);
+  assert.equal(calls.filter((sql) => sql.includes("CREATE EXTENSION ")).length, 4);
+  assert.ok(
+    calls.some((sql) => sql.includes('SET LOCAL ROLE "postgres"; CREATE EXTENSION "pgcrypto"')),
+  );
+  assert.ok(
+    calls.some((sql) =>
+      sql.includes('SET LOCAL ROLE "supabase_admin"; CREATE EXTENSION "supabase_vault"'),
+    ),
+  );
+  await assert.rejects(() =>
+    prepareArchiveExtensions(
+      { containerId: "a".repeat(64) },
+      {
+        ...catalog,
+        extensions: extensions.map((row) =>
+          row.name === "pgcrypto" ? { ...row, owner: "other" } : row,
+        ),
+      },
+      execute,
+    ),
   );
 });
 
