@@ -3,19 +3,24 @@
 import { useMemo, useState } from "react";
 import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { PortalDrawer } from "@/components/PortalDrawer";
+import { AddPayerPortalDialog } from "@/components/payer-admin/AddPayerPortalDialog";
 import { useSops } from "@/hooks/useAdmin";
 import { usePortalFieldMaps, usePortals } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
 import { buildPayerPortalInventory } from "@/lib/payerPortalsView";
+import { useIsAdmin } from "@/lib/permissions";
 import type { Payer, Portal } from "@/types";
 
 export function PayerPortalsTab({ payer }: { payer: Payer }) {
+  const isAdmin = useIsAdmin();
   const portalsQ = usePortals();
   const templatesQ = useSops();
   const mapsQ = usePortalFieldMaps();
   const drift = useFormDrift();
   const [active, setActive] = useState<Portal | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -35,11 +40,23 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
   return (
     <div className="space-y-4">
       <section className="rounded-[6px] border border-[#E8E5E0] bg-white">
-        <div className="border-b border-[#E8E5E0] px-5 py-4">
-          <h2 className="text-[16px] font-semibold text-foreground">Portals — {payer.name}</h2>
-          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-            Row opens URL edit and stop-using. Portal keys are permanent identity.
-          </p>
+        <div className="flex items-center justify-between border-b border-[#E8E5E0] px-5 py-4">
+          <div>
+            <h2 className="text-[16px] font-semibold text-foreground">Portals — {payer.name}</h2>
+            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+              Row opens URL edit, attached payer, and stop-using. Portal keys are permanent
+              identity.
+            </p>
+          </div>
+          {isAdmin ? (
+            <Button
+              size="sm"
+              className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+              onClick={() => setShowAddModal(true)}
+            >
+              + Add portal
+            </Button>
+          ) : null}
         </div>
         <div className="p-5">
           {errored ? (
@@ -65,9 +82,18 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
                 No portals for this payer
               </div>
               <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
-                Register a portal from a template&apos;s online-form step (Form setup), or when an
-                Action links one during authoring.
+                Add a portal directly to fill ad hoc, or register one from a template&apos;s
+                online-form step.
               </p>
+              {isAdmin ? (
+                <Button
+                  size="sm"
+                  className="mt-3 h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+                  onClick={() => setShowAddModal(true)}
+                >
+                  + Add portal
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[6px] border border-[#E8E5E0]">
@@ -120,7 +146,9 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
                         <StatusPill status={row.status.tone} label={row.status.label} />
                       </td>
                       <td className="px-3 text-[13px] text-muted-foreground">
-                        {row.usedByCount} step{row.usedByCount === 1 ? "" : "s"}
+                        {row.usedByCount > 0
+                          ? `${row.usedByCount} step${row.usedByCount === 1 ? "" : "s"}`
+                          : "0 steps (Ad hoc)"}
                       </td>
                       <td className="px-3 text-[13px] text-muted-foreground">
                         {row.lastProvenLabel}
@@ -140,6 +168,14 @@ export function PayerPortalsTab({ payer }: { payer: Payer }) {
           payerId={payer.id}
           onClose={() => setActive(null)}
           onPortalUpdated={(p) => setActive(p)}
+        />
+      ) : null}
+
+      {showAddModal ? (
+        <AddPayerPortalDialog
+          payer={payer}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={(p) => setActive(p)}
         />
       ) : null}
     </div>

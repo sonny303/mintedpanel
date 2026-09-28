@@ -85,14 +85,20 @@ export interface ProviderProfileOptions {
   // be in the caller's org AND the provider's facility set, else the result
   // is facility_not_found (the route's 404) — cross-org ids resolve nothing.
   facilityId?: string;
+  // Explicit group selection for group.* / groupInsurance.* tokens.
+  groupId?: string;
+  // Optional case context: validates provider/case ownership and ensures
+  // the requested group matches the selected case's group.
+  caseId?: string;
 }
 
-// getProviderProfile result: both not-found kinds map to a 404 at the route,
+// getProviderProfile result: not-found kinds map to a 404 at the route,
 // with messages that tell the extension WHICH reference was bad.
 export type ProviderProfileResult =
   | { kind: "ok"; profile: ProviderProfile; needsFacility: boolean }
   | { kind: "provider_not_found" }
-  | { kind: "facility_not_found" };
+  | { kind: "facility_not_found" }
+  | { kind: "group_not_found" };
 
 // Explicit projections: every column the token catalog references for the
 // table, plus the keys resolution needs. Never select('*') here.
@@ -250,7 +256,48 @@ export async function getProviderProfile(
   if (providerErr) throw providerErr;
   if (!providerRow) return { kind: "provider_not_found" };
   const provider = providerRow as unknown as Row;
-  const groupId = (provider.group_id as string | null) ?? null;
+
+  // Case validation: if a case is supplied, it must belong to this provider and org.
+  // If the case specifies a group, options.groupId cannot conflict with it.
+  let caseGroupId: string | null = null;
+  if (options.caseId) {
+    const { data: caseRow, error: caseErr } = await db
+      .from("credential_cases")
+      .select("id, provider_id, group_id")
+      .eq("id", options.caseId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (caseErr) throw caseErr;
+    if (!caseRow || caseRow.provider_id !== providerId) {
+      return { kind: "provider_not_found" };
+    }
+    caseGroupId = (caseRow.group_id as string | null) ?? null;
+    if (caseGroupId != null && options.groupId != null && options.groupId !== caseGroupId) {
+      return { kind: "group_not_found" };
+    }
+  }
+
+  const groupId = options.groupId ?? caseGroupId ?? (provider.group_id as string | null) ?? null;
+
+  // Group relationship check: if a groupId is resolved, the provider must be
+  // affiliated with it (either as primary group, case group, or via provider_group_assignments).
+  if (groupId != null) {
+    const isDirectlyLinked =
+      provider.group_id === groupId || (caseGroupId != null && caseGroupId === groupId);
+    if (!isDirectlyLinked) {
+      const { data: assignmentRow, error: assignErr } = await db
+        .from("provider_group_assignments")
+        .select("group_id")
+        .eq("provider_id", providerId)
+        .eq("group_id", groupId)
+        .eq("org_id", orgId)
+        .maybeSingle();
+      if (assignErr) throw assignErr;
+      if (!assignmentRow) {
+        return { kind: "group_not_found" };
+      }
+    }
+  }
 
   const { data: catalogRaw, error: catalogErr } = await db.rpc("get_sop_field_tokens");
   if (catalogErr) throw catalogErr;
@@ -289,6 +336,7 @@ export async function getProviderProfile(
   }
 
   const group = (groupRes.data as Row | null) ?? null;
+  if (groupId != null && !group) return { kind: "group_not_found" };
   const licenses = (licenseRes.data ?? []) as unknown as Row[];
   const assignments = (assignmentRes.data ?? []) as unknown as Row[];
   const policies = (policyRes.data ?? []) as unknown as Row[];

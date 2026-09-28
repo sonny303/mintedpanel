@@ -397,4 +397,75 @@ describe("provider profile service — injected server context", () => {
       "unsupported source table (space_stations)",
     );
   });
+
+  describe("group validation and case context agreement", () => {
+    it("rejects group choice that mismatches selected case group", async () => {
+      const caseRow = { id: "c1", provider_id: "p1", group_id: "g1" };
+      const { db } = makeFakeDb(
+        { ...happyTables(), credential_cases: { data: caseRow } },
+        { data: CATALOG },
+      );
+
+      const result = await getProviderProfile(ctxWith(db), "p1", {
+        caseId: "c1",
+        groupId: "g-mismatch",
+      });
+
+      expect(result.kind).toBe("group_not_found");
+    });
+
+    it("rejects group choice unaffiliated with provider", async () => {
+      // provider p1 has group_id g1, not g-other
+      const { db } = makeFakeDb(
+        {
+          ...happyTables(),
+          provider_group_assignments: { data: null },
+        },
+        { data: CATALOG },
+      );
+
+      const result = await getProviderProfile(ctxWith(db), "p1", {
+        groupId: "g-unaffiliated",
+      });
+
+      expect(result.kind).toBe("group_not_found");
+    });
+
+    it("accepts group choice matching selected case group", async () => {
+      const caseRow = { id: "c1", provider_id: "p1", group_id: "g1" };
+      const { db } = makeFakeDb(
+        { ...happyTables(), credential_cases: { data: caseRow } },
+        { data: CATALOG },
+      );
+
+      const result = await getProviderProfile(ctxWith(db), "p1", {
+        caseId: "c1",
+        groupId: "g1",
+      });
+
+      expect(result.kind).toBe("ok");
+    });
+
+    it("accepts group choice affiliated via provider_group_assignments", async () => {
+      const g2Row = { id: "g2", name: "Second Group" };
+      const assignmentG2 = { id: "pga-1", provider_id: "p1", group_id: "g2" };
+      const { db } = makeFakeDb(
+        {
+          ...happyTables(),
+          provider_groups: { data: g2Row },
+          provider_group_assignments: { data: assignmentG2 },
+        },
+        { data: CATALOG },
+      );
+
+      const result = await getProviderProfile(ctxWith(db), "p1", {
+        groupId: "g2",
+      });
+
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") {
+        expect(valueOf(result.profile, "group.name")).toBe("Second Group");
+      }
+    });
+  });
 });

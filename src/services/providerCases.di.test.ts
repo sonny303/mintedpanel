@@ -277,6 +277,23 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
     expect(captures.map((c) => c.table)).toContain("profiles");
   });
 
+  it("exposes groupId when case has an assigned group", async () => {
+    const row = {
+      ...caseRow("c1", "Aetna", "KS", "in_progress"),
+      group_id: "group-uuid-1",
+    };
+    const { db } = makeFakeDb([
+      { data: { id: PROVIDER_ID } },
+      { data: [row] },
+      NO_TOUCHES,
+      { data: [] },
+    ]);
+
+    const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
+
+    expect(result?.[0]?.groupId).toBe("group-uuid-1");
+  });
+
   it("falls back to email when the author has no full_name, and skips the profiles read when no note has an author", async () => {
     const { db, captures } = makeFakeDb([
       { data: { id: PROVIDER_ID } },

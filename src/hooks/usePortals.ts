@@ -9,6 +9,7 @@ import {
   hidePortalFromPickers,
   listPortals,
   savePortalFormUrl,
+  updatePortalPayer,
   updatePortalUrl,
   type PortalInput,
 } from "@/services/portals";
@@ -95,6 +96,17 @@ export function useSavePortalFormUrl() {
   return useMutation({
     mutationFn: ({ portal, formUrl }: { portal: Portal; formUrl: string }) =>
       savePortalFormUrl(portal, formUrl),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
+  });
+}
+
+/** Update or set attached payer on a portal. */
+export function useUpdatePortalPayer() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ portal, payerId }: { portal: Portal; payerId: string | null }) =>
+      updatePortalPayer(portal, payerId),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
   });
 }

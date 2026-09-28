@@ -22,12 +22,13 @@ vi.mock("@/lib/audit", () => ({
   requireActiveOrg: () => "org-1",
 }));
 
-import { createPortal } from "./portals";
+import { createPortal, updatePortalPayer } from "./portals";
 
 interface Captured {
   table: string;
-  op?: "insert";
+  op?: "insert" | "update";
   payload?: Record<string, unknown>;
+  eqs?: Array<[string, unknown]>;
 }
 
 // Minimal chainable fake for createPortal's one shape:
@@ -35,12 +36,21 @@ interface Captured {
 function installDb(created: Record<string, unknown>): Captured[] {
   const captures: Captured[] = [];
   holder.from = (table: string) => {
-    const cap: Captured = { table };
+    const cap: Captured = { table, eqs: [] };
     captures.push(cap);
     const builder: Record<string, unknown> = {
       insert(payload: Record<string, unknown>) {
         cap.op = "insert";
         cap.payload = payload;
+        return builder;
+      },
+      update(payload: Record<string, unknown>) {
+        cap.op = "update";
+        cap.payload = payload;
+        return builder;
+      },
+      eq(col: string, val: unknown) {
+        cap.eqs?.push([col, val]);
         return builder;
       },
       select() {
@@ -93,5 +103,43 @@ describe("createPortal", () => {
     // normalizePortalKey collapses blank to null; the write boundary coalesces
     // to "" so the NOT NULL portal_key column always gets a string.
     expect(captures[0].payload?.portal_key).toBe("");
+  });
+});
+
+describe("updatePortalPayer", () => {
+  it("updates payer_id for an org portal and audits the change", async () => {
+    const updatedRow = { ...CREATED_ROW, payer_id: "payer-123" };
+    const captures = installDb(updatedRow);
+
+    const portal = {
+      id: "portal-1",
+      orgId: "org-1",
+      portalKey: "bcbs_ks_enrollment",
+      name: "BCBS KS Enrollment",
+      payerId: null,
+      formUrl: null,
+      isVerified: false,
+      lastVerifiedAt: null,
+      urlChangedAt: null,
+      createdAt: "2026-07-01T00:00:00Z",
+      updatedAt: "2026-07-01T00:00:00Z",
+    };
+
+    const res = await updatePortalPayer(portal, "payer-123");
+
+    expect(captures[0].op).toBe("update");
+    expect(captures[0].payload).toEqual({ payer_id: "payer-123" });
+    expect(captures[0].eqs).toContainEqual(["id", "portal-1"]);
+    expect(captures[0].eqs).toContainEqual(["org_id", "org-1"]);
+    expect(res.payerId).toBe("payer-123");
+    expect(writeAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "UPDATE",
+        entityType: "portal",
+        entityId: "portal-1",
+        before: { payerId: null },
+        after: { payerId: "payer-123" },
+      }),
+    );
   });
 });

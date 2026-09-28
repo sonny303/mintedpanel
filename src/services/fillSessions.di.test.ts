@@ -104,6 +104,7 @@ describe("recordFillEvent — shape validation rejects before any DB call", () =
     ["non-UUID caseId", { ...baseInput, caseId: "case-1" }],
     ["non-UUID providerId", { ...baseInput, providerId: "p1" }],
     ["non-UUID taskId", { ...baseInput, taskId: "t1" }],
+    ["missing both caseId and providerId", { id: FILL_ID, portalKey: "availity" }],
     ["blank portalKey", { ...baseInput, portalKey: "  " }],
     ["unknown fillMode", { ...baseInput, fillMode: "fax" as never }],
     ["negative fieldsFilled", { ...baseInput, fieldsFilled: -1 }],
@@ -233,6 +234,34 @@ describe("recordFillEvent — happy path", () => {
 
     const insertCap = captures.find((c) => c.op === "insert");
     expect(insertCap?.payload?.started_at).toBe("2026-07-04T12:00:00Z");
+  });
+
+  it("inserts an ad hoc fill with null case_id when providerId is provided without caseId", async () => {
+    const { db, captures } = makeFakeDb([
+      // belongsToOrg("providers", PROVIDER_ID)
+      { data: { id: PROVIDER_ID } },
+      // idempotency lookup (miss)
+      { data: null },
+      // insert().select().single()
+      { data: { ...storedRow, case_id: null, provider_id: PROVIDER_ID } },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, {
+      id: FILL_ID,
+      providerId: PROVIDER_ID,
+      portalKey: "availity",
+    });
+
+    expect(result.kind).toBe("created");
+    if (result.kind !== "created") throw new Error("expected created");
+    expect(result.session.caseId).toBeNull();
+    expect(result.session.providerId).toBe(PROVIDER_ID);
+
+    const insertCap = captures.find((c) => c.op === "insert");
+    expect(insertCap?.payload?.case_id).toBeNull();
+    expect(insertCap?.payload?.provider_id).toBe(PROVIDER_ID);
+    expect(writeAudit).toHaveBeenCalledTimes(1);
   });
 });
 
