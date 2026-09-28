@@ -19,15 +19,17 @@ import type { EnrollmentAudience, EnrollmentContext } from "@/services/clientAcc
 let registeredQueryClient: QueryClient | null = null;
 let accessContextAbortController: AbortController | null = null;
 let revisionObserverRegistered = false;
-let lifecycleListenersRegistered = false;
 
 function invalidateProtectedWork({
   resetRevision = false,
-}: { resetRevision?: boolean } = {}): void {
+  clearQueryCache = false,
+}: { resetRevision?: boolean; clearQueryCache?: boolean } = {}): void {
   accessContextAbortController?.abort();
   accessContextAbortController = null;
   void registeredQueryClient?.cancelQueries();
-  registeredQueryClient?.clear();
+  if (clearQueryCache) {
+    registeredQueryClient?.clear();
+  }
   if (resetRevision) resetContextRevision();
   else beginContextRefresh();
 }
@@ -123,7 +125,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data, error } = await supabase.auth.getSession();
           if (error) throw error;
-          invalidateProtectedWork({ resetRevision: true });
+          invalidateProtectedWork({ resetRevision: true, clearQueryCache: true });
           set({
             session: data.session,
             user: data.session?.user ?? null,
@@ -163,20 +165,6 @@ export const useAuthStore = create<AuthState>()(
         supabase.auth.onAuthStateChange(async (event, session) => {
           await applyAuthStateChange(event, session);
         });
-
-        if (!lifecycleListenersRegistered && typeof window !== "undefined") {
-          lifecycleListenersRegistered = true;
-          const refresh = () => {
-            const state = useAuthStore.getState();
-            if (state.session && !state.accessContextLoading) {
-              void state.loadAccessContext().catch(() => undefined);
-            }
-          };
-          window.addEventListener("focus", refresh);
-          document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") refresh();
-          });
-        }
       },
 
       loadMemberships: async () => {
@@ -280,7 +268,7 @@ export const useAuthStore = create<AuthState>()(
         accessContextAbortController = new AbortController();
         const signal = accessContextAbortController.signal;
         set({
-          accessContext: null,
+          accessContext: previous ?? null,
           accessContextLoading: true,
           accessContextError: null,
           contextEpoch: epoch,
@@ -336,6 +324,17 @@ export const useAuthStore = create<AuthState>()(
           ) {
             throw new Error("The selected access context was not returned by the server");
           }
+          const isReplacement =
+            !previous ||
+            previous.contextRevision !== context.contextRevision ||
+            previous.selectedOrgId !== context.selectedOrgId ||
+            previous.audience !== context.audience;
+
+          if (isReplacement) {
+            void registeredQueryClient?.cancelQueries();
+            registeredQueryClient?.clear();
+          }
+
           setContextRevision(context.contextRevision);
           set({
             accessContext: context,
@@ -404,7 +403,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signOut: async () => {
-        invalidateProtectedWork({ resetRevision: true });
+        invalidateProtectedWork({ resetRevision: true, clearQueryCache: true });
         await supabase.auth.signOut();
         set({
           session: null,
@@ -468,10 +467,11 @@ export async function applyAuthStateChange(
     return false;
   }
 
-  invalidateProtectedWork({ resetRevision: true });
   const previousUserId = current.user?.id ?? null;
   const nextUserId = session?.user?.id ?? null;
   const sameActor = Boolean(previousUserId && nextUserId && previousUserId === nextUserId);
+  const clearingCache = !session || !sameActor;
+  invalidateProtectedWork({ resetRevision: true, clearQueryCache: clearingCache });
   const previousContext = current.accessContext;
   const selectionHint =
     sameActor && previousContext?.audience && previousContext.selectedOrgId

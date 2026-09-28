@@ -403,4 +403,40 @@ describe("E6.12 auth lifecycle", () => {
     });
     expect(queryClient.getQueryData(["cases", ORG_A])).toEqual([{ id: "case-a" }]);
   });
+
+  it("preserves query cache and active context during same-revision revalidation", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["cases", ORG_A], [{ id: "keep-case" }]);
+    const { registerQueryClient } = await import("./auth-store");
+    registerQueryClient(queryClient);
+    useAuthStore.setState({ accessContext: context(ACTOR_A, "rev-same", ORG_A) });
+    fetchContextMock.mockResolvedValueOnce(context(ACTOR_A, "rev-same"));
+    selectContextMock.mockResolvedValueOnce(context(ACTOR_A, "rev-same", ORG_A));
+
+    await useAuthStore.getState().loadAccessContext();
+
+    expect(queryClient.getQueryData(["cases", ORG_A])).toEqual([{ id: "keep-case" }]);
+    expect(useAuthStore.getState().accessContext?.contextRevision).toBe("rev-same");
+  });
+
+  it("retains existing access context in state while a revalidation is in-flight", async () => {
+    const delayed = deferred<EnrollmentContext>();
+    fetchContextMock.mockReturnValueOnce(delayed.promise);
+    selectContextMock.mockResolvedValueOnce(context(ACTOR_A, "rev-current", ORG_A));
+    useAuthStore.setState({ accessContext: context(ACTOR_A, "rev-current", ORG_A) });
+
+    const loadPromise = useAuthStore.getState().loadAccessContext();
+
+    expect(useAuthStore.getState().accessContextLoading).toBe(true);
+    expect(useAuthStore.getState().accessContext).toMatchObject({
+      contextRevision: "rev-current",
+      selectedOrgId: ORG_A,
+    });
+
+    delayed.resolve(context(ACTOR_A, "rev-current", ORG_A));
+    await loadPromise;
+
+    expect(useAuthStore.getState().accessContextLoading).toBe(false);
+    expect(useAuthStore.getState().accessContext?.contextRevision).toBe("rev-current");
+  });
 });
