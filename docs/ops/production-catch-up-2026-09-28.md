@@ -56,6 +56,35 @@ reported six activation blockers, and both migration readiness commands returned
 11,463 ms for one 50-provider page after planner statistics were refreshed;
 this is not a p95 or hosted measurement.
 
+The #427 migration would update eight existing contracting status rows and
+insert 20 across four staging organizations. In production it would update six
+and insert 15 across three organizations. Both databases currently have zero
+contract rows. The #429 columns would touch existing `portal_field_maps` tables
+with 659 staging and 714 production rows; #424/#425 adds columns/constraints to
+`fill_sessions` with 90 staging and 92 production rows. These are read-only
+impact counts, not a completed rehearsal. Recount immediately before approval.
+
+The body of `public.resolve_enrollment_context(uuid,text,uuid)` has the same
+`prosrc` MD5 in both hosted databases (`8c77250cba65fc3e6146b1a6ff0e85c1`),
+but staging is `SECURITY DEFINER` and production is `SECURITY INVOKER`. The
+committed E6.12 migration specifies invoker. Both targets currently report
+`service_role` SELECT access to `auth.users`. The production-only ledger entries
+therefore cannot simply be copied to staging; reconcile the exact function
+metadata and ledger evidence, then rehearse an invoker correction with its
+authorization tests.
+
+## #351 requirement disposition
+
+The open S1/S2/S4 spike predates the merged Enrollment Explorer requirements.
+Its client Auth identity plus explicit group grants is implemented by E6.12;
+its service-only, published client-safe data boundary is specified by E6.13;
+its 50-provider cursor pages and virtualized matrix are in #455/E6.14. The
+spike's older 60,000-case benchmark does not certify #455's 120,000-scope SQL.
+Its proposed “Ready to bill” business meaning and any broader client-visible
+identifier set remain outside this release; they require separate product
+requirements before use. Once this trace is reviewed, close #351 as superseded
+without merging its stale benchmarks into current release proof.
+
 Use [`staging-delivery.md`](staging-delivery.md),
 [`migration-tracking.md`](migration-tracking.md),
 [`production-release.md`](production-release.md) and the extension
