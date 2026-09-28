@@ -798,6 +798,16 @@ export async function createMockApiServer(options = {}) {
       const audience = req.headers["x-enrollment-audience"];
       const revision = req.headers["x-minted-context-revision"];
       const selectedOrg = req.headers["x-org-id"];
+      const urlOrg = url.searchParams.get("org");
+      const urlOrgId = url.searchParams.get("orgId");
+      if ((urlOrg && urlOrg !== selectedOrg) || (urlOrgId && urlOrgId !== selectedOrg)) {
+        return envelope(
+          res,
+          403,
+          null,
+          "Selected organization does not match the verified request",
+        );
+      }
       if (audience !== "staff" && audience !== "client") {
         return envelope(res, 400, null, "Choose an explicit enrollment audience");
       }
@@ -816,6 +826,53 @@ export async function createMockApiServer(options = {}) {
       }
       res.setHeader("cache-control", "no-store, max-age=0");
       res.setHeader("x-minted-context-revision", expectedRevision);
+      if (url.pathname === "/api/enrollment-explorer/report/page") {
+        if (url.searchParams.has("cursor") && !url.searchParams.has("viewToken")) {
+          return envelope(res, 422, null, "A report cursor requires its view token");
+        }
+        return envelope(res, 200, {
+          contextRevision: expectedRevision,
+          viewToken: url.searchParams.get("viewToken") ?? "mock-e614-view-token",
+          accessState: "ready",
+          filters: {},
+          filterChoices: {
+            groups: [],
+            states: [],
+            facilities: [],
+            products: [],
+            disciplines: ["PT", "PTA", "OT", "OTA", "SLP", "Other", "Unknown"],
+            statuses: ["approved", "needs_verification"],
+          },
+          sections: [],
+          providers: [],
+          nextCursor: null,
+        });
+      }
+      if (url.pathname === "/api/enrollment-explorer/report.csv") {
+        if (!url.searchParams.has("viewToken")) {
+          return envelope(res, 422, null, "A report export requires a first-page view token");
+        }
+        res.writeHead(200, {
+          "content-type": "text/csv; charset=utf-8",
+          "content-disposition": 'attachment; filename="enrollment-report.csv"',
+          "cache-control": "no-store, max-age=0",
+          "x-minted-context-revision": expectedRevision,
+        });
+        return res.end(
+          '"Provider Name","NPI","Discipline","Group","Payer","Product","State","Facility","Status","Publication State","Intake Date","Complete to Submit Date","Submitted Date","Payer Acknowledged Date","Approved Date","Effective Date","Termination Date","Current Application Cycle","Payer Reference","Retro Type","Retro Value","Retro Basis","Client-safe Blocker","Owner","Reviewed As Of","Proof Label","Proof Type","Authenticated Report URL"\r\n"Kay Five","0000000005","Unknown","Mock Group","Mock Payer","Mock Product","KS","Main Clinic","approved","published","","","","","","","","1","","unknown","","","","Payer","","","","/reporting/enrollment-explorer"',
+        );
+      }
+      const historyPath = /^\/api\/enrollment-explorer\/scopes\/([^/]+)\/history$/.exec(
+        url.pathname,
+      );
+      if (historyPath) {
+        return envelope(res, 200, {
+          audience,
+          scopeId: historyPath[1],
+          items: [],
+          nextCursor: null,
+        });
+      }
       return envelope(res, 200, {
         products: [
           { productId: "mock-product", payerId: "mock-payer", displayName: "Mock Product" },

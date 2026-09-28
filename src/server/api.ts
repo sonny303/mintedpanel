@@ -291,6 +291,7 @@ async function handleEnrollmentExplorerApiRequest(request: Request): Promise<Res
     const response = await routes.handleEnrollmentExplorerRequest(request, user, {
       orgId,
       audience: selectedAudience,
+      contextRevision: current.contextRevision,
     });
     response.headers.set("x-minted-context-revision", current.contextRevision);
     if (response.status >= 400) return response;

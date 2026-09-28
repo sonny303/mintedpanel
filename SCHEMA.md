@@ -622,3 +622,24 @@ authorized publications. The proof proxy reauthorizes before bytes, checks
 the pinned version/digest and writes identifiers-only read audit. No report
 operation changes the four-part case key, case status/history or source facts.
 Hosted application and activation remain separately approval-gated.
+
+## E6.14 enrollment report reads (repository-only)
+
+The [E6.14 contract](docs/redesign/E6.14-enrollment-explorer-matrix.md) adds
+service-only report page, history and export reads over the existing grains.
+It introduces no report, snapshot, generation or export table. Operational
+case/fact tables have no report-maintained mutation or invalidation triggers.
+
+The active verified provider-group cohort and authorized published scopes are
+combined before filtering and 50-provider keyset pagination. Actual group
+assignments permit empty target intersections; only actual scope rows produce
+detail or CSV records. Published-only lifecycle rows retain their exact scope
+coordinates, including completed enrollments for retired products.
+
+Each read derives its authorized snapshot and internal consistency digest from
+canonical material source state, presence/expiry, publications, document versions,
+labels and assignments. The browser receives an opaque, audience/context-bound
+view token; internal digests remain server-side. CSV uses an explicit client-safe
+28-column projection for either audience, with strict row/byte bounds and a fresh
+snapshot/authority check after serialization and before direct delivery. It
+creates no persistent artifact or asynchronous work.

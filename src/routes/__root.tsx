@@ -182,6 +182,13 @@ function RootComponent() {
   const initError = useAuthStore((s) => s.initError);
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
+  const accessContext = useAuthStore((s) => s.accessContext);
+  const isRestrictedReportingPath =
+    pathname === "/reporting" ||
+    pathname === "/reporting/" ||
+    pathname === "/reporting/enrollment-explorer";
+  const routeContextKey = accessContext?.contextRevision ?? activeOrgId ?? "no-context";
+  const routeOutlet = <Outlet key={routeContextKey} />;
 
   useEffect(() => {
     registerQueryClient(queryClient);
@@ -234,7 +241,9 @@ function RootComponent() {
       {isChromelessRoute ? (
         <Outlet />
       ) : (
-        <AccessContextBoundary>
+        <AccessContextBoundary
+          clientReportOutlet={isRestrictedReportingPath ? routeOutlet : undefined}
+        >
           {isRootRoute && session ? (
             <AuthenticatedHome />
           ) : memberships.length === 0 ? (
@@ -248,7 +257,7 @@ function RootComponent() {
                   (selected provider/case/facility, filters, unsaved forms) before
                   the new org loads. Server state is cleared by
                   auth-store.setActiveOrg -> queryClient.removeQueries(). */}
-              <Outlet key={activeOrgId ?? "no-org"} />
+              {routeOutlet}
             </AppShell>
           )}
         </AccessContextBoundary>

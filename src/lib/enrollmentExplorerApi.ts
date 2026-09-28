@@ -8,7 +8,11 @@ import type {
   EnrollmentEvidenceKind,
   EnrollmentExplorerAudience,
   EnrollmentProofField,
+  EnrollmentReportFilters,
+  EnrollmentReportPage,
+  EnrollmentReportPageRequest,
   EnrollmentScopeDetail,
+  EnrollmentScopeHistoryPage,
   EnrollmentScopeSaveInput,
   EnrollmentUnresolvedPage,
 } from "@/types";
@@ -78,6 +82,7 @@ async function download(
   context: EnrollmentExplorerRequestContext,
   path: string,
   signal?: AbortSignal,
+  failureMessage = "Enrollment proof download failed",
 ): Promise<Blob> {
   const before = getContextRevisionSnapshot();
   const { data } = await supabase.auth.getSession();
@@ -97,7 +102,7 @@ async function download(
     throw new EnrollmentExplorerApiError(409, "Access context changed; retry the request");
   }
   if (!response.ok) {
-    let error = "Enrollment proof download failed";
+    let error = failureMessage;
     try {
       const body = (await response.json()) as ApiEnvelope<unknown>;
       error = body.error ?? error;
@@ -167,6 +172,67 @@ export function fetchEnrollmentScopeDetail(
   return request(context, `/api/enrollment-explorer/scopes/${encodeURIComponent(scopeId)}`, {
     signal: options?.signal,
   });
+}
+
+function addReportFilters(query: URLSearchParams, filters: EnrollmentReportFilters): void {
+  if (filters.groupId) query.set("groupId", filters.groupId);
+  if (filters.state) query.set("state", filters.state);
+  if (filters.facilityId) query.set("facilityId", filters.facilityId);
+  if (filters.productId) query.set("productId", filters.productId);
+  if (filters.discipline) query.set("discipline", filters.discipline);
+  if (filters.status) query.set("status", filters.status);
+  if (filters.search) query.set("search", filters.search);
+  if (filters.historical) query.set("historical", "true");
+}
+
+export function fetchEnrollmentReportPage(
+  context: EnrollmentExplorerRequestContext,
+  input: EnrollmentReportPageRequest,
+  options?: { signal?: AbortSignal },
+): Promise<EnrollmentReportPage> {
+  const query = new URLSearchParams();
+  addReportFilters(query, input);
+  if (input.cursor) query.set("cursor", input.cursor);
+  if (input.viewToken) query.set("viewToken", input.viewToken);
+  const suffix = query.toString();
+  return request(
+    context,
+    `/api/enrollment-explorer/report/page${suffix ? `?${suffix}` : ""}`,
+    { signal: options?.signal },
+  );
+}
+
+export function fetchEnrollmentScopeHistory(
+  context: EnrollmentExplorerRequestContext,
+  scopeId: string,
+  input: { cursor?: string | null; limit?: number },
+  options?: { signal?: AbortSignal },
+): Promise<EnrollmentScopeHistoryPage> {
+  const query = new URLSearchParams();
+  if (input.cursor) query.set("cursor", input.cursor);
+  if (input.limit != null) query.set("limit", String(input.limit));
+  const suffix = query.toString();
+  const path = `/api/enrollment-explorer/scopes/${encodeURIComponent(scopeId)}/history`;
+  return request(context, `${path}${suffix ? `?${suffix}` : ""}`, {
+    signal: options?.signal,
+  });
+}
+
+export function downloadEnrollmentReportCsv(
+  context: EnrollmentExplorerRequestContext,
+  filters: EnrollmentReportFilters,
+  viewToken: string,
+  options?: { signal?: AbortSignal },
+): Promise<Blob> {
+  const query = new URLSearchParams();
+  addReportFilters(query, filters);
+  query.set("viewToken", viewToken);
+  return download(
+    context,
+    `/api/enrollment-explorer/report.csv?${query.toString()}`,
+    options?.signal,
+    "Enrollment report download failed",
+  );
 }
 
 export function saveEnrollmentScope(

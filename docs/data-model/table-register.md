@@ -150,6 +150,12 @@ No additional audit table is introduced. Existing cases,
 case history and facts remain read-only report inputs. This is repository
 schema documentation, not a claim of hosted migration application.
 
+E6.14 adds service-only matrix, history and bounded export reads over these
+relations and the existing authorized provider/group/facility cohort. It adds
+no table or grain, generation state, operational invalidation trigger, retained
+snapshot or export artifact. Staff capture continues through the E6.13 write
+contract; clients and both-audience CSV receive explicit safe projections.
+
 ## WP 1.3 — Provider Roster Engine
 
 | Table                   | Layer  | Status  | Usage                | Notes / replacement                                                                                                                                                                         |
