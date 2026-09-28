@@ -43,6 +43,38 @@ separately approved extension package.
 | Production database and Panel release           | Independent `fkvuhfsqcmujywzgczmc` ledger/catalog/backup/restore proof, exact staging candidate and qualification digest, old/new compatibility, production environment reviewer and immutable release summary.                                           | Execute only inside the single approved Production job, then read back schema, aliases, health and isolation. Hold on mismatch; use captured previous deployment for app rollback while separately reconciling database state. |
 | Chrome Web Store publication                    | Exact item/publisher/audience/version, reviewed clean extension source and ZIP hash, staging native PASS, installed-version compatibility and owner-approved release policy.                                                                              | Submit that ZIP to the existing approved item; verify Store acceptance, published version and installation before claiming extension production current.                                                                       |
 
+### First hosted decision: staging encrypted baseline capture
+
+Target **only** `vmznysvietfaddakkegt`. Current read-only state: 143 ledger
+entries; four organizations, zero contracts, 659 portal maps and 90 fill
+sessions; eight existing contracting statuses would be updated by #427. The
+crosswalk records 120 source SQL hashes, including a duplicate version; no
+schema repair is authorized by this capture. Prior September 23 isolated
+restore passed for an older staging snapshot, but it cannot stand in for a
+fresh baseline. Recheck identity, ledger, catalog and counts immediately before
+this operation.
+
+The requested first hosted operation is the reviewed
+`scripts/recovery/live-backup.mjs capture` path: create a bounded temporary
+staging login, take a consistent encrypted age snapshot, and verify that exact
+login is removed. The output remains local private ciphertext with `CAPTURED_ONLY`
+status. Then restore that capture into an isolated local database and verify
+row/sequence/catalog/ledger integrity. No staging application SQL, Vercel setting,
+alias, production resource or Store item changes in this checkpoint. It requires
+an owner-designated age recipient with its restore identity available and a
+staging-scoped management credential; these are not present in the task
+environment. Capture/restore failure or uncertain temporary-role cleanup stops
+the wave for reconciliation.
+
+The three missing feature SQL files are pinned for the **later, separate**
+rehearsal/hosted approval: #427
+`57abd0ea67b7fb4e25c953dac578c43d895d251fddd3a4e8e703d3432caf80b3`,
+#429 `18311a257c89fd3487805e3f65021dad9ba91432f26357ca70b1f36a742add44`,
+and #424/#425
+`43ecff4b5d8fb4e475e16e22d50b1501375f068587486645c09b4483a051b9ce`.
+Do not apply them until the lineage correction, populated rehearsal and separate
+staging database decision are reviewed.
+
 ## Current read-only evidence
 
 On 2026-09-28, both Supabase migration ledgers lacked the three R4 versions.
