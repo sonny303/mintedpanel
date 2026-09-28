@@ -86,6 +86,15 @@ Developer Dashboard requested account re-verification, so audience/publisher
 details are still unobserved. [Extension #72](https://github.com/sonny303/minted-extension/pull/72)
 records the two clean local ZIPs and their open native gates.
 
+For #412, a scan of values removed by its diff against every tracked file in
+the current PR tree found no residual occurrences of the removed email, three
+tax-ID-like tokens, 18 street-address-like tokens or four of five NPI-like
+tokens. The fifth NPI-like token appears in 66 files, including an explicitly
+named synthetic identity probe and design-system examples; it is a shared
+synthetic fixture. The current-tree scrub does not remove prior Git history.
+The historical exposure disposition remains a separate owner decision before
+calling the privacy work complete.
+
 ## #351 requirement disposition
 
 The open S1/S2/S4 spike predates the merged Enrollment Explorer requirements.
