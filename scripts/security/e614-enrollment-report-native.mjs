@@ -708,6 +708,9 @@ function scaleChecks() {
   assertEqual("scale.actual_provider_count", counts[0], E614_SCALE_FIXTURE.providerCount);
   assertEqual("scale.actual_product_count", counts[1], E614_SCALE_FIXTURE.productCount);
   assertEqual("scale.actual_scope_count", counts[2], E614_SCALE_FIXTURE.scopeCount);
+  // The bulk fixture is newer than autovacuum's statistics. Measure the query
+  // with an informed planner, as a populated hosted database would be measured.
+  sql("ANALYZE;");
   const started = performance.now();
   const page = callJson(
     E612.admin,
