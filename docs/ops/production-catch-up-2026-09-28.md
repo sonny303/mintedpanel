@@ -64,6 +64,12 @@ with 659 staging and 714 production rows; #424/#425 adds columns/constraints to
 `fill_sessions` with 90 staging and 92 production rows. These are read-only
 impact counts, not a completed rehearsal. Recount immediately before approval.
 
+The [complete read-only lineage crosswalk](release-packets/2026-09-28/README.md)
+binds all 120 source SQL hashes to both hosted ledger lists. Only 18 source
+versions match a hosted version exactly; 108 source names match ledger names,
+with no SQL-equivalence claim. Twelve source names are absent from each ledger,
+and 34 staging / 36 production hosted entries have no source filename suffix.
+
 The body of `public.resolve_enrollment_context(uuid,text,uuid)` has the same
 `prosrc` MD5 in both hosted databases (`8c77250cba65fc3e6146b1a6ff0e85c1`),
 but staging is `SECURITY DEFINER` and production is `SECURITY INVOKER`. The
