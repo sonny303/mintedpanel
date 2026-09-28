@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isAllStates, templateStates } from "@/lib/sopMatchKey";
-import { pickTemplate } from "@/lib/pickTemplate";
+import { topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
 import { useReapplyCase } from "@/hooks/useCases";
@@ -45,7 +45,8 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const autoTemplate = useMemo(() => {
-    return pickTemplate(templatesQ.data ?? [], c.payerId, c.state, c.groupId);
+    const top = topRankedTemplates(templatesQ.data ?? [], c.payerId, c.state, c.groupId);
+    return top.length === 1 ? top[0] : null;
   }, [templatesQ.data, c.payerId, c.state, c.groupId]);
 
   const candidateTemplates = useMemo(() => {
@@ -53,7 +54,7 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
     return all.filter((t) => {
       if (t.archived) return false;
       if (t.payerId !== c.payerId) return false;
-      if (t.groupId !== null && c.groupId !== null && t.groupId !== c.groupId) return false;
+      if (t.groupId !== null && t.groupId !== c.groupId) return false;
       const states = templateStates(t);
       if (states.length > 0 && !isAllStates(states) && !states.includes(c.state)) return false;
       return true;
@@ -70,15 +71,16 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
 
   const effectiveTemplate = useMemo(() => {
     if (selectedTemplateId) {
-      return (templatesQ.data ?? []).find((t) => t.id === selectedTemplateId) ?? null;
+      return templateOptions.find((t) => t.id === selectedTemplateId) ?? null;
     }
     return autoTemplate;
-  }, [selectedTemplateId, templatesQ.data, autoTemplate]);
+  }, [selectedTemplateId, templateOptions, autoTemplate]);
 
   if (c.caseStatus !== "denied" || !canEdit) return null;
 
   const run = () => {
     const template = effectiveTemplate;
+    if (templateOptions.length > 0 && !template) return;
     const resolved =
       template && c.provider ? resolveTemplate(template, c.provider, c.group, null, null) : [];
     // Append after the case's existing tasks so the combined checklist keeps
@@ -165,7 +167,7 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
               </Button>
               <Button
                 className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-                disabled={reapply.isPending}
+                disabled={reapply.isPending || (templateOptions.length > 0 && !effectiveTemplate)}
                 onClick={run}
               >
                 {reapply.isPending ? "Reapplying…" : "Reapply"}

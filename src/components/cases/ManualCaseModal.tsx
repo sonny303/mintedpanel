@@ -39,7 +39,7 @@ import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { usePayers, useSops } from "@/hooks/useAdmin";
 import { resolveCaseFacilityId } from "@/lib/caseFacility";
 import { manualCasePayers } from "@/lib/payerSetup";
-import { pickTemplate } from "@/lib/pickTemplate";
+import { topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
 import { isAllStates, templateStates } from "@/lib/sopMatchKey";
@@ -75,28 +75,20 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
   // Auto-selected template according to standard match precedence
   const autoTemplate = useMemo(() => {
-    if (payerId === NONE) return null;
-    return pickTemplate(
-      templatesQ.data ?? [],
-      payerId,
-      state === NONE ? "KS" : state,
-      groupId === NONE ? null : groupId,
-    );
+    if (payerId === NONE || state === NONE || groupId === NONE) return null;
+    const top = topRankedTemplates(templatesQ.data ?? [], payerId, state, groupId);
+    return top.length === 1 ? top[0] : null;
   }, [payerId, state, groupId, templatesQ.data]);
 
   const candidateTemplates = useMemo(() => {
-    if (payerId === NONE) return [];
+    if (payerId === NONE || state === NONE || groupId === NONE) return [];
     const all = templatesQ.data ?? [];
     return all.filter((t) => {
       if (t.archived) return false;
       if (t.payerId !== payerId) return false;
-      if (t.groupId !== null && groupId !== NONE && t.groupId !== groupId) return false;
-      if (state !== NONE) {
-        const states = templateStates(t);
-        if (states.length > 0 && !isAllStates(states) && !states.includes(state)) {
-          return false;
-        }
-      }
+      if (t.groupId !== null && t.groupId !== groupId) return false;
+      const states = templateStates(t);
+      if (states.length > 0 && !isAllStates(states) && !states.includes(state)) return false;
       return true;
     });
   }, [payerId, groupId, state, templatesQ.data]);
@@ -116,8 +108,8 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
   const effectiveTemplate = useMemo(() => {
     if (effectiveTemplateId === NONE) return null;
-    return (templatesQ.data ?? []).find((t) => t.id === effectiveTemplateId) ?? null;
-  }, [effectiveTemplateId, templatesQ.data]);
+    return templateOptions.find((t) => t.id === effectiveTemplateId) ?? null;
+  }, [effectiveTemplateId, templateOptions]);
 
   const roster = useMemo(
     () => (providersQ.data ?? []).filter((p) => p.status !== "terminated"),
@@ -203,7 +195,13 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   };
 
   const submit = () => {
-    if (!selection || blockingCase) return;
+    if (
+      !selection ||
+      blockingCase ||
+      (templateOptions.length > 0 && autoTemplate === null && selectedTemplateId === null) ||
+      (effectiveTemplateId !== NONE && !effectiveTemplate)
+    )
+      return;
     const provider = providers.find((p) => p.id === selection.providerId);
     if (!provider) return;
     const group = (groupsQ.data ?? []).find((g) => g.id === selection.groupId) ?? null;
@@ -467,6 +465,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
               !prerequisitesReady ||
               !selection ||
               Boolean(blockingCase) ||
+              (templateOptions.length > 0 &&
+                autoTemplate === null &&
+                selectedTemplateId === null) ||
+              (effectiveTemplateId !== NONE && !effectiveTemplate) ||
               loading ||
               failed ||
               createCase.isPending

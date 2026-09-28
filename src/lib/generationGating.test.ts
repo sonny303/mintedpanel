@@ -56,6 +56,19 @@ function tpl(required: string[]): SOPTemplate {
 }
 
 describe("evaluateGeneration (TE-13 gating)", () => {
+  it("withholds a proposed case when equal-priority templates would stamp different tasks", () => {
+    const first = tpl([]);
+    const second = { ...tpl([]), id: "second" };
+    const res = evaluateGeneration({
+      rows: [row({})],
+      templates: [second, first],
+      factsById: new Map([["p1", facts({})]]),
+    });
+    expect(res.confirmable).toHaveLength(0);
+    expect(res.ambiguous).toHaveLength(1);
+    expect(res.gated).toHaveLength(0);
+  });
+
   it("gates a proposed provider missing a required attribute (TS-96)", () => {
     const res = evaluateGeneration({
       rows: [row({})],

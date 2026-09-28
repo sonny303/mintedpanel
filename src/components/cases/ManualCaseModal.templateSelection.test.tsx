@@ -12,7 +12,7 @@ const mockState = vi.hoisted(() => ({
   providers: [
     { id: "pr-1", firstName: "Jane", lastName: "Whitaker", status: "active" } as Provider,
   ],
-  payers: [{ id: "pay-1", name: "Aetna", isNetworkPayer: true }] as Payer[],
+  payers: [{ id: "pay-1", name: "Aetna", isNetworkPayer: true }] as unknown as Payer[],
   providerAssignments: [
     { providerId: "pr-1", groupId: "g-1", endDate: null } as ProviderGroupAssignment,
   ],
