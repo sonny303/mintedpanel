@@ -19,6 +19,7 @@ import type { EnrollmentAudience, EnrollmentContext } from "@/services/clientAcc
 let registeredQueryClient: QueryClient | null = null;
 let accessContextAbortController: AbortController | null = null;
 let revisionObserverRegistered = false;
+let lifecycleListenersRegistered = false;
 
 function invalidateProtectedWork({
   resetRevision = false,
@@ -165,6 +166,20 @@ export const useAuthStore = create<AuthState>()(
         supabase.auth.onAuthStateChange(async (event, session) => {
           await applyAuthStateChange(event, session);
         });
+
+        if (!lifecycleListenersRegistered && typeof window !== "undefined") {
+          lifecycleListenersRegistered = true;
+          const refresh = () => {
+            const state = useAuthStore.getState();
+            if (state.session && !state.accessContextLoading) {
+              void state.loadAccessContext().catch(() => undefined);
+            }
+          };
+          window.addEventListener("focus", refresh);
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") refresh();
+          });
+        }
       },
 
       loadMemberships: async () => {
@@ -325,10 +340,9 @@ export const useAuthStore = create<AuthState>()(
             throw new Error("The selected access context was not returned by the server");
           }
           const isReplacement =
-            !previous ||
-            previous.contextRevision !== context.contextRevision ||
-            previous.selectedOrgId !== context.selectedOrgId ||
-            previous.audience !== context.audience;
+            previous !== null &&
+            (previous.contextRevision !== context.contextRevision ||
+              previous.audience !== context.audience);
 
           if (isReplacement) {
             void registeredQueryClient?.cancelQueries();
