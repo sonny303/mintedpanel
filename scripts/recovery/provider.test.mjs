@@ -4,6 +4,7 @@ import { RecoveryError, STAGING } from "./contract.mjs";
 import { canonicalDigest } from "../release/contract.mjs";
 import {
   cleanupExpiredStagingLoginRole,
+  cleanupFailedCaptureStagingLoginRole,
   loadSupabaseAccessToken,
   decodeKeychainToken,
   observeStagingProvider,
@@ -455,6 +456,55 @@ test("expired staging role cleanup rejects a newly active session without termin
   assert.ok(calls.every((call) => call.options.method !== "DELETE"));
   assert.ok(calls.every((call) => !call.options.body?.includes("pg_terminate_backend")));
 });
+
+const failedCaptureExpiry = "2026-09-19 04:05:00+00";
+const failedCaptureSteps = () => {
+  const steps = expiredRoleSteps();
+  steps[3].body[0].expires_at = failedCaptureExpiry;
+  steps[3].body[0].expired = false;
+  return steps;
+};
+
+test("failed capture role cleanup removes only the bound, sessionless staging role", async () => {
+  const calls = [];
+  const steps = failedCaptureSteps();
+  const result = await cleanupFailedCaptureStagingLoginRole({
+    token,
+    expectedInventoryDigest: expiredRoleDigest,
+    expectedExpiry: failedCaptureExpiry,
+    fetchImpl: fetchSequence(steps, calls),
+    clock: () => now,
+  });
+  assert.equal(result.status, "FAILED_CAPTURE_ROLE_REMOVED");
+  assert.equal(result.cleanup.poststateRoleCount, 0);
+  assert.equal(calls.filter((call) => call.options.method === "DELETE").length, 1);
+  assert.equal(steps.length, 0);
+});
+
+for (const [label, mutate] of [
+  ["different expiry", (steps) => (steps[3].body[0].expires_at = "2026-09-19 04:06:00+00")],
+  ["active session", (steps) => (steps[3].body[0].session_count = 1)],
+  ["new role", (steps) => (steps[2].body[0].rolname = "cli_login_other")],
+  ["session race", (steps) => (steps[6].body = [{ pid: 123, usename: expiredRole }])],
+]) {
+  test(`failed capture role cleanup rejects ${label} before DELETE`, async () => {
+    const calls = [];
+    const steps = failedCaptureSteps();
+    mutate(steps);
+    await assert.rejects(
+      cleanupFailedCaptureStagingLoginRole({
+        token,
+        expectedInventoryDigest: expiredRoleDigest,
+        expectedExpiry: failedCaptureExpiry,
+        fetchImpl: fetchSequence(steps, calls),
+        clock: () => now,
+      }),
+      RecoveryError,
+    );
+    assert.ok(calls.every((call) => call.options.method !== "DELETE"));
+    assert.ok(calls.every((call) => !call.options.body?.includes("pg_terminate_backend")));
+  });
+}
 
 for (const [label, mutate] of [
   [

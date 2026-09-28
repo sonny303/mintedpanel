@@ -103,6 +103,24 @@ node scripts/recovery/cleanup-expired-staging-login.mjs cleanup \
 This command removes only the expired access role. It does not capture a backup,
 alter application tables, or authorize the later migration rehearsal.
 
+### Failed capture with a fresh leftover login
+
+If capture returns `RECOVERY_BACKUP_REJECTED` without `capture.json`, treat any
+encrypted files as an incomplete attempt. Re-read the fixed staging project,
+sole CLI role, exact expiry and session count. During the same approved exclusive
+staging CLI maintenance window, the fixed failed-capture cleanup path accepts
+only `cli_login_postgres`, the reviewed inventory digest and exact observed
+expiry within one hour of execution. It requires zero sessions, rejects a new
+session on recheck, invokes the provider DELETE once and verifies empty
+inventory. Keep the failed workspace sealed; a later attempt needs a new private
+workspace and a fresh baseline decision after the failure is reconciled.
+
+```sh
+node scripts/recovery/cleanup-failed-capture-login.mjs cleanup \
+  --expected-inventory-digest REVIEWED_FRESH_INVENTORY_SHA256 \
+  --expected-expiry 'REVIEWED_EXACT_ROLE_EXPIRY'
+```
+
 If the POST outcome is uncertain and no validated role name was received, the
 coordinator does not retry or guess a role and does not call a bulk cleanup. It
 re-reads inventory once, leaves the run blocked, and relies on the provider's
