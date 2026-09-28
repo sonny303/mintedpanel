@@ -485,10 +485,9 @@ export async function streamArchive(target, workspace, identityPath, options = {
       "--host=/var/run/postgresql",
       "--port=5432",
       // The local Supabase image's postgres role cannot SET ROLE to every
-      // managed schema owner. Restore as the isolated image's administrator
-      // so archive ownership/ACLs remain intact; verification still uses postgres.
+      // managed schema owner. Stay on the isolated image's administrator for
+      // archive ownership/ACL restoration; verification still uses postgres.
       "--username=supabase_admin",
-      "--role=postgres",
       ...(useList ? [`--use-list=${tocPath}`] : []),
       `--dbname=${DATABASE}`,
     ),
