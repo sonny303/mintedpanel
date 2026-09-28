@@ -62,6 +62,7 @@ export interface UnresolvedToken {
 export interface ProviderProfileFacility {
   id: string;
   name: string;
+  state?: string | null;
 }
 
 export interface ProviderProfile {
@@ -78,8 +79,8 @@ export interface ProviderProfile {
 }
 
 export interface ProviderProfileOptions {
-  // Two-letter state filter: selects the state license (the portal being
-  // filled is state-specific, mirroring sopResolver's stateLicenseNumber).
+  // Two-letter state filter. For ad hoc fills with an explicit facility,
+  // the facility's stored state takes precedence over this client hint.
   state?: string;
   // Explicit facility selection for the facility.*/assignment.* tokens. Must
   // be in the caller's org AND the provider's facility set, else the result
@@ -341,13 +342,12 @@ export async function getProviderProfile(
   const assignments = (assignmentRes.data ?? []) as unknown as Row[];
   const policies = (policyRes.data ?? []) as unknown as Row[];
 
-  const licensePick = pickLicense(licenses, options.state);
   const policyPick = pickPolicy(policies, group != null);
 
   // The provider→facility linkage is provider_facility_assignments (unique
   // (provider_id, facility_id)); the resolvable facility set is every assigned
-  // facility that still exists in the caller's org. Fetched id+name only —
-  // this list is part of the response payload, not a token source.
+  // facility that still exists in the caller's org. State also identifies the
+  // license jurisdiction for an explicit ad hoc location.
   const assignmentFacilityIds = [
     ...new Set(assignments.map((a) => a.facility_id as string).filter(Boolean)),
   ];
@@ -355,21 +355,30 @@ export async function getProviderProfile(
   if (assignmentFacilityIds.length > 0) {
     const { data: facilityRows, error: facilityListErr } = await db
       .from("facilities")
-      .select("id, name")
+      .select("id, name, state")
       .in("id", assignmentFacilityIds)
       .eq("org_id", orgId)
       .order("name")
       .order("id");
     if (facilityListErr) throw facilityListErr;
-    facilities = ((facilityRows ?? []) as Array<{ id: string; name: string | null }>).map((f) => ({
+    facilities = (
+      (facilityRows ?? []) as Array<{ id: string; name: string | null; state: string | null }>
+    ).map((f) => ({
       id: f.id,
       name: f.name ?? "",
+      state: f.state ?? null,
     }));
   }
 
   const selection = selectFacility(facilities, assignments.length > 0, options.facilityId);
   if (selection.invalid) return { kind: "facility_not_found" };
   const selectedFacilityId = selection.facility?.id ?? null;
+  const adHocLocation = !options.caseId && !!options.facilityId;
+  const licenseState = adHocLocation ? selection.facility?.state?.trim() : options.state;
+  const licensePick =
+    adHocLocation && !licenseState
+      ? { row: null, reason: "selected facility has no state" }
+      : pickLicense(licenses, licenseState);
 
   // The assignment row follows the facility selection — it IS the link row of
   // the selected facility, so assignment.* and facility.* always agree.

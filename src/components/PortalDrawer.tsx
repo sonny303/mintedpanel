@@ -133,9 +133,7 @@ export function PortalDrawer({
     try {
       const nextPayerId = attachedPayerId === NO_PAYER ? null : attachedPayerId;
       const after = await updatePayerMut.mutateAsync({ portal, payerId: nextPayerId });
-      toast.success(
-        nextPayerId ? "Attached payer updated" : "Portal set to multi-payer (unattached)",
-      );
+      toast.success(nextPayerId ? "Attached payer updated" : "Portal detached from payer");
       onPortalUpdated?.(after);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update attached payer");
@@ -196,10 +194,10 @@ export function PortalDrawer({
                   disabled={!isAdmin || busy || hidden}
                 >
                   <SelectTrigger className="h-9 text-[12px] flex-1" aria-label="Attached payer">
-                    <SelectValue placeholder="Multi-payer (unattached)" />
+                    <SelectValue placeholder="Select a payer" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_PAYER}>Multi-payer (all payers)</SelectItem>
+                    {!isGlobal && <SelectItem value={NO_PAYER}>Unattached</SelectItem>}
                     {(payersQ.data ?? []).map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.name}

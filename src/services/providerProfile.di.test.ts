@@ -10,7 +10,7 @@ import {
 } from "./providerProfile";
 
 // Minimal chainable fake of the supabase-js query builder, keyed by table name.
-// A table may be queried more than once (facilities: the id/name facility set,
+// A table may be queried more than once (facilities: the id/name/state facility set,
 // then the selected facility's full row) — give it an ARRAY of results and each
 // from() call consumes the next one, in call order. Also fakes `.rpc()` for the
 // get_sop_field_tokens catalog.
@@ -122,7 +122,7 @@ function happyTables(): Record<string, FakeResult | FakeResult[]> {
     state_licenses: { data: [licenseKS] },
     provider_facility_assignments: { data: [assignmentF1] },
     group_insurance_policies: { data: [policyRow] },
-    // Queried twice: the org-scoped facility set (id, name), then the selected
+    // Queried twice: the org-scoped facility set (id, name, state), then the selected
     // facility's full-column row.
     facilities: [{ data: [facilityListF1] }, { data: facilityRowF1 }],
   };
@@ -177,7 +177,7 @@ describe("provider profile service — injected server context", () => {
     expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("POL-9");
 
     // A sole facility is auto-selected and reported in the payload.
-    expect(profile.facilities).toEqual([{ id: "f1", name: "Main Clinic" }]);
+    expect(profile.facilities).toEqual([{ id: "f1", name: "Main Clinic", state: null }]);
     expect(profile.selected_facility_id).toBe("f1");
 
     // Case-scoped sources are never resolved from a provider profile.
@@ -194,11 +194,11 @@ describe("provider profile service — injected server context", () => {
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
-    // The facility set is fetched by the assignments' facility ids (id + name
+    // The facility set is fetched by the assignments' facility ids (id + name + state
     // only), then the selected facility's full row by id.
     const facilityCaps = captures.filter((c) => c.table === "facilities");
     expect(facilityCaps).toHaveLength(2);
-    expect(facilityCaps[0].selectCols).toBe("id, name");
+    expect(facilityCaps[0].selectCols).toBe("id, name, state");
     expect(facilityCaps[0].ins).toEqual([["id", ["f1"]]]);
     expect(facilityCaps[0].orders.map(([col]) => col)).toEqual(["name", "id"]);
     expect(facilityCaps[1].filters).toContainEqual(["id", "f1"]);
@@ -216,6 +216,73 @@ describe("provider profile service — injected server context", () => {
 
     expect(valueOf(profile, "license.licenseNumber")).toBe("MO-200");
     expect(profile.unresolved.some((u) => u.token === "license.licenseNumber")).toBe(false);
+  });
+
+  it("returns facility state and uses it for an explicit ad hoc location over caller state", async () => {
+    const tables = happyTables();
+    tables.state_licenses = { data: [licenseKS, licenseMO] };
+    tables.facilities = [
+      { data: [{ ...facilityListF1, state: "MO" }] },
+      { data: { ...facilityRowF1, state: "MO" } },
+    ];
+    const { db, captures } = makeFakeDb(tables, { data: CATALOG });
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", { facilityId: "f1", state: "KS" }),
+    );
+
+    expect(profile.facilities).toEqual([{ ...facilityListF1, state: "MO" }]);
+    expect(valueOf(profile, "license.licenseNumber")).toBe("MO-200");
+    expect(captures.find((c) => c.table === "facilities")?.selectCols).toBe("id, name, state");
+  });
+
+  it("leaves ad hoc license unresolved when the explicit location has no state", async () => {
+    const { db } = makeFakeDb(happyTables(), { data: CATALOG });
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", { facilityId: "f1", state: "KS" }),
+    );
+
+    expect(profile.facilities).toEqual([{ ...facilityListF1, state: null }]);
+    expect(valueOf(profile, "license.licenseNumber")).toBeNull();
+    expect(reasonFor(profile, "license.licenseNumber")).toBe("selected facility has no state");
+  });
+
+  it("does not fall back to another state when the ad hoc location has no matching license", async () => {
+    const tables = happyTables();
+    tables.facilities = [
+      { data: [{ ...facilityListF1, state: "MO" }] },
+      { data: { ...facilityRowF1, state: "MO" } },
+    ];
+    const { db } = makeFakeDb(tables, { data: CATALOG });
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", { facilityId: "f1", state: "KS" }),
+    );
+
+    expect(valueOf(profile, "license.licenseNumber")).toBeNull();
+    expect(reasonFor(profile, "license.licenseNumber")).toBe("provider has no MO license");
+  });
+
+  it("preserves caller state for case-bound fills even when the location is in another state", async () => {
+    const tables = happyTables();
+    tables.credential_cases = { data: { id: "c1", provider_id: "p1", group_id: "g1" } };
+    tables.state_licenses = { data: [licenseKS, licenseMO] };
+    tables.facilities = [
+      { data: [{ ...facilityListF1, state: "MO" }] },
+      { data: { ...facilityRowF1, state: "MO" } },
+    ];
+    const { db } = makeFakeDb(tables, { data: CATALOG });
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", {
+        caseId: "c1",
+        facilityId: "f1",
+        state: "KS",
+      }),
+    );
+
+    expect(valueOf(profile, "license.licenseNumber")).toBe("KS-100");
   });
 
   it("several licenses without ?state leave the license token null with a ?state hint", async () => {
@@ -245,8 +312,8 @@ describe("provider profile service — injected server context", () => {
     const profile = result.profile;
     expect(profile.selected_facility_id).toBeNull();
     expect(profile.facilities).toEqual([
-      { id: "f1", name: "Main Clinic" },
-      { id: "f2", name: "Second Clinic" },
+      { id: "f1", name: "Main Clinic", state: null },
+      { id: "f2", name: "Second Clinic", state: null },
     ]);
     expect(valueOf(profile, "facility.name")).toBeNull();
     expect(reasonFor(profile, "facility.name")).toContain("?facilityId=");

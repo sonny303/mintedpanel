@@ -12,9 +12,10 @@ const holder = vi.hoisted(() => ({
   },
 }));
 const writeAuditMock = vi.hoisted(() => vi.fn());
+const rpcMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/integrations/supabase/externalClient", () => ({
-  supabase: { from: (table: string) => holder.from(table) },
+  supabase: { from: (table: string) => holder.from(table), rpc: rpcMock },
 }));
 
 vi.mock("@/lib/audit", () => ({
@@ -79,6 +80,7 @@ const CREATED_ROW = {
 
 beforeEach(() => {
   writeAuditMock.mockClear();
+  rpcMock.mockReset();
 });
 
 describe("createPortal", () => {
@@ -107,6 +109,78 @@ describe("createPortal", () => {
 });
 
 describe("updatePortalPayer", () => {
+  const globalPortal = {
+    id: "portal-1",
+    orgId: null,
+    portalKey: "bcbs_ks_enrollment",
+    name: "BCBS KS Enrollment",
+    payerId: "payer-1",
+    formUrl: null,
+    isVerified: false,
+    lastVerifiedAt: null,
+    urlChangedAt: null,
+    createdAt: "2026-07-01T00:00:00Z",
+    updatedAt: "2026-07-01T00:00:00Z",
+  };
+
+  it("refuses to detach a global portal before any write", async () => {
+    rpcMock.mockResolvedValue({ data: { ...CREATED_ROW, org_id: null }, error: null });
+    const captures = installDb(CREATED_ROW);
+
+    await expect(updatePortalPayer(globalPortal, null)).rejects.toThrow(
+      "Global portals must have an attached payer",
+    );
+
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(captures).toHaveLength(0);
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("audits a successful global portal payer reassignment", async () => {
+    rpcMock.mockResolvedValue({
+      data: { ...CREATED_ROW, org_id: null, payer_id: "payer-2" },
+      error: null,
+    });
+
+    const updated = await updatePortalPayer(globalPortal, "payer-2");
+
+    expect(updated.payerId).toBe("payer-2");
+    expect(rpcMock).toHaveBeenCalledWith(
+      "upsert_global_portal",
+      expect.objectContaining({ p_id: "portal-1", p_payer_id: "payer-2" }),
+    );
+    expect(writeAuditMock).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        actionType: "UPDATE",
+        entityType: "portal",
+        entityId: "portal-1",
+        before: { payerId: "payer-1" },
+        after: { payerId: "payer-2" },
+      }),
+    );
+  });
+
+  it("does not audit a rejected global payer reassignment", async () => {
+    const error = new Error("permission denied");
+    rpcMock.mockResolvedValue({ data: null, error });
+
+    await expect(updatePortalPayer(globalPortal, "payer-2")).rejects.toThrow(error);
+
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("still allows detaching an organization portal", async () => {
+    const captures = installDb(CREATED_ROW);
+
+    const updated = await updatePortalPayer({ ...globalPortal, orgId: "org-1" }, null);
+
+    expect(updated.payerId).toBeNull();
+    expect(captures[0].payload).toEqual({ payer_id: null });
+    expect(writeAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ before: { payerId: "payer-1" }, after: { payerId: null } }),
+    );
+  });
+
   it("updates payer_id for an org portal and audits the change", async () => {
     const updatedRow = { ...CREATED_ROW, payer_id: "payer-123" };
     const captures = installDb(updatedRow);

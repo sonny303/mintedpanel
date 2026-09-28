@@ -144,6 +144,9 @@ export async function recordFillEvent(
   if (input.taskId != null && !UUID_RE.test(input.taskId)) {
     return reject(422, "taskId must be a UUID");
   }
+  if (input.taskId != null && input.caseId == null) {
+    return reject(422, "taskId requires caseId; ad hoc fills cannot complete tasks");
+  }
   if (typeof input.portalKey !== "string" || input.portalKey.trim() === "") {
     return reject(422, "portalKey is required");
   }

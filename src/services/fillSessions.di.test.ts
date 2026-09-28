@@ -104,6 +104,14 @@ describe("recordFillEvent — shape validation rejects before any DB call", () =
     ["non-UUID caseId", { ...baseInput, caseId: "case-1" }],
     ["non-UUID providerId", { ...baseInput, providerId: "p1" }],
     ["non-UUID taskId", { ...baseInput, taskId: "t1" }],
+    [
+      "taskId with null caseId",
+      { ...baseInput, providerId: PROVIDER_ID, caseId: null, taskId: TASK_ID },
+    ],
+    [
+      "taskId with omitted caseId",
+      { id: FILL_ID, portalKey: "availity", providerId: PROVIDER_ID, taskId: TASK_ID },
+    ],
     ["missing both caseId and providerId", { id: FILL_ID, portalKey: "availity" }],
     ["blank portalKey", { ...baseInput, portalKey: "  " }],
     ["unknown fillMode", { ...baseInput, fillMode: "fax" as never }],
@@ -266,6 +274,28 @@ describe("recordFillEvent — happy path", () => {
 });
 
 describe("recordFillEvent — idempotency", () => {
+  it("rejects a case-free task completion before looking up an existing fill session", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: PROVIDER_ID } },
+      { data: { id: TASK_ID } },
+      { data: { ...storedRow, case_id: null, provider_id: PROVIDER_ID } },
+      { data: { id: TASK_ID, status: "in_progress" } },
+      { data: { id: TASK_ID } },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, {
+      id: FILL_ID,
+      providerId: PROVIDER_ID,
+      portalKey: "availity",
+      taskId: TASK_ID,
+    });
+
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
   it("a replayed id returns the stored row without inserting or auditing", async () => {
     // Sequence: case lookup, idempotency lookup (hit).
     const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: storedRow }]);
