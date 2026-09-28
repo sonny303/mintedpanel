@@ -511,6 +511,72 @@ export async function cleanupExpiredStagingLoginRole({
   }
 }
 
+// An interrupted capture can leave its newly created CLI role behind if the
+// default exact-role SQL cleanup is rejected by the provider. Reconcile only
+// the freshly observed, sole, sessionless staging role under the same approved
+// exclusive maintenance window; never terminate its sessions or retry DELETE.
+export async function cleanupFailedCaptureStagingLoginRole({
+  token,
+  expectedInventoryDigest,
+  expectedExpiry,
+  fetchImpl = fetch,
+  clock = () => new Date().toISOString(),
+} = {}) {
+  try {
+    check(
+      TOKEN.test(token) &&
+        /^[a-f0-9]{64}$/.test(expectedInventoryDigest) &&
+        typeof expectedExpiry === "string" &&
+        Number.isFinite(Date.parse(expectedExpiry)),
+    );
+    const source = await observeStagingProvider({ token, fetchImpl, clock });
+    const before = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(
+      before.roleCount === 1 &&
+        before.roleNames[0] === EXPIRED_STAGING_ROLE &&
+        before.inventoryDigest === expectedInventoryDigest,
+    );
+    const rows = await request(
+      fetchImpl,
+      token,
+      `/v1/projects/${STAGING.ref}/database/query/read-only`,
+      { method: "POST", body: JSON.stringify({ query: EXPIRED_STAGING_ROLE_QUERY }) },
+    );
+    const now = Date.parse(exactTimestamp(clock()));
+    check(
+      Array.isArray(rows) &&
+        rows.length === 1 &&
+        plainObject(rows[0]) &&
+        Object.keys(rows[0]).sort().join(",") === "expired,expires_at,rolname,session_count" &&
+        rows[0].rolname === EXPIRED_STAGING_ROLE &&
+        rows[0].expires_at === expectedExpiry &&
+        rows[0].session_count === 0 &&
+        Date.parse(expectedExpiry) >= now - 3_600_000 &&
+        Date.parse(expectedExpiry) <= now + 3_600_000,
+    );
+    const latest = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(latest.inventoryDigest === before.inventoryDigest);
+    const cleanup = await removeExclusiveStagingLoginRole({
+      token,
+      role: EXPIRED_STAGING_ROLE,
+      fetchImpl,
+      clock,
+      allowSessionTermination: false,
+    });
+    return {
+      status: "FAILED_CAPTURE_ROLE_REMOVED",
+      projectRef: STAGING.ref,
+      sourceProviderDigest: source.providerDigest,
+      prestateInventoryDigest: before.inventoryDigest,
+      roleDigest: canonicalDigest(EXPIRED_STAGING_ROLE),
+      observedExpiry: expectedExpiry,
+      cleanup,
+    };
+  } catch {
+    throw fail();
+  }
+}
+
 // Default cleanup remains exact-role SQL. The explicit maintenance mode is a
 // separate operator-authorized path; unknown POST outcomes never invoke DELETE.
 export async function withStagingLoginRole(
