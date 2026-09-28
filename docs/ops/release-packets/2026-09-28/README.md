@@ -37,6 +37,17 @@ invoker. SQL body equality alone does not settle that difference. Inspect the
 actual hosted migration statements, current owner/search path/grants and tenant
 tests before writing an additive correction.
 
+A further read-only object probe on both projects found the selected footprints
+of the eight source-only names other than the baseline and three feature
+migrations: `provider_ssn_vault`, `provider_ssn_intake_links` and their named
+functions; all three provider-document version columns and the document storage
+function; zero of the eleven payer legacy columns and no old case payer ID;
+the case-number sequence, column and immutability function; and a
+`propose_shared_field_map` function. This confirms **presence of selected
+effects**, not complete SQL, grants, policy, Vault or Storage equivalence. The
+1,249-line `baseline_live_schema` needs its own object-level comparison. None
+of these nine names should be replayed based on missing ledger names.
+
 Next owner PR: an object-level crosswalk with the exact proposed additive SQL,
 per-target backup/restore receipts, populated rehearsal results and reviewed
 environment plans. This read-only snapshot does not satisfy `PLAN_READY`.
