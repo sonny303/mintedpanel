@@ -60,11 +60,20 @@ staging login, take a consistent encrypted age snapshot, and verify that exact
 login is removed. The output remains local private ciphertext with `CAPTURED_ONLY`
 status. Then restore that capture into an isolated local database and verify
 row/sequence/catalog/ledger integrity. No staging application SQL, Vercel setting,
-alias, production resource or Store item changes in this checkpoint. It requires
-an owner-designated age recipient with its restore identity available and a
-staging-scoped management credential; these are not present in the task
-environment. Capture/restore failure or uncertain temporary-role cleanup stops
-the wave for reconciliation.
+alias, production resource or Store item changes in this checkpoint. The owner
+approved staging capture and isolated restore on September 28; the private age
+identity and staging management credential were verified without disclosing
+their contents. Capture/restore failure or uncertain temporary-role cleanup
+stops the wave for reconciliation.
+
+The September 28 preflight found one pre-existing `cli_login_postgres` role,
+expired September 26 at 14:42:45 UTC, with zero active sessions. Its inventory
+digest was `1d6cd6736d8066f8c1d95d383c6afcafd3e99a61af40af6205d8c256d6b8a0a7`.
+The capture command rejects this nonempty prestate. A separate exclusive staging
+CLI maintenance approval is required for the fixed expired-role cleanup in
+[`staging-recovery.md`](staging-recovery.md); refresh the inventory and sessions
+at action time, then use the fresh digest. Only after verified empty inventory
+may the approved capture and isolated restore proceed.
 
 The three missing feature SQL files are pinned for the **later, separate**
 rehearsal/hosted approval: #427

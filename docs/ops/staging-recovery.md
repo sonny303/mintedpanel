@@ -81,6 +81,28 @@ inventory check cannot prevent another operator creating a role immediately
 afterward. Never enable this mode automatically or use it against production.
 Unknown login-POST outcomes still fail closed without bulk deletion.
 
+### Expired pre-existing CLI role preflight
+
+If the initial inventory finds a pre-existing role, the capture command rejects
+before creating a new login. The fixed
+`scripts/recovery/cleanup-expired-staging-login.mjs` path handles only the sole
+`cli_login_postgres` role in `vmznysvietfaddakkegt`, after a separate owner
+decision for an exclusive staging CLI maintenance window. It binds the fresh
+inventory digest supplied by the operator, checks the exact project/pooler,
+requires the role expiry to be more than one hour past and zero sessions, then
+uses the existing exclusive provider DELETE path with a second sole-role and
+session readback. It must verify an empty inventory afterward. A changed role,
+new session, nonexpired role or uncertain DELETE result blocks capture; do not
+retry or use this path against another project.
+
+```sh
+node scripts/recovery/cleanup-expired-staging-login.mjs cleanup \
+  --expected-inventory-digest REVIEWED_FRESH_INVENTORY_SHA256
+```
+
+This command removes only the expired access role. It does not capture a backup,
+alter application tables, or authorize the later migration rehearsal.
+
 If the POST outcome is uncertain and no validated role name was received, the
 coordinator does not retry or guess a role and does not call a bulk cleanup. It
 re-reads inventory once, leaves the run blocked, and relies on the provider's
