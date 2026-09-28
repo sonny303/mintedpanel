@@ -64,30 +64,30 @@ Org facilities: 28 active rows. The roster uses 22 of them. Group TIN
 `[REDACTED_TIN]` is on two groups; Hargrove is the only roster location on the dba
 group. Every other roster location is on `BEST Physical Therapy, LLC`.
 
-| Roster cell                                          | Resolved facility                            |
-| ---------------------------------------------------- | -------------------------------------------- |
-| 101 Sample Road, Suite 100, Raleigh, NC 27616        | BEST Physical Therapy - Hargrove (dba group) |
-| 102 Sample Drive, Suite 110, Cary, NC 27519          | BEST Physical Therapy - Connemara            |
-| 103 Sample Court, Cary, NC 27513                     | BEST Physical Therapy - Towerview            |
-| 104 Sample Court, Suite A, Knightdale, NC 27545       | BEST Physical Therapy - Knightdale           |
-| 105 Sample Rd STE 129, Raleigh, NC 27613             | BEST Physical Therapy - Leesville Rd         |
-| 11694 Sample Highway W, Clayton NC, 27520            | BEST Physical Therapy - Clayton              |
-| 107 Sample Road, Raeford, NC 28376                   | BEST Physical Therapy - Raeford              |
-| 108 N Sample Road, Wilmington, NC 28405              | BEST Physical Therapy - Wilmington           |
-| 109 Sample Dr, Cary, NC 27511                       | BEST Physical Therapy - Convention           |
-| 110 Sample Drive East, Garner NC 27529               | BEST Physical Therapy - Garner               |
-| 111 Sample Dr, Fayetteville, NC 28304                 | BEST Physical Therapy - Fayetteville         |
-| 112 Sample Dr, Cary, NC 27519                       | BEST Physical Therapy - Cary                 |
-| 113 W Sample St #271, Durham, NC 27713               | BEST Physical Therapy - Durham               |
-| 114 Sample Drive, Greenville, SC 29607               | BEST Physical Therapy - Greenville           |
-| 115 Sample Rd, Suite 101, Madison, WI 53704          | BEST Physical Therapy - Madison              |
-| 116 Sample Rd, Fitchburg, WI 53719                   | BEST Physical Therapy - Fitchburg            |
-| 117 Sample St #200, Longmont, CO 80501               | BEST Physical Therapy - Longmont             |
-| 118 Sample Dr, Colorado Springs, CO 80923            | BEST Physical Therapy - Colorado Springs     |
-| 119 Sample Rd, Cypress, TX 77429                     | BEST Physical Therapy - Cypress              |
-| 120 Sample Rd, Katy, TX 77494                       | BEST Physical Therapy - Katy                 |
-| 121 SW Sample St, Beaverton, OR 97005                | BEST Physical Therapy - Beaverton            |
-| 122 Sample Way, Caldwell, ID 83605                   | BEST Physical Therapy - VS Caldwell          |
+| Roster cell                                     | Resolved facility                            |
+| ----------------------------------------------- | -------------------------------------------- |
+| 101 Sample Road, Suite 100, Raleigh, NC 27616   | BEST Physical Therapy - Hargrove (dba group) |
+| 102 Sample Drive, Suite 110, Cary, NC 27519     | BEST Physical Therapy - Connemara            |
+| 103 Sample Court, Cary, NC 27513                | BEST Physical Therapy - Towerview            |
+| 104 Sample Court, Suite A, Knightdale, NC 27545 | BEST Physical Therapy - Knightdale           |
+| 105 Sample Rd STE 129, Raleigh, NC 27613        | BEST Physical Therapy - Leesville Rd         |
+| 11694 Sample Highway W, Clayton NC, 27520       | BEST Physical Therapy - Clayton              |
+| 107 Sample Road, Raeford, NC 28376              | BEST Physical Therapy - Raeford              |
+| 108 N Sample Road, Wilmington, NC 28405         | BEST Physical Therapy - Wilmington           |
+| 109 Sample Dr, Cary, NC 27511                   | BEST Physical Therapy - Convention           |
+| 110 Sample Drive East, Garner NC 27529          | BEST Physical Therapy - Garner               |
+| 111 Sample Dr, Fayetteville, NC 28304           | BEST Physical Therapy - Fayetteville         |
+| 112 Sample Dr, Cary, NC 27519                   | BEST Physical Therapy - Cary                 |
+| 113 W Sample St #271, Durham, NC 27713          | BEST Physical Therapy - Durham               |
+| 114 Sample Drive, Greenville, SC 29607          | BEST Physical Therapy - Greenville           |
+| 115 Sample Rd, Suite 101, Madison, WI 53704     | BEST Physical Therapy - Madison              |
+| 116 Sample Rd, Fitchburg, WI 53719              | BEST Physical Therapy - Fitchburg            |
+| 117 Sample St #200, Longmont, CO 80501          | BEST Physical Therapy - Longmont             |
+| 118 Sample Dr, Colorado Springs, CO 80923       | BEST Physical Therapy - Colorado Springs     |
+| 119 Sample Rd, Cypress, TX 77429                | BEST Physical Therapy - Cypress              |
+| 120 Sample Rd, Katy, TX 77494                   | BEST Physical Therapy - Katy                 |
+| 121 SW Sample St, Beaverton, OR 97005           | BEST Physical Therapy - Beaverton            |
+| 122 Sample Way, Caldwell, ID 83605              | BEST Physical Therapy - VS Caldwell          |
 
 Shapes in this file that a strict "same string as street, city, state zip"
 compare would drop, and the rule below still takes:

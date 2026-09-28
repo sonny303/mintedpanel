@@ -163,14 +163,7 @@ const BEST: FacilityLocatorRecord[] = [
     "CO",
     "80923",
   ),
-  facility(
-    "cypress",
-    "BEST Physical Therapy - Cypress",
-    "119 Sample Rd",
-    "Cypress",
-    "TX",
-    "77429",
-  ),
+  facility("cypress", "BEST Physical Therapy - Cypress", "119 Sample Rd", "Cypress", "TX", "77429"),
   facility("katy", "BEST Physical Therapy - Katy", "120 Sample Rd", "Katy", "TX", "77494"),
   facility(
     "beaverton",
