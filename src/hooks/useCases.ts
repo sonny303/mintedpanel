@@ -15,6 +15,7 @@ import {
   listCaseDenialEntries,
   listDenialReasonCodes,
   removeCaseFacility,
+  replaceUnstartedCaseSop,
   setCaseDates,
   setCaseFacility,
   setCaseStatus,
@@ -251,6 +252,25 @@ export function useReapplyCase() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useReplaceCaseSop() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: {
+      caseId: string;
+      templateId: string;
+      expectedVersion: number;
+      tasks: CaseTaskPayload[];
+    }) =>
+      replaceUnstartedCaseSop(input.caseId, input.templateId, input.expectedVersion, input.tasks),
+    onSuccess: (_count, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },

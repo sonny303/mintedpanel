@@ -982,6 +982,56 @@ export interface CaseTaskPayload {
   sopResolutionTier?: SopResolutionTier | null;
 }
 
+/** Replace the checklist on an untouched case with a chosen published SOP.
+ * The RPC checks eligibility and swaps tasks atomically; it stamps its locked
+ * template version rather than trusting the client to supply one. */
+export async function replaceUnstartedCaseSop(
+  caseId: string,
+  templateId: string,
+  expectedVersion: number,
+  tasks: CaseTaskPayload[],
+): Promise<number> {
+  const orgId = requireActiveOrg();
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: number | null; error: { message: string; code?: string } | null }>;
+  const { data, error } = await rpc("replace_unstarted_case_sop", {
+    p_org_id: orgId,
+    p_case_id: caseId,
+    p_template_id: templateId,
+    p_expected_version: expectedVersion,
+    p_tasks: tasks.map((task) => ({
+      title: task.title,
+      description: task.description,
+      sop_content: task.sopContent,
+      sort_order: task.sortOrder,
+      due_date: task.dueDate,
+      execution_type: task.executionType ?? null,
+    })),
+  });
+  if (error) {
+    if (error.message.includes("case_sop_tasks_started")) {
+      throw new Error(
+        "This checklist has activity or a manual task and can no longer be replaced.",
+      );
+    }
+    if (error.message.includes("case_sop_template_ineligible")) {
+      throw new Error(
+        "That template is no longer available for this case. Refresh and choose again.",
+      );
+    }
+    if (error.message.includes("case_sop_change_unavailable")) {
+      throw new Error("This case status no longer allows a checklist change.");
+    }
+    if (error.message.includes("case_sop_tasks_invalid")) {
+      throw new Error("The template changed while this case was open. Refresh and choose again.");
+    }
+    throw translateDbError(error);
+  }
+  return data ?? 0;
+}
+
 export async function createCase(
   input: CaseInput,
   tasks: CaseTaskPayload[] = [],
