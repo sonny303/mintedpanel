@@ -115,6 +115,10 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
     () => new Set((preview.gated ?? []).map((g) => previewRowKey(g.row))),
     [preview.gated],
   );
+  const ambiguousKeys = useMemo(
+    () => new Set((preview.ambiguous ?? []).map(previewRowKey)),
+    [preview.ambiguous],
+  );
   const fallbackKeys = useMemo(
     () => preview.fallbackRowKeys ?? new Set<string>(),
     [preview.fallbackRowKeys],
@@ -125,11 +129,13 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   const gridRows = useMemo<GridRow[] | undefined>(() => {
     if (!preview.rows || factsQ.data === undefined) return undefined;
     const bucketed = bucketGridRows(
-      preview.rows.filter((r) => !gatedKeys.has(previewRowKey(r))),
+      preview.rows.filter(
+        (r) => !gatedKeys.has(previewRowKey(r)) && !ambiguousKeys.has(previewRowKey(r)),
+      ),
       factsQ.data,
     );
     return filterGridRows(bucketed, scope, preview.providerFacilities);
-  }, [preview.rows, factsQ.data, gatedKeys, scope, preview.providerFacilities]);
+  }, [preview.rows, factsQ.data, gatedKeys, ambiguousKeys, scope, preview.providerFacilities]);
 
   const selectedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -315,6 +321,17 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
               );
             })}
           </ul>
+        </div>
+      ) : null}
+
+      {(preview.ambiguous?.length ?? 0) > 0 ? (
+        <div
+          className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]"
+          role="alert"
+        >
+          {preview.ambiguous?.length} case{preview.ambiguous?.length === 1 ? "" : "s"} blocked
+          because multiple SOP templates have equal priority. Create these cases manually and select
+          a template, or archive an obsolete template.
         </div>
       ) : null}
 

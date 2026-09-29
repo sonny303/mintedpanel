@@ -71,48 +71,9 @@ function assertActiveOrgMatchKeyComplete(key: {
   if (err) throw new Error(err);
 }
 
-/** E4.2 SOP hardening — reject a match-key that would create a SECOND active
- * organization template at the supported grain (payer + state + group, group
- * NULLS-NOT-DISTINCT). This mirrors the additive `uq_sop_templates_active_org_match`
- * index and runs BEFORE the write so the author sees a clear blocking message
- * (the DB constraint stays the backstop for races). Only ACTIVE org templates
- * WITH payer + state are constrained — archived / payer-or-state-less rows are
- * outside the runtime-selectable grain and never validated here. */
-async function assertUniqueActiveMatch(
-  orgId: string,
-  key: {
-    payerId: string | null;
-    states: string[] | null;
-    groupId: string | null;
-    archived: boolean;
-  },
-  excludeId?: string,
-): Promise<void> {
-  if (key.archived || !key.payerId || !key.states || key.states.length === 0) return;
-  let query = supabase
-    .from("sop_templates")
-    .select("id, name, states")
-    .eq("org_id", orgId)
-    .eq("archived", false)
-    .eq("payer_id", key.payerId)
-    // Multi-state: the collision is an OVERLAP, not equality — `overlaps` is
-    // PostgREST's `&&`. The DB trigger is the race-proof backstop; this pre-check
-    // exists so the author gets a message naming the actual clashing states.
-    .overlaps("states", key.states);
-  query = key.groupId === null ? query.is("group_id", null) : query.eq("group_id", key.groupId);
-  if (excludeId) query = query.neq("id", excludeId);
-  const { data, error } = await query.limit(1);
-  if (error) throw error;
-  const existing = data?.[0] as { name: string; states: string[] | null } | undefined;
-  if (existing) {
-    const clashing = (existing.states ?? []).filter((s) => key.states?.includes(s));
-    const which = clashing.length > 0 ? clashing.slice().sort().join(", ") : "these states";
-    throw new Error(
-      `“${existing.name}” already covers ${which} for this payer and group. ` +
-        `Remove ${clashing.length === 1 ? "that state" : "those states"} here, or edit that template instead.`,
-    );
-  }
-}
+/** Formerly enforced 1 active template per state/payer/group.
+ * Retired to allow multiple templates per state (e.g. for different specialties
+ * or request types like initial credentialing vs recredentialing). */
 
 export async function listTemplates(): Promise<SOPTemplate[]> {
   const orgId = requireActiveOrg();
@@ -330,12 +291,6 @@ export async function createTemplate(input: TemplateInput): Promise<SOPTemplate>
     states: input.states ?? null,
     archived,
   });
-  await assertUniqueActiveMatch(orgId, {
-    payerId: input.payerId ?? null,
-    states: input.states ?? null,
-    groupId: input.groupId ?? null,
-    archived,
-  });
   const { data, error } = await supabase
     .from("sop_templates")
     .insert(templatePayload(input, orgId))
@@ -440,11 +395,6 @@ export async function updateTemplate(
         states: destStates,
         archived: nextArchived,
       });
-      await assertUniqueActiveMatch(
-        orgId,
-        { payerId: destPayerId, states: destStates, groupId: destGroupId, archived: nextArchived },
-        id,
-      );
     }
   }
   const payload = templatePayload(patch, orgId) as unknown as SopTemplateUpdate;
