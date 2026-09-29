@@ -48,6 +48,11 @@ effects**, not complete SQL, grants, policy, Vault or Storage equivalence. The
 1,249-line `baseline_live_schema` needs its own object-level comparison. None
 of these nine names should be replayed based on missing ledger names.
 
-Next owner PR: an object-level crosswalk with the exact proposed additive SQL,
-per-target backup/restore receipts, populated rehearsal results and reviewed
-environment plans. This read-only snapshot does not satisfy `PLAN_READY`.
+Next owner PR: an object-level crosswalk with the exact proposed SQL and route,
+reviewed environment plans, and route-specific rehearsal results. The owner
+clarified on September 28 that staging data is disposable: staging may use a
+reviewed reset and owned synthetic reseed instead of preserving its current
+rows. The completed staging encrypted capture and isolated restore remain
+baseline evidence. Production still requires its independent backup/restore,
+populated rehearsal, and row-preservation proof. This read-only snapshot does
+not satisfy `PLAN_READY`.
