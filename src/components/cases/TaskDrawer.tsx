@@ -35,6 +35,7 @@ import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTas
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
 import { isPortalHandoffStepEligible } from "@/lib/casePortals";
+import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
 interface TaskDrawerProps {
@@ -45,6 +46,8 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** token -> value map for the pdf-step filler (from the case page). */
   tokenValues?: Record<string, string>;
+  refreshTokenValues?: RefreshPdfTokenValues;
+  pdfContextKey?: string;
   /** ASD — the case's group, for the step-artifact panel's vault grain AND
    * the Active Documents rail below. The task carries its own
    * caseId/providerId; groupId lives on the case. */
@@ -56,6 +59,8 @@ interface TaskDrawerProps {
   caseTasks?: Task[];
   providerName?: string;
   groupName?: string | null;
+  payerName?: string | null;
+  state?: string | null;
   /** Exact route-owned case context. The drawer only exposes it to the active,
    * incomplete online-form step when the task identifiers match. */
   portalHandoff?: PortalHandoffContext;
@@ -90,10 +95,14 @@ export function TaskDrawer({
   open,
   onOpenChange,
   tokenValues,
+  refreshTokenValues,
+  pdfContextKey = "",
   groupId = null,
   caseTasks = [],
   providerName = "this provider",
   groupName = null,
+  payerName = null,
+  state = null,
   portalHandoff,
 }: TaskDrawerProps) {
   const navigate = useNavigate();
@@ -344,10 +353,14 @@ export function TaskDrawer({
                               <StepBody
                                 step={step}
                                 tokenValues={tokenValues}
+                                refreshTokenValues={refreshTokenValues}
+                                pdfContextKey={pdfContextKey}
                                 taskId={task.id}
                                 caseId={task.caseId}
                                 providerId={task.providerId}
                                 groupId={groupId}
+                                providerName={providerName}
+                                groupName={groupName}
                                 portalHandoff={stepPortalHandoff}
                               />
                             )}
@@ -376,6 +389,8 @@ export function TaskDrawer({
                   providerName={providerName}
                   groupId={groupId}
                   groupName={groupName}
+                  payerName={payerName}
+                  state={state}
                   caseId={task.caseId}
                   tasks={caseTasks.length > 0 ? caseTasks : [task]}
                 />

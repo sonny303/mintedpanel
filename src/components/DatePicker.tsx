@@ -3,7 +3,7 @@
 // over the newly added ui/popover + ui/calendar primitives. Value is a plain
 // ISO date string ("YYYY-MM-DD", no time/zone), matching how date columns
 // are stored. Logged in DESIGN-DEBT.md with the two primitives.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -36,6 +36,19 @@ interface DatePickerProps {
 export function DatePicker({ id, value, onChange, ariaLabel, invalid }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const selected = value ? fromIsoDate(value) : undefined;
+  useEffect(() => {
+    if (!open) return;
+    // A dialog's document-level Escape listener can dismiss the parent on the
+    // same keypress as this portalled popover. Handle it at window capture so
+    // both Radix layers see a consumed event, then close only the picker.
+    const closePickerOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+    };
+    window.addEventListener("keydown", closePickerOnEscape, true);
+    return () => window.removeEventListener("keydown", closePickerOnEscape, true);
+  }, [open]);
   return (
     // modal — the picker is used inside modal dialogs, where a non-modal
     // popover portal would be pointer-events-locked by the dialog overlay.

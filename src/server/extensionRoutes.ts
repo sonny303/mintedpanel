@@ -8,8 +8,9 @@ import {
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
+import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
 import { listPortalsForApi, listSharedPortals } from "@/services/portals";
-import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
+import { recordFillEvent, supportsFillEventV2, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
@@ -45,7 +46,6 @@ function todayIso(): string {
 
 const STATE_RE = /^[A-Za-z]{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // GET /api/me/orgs — the caller's own org memberships (org id, name, role),
 // derived from the JWT-verified user id and nothing else. This is the org
 // discovery endpoint a multi-org caller needs BEFORE it can send x-org-id, so
@@ -123,8 +123,9 @@ export async function handleNextBestAction(url: URL, ctx: AuthContext): Promise<
   return ok(result, { total: result.items.length });
 }
 
-// GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the
-// fill engine needs for one provider, resolved server-side. The most PHI-dense
+// GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>&case_id=<uuid>] —
+// everything the fill engine needs for a provider, optionally bound to a case.
+// The most PHI-dense
 // response in the system (SSN last-4, DOB, home address — unmasked by design
 // for form fill): Cache-Control: no-store, and nothing here may ever log the
 // response body.
@@ -142,25 +143,59 @@ export async function handleProviderProfile(
     if (!STATE_RE.test(stateRaw)) return fail(422, "state must be a two-letter code");
     state = stateRaw.toUpperCase();
   }
+  const hasSnakeCaseId = url.searchParams.has("case_id");
+  const hasCamelCaseId = url.searchParams.has("caseId");
+  let caseId: string | undefined;
+
+  if (hasSnakeCaseId) {
+    const caseIdRaw = url.searchParams.get("case_id");
+    if (!caseIdRaw || !UUID_RE.test(caseIdRaw)) {
+      return fail(422, "case_id must be a UUID");
+    }
+    caseId = caseIdRaw;
+  } else if (hasCamelCaseId) {
+    const caseIdRaw = url.searchParams.get("caseId");
+    if (caseIdRaw != null && caseIdRaw !== "") {
+      if (!UUID_RE.test(caseIdRaw)) return fail(404, "Case not found for this provider");
+      caseId = caseIdRaw;
+    }
+  }
+
+  const caseIdPresent = hasSnakeCaseId || (hasCamelCaseId && caseId != null);
+
   // Explicit facility selection for the facility.*/assignment.* tokens. A
   // non-UUID can't be a facility — same early 404 the set-membership check
   // below would produce, without a uuid-cast 500.
   const facilityIdRaw = url.searchParams.get("facilityId");
   let facilityId: string | undefined;
+  if (caseIdPresent && facilityIdRaw === "") {
+    return fail(404, "Facility not found for this case");
+  }
   if (facilityIdRaw != null && facilityIdRaw !== "") {
     if (!UUID_RE.test(facilityIdRaw)) return fail(404, "Facility not found for this provider");
     facilityId = facilityIdRaw;
+  }
+  const groupIdRaw = url.searchParams.get("groupId");
+  let groupId: string | undefined;
+  if (groupIdRaw != null && groupIdRaw !== "") {
+    if (!UUID_RE.test(groupIdRaw)) return fail(404, "Group not found for this provider");
+    groupId = groupIdRaw;
   }
 
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
+    groupId,
+    caseId,
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
   // A facilityId outside the caller's org or this provider's facility set —
   // the isolation gate's assertion 11. Not a read: no audit row, no data.
   if (result.kind === "facility_not_found") {
     return fail(404, "Facility not found for this provider");
+  }
+  if (result.kind === "group_not_found") {
+    return fail(404, "Group not found for this provider or case");
   }
   const { profile, needsFacility } = result;
 
@@ -193,6 +228,7 @@ export async function handleProviderProfile(
       route: "/api/providers/:id/profile",
       state: state ?? null,
       facilityId: profile.selected_facility_id,
+      caseId: profile.case_id,
     },
     description: "Provider profile read (extension fill payload)",
   });
@@ -273,7 +309,11 @@ export async function handleListSharedPortals(user: UserContext): Promise<Respon
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
-  return ok(rows, { total: rows.length });
+  const v2Supported = await supportsFillEventV2({ db: ctx.db });
+  return ok(rows, {
+    total: rows.length,
+    ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
+  });
 }
 
 // POST /api/portal-field-maps — the extension reports an unmapped field it saw
@@ -306,7 +346,11 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listSharedFieldMaps(user.db, portalKey);
-  return ok(rows, { total: rows.length });
+  const v2Supported = await supportsFillEventV2({ db: user.db });
+  return ok(rows, {
+    total: rows.length,
+    ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
+  });
 }
 
 export async function handleProposeSharedFieldMap(
@@ -347,6 +391,31 @@ export async function handleRecordSharedTestFill(
         : typeof raw.mock_profile_version === "number"
           ? raw.mock_profile_version
           : null,
+    schemaVersion:
+      raw.schemaVersion == null && raw.schema_version == null
+        ? undefined
+        : typeof (raw.schemaVersion ?? raw.schema_version) === "number"
+          ? ((raw.schemaVersion ?? raw.schema_version) as number)
+          : Number.NaN,
+    fieldsAttempted:
+      typeof (raw.fieldsAttempted ?? raw.fields_attempted) === "number"
+        ? ((raw.fieldsAttempted ?? raw.fields_attempted) as number)
+        : raw.fieldsAttempted == null && raw.fields_attempted == null
+          ? undefined
+          : Number.NaN,
+    fieldsVerified:
+      typeof (raw.fieldsVerified ?? raw.fields_verified) === "number"
+        ? ((raw.fieldsVerified ?? raw.fields_verified) as number)
+        : raw.fieldsVerified == null && raw.fields_verified == null
+          ? undefined
+          : Number.NaN,
+    fieldsRejected:
+      typeof (raw.fieldsRejected ?? raw.fields_rejected) === "number"
+        ? ((raw.fieldsRejected ?? raw.fields_rejected) as number)
+        : raw.fieldsRejected == null && raw.fields_rejected == null
+          ? undefined
+          : Number.NaN,
+    fieldOutcomes: raw.fieldOutcomes ?? raw.field_outcomes,
   };
   const result = await recordSharedTestFill({ db: user.db, userId: user.userId }, input);
   if (result.kind === "rejected") return fail(result.status, result.message);
@@ -388,6 +457,23 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
     null,
     result.kind === "created" ? 201 : 200,
   );
+}
+
+// POST /api/portal-field-maps/batch-learn — only accepted, high-confidence,
+// value-free AI suggestions after a successful portal submission are eligible.
+// Actor and tenant are always taken from the authenticated context. The RPC
+// repeats evidence and ownership checks and commits maps + audit atomically.
+export async function handleBatchLearnPortalFieldMaps(
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot save AI field mappings");
+  const result = await batchLearnPortalFieldMaps(
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },
+    body,
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok(result.response, { total: result.response.confirmed_saved_count });
 }
 
 // GET /api/cases — two additive modes over the same org-scoped route:

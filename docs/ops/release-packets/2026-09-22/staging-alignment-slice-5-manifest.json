@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "status": "AUTHOR_ONLY_NOT_APPLIED",
+  "baseCommit": "99e805abee603da618d71aaa406d096e4da95620",
+  "sourceSha": "7a40fc7876c4b53810e1391426afbed865176c3b",
+  "stagingProjectRef": "vmznysvietfaddakkegt",
+  "forbiddenProductionProjectRef": "fkvuhfsqcmujywzgczmc",
+  "packet": {
+    "files": ["staging-alignment-slice-5.sql"],
+    "checksums": {
+      "staging-alignment-slice-5.sql": "e928f8b3f83e3802ce636f5690e4fb0f47335909ccb2f7b867ee6376378d65d0"
+    },
+    "execution": "serial_same_session_after_fresh_qualified_restore_rehearsal",
+    "hostedApply": "operator_only_after_recovery_qualification_and_review"
+  },
+  "targetBinding": {
+    "hosted": {
+      "sessionKind": "hosted_staging",
+      "projectRef": "vmznysvietfaddakkegt",
+      "requiredPhysicalSystemIdentifier": "7662742571317219726",
+      "productionRefRejected": true
+    },
+    "local": {
+      "sessionKind": "qualified_local_restore",
+      "requiredDatabase": "minted_recovery",
+      "requiredPhysicalSystemIdentifier": "7688850032395546663",
+      "requiredExternalReceiptBinding": true,
+      "expectedApplicationStatus": "LOCAL_APPLICATION_BASELINE_VERIFIED",
+      "applicationBinding": {
+        "status": "BOUND",
+        "baselineQualificationDigest": "0feaecb6544f20a899cc169c472c5e668ef3d73f61f3e15a5ea170cb63abea7b",
+        "captureDigest": "efe2bdaecddf7e3ea83d0afd42110e775c637e867f06499e75537b89f66da4a5",
+        "baselineTarget": {
+          "runId": "2e465ae49df2037d",
+          "systemIdentifier": "7688816016043610151"
+        },
+        "rehearsalTarget": {
+          "runId": "7dc905282a047aa2",
+          "containerId": "d7ed97e0cb0baceab4ea2a9eb94a6357fad2a6ddb10fd536a9bd1b2731bfdb84",
+          "systemIdentifier": "7688850032395546663"
+        }
+      },
+      "currentReceipt": {
+        "status": "LOCAL_APPLICATION_BASELINE_VERIFIED",
+        "eligibleForApply": false,
+        "receiptId": "0feaecb6544f20a8"
+      }
+    }
+  },
+  "sourceFiles": {
+    "supabase/migrations/20260721120000_party_role_label_terminology.sql": "c298e496a17b7ec978baeae60c124142d2bfb194819feb4cf11bfdc2e841543a",
+    "supabase/migrations/20260807130000_people_contact_roles.sql": "5185702ddc5b889cd2df57db94ab6612e5f011de482285700d6a35a0751ae57a",
+    "supabase/migrations/20260807130100_people_contact_role_rpcs.sql": "e6c9d39c4b5680f21de0e78f7d2b7e1a938333a4bca359efadf98507ebc6dc4d",
+    "supabase/migrations/20260807150937_harden_party_role_tenant_integrity.sql": "b8c6a8e263f4cc3de74323a4c95b2a442c40892ecc29c51ca9a1b211e69a9405",
+    "supabase/migrations/20260923214607_repair_party_capture_link_org_guard.sql": "52cd99994e15dbaadeb1aa660825bfc387efd099c6f4b2387d4fd01bfcf3700a"
+  },
+  "captureBoundaryRepair": {
+    "status": "AUTHOR_ONLY_NOT_APPLIED",
+    "migration": "supabase/migrations/20260923214607_repair_party_capture_link_org_guard.sql",
+    "sourceBasis": "forward correction composed from the final slice-5 submit_capture and validate_capture_token definitions; the historical source heads do not contain this org-boundary fix",
+    "replacesOnly": ["submit_capture(text, jsonb)", "validate_capture_token(text)"],
+    "preserves": [
+      "throttle",
+      "state responses",
+      "payload keys",
+      "function signatures",
+      "anon/authenticated execute ACLs"
+    ],
+    "activeLinkRule": "party id and party org_id must match link org_id under FOR KEY SHARE before mark_rpc_attempt_valid or any state/details/payload write",
+    "inactiveRows": "all inactive capture-link rows remain byte-identical, including one used row with an org mismatch",
+    "compositeForeignKey": "omitted to preserve historical inactive rows"
+  },
+  "targetCounts": {
+    "partyRows": 17,
+    "partyAssignmentResolution": "every party has at least one assignment and exactly one distinct assignment org"
+  },
+  "preservation": {
+    "perPrimaryKeyRowHashTables": [
+      "parties",
+      "party_role_assignments",
+      "party_capture_links",
+      "audit_log",
+      "party_role_types"
+    ],
+    "allowedPartyColumns": ["org_id", "first_name", "last_name", "title", "fax", "phone_extension"],
+    "allowedAssignmentColumns": ["is_default"],
+    "allowedRoleTypeColumns": ["label", "is_active"]
+  },
+  "aclContracts": {
+    "privateHelpers": [
+      "_party_first_name(text)",
+      "_party_last_name(text)",
+      "insert_contact_party(jsonb, uuid, uuid)"
+    ],
+    "authenticatedRpcs": [
+      "create_organization(text, text, text)",
+      "create_organization(text, text, text, jsonb, jsonb)",
+      "create_capture_link(uuid, uuid, text, text)",
+      "set_default_party_role(uuid, uuid, text)"
+    ],
+    "publicCaptureRpcs": ["validate_capture_token(text)", "submit_capture(text, jsonb)"],
+    "retainedLegacyHelper": "insert_contact_party(jsonb, uuid) remains untouched when present and revoked from browser roles"
+  },
+  "requiredInvariants": [
+    "No historical orphan delete and no creator-membership org fallback; unresolved or multiply assigned parties abort.",
+    "All 17 party IDs, every assignment, every capture link, and every audit row survive by primary-key row hash.",
+    "Existing valid sole defaults remain; multiple defaults and cross-org assignments abort.",
+    "The composite tenant FK, immutable party org trigger, membership-scoped policies, role labels/activation, and final RPC signatures are present.",
+    "No migration ledger write or hosted SQL execution is part of this packet."
+  ]
+}

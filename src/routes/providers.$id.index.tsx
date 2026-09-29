@@ -77,8 +77,14 @@ import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import { isValidEmail } from "@/lib/contactValidation";
 import { isValidNpi } from "@/lib/providerGroup";
+import { hasValidLicenseDateOrder, LICENSE_DATE_ORDER_ERROR } from "@/lib/licenseDates";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import {
+  PROVIDER_GENDER_UNSET_VALUE,
+  providerGenderLabel,
+  providerGenderOptionsForValue,
+} from "@/lib/providerGender";
 import { ProviderSaveError, type ProviderInput } from "@/services/providers";
 import type { Provider } from "@/types";
 
@@ -157,6 +163,16 @@ function ProviderRecordPage() {
 
   if (providerQ.isLoading) {
     return <div className="h-40 animate-pulse rounded-md bg-mp-muted" />;
+  }
+  if (providerQ.isError) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[13px] text-muted-foreground">Couldn't load this provider.</p>
+        <Button variant="outline" onClick={() => void providerQ.refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
   const provider = providerQ.data;
   if (!provider) {
@@ -346,7 +362,7 @@ interface FieldDef {
   label: string;
   key: keyof ProviderInput & string;
   value: string | null;
-  type?: "text" | "date";
+  type?: "text" | "date" | "gender";
   validate?: (value: string) => string | null;
   masked?: boolean;
   mono?: boolean;
@@ -370,6 +386,13 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
       cells: [
         { label: "First name", key: "firstName", value: provider.firstName },
         { label: "Last name", key: "lastName", value: provider.lastName },
+        {
+          label: "Gender",
+          key: "gender",
+          value: provider.gender ?? null,
+          type: "gender",
+          display: providerGenderLabel,
+        },
         {
           label: "Date of birth",
           key: "dateOfBirth",
@@ -449,7 +472,8 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
   const save = async () => {
     const errors: Record<string, string> = {};
     for (const f of fields) {
-      const v = (draft[f.key] ?? "").trim();
+      const draftValue = draft[f.key] ?? "";
+      const v = f.type === "gender" ? draftValue : draftValue.trim();
       // Validate only fields the user actually changed — a legacy invalid
       // value in an untouched field must not block an unrelated edit.
       const changed = (v === "" ? null : v) !== (f.value ?? null);
@@ -465,8 +489,9 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
     // here (the E6.4 wipe-defect protection holds by construction).
     const patch: Partial<ProviderInput> = {};
     for (const f of fields) {
-      const trimmed = (draft[f.key] ?? "").trim();
-      const next = trimmed === "" ? null : trimmed;
+      const draftValue = draft[f.key] ?? "";
+      const value = f.type === "gender" ? draftValue : draftValue.trim();
+      const next = value === "" ? null : value;
       if (next !== (f.value ?? null)) (patch as Record<string, string | null>)[f.key] = next;
     }
     if (Object.keys(patch).length === 0) {
@@ -560,16 +585,41 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
                     <Label htmlFor={`identity-${c.key}`} className={CELL_LABEL}>
                       {c.label}
                     </Label>
-                    <Input
-                      id={`identity-${c.key}`}
-                      type={c.type === "date" ? "date" : "text"}
-                      value={draft[c.key] ?? ""}
-                      onChange={(e) => {
-                        setDraft((d) => ({ ...d, [c.key]: e.target.value }));
-                        setFieldErrors((prev) => ({ ...prev, [c.key]: "" }));
-                      }}
-                      className={cn("h-8 text-[13px]", c.mono && "font-mono")}
-                    />
+                    {c.type === "gender" ? (
+                      <Select
+                        value={draft[c.key] || PROVIDER_GENDER_UNSET_VALUE}
+                        onValueChange={(value) => {
+                          setDraft((d) => ({
+                            ...d,
+                            [c.key]: value === PROVIDER_GENDER_UNSET_VALUE ? "" : value,
+                          }));
+                          setFieldErrors((prev) => ({ ...prev, [c.key]: "" }));
+                        }}
+                      >
+                        <SelectTrigger id={`identity-${c.key}`} className="h-8 text-[13px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={PROVIDER_GENDER_UNSET_VALUE}>Not set</SelectItem>
+                          {providerGenderOptionsForValue(c.value).map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`identity-${c.key}`}
+                        type={c.type === "date" ? "date" : "text"}
+                        value={draft[c.key] ?? ""}
+                        onChange={(e) => {
+                          setDraft((d) => ({ ...d, [c.key]: e.target.value }));
+                          setFieldErrors((prev) => ({ ...prev, [c.key]: "" }));
+                        }}
+                        className={cn("h-8 text-[13px]", c.mono && "font-mono")}
+                      />
+                    )}
                     {fieldErrors[c.key] ? (
                       <p role="alert" className="text-[12px] text-[#B91C1C]">
                         {fieldErrors[c.key]}
@@ -777,6 +827,9 @@ function LicenseDialog({
     license !== null &&
     draft.expirationDate !== (draft.storedExpirationDate ?? "") &&
     draft.verifiedStatus !== "unverified";
+  const dateOrderError = hasValidLicenseDateOrder(draft.issueDate, draft.expirationDate)
+    ? null
+    : LICENSE_DATE_ORDER_ERROR;
 
   const save = () => {
     if (requiresReload || update.isPending) return;
@@ -784,6 +837,7 @@ function LicenseDialog({
       setError("State is required.");
       return;
     }
+    if (dateOrderError) return;
     if (expected && licenseDraftsEqual(draft, initialDraft)) {
       onClose();
       return;
@@ -885,8 +939,19 @@ function LicenseDialog({
                 type="date"
                 value={draft.expirationDate}
                 onChange={(e) => set({ expirationDate: e.target.value })}
+                aria-invalid={Boolean(dateOrderError)}
+                aria-describedby={dateOrderError ? "license-expires-error" : undefined}
                 className="h-9"
               />
+              {dateOrderError ? (
+                <p
+                  id="license-expires-error"
+                  role="alert"
+                  className="mt-1 text-[12px] text-[#B91C1C]"
+                >
+                  {dateOrderError}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label htmlFor="license-psv" className="text-[12px]">

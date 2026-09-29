@@ -88,61 +88,31 @@ function installDb(results: Array<{ data: unknown; error?: unknown }>) {
 
 beforeEach(() => writeAuditMock.mockClear());
 
-describe("createTemplate — active-org match-key uniqueness", () => {
-  it("blocks a duplicate at the same (payer, state, group) with a clear message", async () => {
-    // Conflict check finds an existing active template → reject before insert.
-    const captures = installDb([
-      { data: [{ id: "existing", name: "Aetna NC", states: ["NC", "SC"] }] },
-    ]);
-
-    await expect(
-      createTemplate({
-        name: "Aetna NC (dupe)",
-        payerId: "pay1",
-        states: ["NC"],
-        groupId: "g1",
-        taskDefinitions: [],
-      }),
-      // The message names the ACTUAL clashing state, not "these states".
-    ).rejects.toThrow(/“Aetna NC” already covers NC for this payer and group/i);
-
-    // Only the conflict check ran — no insert, no audit.
-    expect(captures).toHaveLength(1);
-    expect(captures[0].op).toBeUndefined();
-    expect(captures[0].filters).toContainEqual(["org_id", "org-1"]);
-    expect(captures[0].filters).toContainEqual(["archived", false]);
-    expect(captures[0].filters).toContainEqual(["payer_id", "pay1"]);
-    expect(captures[0].overlapFilters).toContainEqual(["states", ["NC"]]);
-    expect(captures[0].filters).toContainEqual(["group_id", "g1"]);
-    expect(writeAuditMock).not.toHaveBeenCalled();
-  });
-
-  it("uses a NULLS-NOT-DISTINCT (IS NULL) check for an any-group template", async () => {
-    // No conflict → insert proceeds and audits.
+describe("createTemplate — active-org multiple templates allowed", () => {
+  it("allows multiple active templates at the same (payer, state, group)", async () => {
     const created = {
-      id: "new",
+      id: "new-2",
       org_id: "org-1",
-      name: "Aetna NC (any group)",
+      name: "Aetna NC (Recred)",
       payer_id: "pay1",
       states: ["NC"],
-      group_id: null,
+      group_id: "g1",
       archived: false,
       task_definitions: [],
     };
-    const captures = installDb([{ data: [] }, { data: created }]);
+    const captures = installDb([{ data: created }]);
 
     const result = await createTemplate({
-      name: "Aetna NC (any group)",
+      name: "Aetna NC (Recred)",
       payerId: "pay1",
       states: ["NC"],
-      groupId: null,
+      groupId: "g1",
       taskDefinitions: [],
     });
 
-    expect(result.id).toBe("new");
-    // The any-group conflict check matches group_id IS NULL, not eq.
-    expect(captures[0].isFilters).toContainEqual(["group_id", null]);
-    expect(captures[1].op).toBe("insert");
+    expect(result.id).toBe("new-2");
+    expect(captures).toHaveLength(1);
+    expect(captures[0].op).toBe("insert");
     expect(writeAuditMock).toHaveBeenCalledTimes(1);
   });
 

@@ -1,6 +1,6 @@
 // DYN-TOKEN — which token families each FILL surface can actually resolve.
 //
-// `listTokenCatalog()` serves one 157-token catalog to three pickers. The SOP
+// `listTokenCatalog()` serves one shared catalog to three pickers. The SOP
 // authoring picker has narrowed it since E1.7b (`sopAuthoringTokens.ts` →
 // `isResolvableToken`); the two MAPPING pickers never did, so they offered
 // tokens no fill could resolve and the payer-PDF sample fill happily mocked a
@@ -20,7 +20,8 @@
  * `{ provider, group, facility, license, groupInsurance }` — the entities the
  * case page holds (license via `pickLicenseForState` against the case state;
  * groupInsurance via `pickGroupInsurancePolicy` against the case's group
- * policies), deliberately, so PHI stays in the browser.
+ * policies), plus current authenticated-user and org-default contact values
+ * resolved at generation time, deliberately, so PHI stays in the browser.
  *
  * This is NOT `ENTITY_TOKEN_FAMILIES`, which lists `mso` (SOP resolver) and
  * omits the child-row families the caller chooses. Reusing that constant here
@@ -36,15 +37,15 @@ export const PDF_FILL_FAMILIES: readonly string[] = [
   "facility",
   "license",
   "groupInsurance",
+  "user",
+  "billingContact",
+  "credentialingContact",
+  "contractingSigner",
 ];
 
 /**
- * Families the web profile resolves — the six source rows
- * `getProviderProfile` picks, plus `user.*` appended by the route.
- *
- * The org-contact families (`billingContact.*` and friends) also resolve
- * there, but are deliberately absent: `get_sop_field_tokens()` never emits
- * them, so no picker offers them and nothing can be mapped to them.
+ * Families the web profile resolves — provider/case source rows plus the
+ * user/contact families appended by the route.
  */
 export const WEB_FILL_FAMILIES: readonly string[] = [
   "provider",
@@ -54,6 +55,9 @@ export const WEB_FILL_FAMILIES: readonly string[] = [
   "assignment",
   "groupInsurance",
   "user",
+  "billingContact",
+  "credentialingContact",
+  "contractingSigner",
 ];
 
 /**

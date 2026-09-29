@@ -257,13 +257,14 @@ function AddPartyDialog({
   const assignRole = useAssignRole();
   const [value, setValue] = useState<ContactInput>(EMPTY_CONTACT);
   const [roleKey, setRoleKey] = useState<PartyRoleKey | "">("");
-  const [errors, setErrors] = useState<ContactFieldErrors>({});
+  const [showErrors, setShowErrors] = useState(false);
+  const errors = showErrors ? contactErrors(value) : {};
   const [formError, setFormError] = useState<string | null>(null);
   const pending = createParty.isPending || assignRole.isPending;
 
   async function save() {
     const e = contactErrors(value);
-    setErrors(e);
+    setShowErrors(true);
     if (hasContactErrors(e)) return;
     if (!roleKey) {
       setFormError("Choose a role for this person.");
@@ -295,7 +296,16 @@ function AddPartyDialog({
           />
           <div>
             <Label className="text-[12px]">Role</Label>
-            <ActiveRoleSelect roleTypes={roleTypes} value={roleKey} onChange={setRoleKey} />
+            <ActiveRoleSelect
+              roleTypes={roleTypes}
+              value={roleKey}
+              onChange={(selected) => {
+                setRoleKey(selected);
+                setFormError((current) =>
+                  current === "Choose a role for this person." ? null : current,
+                );
+              }}
+            />
           </div>
           {formError ? (
             <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">

@@ -6,6 +6,8 @@ import type { CaseStatus } from "@/lib/caseStatus";
 import type { ExecutionType } from "@/lib/executionTypes";
 import type { ReleaseScopeRecord } from "@/lib/releaseScope";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
+import type { FillEventV2FieldOutcome } from "./fillEventV2";
+import type { FillEventV2Outcome, FillEventV2ReasonCode } from "./fillEventV2";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
@@ -755,6 +757,363 @@ export interface EnrollmentFact {
   createdAt: string;
 }
 
+/** E6.13 enrollment explorer wire contracts. Actor, org, audience and context
+ * revision are supplied by the verified API context, never by DTO payloads. */
+export type EnrollmentExplorerAudience = "staff" | "client";
+export type EnrollmentStatus =
+  | "not_started"
+  | "in_progress"
+  | "submitted"
+  | "in_review"
+  | "action_required"
+  | "approved"
+  | "denied"
+  | "not_pursuing"
+  | "terminated";
+export type EnrollmentActionOwner = "Minted" | "Client" | "Payer" | "Complete" | "Unassigned";
+export type EnrollmentRetroStatus = "unknown" | "not_supported" | "documented";
+export type EnrollmentSourceKind = "case" | "fact";
+export type EnrollmentEvidenceKind =
+  "payer_approval_letter" | "payer_roster_confirmation" | "payer_acknowledgement" | "license_psv";
+export type EnrollmentProofField =
+  | "enrollment_status"
+  | "payer_reference"
+  | "approved_date"
+  | "effective_date"
+  | "termination_date"
+  | "facility_id"
+  | "product_id"
+  | "retro_status"
+  | "retro_days"
+  | "retro_date"
+  | "submitted_date"
+  | "payer_acknowledged_date"
+  | "license_current";
+
+export interface EnrollmentSourceLink {
+  sourceKind: EnrollmentSourceKind;
+  sourceId: string;
+  sourceFingerprint: string;
+}
+
+export interface EnrollmentRevisionDraft {
+  status: EnrollmentStatus;
+  intakeDate?: string | null;
+  completeToSubmitDate?: string | null;
+  submittedDate?: string | null;
+  payerAcknowledgedDate?: string | null;
+  approvedDate?: string | null;
+  effectiveDate?: string | null;
+  terminationDate?: string | null;
+  payerReference?: string | null;
+  clientSafeBlocker?: string | null;
+  owner: EnrollmentActionOwner;
+  retroStatus: EnrollmentRetroStatus;
+  retroDays?: number | null;
+  retroDate?: string | null;
+  retroBasis?: string | null;
+  staffNote?: string | null;
+  observedAt?: string | null;
+}
+
+export interface EnrollmentScopeSaveInput {
+  scopeId?: string | null;
+  expectedRevisionId?: string | null;
+  providerId: string;
+  groupId: string;
+  payerProductId: string;
+  facilityId: string;
+  state: string;
+  revision: EnrollmentRevisionDraft;
+  sources: EnrollmentSourceLink[];
+}
+
+export interface EnrollmentCatalogProduct {
+  productId: string;
+  payerId: string;
+  payerName: string;
+  productKey: string;
+  displayName: string;
+  isActive: boolean;
+}
+
+export interface EnrollmentCatalogTarget {
+  targetId: string;
+  groupId: string;
+  payerProductId: string;
+  payerId: string;
+  state: string;
+  isActive: boolean;
+}
+
+export interface EnrollmentCatalog {
+  products: EnrollmentCatalogProduct[];
+  targets: EnrollmentCatalogTarget[];
+}
+
+export interface EnrollmentUnmappedCoordinate {
+  payerProductId: string;
+  facilityId: string;
+  state: string;
+}
+
+export type EnrollmentTriageState = "needs_verification" | "unmapped" | "partially_mapped";
+
+export interface EnrollmentUnresolvedSource {
+  sourceKind: EnrollmentSourceKind;
+  sourceId: string;
+  sourceFingerprint: string;
+  /** Canonical source projection is staff-only; never use it for client DTOs. */
+  sourceSnapshot: Record<string, unknown>;
+  mappedScopeIds: string[];
+  unmappedFacilityIds: string[];
+  unmappedCoordinates: EnrollmentUnmappedCoordinate[];
+  mappingNeedsConfiguration: boolean;
+  triageState: EnrollmentTriageState;
+  observedAt: string;
+}
+
+export interface EnrollmentUnresolvedCursor {
+  observedAt: string;
+  sourceKind: EnrollmentSourceKind;
+  sourceId: string;
+}
+
+export interface EnrollmentUnresolvedPage {
+  items: EnrollmentUnresolvedSource[];
+  nextCursor: EnrollmentUnresolvedCursor | null;
+}
+
+export interface EnrollmentProofSummary {
+  publicationId: string;
+  evidenceKind: EnrollmentEvidenceKind;
+  supportedFields: EnrollmentProofField[];
+  publishedAt: string;
+}
+
+export interface EnrollmentClientScopeSummary {
+  scopeId: string;
+  orgId: string;
+  providerId: string;
+  groupId: string;
+  payerProductId: string;
+  facilityId: string;
+  state: string;
+  status: EnrollmentStatus | "needs_verification";
+  historicalStatus?: EnrollmentStatus;
+  clientSafeBlocker?: string | null;
+  owner?: EnrollmentActionOwner;
+  reviewedAt?: string;
+  cycleNo?: number;
+  revisionNo?: number;
+  intakeDate?: string | null;
+  completeToSubmitDate?: string | null;
+  submittedDate?: string | null;
+  payerAcknowledgedDate?: string | null;
+  approvedDate?: string | null;
+  effectiveDate?: string | null;
+  terminationDate?: string | null;
+  payerReference?: string | null;
+  retroStatus?: EnrollmentRetroStatus;
+  retroDays?: number | null;
+  retroDate?: string | null;
+  retroBasis?: string | null;
+  proofs: EnrollmentProofSummary[];
+}
+
+export interface EnrollmentScopeDetailStaff {
+  scope: {
+    id: string;
+    orgId: string;
+    providerId: string;
+    groupId: string;
+    payerProductId: string;
+    facilityId: string;
+    state: string;
+    currentRevisionId: string;
+  };
+  revision: Record<string, unknown>;
+  stale: boolean;
+  sources: Array<EnrollmentSourceLink & { sourceSnapshot: Record<string, unknown> }>;
+  summary: {
+    publicationId: string;
+    revisionId: string;
+    status: EnrollmentStatus;
+    clientSafeBlocker: string | null;
+    owner: EnrollmentActionOwner;
+    publishedAt: string;
+  } | null;
+  proofs: Array<EnrollmentProofSummary & { documentVersionId: string; sha256: string }>;
+}
+
+export type EnrollmentScopeDetail = EnrollmentScopeDetailStaff | EnrollmentClientScopeSummary;
+
+/** E6.14 matrix/report contracts. Empty target cells are UI-only projections. */
+export type EnrollmentReportDiscipline = "PT" | "PTA" | "OT" | "OTA" | "SLP" | "Other" | "Unknown";
+
+export type EnrollmentReportStatus = EnrollmentStatus | "needs_verification";
+
+export interface EnrollmentReportFilters {
+  groupId?: string;
+  state?: string;
+  facilityId?: string;
+  productId?: string;
+  discipline?: EnrollmentReportDiscipline;
+  status?: EnrollmentReportStatus;
+  search?: string;
+  historical?: boolean;
+}
+
+export interface EnrollmentReportPageRequest extends EnrollmentReportFilters {
+  cursor?: string | null;
+  viewToken?: string | null;
+}
+
+export interface EnrollmentReportFilterChoices {
+  groups: Array<{ id: string; label: string }>;
+  states: string[];
+  facilities: Array<{ id: string; label: string; groupId: string; state: string }>;
+  products: Array<{ id: string; payerLabel: string; label: string }>;
+  disciplines: EnrollmentReportDiscipline[];
+  statuses: EnrollmentReportStatus[];
+}
+
+export interface EnrollmentReportProductColumn {
+  key: string;
+  productId: string;
+  payerLabel: string;
+  productLabel: string;
+}
+
+export interface EnrollmentReportSection {
+  key: string;
+  groupId: string;
+  groupLabel: string;
+  state: string;
+  columns: EnrollmentReportProductColumn[];
+}
+
+export type EnrollmentReportPublicationState =
+  "published" | "stale" | "retracted" | "superseded" | "draft";
+
+export interface EnrollmentReportLocation {
+  sectionKey: string;
+  scopeId: string;
+  facilityId: string;
+  facilityLabel: string;
+  publicationState: EnrollmentReportPublicationState;
+  historical: boolean;
+  status: EnrollmentReportStatus;
+}
+
+export interface EnrollmentReportCell {
+  key: string;
+  sectionKey: string;
+  productId: string;
+  state: "published" | "needs_verification" | "staff_draft";
+  locationCount: number;
+  locations: EnrollmentReportLocation[];
+}
+
+export interface EnrollmentReportProvider {
+  providerId: string;
+  name: string;
+  npi: string | null;
+  discipline: EnrollmentReportDiscipline;
+  status: ProviderStatus;
+  referenceOnly: boolean;
+  verificationState: ProviderVerificationState;
+  sectionKeys: string[];
+  cells: EnrollmentReportCell[];
+}
+
+export interface EnrollmentReportPage {
+  contextRevision: string;
+  viewToken: string;
+  accessState: "ready" | "no_grants" | "empty_cohort";
+  filters: EnrollmentReportFilters;
+  filterChoices: EnrollmentReportFilterChoices;
+  sections: EnrollmentReportSection[];
+  providers: EnrollmentReportProvider[];
+  nextCursor: string | null;
+}
+
+export interface EnrollmentScopeHistoryStaffItem {
+  revisionId: string;
+  cycleNo: number;
+  revisionNo: number;
+  createdAt: string;
+  status: EnrollmentStatus;
+  revision: EnrollmentRevisionDraft;
+  sources: Array<EnrollmentSourceLink & { sourceSnapshot: Record<string, unknown> }>;
+  publications: Array<{
+    publicationId: string;
+    kind: "summary" | "proof";
+    state: "published" | "revoked" | "superseded" | "expired";
+    publishedAt: string;
+    evidenceKind?: EnrollmentEvidenceKind;
+    supportedFields?: EnrollmentProofField[];
+  }>;
+}
+
+export interface EnrollmentScopeHistoryClientItem extends EnrollmentClientScopeSummary {
+  providerName: string;
+  groupLabel: string;
+  payerLabel: string;
+  productLabel: string;
+  facilityLabel: string;
+  historical: true;
+  publicationState: "published" | "retracted" | "superseded";
+  publishedAt: string;
+}
+
+export interface EnrollmentScopeHistoryPage {
+  audience: EnrollmentExplorerAudience;
+  scopeId: string;
+  items: Array<EnrollmentScopeHistoryStaffItem | EnrollmentScopeHistoryClientItem>;
+  nextCursor: string | null;
+}
+
+export interface EnrollmentReportCsvRecord {
+  providerName: string;
+  npi: string | null;
+  discipline: EnrollmentReportDiscipline;
+  groupLabel: string;
+  payerLabel: string;
+  productLabel: string;
+  state: string;
+  facilityLabel: string;
+  status: EnrollmentReportStatus;
+  publicationState: EnrollmentReportPublicationState;
+  intakeDate: string | null;
+  completeToSubmitDate: string | null;
+  submittedDate: string | null;
+  payerAcknowledgedDate: string | null;
+  approvedDate: string | null;
+  effectiveDate: string | null;
+  terminationDate: string | null;
+  cycleNo: number | null;
+  payerReference: string | null;
+  retroType: EnrollmentRetroStatus | null;
+  retroValue: string | null;
+  retroBasis: string | null;
+  clientSafeBlocker: string | null;
+  owner: EnrollmentActionOwner | null;
+  reviewedAsOf: string | null;
+  proofLabel: string | null;
+  proofType: EnrollmentEvidenceKind | null;
+  authenticatedReportUrl: string;
+}
+
+export interface EnrollmentProofCaptureInput {
+  scopeId: string;
+  revisionId: string;
+  documentVersionId: string;
+  evidenceKind: EnrollmentEvidenceKind;
+  supportedFields: EnrollmentProofField[];
+  reason: string;
+}
+
 export interface Mso {
   id: string;
   orgId: string;
@@ -858,7 +1217,10 @@ export interface CaseFacility {
 // A case's location joined to the Facility row, for display (case detail /
 // editor). One row per case_facilities row.
 export interface CaseFacilityWithDetail extends CaseFacility {
-  facility: Pick<Facility, "id" | "name" | "street" | "city" | "state" | "zip" | "isActive">;
+  facility: Pick<
+    Facility,
+    "id" | "name" | "street" | "suite" | "city" | "state" | "zip" | "isActive"
+  >;
 }
 
 // E2.1 TE-2 — one row per confirmed generation batch (who/when/counts).
@@ -913,6 +1275,16 @@ export interface CaseGenerationRunRow {
   createdAt: string;
 }
 
+export type ContractingStatusLabel =
+  | "Not Started"
+  | "Application Submitted"
+  | "In Progress (Contract Signed)"
+  | "In-Network"
+  | "Denied"
+  | "Denied - Appealed"
+  | "Denied - Reapplied"
+  | "Out of Network";
+
 export interface Contract {
   id: string;
   orgId: string;
@@ -920,7 +1292,9 @@ export interface Contract {
   payerId: string | null;
   state: string;
   effectiveDate: string | null;
+  tentativeEffectiveDate?: string | null;
   expirationDate: string | null;
+  specialty?: string | null;
   notes: string | null;
   contractingStatusId: string | null;
   createdAt: string;
@@ -1387,6 +1761,8 @@ export interface PortalFieldMap {
   sortOrder?: number | null;
   /** E6.10 — captured option vocabulary `{ value, label }[]`. Null = never captured. */
   controlOptions?: { value: string; label: string }[] | null;
+  /** Flywheel provenance is additive so pre-migration readers remain compatible. */
+  learnedVia?: "manual" | "nano" | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1400,6 +1776,38 @@ export interface FillSkippedField {
   reason: "unmapped" | "empty_token";
 }
 
+/** Persisted legacy-compatible projection for fills after free text was removed. */
+export interface SafeFillSkippedMetadata {
+  label: "";
+  reason:
+    | FillEventV2Outcome
+    | FillEventV2ReasonCode
+    | "field not found on this page"
+    | "field belongs to another page"
+    | "field is hidden on this page"
+    | "readback_unavailable"
+    | "mapping_required"
+    | "missing_value"
+    | "page_unknown"
+    | "manual_required"
+    | "unmapped"
+    | "empty_token";
+  kind:
+    | FillEventV2Outcome
+    | "skipped"
+    | "other_page"
+    | "hidden"
+    | "unmapped"
+    | "empty_token"
+    | "no_mapping"
+    | "no_value"
+    | "file"
+    | "review";
+  mapId: string | null;
+}
+
+export type FillSessionSkippedField = FillSkippedField | SafeFillSkippedMetadata;
+
 export interface FillSession {
   id: string;
   orgId: string;
@@ -1410,9 +1818,15 @@ export interface FillSession {
   startedAt: string;
   completedAt: string | null;
   fieldsFilled: number;
-  fieldsSkipped: FillSkippedField[] | null;
+  fieldsSkipped: FillSessionSkippedField[] | null;
   docsAttached: unknown;
   performedBy: string | null;
+  /** NULL/absent = historical V1 semantics; 2 = explicit per-map evidence. */
+  eventSchemaVersion?: 1 | 2 | null;
+  fieldsAttempted?: number | null;
+  fieldsVerified?: number | null;
+  fieldsRejected?: number | null;
+  fieldOutcomes?: FillEventV2FieldOutcome[] | null;
   /** E4.2 TE-17 — dry-run test fill marker; excluded from every metric reader. */
   isTest?: boolean;
 }
@@ -1627,4 +2041,190 @@ export interface ResolvedPayerFormPointer extends AuthoredPayerFormPointer {
   removedAt?: string;
   removedBy?: string | null;
   removedReason?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Provider Roster Engine (WP 1.3)
+// ---------------------------------------------------------------------------
+
+export type RosterGrain = "provider" | "provider_location" | "provider_location_tin";
+export type RosterValueType = "text" | "date" | "phone" | "npi" | "zip_plus_4";
+export type RosterTransform =
+  "uppercase" | "date_yyyy_mm_dd" | "date_mm_dd_yyyy" | "phone_strip" | "npi_check";
+export type RosterExportFormat = "csv" | "xlsx";
+export type RosterIssueSeverity = "hard_error" | "warning";
+
+export interface RosterTemplateColumn {
+  key: string;
+  header: string;
+  required: boolean;
+  targetType: RosterValueType;
+}
+
+export interface RosterTemplate {
+  id: string;
+  slug: string;
+  payerName: string;
+  name: string;
+  schemaVersion: number;
+  verified: boolean;
+  verificationStatus: "verified" | "draft_pending_payer_spec";
+  grains: RosterGrain[];
+  columns: RosterTemplateColumn[];
+}
+
+export type RosterSourceField =
+  | "provider.first_name"
+  | "provider.last_name"
+  | "provider.npi"
+  | "provider.taxonomy_code"
+  | "provider.date_of_birth"
+  | "provider.ssn_last4"
+  | "facility.name"
+  | "facility.street"
+  | "facility.suite"
+  | "facility.city"
+  | "facility.state"
+  | "facility.zip"
+  | "facility.phone"
+  | "group.name"
+  | "group.npi_type2"
+  | "group.tin"
+  | "license.license_number"
+  | "license.issue_date"
+  | "license.expiration_date";
+
+export interface RosterColumnAssignment {
+  columnKey: string;
+  sourceField: RosterSourceField | null;
+  transform: RosterTransform | null;
+}
+
+export interface RosterMapping {
+  id: string;
+  orgId: string;
+  templateId: string;
+  name: string;
+  grain: RosterGrain;
+  selectedProviderIds: string[];
+  selectedFacilityIds: string[];
+  /** Restricts locations by their facilities.group_id and the provider's group assignment. */
+  selectedGroupIds: string[];
+  columnAssignments: RosterColumnAssignment[];
+  revision: number;
+  updatedAt: string;
+}
+
+export interface RosterSourceOptions {
+  providers: Array<{ id: string; label: string; npi: string | null }>;
+  facilities: Array<{
+    id: string;
+    label: string;
+    state: string | null;
+    groupId: string | null;
+    groupLabel: string | null;
+  }>;
+  groups: Array<{ id: string; label: string; tin: string | null; npi: string | null }>;
+}
+
+export interface RosterMappingDetail {
+  mapping: RosterMapping;
+  template: RosterTemplate;
+  sourceOptions: RosterSourceOptions;
+}
+
+export interface CreateRosterMappingInput {
+  templateId: string;
+  name: string;
+  grain: RosterGrain;
+  selectedProviderIds: string[];
+  selectedFacilityIds?: string[];
+  selectedGroupIds?: string[];
+}
+
+export interface UpdateRosterMappingInput {
+  expectedRevision: number;
+  name?: string;
+  grain?: RosterGrain;
+  selectedProviderIds?: string[];
+  selectedFacilityIds?: string[];
+  selectedGroupIds?: string[];
+  columnAssignments?: RosterColumnAssignment[];
+}
+
+export interface RosterPreviewRow {
+  rowKey: string;
+  providerLabel: string;
+  facilityLabel: string | null;
+  groupLabel: string | null;
+  values: Record<string, string | null>;
+}
+
+export interface RosterPreview {
+  mappingId: string;
+  revision: number;
+  inputFingerprint: string;
+  rowCount: number;
+  rows: RosterPreviewRow[];
+}
+
+export interface RosterValidationIssue {
+  rowKey: string;
+  ruleCode: string;
+  fieldKey: string;
+  severity: RosterIssueSeverity;
+  message: string;
+  overrideable: boolean;
+  overrideId: string | null;
+  overrideReason: string | null;
+}
+
+export interface RosterValidationResult {
+  mappingId: string;
+  revision: number;
+  inputFingerprint: string;
+  rowCount: number;
+  issues: RosterValidationIssue[];
+  hardErrorCount: number;
+  overriddenErrorCount: number;
+  exportable: boolean;
+}
+
+export interface SaveRosterOverrideInput {
+  expectedRevision: number;
+  inputFingerprint: string;
+  rowKey: string;
+  ruleCode: string;
+  fieldKey: string;
+  reason: string;
+}
+
+export interface RosterOverride {
+  id: string;
+  mappingId: string;
+  revision: number;
+  inputFingerprint: string;
+  rowKey: string;
+  ruleCode: string;
+  fieldKey: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface RosterExportSnapshot {
+  id: string;
+  mappingId: string;
+  templateId: string;
+  templateName: string;
+  mappingName: string;
+  templateVerified: boolean;
+  templateVerificationStatus: "verified" | "draft_pending_payer_spec";
+  format: RosterExportFormat;
+  exportedAt: string;
+  exportedBy: string;
+  totalRows: number;
+  checksum: string;
+  appliedOverrides: number;
+  fileName: string;
+  downloadPath: string;
 }

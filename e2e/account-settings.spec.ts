@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // /account — the user's own settings page (2026-08-16).
 //
@@ -13,6 +13,7 @@ import { test, expect, type Route } from "@playwright/test";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
+const SWITCHED_USER_ID = "99999999-9999-4999-8999-999999999999";
 const ORG_ID = "00000000-0000-4000-a000-000000000001";
 
 const SESSION = {
@@ -176,6 +177,87 @@ test.describe("/account — user settings", () => {
     const metaWrite = recorded.find((r) => r.method === "PUT");
     expect(metaWrite, "auth metadata must be mirrored on save").toBeTruthy();
     expect(metaWrite?.body).toMatchObject({ data: { full_name: "Sowmya Surapureddy" } });
+  });
+
+  test("skips the auth mirror and late success state when the actor switches during save", async ({
+    page,
+    context,
+  }) => {
+    const recorded: Recorded[] = [];
+    let releasePatch!: () => void;
+    let patchSeen!: () => void;
+    let patchCompleted!: () => void;
+    let switchedMembershipSeen!: () => void;
+    const patchStarted = new Promise<void>((resolve) => {
+      patchSeen = resolve;
+    });
+    const patchRelease = new Promise<void>((resolve) => {
+      releasePatch = resolve;
+    });
+    const patchDone = new Promise<void>((resolve) => {
+      patchCompleted = resolve;
+    });
+    const switchedMembership = new Promise<void>((resolve) => {
+      switchedMembershipSeen = resolve;
+    });
+
+    await context.route("https://*.supabase.co/**", harness(recorded));
+    await context.route("https://*.supabase.co/rest/v1/memberships**", async (route) => {
+      const request = route.request();
+      if (
+        request.method() === "GET" &&
+        request.headers().authorization === "Bearer switched-access-token" &&
+        new URL(request.url()).searchParams.get("user_id") === `eq.${SWITCHED_USER_ID}`
+      ) {
+        switchedMembershipSeen();
+      }
+      await route.fallback();
+    });
+    await context.route("https://*.supabase.co/rest/v1/profiles**", async (route) => {
+      if (route.request().method() === "PATCH") {
+        patchSeen();
+        await patchRelease;
+        await route.fallback();
+        patchCompleted();
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/account");
+    await expect(page.getByLabel("First name")).toHaveValue("Sowmya", { timeout: 30000 });
+    await page.getByLabel(/^Title/).fill("Director of Credentialing");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await patchStarted;
+
+    const switchedSession = {
+      ...SESSION,
+      access_token: "switched-access-token",
+      refresh_token: "switched-refresh-token",
+      user: {
+        ...SESSION.user,
+        id: SWITCHED_USER_ID,
+        email: "switched@example.test",
+      },
+    };
+    await page.evaluate(
+      ({ authKey, session }) => {
+        localStorage.setItem(authKey, JSON.stringify(session));
+        const channel = new BroadcastChannel(authKey);
+        channel.postMessage({ event: "SIGNED_IN", session });
+        channel.close();
+      },
+      { authKey: AUTH_KEY, session: switchedSession },
+    );
+    await expect(page.getByRole("heading", { name: "My account" })).toHaveCount(0);
+    await switchedMembership;
+
+    releasePatch();
+    await patchDone;
+    await page.waitForLoadState("networkidle");
+
+    expect(recorded.filter((write) => write.method === "PUT")).toHaveLength(0);
+    await expect(page.getByText("Profile saved")).toHaveCount(0);
   });
 
   test("blocks a save that would leave the user with no name", async ({ page, context }) => {

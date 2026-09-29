@@ -17,8 +17,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useSops } from "@/hooks/useAdmin";
-import { usePortalFieldMaps, useSavePortalFormUrl, useStopUsingPortal } from "@/hooks/usePortals";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { usePayers, useSops } from "@/hooks/useAdmin";
+import {
+  usePortalFieldMaps,
+  useSavePortalFormUrl,
+  useStopUsingPortal,
+  useUpdatePortalPayer,
+} from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
 import { fmtDate } from "@/lib/format";
 import { displayPortalUrl, payerPortalStatus } from "@/lib/payerPortalsView";
@@ -33,11 +45,12 @@ import type { Portal } from "@/types";
 const URL_RESET_WARNING =
   "Saving a new URL clears verification. Re-capture and re-prove in Workbench.";
 
+const NO_PAYER = "__none__";
+
 export interface PortalDrawerProps {
-  portal: Portal;
   /** Payer context for deep links back into Form setup. */
   payerId: string;
-  /** Template id preferred for the re-capture handoff (optional). */
+  portal: Portal;
   preferTemplateId?: string | null;
   onClose: () => void;
   /** Called after a successful URL save or stop-using so the parent can refresh selection. */
@@ -52,23 +65,27 @@ export function PortalDrawer({
   onPortalUpdated,
 }: PortalDrawerProps) {
   const isAdmin = useIsAdmin();
+  const payersQ = usePayers();
   const templatesQ = useSops();
   const mapsQ = usePortalFieldMaps(portal.portalKey);
   const drift = useFormDrift();
   const saveUrlMut = useSavePortalFormUrl();
   const stopMut = useStopUsingPortal();
+  const updatePayerMut = useUpdatePortalPayer();
 
   const [url, setUrl] = useState(portal.formUrl ?? "");
+  const [attachedPayerId, setAttachedPayerId] = useState<string>(portal.payerId ?? NO_PAYER);
   const [confirmStop, setConfirmStop] = useState(false);
   const [ackUnlink, setAckUnlink] = useState(false);
   const [ackGlobal, setAckGlobal] = useState(false);
 
   useEffect(() => {
     setUrl(portal.formUrl ?? "");
+    setAttachedPayerId(portal.payerId ?? NO_PAYER);
     setConfirmStop(false);
     setAckUnlink(false);
     setAckGlobal(false);
-  }, [portal.id, portal.formUrl]);
+  }, [portal.id, portal.formUrl, portal.payerId]);
 
   const maps = useMemo(
     () => (mapsQ.data ?? []).filter((m) => m.status !== "retired"),
@@ -90,9 +107,11 @@ export function PortalDrawer({
   );
 
   const dirty = url.trim() !== (portal.formUrl ?? "").trim();
+  const payerDirty =
+    (attachedPayerId === NO_PAYER ? null : attachedPayerId) !== (portal.payerId ?? null);
   const hidden = isPortalHiddenFromPickers(portal);
   const isGlobal = portal.orgId === null;
-  const busy = saveUrlMut.isPending || stopMut.isPending;
+  const busy = saveUrlMut.isPending || stopMut.isPending || updatePayerMut.isPending;
 
   const recaptureTemplateId = preferTemplateId ?? refs[0]?.templateId ?? null;
 
@@ -106,6 +125,18 @@ export function PortalDrawer({
       onPortalUpdated?.(after);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update the URL");
+    }
+  }
+
+  async function savePayer() {
+    if (!payerDirty) return;
+    try {
+      const nextPayerId = attachedPayerId === NO_PAYER ? null : attachedPayerId;
+      const after = await updatePayerMut.mutateAsync({ portal, payerId: nextPayerId });
+      toast.success(nextPayerId ? "Attached payer updated" : "Portal detached from payer");
+      onPortalUpdated?.(after);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update attached payer");
     }
   }
 
@@ -152,6 +183,42 @@ export function PortalDrawer({
               />
               <p id="portal-key-help" className="mt-1 text-[11px] text-muted-foreground">
                 Keys cannot be renamed — they join SOP steps, field maps, and fill logs.
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs">Attached payer</Label>
+              <div className="mt-1 flex items-center gap-2">
+                <Select
+                  value={attachedPayerId}
+                  onValueChange={setAttachedPayerId}
+                  disabled={!isAdmin || busy || hidden}
+                >
+                  <SelectTrigger className="h-9 text-[12px] flex-1" aria-label="Attached payer">
+                    <SelectValue placeholder="Select a payer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!isGlobal && <SelectItem value={NO_PAYER}>Unattached</SelectItem>}
+                    {(payersQ.data ?? []).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isAdmin && !hidden && payerDirty ? (
+                  <Button
+                    size="sm"
+                    className="h-9 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+                    disabled={busy}
+                    onClick={() => void savePayer()}
+                  >
+                    {updatePayerMut.isPending ? "Saving…" : "Save"}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Attaching directly to a payer displays this portal on that payer's Portals tab for
+                ad hoc fills without requiring an SOP template.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E3.0 TE-11 + E3.3 (per-section retarget) — roster-import coverage over the
 // mock harness. The combined 20-column template is retired (E3.3 TE-7); these

@@ -17,11 +17,18 @@ import { isEmailValuedToken, isResolvableToken } from "@/lib/sopResolver";
  *
  * `provider.ssnLast4` resolves (the column is ordinary, E4.4 vault rules bind
  * the full SSN only) and the extension's quick cards offer it, because a payer
- * form asks for it at fill time. A SOP body is different: resolution BAKES the
- * value into tasks.sop_content and into drafted email bodies, so authoring it
- * would scatter identifier snapshots across task rows. Fill time is the right
- * place for it. */
-export const AUTHORING_EXCLUDED_TOKENS: readonly string[] = ["provider.ssnLast4"];
+ * form asks for it at fill time. Computed payer-form name/address aliases are
+ * also fill-time only: the SOP resolver does not build these values. A SOP body
+ * is different: resolution BAKES values into tasks.sop_content and drafted
+ * email bodies, so only tokens actually supported there are authorable. */
+export const AUTHORING_EXCLUDED_TOKENS: readonly string[] = [
+  "provider.ssnLast4",
+  "provider.fullName",
+  "provider.fullNameWithCredentials",
+  "provider.lastFirst",
+  "facility.streetAddress",
+  "facility.fullAddress",
+];
 
 export function filterAuthoringTokens<T extends { token: string }>(catalog: T[]): T[] {
   const excluded = new Set(AUTHORING_EXCLUDED_TOKENS);

@@ -20,6 +20,7 @@
 //   fieldmaps   another org's field-map rows leak into the catalog, and a
 //               proposed row lands global instead of org-scoped (5b, 5c, 20a)
 //   profile     cross-org provider profile served instead of 404     (6)
+//   caseprofile cross-org case-bound profile served instead of 404 (6b)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
 //   casesearch  cross-org case rows leak into ?q= search results      (15b)
@@ -27,6 +28,8 @@
 //   tasks       cross-org task_id closed by a submission touch        (13)
 //   casecontext cross-org case context served instead of 404         (14b)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
+//   accesscontext another org leaks into the pre-shell access context, or the
+//               stale/forged actor boundary is ignored (30, 30b, 30c, 30d)
 //   facility    cross-org profile facilityId honored instead of 404  (11)
 //   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 //   documentdownload cross-org signed document download served instead of 404 (17b)
@@ -42,6 +45,7 @@
 //                  rows that belong to no org
 //   documentupload cross-org owner honored on upload-intent/finalize instead
 //               of 404 before any signing/insert (ASD BITE-ASD-04)   (25b, 26)
+//   learning   AI mapping promotion ignores writer/evidence checks          (20b, 20c)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -56,6 +60,9 @@ export const FIXTURES = {
   KANSAS_CASE_ID: "b7a90000-0000-4000-a000-0000000000c1",
   KANSAS_FACILITY_ID: "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
   SOUTHPARK_FACILITY_ID: "d0e40000-0000-4000-a000-000000000011",
+  KANSAS_ROSTER_MAPPING_ID: "b7a90000-0000-4000-a000-000000000301",
+  SOUTHPARK_ROSTER_MAPPING_ID: "d0e40000-0000-4000-a000-000000000301",
+  SOUTHPARK_ROSTER_EXPORT_ID: "d0e40000-0000-4000-a000-000000000302",
   // Tasks for the submission-touch task-ownership assertion (13). The South
   // Park task is the cross-org task_id a Kansas caller must be denied.
   KANSAS_TASK_ID: "b7a90000-0000-4000-a000-0000000000d1",
@@ -77,10 +84,13 @@ export const FIXTURES = {
 
 export const LEAK_MODES = [
   "sharedtier",
+  "rosters",
   "providers",
   "spoof",
   "fieldmaps",
+  "learning",
   "profile",
+  "caseprofile",
   "fillevents",
   "cases",
   "casesearch",
@@ -88,6 +98,7 @@ export const LEAK_MODES = [
   "tasks",
   "casecontext",
   "meorgs",
+  "accesscontext",
   "facility",
   "ssnrelease",
   "documentdownload",
@@ -96,6 +107,7 @@ export const LEAK_MODES = [
   "documentupload",
   "providergroups",
   "payerformwrite",
+  "e613isolation",
 ];
 
 const USERS = {
@@ -185,6 +197,7 @@ const CASES = [
     // The case's explicit facility link — the ONLY source the context
     // endpoint's selectedFacility resolves from (never the provider's set).
     facilityId: FIXTURES.SOUTHPARK_FACILITY_ID,
+    facilities: [{ facilityId: FIXTURES.SOUTHPARK_FACILITY_ID, isPrimary: true }],
     payerName: "South Park Health",
     state: "CO",
     status: "In Progress",
@@ -206,6 +219,7 @@ const CASES = [
     orgId: FIXTURES.KANSAS_ORG,
     providerId: FIXTURES.KANSAS_PROVIDER_ID,
     facilityId: FIXTURES.KANSAS_FACILITY_ID,
+    facilities: [{ facilityId: FIXTURES.KANSAS_FACILITY_ID, isPrimary: true }],
     payerName: "BCBS of Kansas",
     state: "KS",
     status: "Submitted",
@@ -332,6 +346,93 @@ const PORTALS = [
   },
 ];
 
+// WP1.3 fixtures: synthetic, PHI-free mapping metadata and snapshots for the
+// org-isolation gate. The deliberate "rosters" leak exposes both orgs' rows.
+const ROSTER_MAPPINGS = [
+  {
+    id: FIXTURES.KANSAS_ROSTER_MAPPING_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    templateId: "k-roster-template",
+    name: "Kansas test roster",
+    grain: "provider",
+    selectedProviderIds: [FIXTURES.KANSAS_PROVIDER_ID],
+    selectedFacilityIds: [],
+    selectedGroupIds: [],
+    columnAssignments: [],
+    revision: 1,
+    updatedAt: "2026-09-20T00:00:00Z",
+  },
+  {
+    id: FIXTURES.SOUTHPARK_ROSTER_MAPPING_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    templateId: "sp-roster-template",
+    name: "South Park test roster",
+    grain: "provider",
+    selectedProviderIds: [FIXTURES.SOUTHPARK_PROVIDER_ID],
+    selectedFacilityIds: [],
+    selectedGroupIds: [],
+    columnAssignments: [],
+    revision: 1,
+    updatedAt: "2026-09-21T00:00:00Z",
+  },
+];
+const ROSTER_EXPORTS = [
+  {
+    id: FIXTURES.SOUTHPARK_ROSTER_EXPORT_ID,
+    mappingId: FIXTURES.SOUTHPARK_ROSTER_MAPPING_ID,
+    templateId: "sp-roster-template",
+    templateName: "South Park test template",
+    mappingName: "South Park test roster",
+    format: "csv",
+    exportedAt: "2026-09-21T00:00:00Z",
+    totalRows: 1,
+    checksum: "a".repeat(64),
+    appliedOverrides: 0,
+    exportedBy: "user-southpark",
+    fileName: "south-park-test.csv",
+    downloadPath: `/api/rosters/exports/${FIXTURES.SOUTHPARK_ROSTER_EXPORT_ID}/download`,
+  },
+  {
+    id: "b7a90000-0000-4000-a000-000000000302",
+    mappingId: FIXTURES.KANSAS_ROSTER_MAPPING_ID,
+    templateId: "k-roster-template",
+    templateName: "Kansas test template",
+    mappingName: "Kansas test roster",
+    format: "csv",
+    exportedAt: "2026-09-20T00:00:00Z",
+    totalRows: 1,
+    checksum: "b".repeat(64),
+    appliedOverrides: 0,
+    exportedBy: "user-kansas",
+    fileName: "kansas-test.csv",
+    downloadPath: "/api/rosters/exports/b7a90000-0000-4000-a000-000000000302/download",
+  },
+];
+const ROSTER_TEMPLATES = [
+  {
+    id: "k-roster-template",
+    slug: "mock-kansas-roster",
+    payerName: "Kansas Health",
+    name: "Kansas provider roster",
+    schemaVersion: 1,
+    verified: false,
+    verificationStatus: "draft_pending_payer_spec",
+    grains: ["provider"],
+    columns: [{ key: "npi", header: "NPI", required: true, targetType: "npi" }],
+  },
+  {
+    id: "sp-roster-template",
+    slug: "mock-southpark-roster",
+    payerName: "South Park Health",
+    name: "South Park provider roster",
+    schemaVersion: 1,
+    verified: false,
+    verificationStatus: "draft_pending_payer_spec",
+    grains: ["provider"],
+    columns: [{ key: "npi", header: "NPI", required: true, targetType: "npi" }],
+  },
+];
+
 function envelope(res, status, data, error = null, meta = null) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify({ data, error, meta }));
@@ -351,10 +452,11 @@ function readBody(req) {
   });
 }
 
-function profileFor(p, user, { facilities, selectedFacilityId }) {
+function profileFor(p, user, { facilities, selectedFacilityId, caseId = null }) {
   const selected = FACILITIES.find((f) => f.id === selectedFacilityId) ?? null;
   return {
     provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
+    case_id: caseId,
     tokens: [
       { token: "provider.firstName", value: p.firstName },
       { token: "provider.lastName", value: p.lastName },
@@ -443,6 +545,92 @@ export async function createMockApiServer(options = {}) {
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
     const user = Object.values(USERS).find((u) => u.token === token);
     if (!user) return envelope(res, 401, null, "Missing or malformed Authorization header");
+
+    // --- E6.12 pre-shell access context. This mock keeps the existing
+    // org-isolation gate useful for the new API rule without pretending to be
+    // the service-role RPC implementation. The real route binds actor id to
+    // the verified JWT, requires a revision for selection, and fails closed on
+    // stale authority. Leak "accesscontext" adds a foreign org so the gate
+    // proves this response is tenant-scoped before shell hooks mount.
+    if (/^\/api\/me\/access-context\/?$/.test(url.pathname)) {
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => url.searchParams.has(key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const contextRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      const staffOrgs = [
+        {
+          orgId: user.orgId,
+          orgName: user.orgName,
+          role: user.role,
+          reportStaff: user.role !== "billing",
+          clientManage: user.role === "admin",
+        },
+      ];
+      if (leak === "accesscontext") {
+        staffOrgs.push({
+          orgId: FIXTURES.SOUTHPARK_ORG,
+          orgName: "South Park Physician Group",
+          role: "admin",
+          reportStaff: true,
+          clientManage: true,
+        });
+      }
+      return envelope(res, 200, {
+        actorUserId: user.userId,
+        email: user.email,
+        audience: "staff",
+        // Discovery intentionally leaves staff organization selection null;
+        // the real resolver only auto-selects a sole client org. The explicit
+        // POST selection below exercises the staff org choice.
+        selectedOrgId: null,
+        staffOrgs,
+        clientOrgs: [],
+        globalTraining: true,
+        restrictedExternal: false,
+        contextRevision,
+      });
+    }
+    if (/^\/api\/me\/access-context\/select\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      const body = (await readBody(req)) ?? {};
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      const contextRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      if (body.contextRevision !== contextRevision) {
+        return envelope(
+          res,
+          409,
+          null,
+          "Access context changed; refresh before selecting a new context",
+        );
+      }
+      if (body.audience !== "staff" || body.orgId !== user.orgId) {
+        return envelope(res, 403, null, "This access context is not authorized");
+      }
+      return envelope(res, 200, {
+        actorUserId: user.userId,
+        email: user.email,
+        audience: "staff",
+        selectedOrgId: user.orgId,
+        staffOrgs: [
+          {
+            orgId: user.orgId,
+            orgName: user.orgName,
+            role: user.role,
+            reportStaff: user.role !== "billing",
+            clientManage: user.role === "admin",
+          },
+        ],
+        clientOrgs: [],
+        globalTraining: true,
+        restrictedExternal: false,
+        contextRevision,
+      });
+    }
 
     // --- /api/me/orgs (user-scoped: sits BEFORE org resolution, like the real
     // route runs on authenticateUser — x-org-id is irrelevant to it) ---
@@ -598,6 +786,111 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 405, null, "Method not allowed");
     }
 
+    // E6.13 explicit-audience contract used by the local isolation harness.
+    // This is a synthetic response only; live DB authorization is covered by
+    // the disposable native verifier and the application route tests.
+    if (url.pathname.startsWith("/api/enrollment-explorer/")) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const actorKeys = ["actorUserId", "actorId", "userId", "actor_user_id", "p_actor_user_id"];
+      if (actorKeys.some((key) => url.searchParams.has(key))) {
+        return envelope(res, 400, null, "Actor identity is derived from the verified session");
+      }
+      const audience = req.headers["x-enrollment-audience"];
+      const revision = req.headers["x-minted-context-revision"];
+      const selectedOrg = req.headers["x-org-id"];
+      const urlOrg = url.searchParams.get("org");
+      const urlOrgId = url.searchParams.get("orgId");
+      if ((urlOrg && urlOrg !== selectedOrg) || (urlOrgId && urlOrgId !== selectedOrg)) {
+        return envelope(
+          res,
+          403,
+          null,
+          "Selected organization does not match the verified request",
+        );
+      }
+      if (audience !== "staff" && audience !== "client") {
+        return envelope(res, 400, null, "Choose an explicit enrollment audience");
+      }
+      if (!revision)
+        return envelope(res, 409, null, "Access context is missing; refresh before retrying");
+      const expectedRevision = `e612-mock-${user.userId}-${user.orgId}`;
+      if (revision !== expectedRevision) {
+        return envelope(res, 409, null, "Access context changed; retry the request");
+      }
+      if (!selectedOrg) return envelope(res, 400, null, "A valid x-org-id header is required");
+      if (selectedOrg !== user.orgId && leak !== "e613isolation") {
+        return envelope(res, 403, null, "Selected enrollment access is no longer available");
+      }
+      if (audience !== "staff" || user.role === "billing") {
+        return envelope(res, 403, null, "Selected enrollment access is no longer available");
+      }
+      res.setHeader("cache-control", "no-store, max-age=0");
+      res.setHeader("x-minted-context-revision", expectedRevision);
+      if (url.pathname === "/api/enrollment-explorer/report/page") {
+        if (url.searchParams.has("cursor") && !url.searchParams.has("viewToken")) {
+          return envelope(res, 422, null, "A report cursor requires its view token");
+        }
+        return envelope(res, 200, {
+          contextRevision: expectedRevision,
+          viewToken: url.searchParams.get("viewToken") ?? "mock-e614-view-token",
+          accessState: "ready",
+          filters: {},
+          filterChoices: {
+            groups: [],
+            states: [],
+            facilities: [],
+            products: [],
+            disciplines: ["PT", "PTA", "OT", "OTA", "SLP", "Other", "Unknown"],
+            statuses: ["approved", "needs_verification"],
+          },
+          sections: [],
+          providers: [],
+          nextCursor: null,
+        });
+      }
+      if (url.pathname === "/api/enrollment-explorer/report.csv") {
+        if (!url.searchParams.has("viewToken")) {
+          return envelope(res, 422, null, "A report export requires a first-page view token");
+        }
+        res.writeHead(200, {
+          "content-type": "text/csv; charset=utf-8",
+          "content-disposition": 'attachment; filename="enrollment-report.csv"',
+          "cache-control": "no-store, max-age=0",
+          "x-minted-context-revision": expectedRevision,
+        });
+        return res.end(
+          '"Provider Name","NPI","Discipline","Group","Payer","Product","State","Facility","Status","Publication State","Intake Date","Complete to Submit Date","Submitted Date","Payer Acknowledged Date","Approved Date","Effective Date","Termination Date","Current Application Cycle","Payer Reference","Retro Type","Retro Value","Retro Basis","Client-safe Blocker","Owner","Reviewed As Of","Proof Label","Proof Type","Authenticated Report URL"\r\n"Kay Five","0000000005","Unknown","Mock Group","Mock Payer","Mock Product","KS","Main Clinic","approved","published","","","","","","","","1","","unknown","","","","Payer","","","","/reporting/enrollment-explorer"',
+        );
+      }
+      const historyPath = /^\/api\/enrollment-explorer\/scopes\/([^/]+)\/history$/.exec(
+        url.pathname,
+      );
+      if (historyPath) {
+        return envelope(res, 200, {
+          audience,
+          scopeId: historyPath[1],
+          items: [],
+          nextCursor: null,
+        });
+      }
+      return envelope(res, 200, {
+        products: [
+          { productId: "mock-product", payerId: "mock-payer", displayName: "Mock Product" },
+        ],
+        targets: [
+          {
+            targetId: "mock-target",
+            groupId: "mock-group",
+            payerProductId: "mock-product",
+            state: "KS",
+            ...(leak === "e613isolation" && selectedOrg !== user.orgId
+              ? { orgId: FIXTURES.SOUTHPARK_ORG }
+              : {}),
+          },
+        ],
+      });
+    }
+
     const requestedOrg = req.headers["x-org-id"] ?? url.searchParams.get("orgId");
     let orgId = user.orgId;
     if (requestedOrg) {
@@ -607,6 +900,96 @@ export async function createMockApiServer(options = {}) {
       orgId = requestedOrg; // leak "spoof": honored without a membership check
     }
 
+    // --- WP1.3 roster engine read contract. Fixtures contain identifiers and
+    // synthetic labels only; the "rosters" leak makes each tenant see both
+    // mappings/history rows and allows cross-org mapping/artifact reads.
+    if (url.pathname === "/api/rosters/templates" && method === "GET") {
+      const templates = ROSTER_TEMPLATES.filter((template) =>
+        orgId === FIXTURES.KANSAS_ORG
+          ? template.id === "k-roster-template"
+          : template.id === "sp-roster-template",
+      );
+      return envelope(res, 200, templates, null, { total: templates.length });
+    }
+    if (url.pathname === "/api/rosters/mappings" && method === "GET") {
+      const mappings = ROSTER_MAPPINGS.filter(
+        (mapping) => mapping.orgId === orgId || leak === "rosters",
+      );
+      return envelope(res, 200, mappings, null, { total: mappings.length });
+    }
+    const rosterMappingMatch = url.pathname.match(/^\/api\/rosters\/mappings\/([^/]+)\/?$/);
+    if (rosterMappingMatch && method === "GET") {
+      const mapping = ROSTER_MAPPINGS.find((row) => row.id === rosterMappingMatch[1]);
+      if (!mapping || (mapping.orgId !== orgId && leak !== "rosters")) {
+        return envelope(res, 404, null, "Roster mapping not found");
+      }
+      const template = ROSTER_TEMPLATES.find((row) => row.id === mapping.templateId);
+      const sourceOptions =
+        mapping.orgId === FIXTURES.KANSAS_ORG
+          ? {
+              providers: [
+                { id: FIXTURES.KANSAS_PROVIDER_ID, label: "One, Kay", npi: "1234567890" },
+              ],
+              facilities: [
+                {
+                  id: FIXTURES.KANSAS_FACILITY_ID,
+                  label: "Fitness Physio - Leavenworth",
+                  state: "KS",
+                  groupId: "k-group-1",
+                  groupLabel: "Kansas Group",
+                },
+              ],
+              groups: [
+                { id: "k-group-1", label: "Kansas Group", tin: "000000000", npi: "1234567893" },
+              ],
+            }
+          : {
+              providers: [
+                { id: FIXTURES.SOUTHPARK_PROVIDER_ID, label: "Cartman, Eric", npi: "9876543210" },
+              ],
+              facilities: [
+                {
+                  id: FIXTURES.SOUTHPARK_FACILITY_ID,
+                  label: "Casa Bonita Clinic",
+                  state: "CO",
+                  groupId: "sp-group-1",
+                  groupLabel: "South Park Group",
+                },
+              ],
+              groups: [
+                {
+                  id: "sp-group-1",
+                  label: "South Park Group",
+                  tin: "999999999",
+                  npi: "9876543212",
+                },
+              ],
+            };
+      return envelope(res, 200, { mapping, template, sourceOptions });
+    }
+    if (url.pathname === "/api/rosters/history" && method === "GET") {
+      const snapshots = ROSTER_EXPORTS.filter((snapshot) => {
+        const mapping = ROSTER_MAPPINGS.find((row) => row.id === snapshot.mappingId);
+        return mapping?.orgId === orgId || leak === "rosters";
+      });
+      return envelope(res, 200, snapshots, null, { total: snapshots.length });
+    }
+    const rosterExportMatch = url.pathname.match(/^\/api\/rosters\/exports\/([^/]+)\/download\/?$/);
+    if (rosterExportMatch && method === "GET") {
+      const snapshot = ROSTER_EXPORTS.find((row) => row.id === rosterExportMatch[1]);
+      const mapping = snapshot && ROSTER_MAPPINGS.find((row) => row.id === snapshot.mappingId);
+      if (!snapshot || ((!mapping || mapping.orgId !== orgId) && leak !== "rosters")) {
+        return envelope(res, 404, null, "Roster export not found");
+      }
+      res.writeHead(200, {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename=\"${snapshot.fileName}\"`,
+        "cache-control": "no-store",
+      });
+      res.end("NPI\r\n1234567890\r\n");
+      return;
+    }
+
     // --- /api/providers/:id/profile ---
     const profileMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/profile\/?$/);
     if (profileMatch) {
@@ -614,32 +997,69 @@ export async function createMockApiServer(options = {}) {
       const p = PROVIDERS.find((row) => row.id === profileMatch[1]);
       const visible = p && (p.orgId === orgId || leak === "profile");
       if (!visible) return envelope(res, 404, null, "Provider not found");
+      const hasCaseIntent = url.searchParams.has("case_id");
+      const requestedCaseId = hasCaseIntent ? url.searchParams.get("case_id") : null;
+      let profileCase = null;
+      if (hasCaseIntent) {
+        profileCase = CASES.find(
+          (row) => row.id === requestedCaseId && row.orgId === orgId && row.providerId === p.id,
+        );
+        if (!profileCase && leak === "caseprofile") {
+          profileCase = CASES.find((row) => row.id === requestedCaseId) ?? null;
+        }
+        if (!profileCase) return envelope(res, 404, null, "Case not found for this provider");
+      }
       // Facility awareness: ?facilityId must be in the caller's org AND the
       // provider's facility set (else 404); the sole facility auto-selects;
       // several without a choice -> tokens empty + meta.needs_facility. Leak
       // "facility": the checks are skipped and a cross-org facility is served.
       const requestedFacility = url.searchParams.get("facilityId");
       const provFacilities = facilitiesOf(p);
+      const caseFacilities = profileCase
+        ? (
+            profileCase.facilities ??
+            (profileCase.facilityId
+              ? [{ facilityId: profileCase.facilityId, isPrimary: true }]
+              : [])
+          )
+            .map(({ facilityId }) => FACILITIES.find((facility) => facility.id === facilityId))
+            .filter((facility) => facility?.orgId === orgId)
+        : null;
+      const selectableFacilities = caseFacilities ?? provFacilities;
       let selectedFacilityId = null;
       let needsFacility = false;
       if (requestedFacility) {
-        const okFacility = provFacilities.some(
+        const okFacility = selectableFacilities.some(
           (f) => f.id === requestedFacility && f.orgId === orgId,
         );
         if (!okFacility && leak !== "facility") {
           return envelope(res, 404, null, "Facility not found for this provider");
         }
         selectedFacilityId = requestedFacility;
-      } else if (provFacilities.length === 1) {
-        selectedFacilityId = provFacilities[0].id;
-      } else if (provFacilities.length > 1) {
+      } else if (profileCase) {
+        const primary =
+          profileCase.facilities?.find(({ isPrimary }) => isPrimary)?.facilityId ??
+          profileCase.facilityId ??
+          null;
+        if (primary && selectableFacilities.some((facility) => facility.id === primary)) {
+          selectedFacilityId = primary;
+        } else if (selectableFacilities.length > 0) {
+          needsFacility = true;
+        }
+      } else if (selectableFacilities.length === 1) {
+        selectedFacilityId = selectableFacilities[0].id;
+      } else if (selectableFacilities.length > 1) {
         needsFacility = true;
       }
       res.setHeader("cache-control", "no-store");
       return envelope(
         res,
         200,
-        profileFor(p, user, { facilities: provFacilities, selectedFacilityId }),
+        profileFor(p, user, {
+          facilities: selectableFacilities,
+          selectedFacilityId,
+          caseId: profileCase?.id ?? null,
+        }),
         null,
         needsFacility ? { needs_facility: true } : null,
       );
@@ -1188,6 +1608,28 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, rows, null, { total: rows.length });
     }
 
+    // --- /api/portal-field-maps/batch-learn ---
+    if (/^\/api\/portal-field-maps\/batch-learn\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing" && leak !== "learning") {
+        return envelope(res, 403, null, "Your role cannot save AI field mappings");
+      }
+      const body = (await readBody(req)) ?? {};
+      if (leak === "learning") {
+        return envelope(res, 200, {
+          inserted_count: 1,
+          confirmed_saved_count: 1,
+          preserved_count: 0,
+          results: [],
+        });
+      }
+      const foreignCase = CASES.find((row) => row.id === body.case_id && row.orgId !== orgId);
+      if (foreignCase || !body.fill_session_id) {
+        return envelope(res, 404, null, "Submission evidence not found");
+      }
+      return envelope(res, 404, null, "Submission evidence not found");
+    }
+
     // --- /api/portal-field-maps ---
     if (/^\/api\/portal-field-maps\/?$/.test(url.pathname)) {
       // POST = the propose-only write. The row is always status 'proposed',
@@ -1248,18 +1690,23 @@ export async function createMockApiServer(options = {}) {
       if (leak !== "fillevents") {
         // Real contract: validate ownership BEFORE the idempotency lookup or
         // any write. A cross-org case/provider is a 404, nothing stored.
-        const caseOk = CASES.some((c) => c.id === body.caseId && c.orgId === orgId);
-        if (!caseOk) return envelope(res, 404, null, "Case not found");
-        const providerOk =
-          body.providerId == null ||
-          PROVIDERS.some((p) => p.id === body.providerId && p.orgId === orgId);
-        if (!providerOk) return envelope(res, 404, null, "Provider not found");
+        if (body.caseId != null) {
+          const caseOk = CASES.some((c) => c.id === body.caseId && c.orgId === orgId);
+          if (!caseOk) return envelope(res, 404, null, "Case not found");
+        }
+        if (body.providerId != null) {
+          const providerOk = PROVIDERS.some((p) => p.id === body.providerId && p.orgId === orgId);
+          if (!providerOk) return envelope(res, 404, null, "Provider not found");
+        }
+        if (!body.caseId && !body.providerId) {
+          return envelope(res, 422, null, "At least one of caseId or providerId is required");
+        }
       }
       if (fillSessions.has(key)) return envelope(res, 200, fillSessions.get(key));
       const session = {
         id: body.id,
         orgId,
-        caseId: body.caseId,
+        caseId: body.caseId ?? null,
         providerId: body.providerId ?? null,
         portalKey: body.portalKey,
         fillMode: body.fillMode ?? "web",

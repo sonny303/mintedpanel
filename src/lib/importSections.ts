@@ -240,6 +240,9 @@ export const PROVIDER_FORM_TEMPLATE_HEADERS = {
   firstName: ["provider_first_name"],
   lastName: ["provider_last_name"],
   credentials: ["credentials"],
+  // The import commit RPC does not persist gender yet; keep the Add Provider
+  // form contract exhaustive without advertising a lossy import column.
+  gender: [],
   dateOfBirth: ["date_of_birth"],
   ssnLast4: ["ssn_last4"],
   email: ["email"],

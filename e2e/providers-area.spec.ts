@@ -14,7 +14,7 @@
 // grain by importSections.test.ts and the staged pipeline by
 // roster-import.spec.ts — the commit relationship pass is pinned here at the
 // wire in TS-113's harness (write-through fact POST).
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -48,6 +48,7 @@ const providerRow = (
   first_name: first,
   last_name: last,
   credentials: "PT",
+  gender: null,
   npi: "1093817465",
   status: "active",
   verification_state: "verified",
@@ -417,6 +418,44 @@ function seedAuth(context: {
   );
 }
 
+test("UX-03: a failed provider read can be retried, while a missing provider stays not found", async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const { handler } = makeHandler(baseFixtures());
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  let failProviderRead = true;
+  await context.route(/\/rest\/v1\/providers(?:\?|$)/, async (route) => {
+    const url = new URL(route.request().url());
+    if (failProviderRead && url.searchParams.get("id") === "eq.pr-brooke") {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Provider read unavailable" }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/providers/pr-brooke");
+  await expect(page.getByText("Couldn't load this provider.")).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Provider not found.")).toHaveCount(0);
+
+  failProviderRead = false;
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+
+  await page.goto("/providers/absent-provider");
+  await expect(page.getByText("Provider not found.")).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+});
+
 test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field; + Add facility persists; denial history preserved on the cases panel", async ({
   context,
   page,
@@ -685,6 +724,36 @@ test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-
   ).toHaveLength(0);
 });
 
+test("DatePicker Escape closes the enrollment calendar before its dialog and releases the page", async ({
+  context,
+  page,
+}) => {
+  const { handler } = makeHandler(baseFixtures());
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/pr-brooke");
+  await page.getByRole("tab", { name: "Enrollments" }).click();
+  await page.getByRole("button", { name: "+ Add enrollment" }).click();
+  const dialog = page.getByRole("dialog", { name: "Record an enrollment fact" });
+  await dialog.getByRole("button", { name: "Effective date" }).click();
+  const calendar = page.getByRole("dialog").filter({ has: page.getByRole("grid") });
+  await expect(calendar).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(calendar).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Effective date" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() => page.locator("body").evaluate((body) => body.style.pointerEvents))
+    .toBe("");
+  await page.getByRole("tab", { name: "Cases" }).click();
+  await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible();
+});
+
 test("TS-129: the roster's no-facility gap pill deep-links the focused Groups & facilities section", async ({
   context,
   page,
@@ -749,4 +818,143 @@ test("TS-130: PHI sweep — the roster list read selects no DOB/SSN/home-address
   // Reveal-on-edit: the master edit mode exposes the DOB date input w/ value.
   await page.getByRole("button", { name: "Edit details" }).click();
   await expect(page.getByLabel("Date of birth", { exact: true })).toHaveValue("1990-01-01");
+});
+
+test("MP-20/34: create and edit gender while preserving an existing legacy value", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  const legacyGender = " F ";
+  fixtures.providers[0].gender = legacyGender;
+  const { handler, requests } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/new");
+  await expect(page.getByRole("heading", { name: "Add provider" })).toBeVisible({
+    timeout: 30000,
+  });
+  await page.getByLabel("First name", { exact: true }).fill("Taylor");
+  await page.getByLabel("Last name", { exact: true }).fill("Provider");
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await page.getByRole("option", { name: "Prefer not to say" }).click();
+
+  for (let step = 0; step < 4; step += 1) {
+    await page.getByRole("button", { name: "Next" }).click();
+  }
+  await page.getByRole("button", { name: "Create provider" }).click();
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+  const createWrites = requests.filter(
+    (request) => request.method === "POST" && request.path === "providers",
+  );
+  expect(createWrites).toHaveLength(1);
+  expect((createWrites[0].body as Record<string, unknown>).gender).toBe("prefer_not_to_say");
+  await expect(page.getByText("Prefer not to say", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await page.getByRole("option", { name: "Nonbinary" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page.getByText("Nonbinary", { exact: true })).toBeVisible({ timeout: 15000 });
+  const genderPatches = requests.filter(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "providers" &&
+      (request.body as Record<string, unknown>).gender === "nonbinary",
+  );
+  expect(genderPatches).toHaveLength(1);
+
+  // An unrelated edit preserves the existing unknown value by leaving gender
+  // out of the diff-only patch.
+  await page.goto("/providers/pr-brooke");
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText(legacyGender, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await expect(page.getByRole("option", { name: "F", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Phone", { exact: true }).fill("252-555-0199");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
+
+  const phonePatches = requests.filter(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "providers" &&
+      (request.body as Record<string, unknown>).phone === "252-555-0199",
+  );
+  expect(phonePatches).toHaveLength(1);
+  expect(phonePatches[0].body).toEqual({ phone: "252-555-0199" });
+  expect(fixtures.providers.find((provider) => provider.id === "pr-brooke")?.gender).toBe(
+    legacyGender,
+  );
+
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByRole("combobox", { name: "Gender" }).click();
+  await page.getByRole("option", { name: "Not set" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page.getByText("Not set", { exact: true })).toBeVisible({ timeout: 15000 });
+  const clearGenderPatches = requests.filter(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "providers" &&
+      Object.hasOwn(request.body as Record<string, unknown>, "gender") &&
+      (request.body as Record<string, unknown>).gender === null,
+  );
+  expect(clearGenderPatches).toHaveLength(1);
+  expect(clearGenderPatches[0].body).toEqual({ gender: null });
+  expect(fixtures.providers.find((provider) => provider.id === "pr-brooke")?.gender).toBeNull();
+});
+
+test("F05: license editor blocks reversed dates inline and accepts equal dates", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  const { handler, requests } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/pr-brooke#licenses");
+  await expect(page.getByRole("heading", { name: "Licenses" })).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Add license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add license" });
+  await dialog.getByRole("combobox", { name: "State" }).click();
+  await page.getByRole("option", { name: "CO", exact: true }).click();
+  await dialog.getByLabel("Issued").fill("2026-01-01");
+  await dialog.getByLabel("Expires").fill("2025-01-01");
+
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Expiration date must be on or after issue date.",
+  );
+  await expect(dialog.getByLabel("Expires")).toHaveAttribute("aria-invalid", "true");
+  await dialog.getByRole("button", { name: "Add license" }).click();
+  expect(requests.filter((r) => r.path === "state_licenses" && r.method !== "GET")).toEqual([]);
+
+  await dialog.getByLabel("Expires").fill("2026-01-01");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Add license" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(fixtures.state_licenses).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        state: "CO",
+        issue_date: "2026-01-01",
+        expiration_date: "2026-01-01",
+      }),
+    ]),
+  );
 });

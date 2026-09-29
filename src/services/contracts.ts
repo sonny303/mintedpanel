@@ -21,12 +21,14 @@ export interface ContractInput {
   state: string;
   contractingStatusId?: string | null;
   effectiveDate?: string | null;
+  tentativeEffectiveDate?: string | null;
   expirationDate?: string | null;
+  specialty?: string | null;
   notes?: string | null;
 }
 
 const CONTRACT_LIST_COLUMNS =
-  "id, group_id, payer_id, state, contracting_status_id, effective_date, expiration_date, notes, created_at, updated_at";
+  "id, group_id, payer_id, state, contracting_status_id, effective_date, tentative_effective_date, expiration_date, specialty, notes, created_at, updated_at";
 
 export async function listContracts(filters: ContractFilters = {}): Promise<Contract[]> {
   const orgId = requireActiveOrg();
@@ -126,4 +128,67 @@ export async function updateContractStatus(
   });
 
   return camelizeRow<Contract>(data);
+}
+
+export async function updateContract(
+  contractId: string,
+  patch: Partial<ContractInput>,
+): Promise<Contract> {
+  const orgId = requireActiveOrg();
+  const before = await getContract(contractId);
+  const updatePayload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(patch),
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.state) {
+    updatePayload.state = normalizeStateCode(patch.state);
+  }
+  const { data, error } = await supabase
+    .from("contracts")
+    .update(updatePayload as never)
+    .eq("id", contractId)
+    .eq("org_id", orgId)
+    .select(CONTRACT_LIST_COLUMNS)
+    .single();
+  if (error) throw translateDbError(error);
+
+  if (patch.contractingStatusId && patch.contractingStatusId !== before?.contractingStatusId) {
+    await appendStatusHistory({
+      track: "contracting",
+      contractId,
+      fromStatusId: before?.contractingStatusId ?? null,
+      toStatusId: patch.contractingStatusId,
+    });
+  }
+
+  const after = camelizeRow<Contract>(data);
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "contract",
+    entityId: contractId,
+    before,
+    after,
+    description: `Updated contract`,
+  });
+  return after;
+}
+
+export async function upsertContract(input: ContractInput): Promise<Contract> {
+  const orgId = requireActiveOrg();
+  const normalizedState = normalizeStateCode(input.state);
+  const { data: existing, error } = await supabase
+    .from("contracts")
+    .select("id, contracting_status_id")
+    .eq("org_id", orgId)
+    .eq("group_id", input.groupId)
+    .eq("payer_id", input.payerId)
+    .eq("state", normalizedState)
+    .maybeSingle();
+
+  if (error) throw translateDbError(error);
+
+  if (existing) {
+    return updateContract(existing.id, input);
+  }
+  return createContract(input);
 }

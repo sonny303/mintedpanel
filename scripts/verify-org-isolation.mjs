@@ -35,8 +35,11 @@
 //                          Fixtures for assertion 13 (submission-touch
 //                          task-ownership isolation): a Kansas case (valid POST
 //                          target) + a South Park task id (the cross-org task_id
-//                          that must 404). Both must be set or assertion 13 is
-//                          skipped; the in-sandbox mock run always sets them.
+//                          that must 404). KANSAS_CASE_ID also enables 6a,
+//                          which proves the profile endpoint echoes the
+//                          authorized case binding. Both must be set or
+//                          assertion 13 is skipped; the in-sandbox mock run
+//                          always sets them.
 //   KANSAS_ORG             the Kansas org id, for the propose-only field-map
 //                          write pair (20/20a): the created row must be scoped
 //                          to it. Skipped when unset; the mock run always sets
@@ -51,6 +54,12 @@
 //                          when unset (the real gate waits for the operator to
 //                          seed + pin fixture documents); the in-sandbox mock
 //                          run always sets both.
+//   KANSAS_ROSTER_MAPPING_ID + SOUTHPARK_ROSTER_MAPPING_ID
+//                          Optional WP1.3 roster mapping fixtures. When set,
+//                          the gate verifies cross-org mapping GET returns 404.
+//   SOUTHPARK_ROSTER_EXPORT_ID
+//                          Optional South Park roster export fixture; the gate
+//                          verifies a Kansas caller cannot download its bytes.
 //   (no new env needed for 25/25b/26 — the document upload-intent + finalize
 //   write-path pair, ASD BITE-ASD-04, closing the TD-53 gap; they reuse
 //   KANSAS_PROVIDER_ID/SOUTHPARK_PROVIDER_ID as the owner ids.)
@@ -109,10 +118,11 @@ async function signIn(email, password) {
 // Vercel protection-bypass header when a secret is configured. Returns the
 // parsed JSON body when possible plus the raw text (so a non-JSON SSO gate is
 // visible in the logs).
-async function apiGet(path, { token, orgId } = {}) {
+async function apiGet(path, { token, orgId, extraHeaders = {} } = {}) {
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
   if (orgId) headers["x-org-id"] = orgId;
+  Object.assign(headers, extraHeaders);
   if (BYPASS) {
     headers["x-vercel-protection-bypass"] = BYPASS;
     headers["x-vercel-set-bypass-cookie"] = "true";
@@ -125,14 +135,21 @@ async function apiGet(path, { token, orgId } = {}) {
   } catch {
     /* non-JSON (e.g. an SSO HTML gate) → body stays null; raw holds the page */
   }
-  return { status: res.status, body, raw };
+  return {
+    status: res.status,
+    body,
+    raw,
+    contentType: res.headers.get("content-type"),
+    cacheControl: res.headers.get("cache-control"),
+  };
 }
 
 // One POST against the deploy. Same header handling as apiGet.
-async function apiPost(path, payload, { token, orgId } = {}) {
+async function apiPost(path, payload, { token, orgId, extraHeaders = {} } = {}) {
   const headers = { "content-type": "application/json" };
   if (token) headers.authorization = `Bearer ${token}`;
   if (orgId) headers["x-org-id"] = orgId;
+  Object.assign(headers, extraHeaders);
   if (BYPASS) {
     headers["x-vercel-protection-bypass"] = BYPASS;
     headers["x-vercel-set-bypass-cookie"] = "true";
@@ -186,6 +203,10 @@ function check(name, pass, detail, { leak = false } = {}) {
 
 function idsOf(body) {
   return new Set((body?.data ?? []).map((r) => r.id));
+}
+
+function rowsOf(body) {
+  return Array.isArray(body?.data) ? body.data : [];
 }
 
 function looksLikeVercelGate(r) {
@@ -267,6 +288,83 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // WP1.3 roster mappings and export history are read-only in this gate. The
+  // billing member may read its own organization, while all returned mapping
+  // metadata and snapshot references stay inside that tenant.
+  const kansasMembership = env.KANSAS_ORG
+    ? { status: 200, body: { data: [{ orgId: env.KANSAS_ORG }] } }
+    : await apiGet("/api/me/orgs", { token: kansasTok });
+  const kansasOrgId = kansasMembership.body?.data?.[0]?.orgId;
+  const kRosterMappingsResult = await apiGet("/api/rosters/mappings", { token: kansasTok });
+  const sRosterMappingsResult = await apiGet("/api/rosters/mappings", { token: spTok });
+  const kRosterMappings = rowsOf(kRosterMappingsResult.body);
+  const sRosterMappings = rowsOf(sRosterMappingsResult.body);
+  check(
+    "30. Roster mapping listings contain only each caller's organization",
+    Boolean(kansasOrgId) &&
+      kRosterMappingsResult.status === 200 &&
+      sRosterMappingsResult.status === 200 &&
+      kRosterMappings.every((r) => r.orgId === kansasOrgId) &&
+      sRosterMappings.every((r) => r.orgId === env.SOUTHPARK_ORG),
+    `kansasStatus=${kRosterMappingsResult.status} kansasRows=${kRosterMappings.length} ` +
+      `southParkStatus=${sRosterMappingsResult.status} southParkRows=${sRosterMappings.length}`,
+    { leak: true },
+  );
+  const kRosterIds = new Set(kRosterMappings.map((r) => r.id));
+  const sRosterIds = new Set(sRosterMappings.map((r) => r.id));
+  const sharedRosterIds = [...kRosterIds].filter((id) => sRosterIds.has(id));
+  check(
+    "31. Kansas and South Park roster mapping id sets are disjoint",
+    sharedRosterIds.length === 0,
+    `shared=${sharedRosterIds.length}`,
+    { leak: true },
+  );
+  const kRosterHistoryResult = await apiGet("/api/rosters/history", { token: kansasTok });
+  const sRosterHistoryResult = await apiGet("/api/rosters/history", { token: spTok });
+  const kRosterHistory = rowsOf(kRosterHistoryResult.body);
+  const sRosterHistory = rowsOf(sRosterHistoryResult.body);
+  const foreignHistoryVisible =
+    kRosterHistory.some((snapshot) => sRosterIds.has(snapshot.mappingId)) ||
+    sRosterHistory.some((snapshot) => kRosterIds.has(snapshot.mappingId));
+  check(
+    "32. Roster export history contains no other organization's mapping rows",
+    kRosterHistoryResult.status === 200 &&
+      sRosterHistoryResult.status === 200 &&
+      !foreignHistoryVisible,
+    `kansasStatus=${kRosterHistoryResult.status} kansasSnapshots=${kRosterHistory.length} ` +
+      `southParkStatus=${sRosterHistoryResult.status} southParkSnapshots=${sRosterHistory.length} ` +
+      `foreignMappingVisible=${foreignHistoryVisible}`,
+    { leak: true },
+  );
+  if (env.SOUTHPARK_ROSTER_MAPPING_ID) {
+    const crossOrgMapping = await apiGet(
+      `/api/rosters/mappings/${encodeURIComponent(env.SOUTHPARK_ROSTER_MAPPING_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "33. Kansas cannot read a South Park roster mapping by id",
+      crossOrgMapping.status === 404,
+      `status=${crossOrgMapping.status}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  33. Cross-org roster mapping GET — SOUTHPARK_ROSTER_MAPPING_ID not set");
+  }
+  if (env.SOUTHPARK_ROSTER_EXPORT_ID) {
+    const crossOrgRosterFile = await apiGet(
+      `/api/rosters/exports/${encodeURIComponent(env.SOUTHPARK_ROSTER_EXPORT_ID)}/download`,
+      { token: kansasTok },
+    );
+    check(
+      "34. Kansas cannot download South Park's stored roster bytes",
+      crossOrgRosterFile.status === 404,
+      `status=${crossOrgRosterFile.status}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  34. Cross-org roster export download — SOUTHPARK_ROSTER_EXPORT_ID not set");
+  }
+
   // 3. Kansas view: GET a South Park provider by id -> 404, no row leaked.
   const x = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}`, { token: kansasTok });
   const leakedRow = x.status === 200 && x.body?.data?.id === env.SOUTHPARK_PROVIDER_ID;
@@ -344,6 +442,35 @@ function looksLikeVercelGate(r) {
     "6. Kansas GET profile of a South Park provider -> 404, no data",
     prof.status === 404 && !profLeaked,
     `status=${prof.status} dataPresent=${profLeaked}`,
+    { leak: true },
+  );
+
+  // A valid case is echoed on the profile response, while a real Kansas
+  // provider paired to another org's case remains an indistinguishable 404.
+  // This closes case binding independently from the provider-id boundary 6.
+  if (env.KANSAS_CASE_ID) {
+    const caseBoundProfile = await apiGet(
+      `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?case_id=${encodeURIComponent(env.KANSAS_CASE_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "6a. Kansas profile echoes the authorized case_id",
+      caseBoundProfile.status === 200 &&
+        caseBoundProfile.body?.data?.case_id === env.KANSAS_CASE_ID,
+      `status=${caseBoundProfile.status} caseId=${caseBoundProfile.body?.data?.case_id ?? "null"}`,
+    );
+  } else {
+    console.log("SKIP  6a. Kansas profile case binding — KANSAS_CASE_ID not set");
+  }
+
+  const foreignCaseProfile = await apiGet(
+    `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?case_id=${encodeURIComponent(env.SOUTHPARK_CASE_ID)}`,
+    { token: kansasTok },
+  );
+  check(
+    "6b. Kansas profile paired with a South Park case -> 404, no data",
+    foreignCaseProfile.status === 404 && foreignCaseProfile.body?.data == null,
+    `status=${foreignCaseProfile.status} dataPresent=${foreignCaseProfile.body?.data != null}`,
     { leak: true },
   );
 
@@ -484,6 +611,196 @@ function looksLikeVercelGate(r) {
     `southParkOrgPresent=${spOrgLeaked}`,
     { leak: true },
   );
+
+  // 30. E6.12 pre-shell access context: discovery must be scoped to the
+  // verified actor before the shell mounts. Staff discovery deliberately leaves
+  // selectedOrgId null; the explicit POST selection below chooses the org.
+  const kAccess = await apiGet("/api/me/access-context", { token: kansasTok });
+  const kAccessData = kAccess.body?.data ?? null;
+  const kAccessOrgs = Array.isArray(kAccessData?.staffOrgs) ? kAccessData.staffOrgs : [];
+  const kOrgId = kOrgRows[0]?.orgId ?? null;
+  check(
+    "30. Kansas access context resolves with a revision and unselected staff discovery",
+    kAccess.status === 200 &&
+      typeof kAccessData?.actorUserId === "string" &&
+      typeof kAccessData?.contextRevision === "string" &&
+      kOrgId != null &&
+      kAccessData.selectedOrgId == null &&
+      kAccessOrgs.some((row) => row?.orgId === kOrgId),
+    `status=${kAccess.status} selectedOrg=${kAccessData?.selectedOrgId ?? "null"} ` +
+      `revision=${typeof kAccessData?.contextRevision === "string"}`,
+  );
+  const accessForeignLeak = kAccessOrgs.some((row) => row?.orgId === env.SOUTHPARK_ORG);
+  check(
+    "30b. Kansas access context never contains a South Park org",
+    !accessForeignLeak,
+    `southParkOrgPresent=${accessForeignLeak}`,
+    { leak: true },
+  );
+
+  // Local-only synthetic dispatcher checks for the E6.13 explicit audience
+  // boundary. Hosted database authorization is covered by the disposable
+  // native verifier; these assertions keep the app route boundary in the
+  // existing mock-and-run matrix without requiring hosted fixture writes.
+  if (env.E613_VERIFY === "1") {
+    const selectedHeaders = {
+      "x-enrollment-audience": "staff",
+      "x-minted-context-revision": kAccessData?.contextRevision ?? "",
+    };
+    const e613Own = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: selectedHeaders,
+    });
+    check(
+      "31. E6.13 own-org explicit staff catalog is reachable",
+      e613Own.status === 200 && Array.isArray(e613Own.body?.data?.products),
+      `status=${e613Own.status}`,
+    );
+    const e613NoAudience = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: { "x-minted-context-revision": selectedHeaders["x-minted-context-revision"] },
+    });
+    check(
+      "31b. E6.13 requires an explicit audience",
+      e613NoAudience.status === 400,
+      `status=${e613NoAudience.status}`,
+    );
+    const e613CrossOrg = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.SOUTHPARK_ORG,
+      extraHeaders: selectedHeaders,
+    });
+    check(
+      "31c. E6.13 selected org must be in the verified actor scope",
+      e613CrossOrg.status === 403 && e613CrossOrg.body?.data == null,
+      `status=${e613CrossOrg.status} dataPresent=${e613CrossOrg.body?.data != null}`,
+      { leak: true },
+    );
+    const e613ClientAudience = await apiGet("/api/enrollment-explorer/catalog", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: {
+        "x-enrollment-audience": "client",
+        "x-minted-context-revision": selectedHeaders["x-minted-context-revision"],
+      },
+    });
+    check(
+      "31d. E6.13 does not infer client capability from a staff session",
+      e613ClientAudience.status === 403 && e613ClientAudience.body?.data == null,
+      `status=${e613ClientAudience.status} dataPresent=${e613ClientAudience.body?.data != null}`,
+    );
+
+    const e614Page = await apiGet("/api/enrollment-explorer/report/page", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: selectedHeaders,
+    });
+    check(
+      "32. E6.14 own-org report page returns its restricted DTO",
+      e614Page.status === 200 &&
+        e614Page.body?.data?.accessState === "ready" &&
+        typeof e614Page.body?.data?.viewToken === "string" &&
+        Array.isArray(e614Page.body?.data?.providers),
+      `status=${e614Page.status} accessState=${e614Page.body?.data?.accessState ?? "missing"}`,
+    );
+    const e614History = await apiGet(
+      `/api/enrollment-explorer/scopes/${env.KANSAS_PROVIDER_ID}/history`,
+      { token: kansasTok, orgId: env.KANSAS_ORG, extraHeaders: selectedHeaders },
+    );
+    check(
+      "32b. E6.14 own-org history is paged through the authenticated route",
+      e614History.status === 200 &&
+        e614History.body?.data?.audience === "staff" &&
+        e614History.body?.data?.scopeId === env.KANSAS_PROVIDER_ID &&
+        Array.isArray(e614History.body?.data?.items),
+      `status=${e614History.status}`,
+    );
+    const e614Csv = await apiGet(
+      "/api/enrollment-explorer/report.csv?viewToken=mock-e614-view-token",
+      {
+        token: kansasTok,
+        orgId: env.KANSAS_ORG,
+        extraHeaders: selectedHeaders,
+      },
+    );
+    check(
+      "32c. E6.14 CSV uses a no-store text/csv response",
+      e614Csv.status === 200 &&
+        e614Csv.contentType === "text/csv; charset=utf-8" &&
+        e614Csv.cacheControl?.includes("no-store") &&
+        e614Csv.raw.startsWith('"Provider Name","NPI","Discipline"'),
+      `status=${e614Csv.status} contentType=${e614Csv.contentType ?? "missing"} cache=${e614Csv.cacheControl ?? "missing"}`,
+    );
+    const e614CrossOrg = await apiGet(
+      `/api/enrollment-explorer/report/page?org=${encodeURIComponent(env.SOUTHPARK_ORG)}`,
+      { token: kansasTok, orgId: env.KANSAS_ORG, extraHeaders: selectedHeaders },
+    );
+    check(
+      "32d. E6.14 rejects URL organization mismatch before report data",
+      e614CrossOrg.status === 403 && e614CrossOrg.body?.data == null,
+      `status=${e614CrossOrg.status} dataPresent=${e614CrossOrg.body?.data != null}`,
+      { leak: true },
+    );
+    const e614ClientAudience = await apiGet("/api/enrollment-explorer/report/page", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: {
+        "x-enrollment-audience": "client",
+        "x-minted-context-revision": selectedHeaders["x-minted-context-revision"],
+      },
+    });
+    check(
+      "32e. E6.14 does not infer client capability from staff context",
+      e614ClientAudience.status === 403 && e614ClientAudience.body?.data == null,
+      `status=${e614ClientAudience.status} dataPresent=${e614ClientAudience.body?.data != null}`,
+    );
+  }
+
+  // 30c/30d pin the actor and stale-revision request rules. The actor query
+  // must be rejected before any context data is returned, and a stale chooser
+  // request must not select an org under an old authority snapshot.
+  const forgedAccess = await apiGet("/api/me/access-context?actorUserId=other-user", {
+    token: kansasTok,
+  });
+  check(
+    "30c. Access context rejects a forged actor query without data",
+    forgedAccess.status === 400 && forgedAccess.body?.data == null,
+    `status=${forgedAccess.status} dataPresent=${forgedAccess.body?.data != null}`,
+    { leak: true },
+  );
+  const staleAccess = await apiPost(
+    "/api/me/access-context/select",
+    { audience: "staff", orgId: kOrgId, contextRevision: "stale-context-revision" },
+    { token: kansasTok },
+  );
+  check(
+    "30d. Access context rejects a stale selection revision",
+    staleAccess.status === 409 && staleAccess.body?.data == null,
+    `status=${staleAccess.status} dataPresent=${staleAccess.body?.data != null}`,
+    { leak: true },
+  );
+  if (kAccess.status === 200 && typeof kAccessData?.contextRevision === "string") {
+    const selectedAccess = await apiPost(
+      "/api/me/access-context/select",
+      {
+        audience: "staff",
+        orgId: kOrgId,
+        contextRevision: kAccessData.contextRevision,
+      },
+      { token: kansasTok },
+    );
+    check(
+      "30e. Access context accepts a current staff selection",
+      selectedAccess.status === 200 &&
+        selectedAccess.body?.data?.selectedOrgId === kOrgId &&
+        typeof selectedAccess.body?.data?.contextRevision === "string",
+      `status=${selectedAccess.status} selectedOrg=${selectedAccess.body?.data?.selectedOrgId ?? "null"}`,
+    );
+  } else {
+    console.log("SKIP  30e. current access-context selection — initial context unavailable");
+  }
 
   // 11. Facility awareness on the profile endpoint: a Kansas provider's
   //     profile requested with a South Park facilityId must 404 with no data
@@ -764,8 +1081,51 @@ function looksLikeVercelGate(r) {
         `status=${proposedRow?.status ?? "-"} token=${proposedRow?.token ?? "null"}`,
       { leak: true },
     );
+
+    // These synthetic IDs cannot write in production: learning requires a
+    // same-org completed fill plus a matching immutable submitted-touch audit.
+    const learningProbe = {
+      case_id: env.SOUTHPARK_CASE_ID,
+      provider_id: env.SOUTHPARK_PROVIDER_ID,
+      fill_session_id: "f1a70000-0000-4000-a000-0000000000f1",
+      portal_key: "gate_probe_portal",
+      page_url: "https://portal.example/forms/gate",
+      mappings: [
+        {
+          selector: "#gate-learning-probe",
+          token: "provider.npi",
+          confidence: 0.91,
+          field_type: "text",
+        },
+      ],
+    };
+    const learnedForeign = await apiPost("/api/portal-field-maps/batch-learn", learningProbe, {
+      token: kansasTok,
+    });
+    check(
+      "20b. Kansas cannot promote AI mappings from another org's case",
+      learnedForeign.status === 404 && learnedForeign.body?.data == null,
+      `status=${learnedForeign.status} dataPresent=${learnedForeign.body?.data != null}`,
+      { leak: true },
+    );
+
+    const billingLearn = await apiPost(
+      "/api/portal-field-maps/batch-learn",
+      {
+        ...learningProbe,
+        case_id: "f1a70000-0000-4000-a000-0000000000f2",
+        provider_id: "f1a70000-0000-4000-a000-0000000000f3",
+      },
+      { token: spTok },
+    );
+    check(
+      "20c. Billing cannot promote AI field mappings",
+      billingLearn.status === 403 && billingLearn.body?.data == null,
+      `status=${billingLearn.status} dataPresent=${billingLearn.body?.data != null}`,
+      { leak: true },
+    );
   } else {
-    console.log("SKIP  20/20a. propose-only field-map write — KANSAS_ORG not set");
+    console.log("SKIP  20/20a/20b/20c. field-map writes — KANSAS_ORG not set");
   }
 
   // 21. Task-step WRITE isolation (S4.3): a Kansas writer ticking a step on a

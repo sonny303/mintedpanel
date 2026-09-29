@@ -2,11 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   casePortalTargets,
   handoffFacilityOptions,
+  isSameCasePdfScope,
   isPortalHandoffStepEligible,
+  resolveFreshCasePdfFacility,
   resolveHandoffFacility,
   resolvePortalTargets,
+  shouldShowCaseFacilityPicker,
 } from "./casePortals";
-import type { Portal, Task } from "@/types";
+import type { Facility, Portal, Task } from "@/types";
 
 function portal(over: Partial<Portal>): Portal {
   return {
@@ -119,10 +122,10 @@ describe("resolveHandoffFacility", () => {
     });
   });
 
-  it("uses the sole loaded location when no prior selection exists", () => {
+  it("requires an explicit choice when there is no valid primary mirror", () => {
     expect(resolveHandoffFacility("ready", [primary], null, undefined)).toEqual({
-      status: "ready",
-      facilityId: primary.id,
+      status: "blocked",
+      reason: "selection_required",
     });
   });
 
@@ -149,7 +152,7 @@ describe("resolveHandoffFacility", () => {
     );
   });
 
-  it("blocks a stale explicit or case selection instead of substituting the primary", () => {
+  it("blocks stale explicit choices and asks again for a missing mirror", () => {
     const stale = "99999999-8888-4777-8666-555555555555";
     expect(resolveHandoffFacility("ready", [primary, secondary], primary.id, stale)).toEqual({
       status: "blocked",
@@ -157,16 +160,52 @@ describe("resolveHandoffFacility", () => {
     });
     expect(resolveHandoffFacility("ready", [primary], stale, undefined)).toEqual({
       status: "blocked",
-      reason: "selection_invalid",
+      reason: "selection_required",
     });
+  });
+
+  it("keeps an empty authoritative set location-free even if the legacy mirror remains", () => {
+    expect(
+      resolveHandoffFacility("ready", [], "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", undefined),
+    ).toEqual({
+      status: "ready",
+      facilityId: undefined,
+    });
+  });
+});
+
+describe("shouldShowCaseFacilityPicker", () => {
+  const single = { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", name: "Main" };
+
+  it("shows a case-level selector for a PDF-only location choice", () => {
+    const resolution = resolveHandoffFacility("ready", [single], null, undefined);
+    expect(resolution).toEqual({ status: "blocked", reason: "selection_required" });
+    expect(shouldShowCaseFacilityPicker("ready", [single], resolution)).toBe(true);
+  });
+
+  it("keeps a valid single primary quiet and hides the selector when no locations exist", () => {
+    expect(
+      shouldShowCaseFacilityPicker(
+        "ready",
+        [single],
+        resolveHandoffFacility("ready", [single], single.id, undefined),
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowCaseFacilityPicker(
+        "ready",
+        [],
+        resolveHandoffFacility("ready", [], null, undefined),
+      ),
+    ).toBe(false);
   });
 });
 
 describe("handoffFacilityOptions", () => {
   const selected = { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", name: "Main" };
 
-  it("preserves the exact joined case facility when the optional child table returns no rows", () => {
-    expect(handoffFacilityOptions([], selected.id, selected)).toEqual([selected]);
+  it("does not restore the legacy mirror when it is absent from the authoritative set", () => {
+    expect(handoffFacilityOptions([], selected.id, selected)).toEqual([]);
   });
 
   it("does not duplicate or accept a mismatched joined facility", () => {
@@ -185,6 +224,72 @@ describe("handoffFacilityOptions", () => {
       status: "blocked",
       reason: "load_failed",
     });
+  });
+});
+
+describe("resolveFreshCasePdfFacility", () => {
+  const primary = { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", name: "Main" };
+  const secondary = { id: "11111111-2222-4333-8444-555555555555", name: "Uptown" };
+  const fullSecondary = {
+    id: secondary.id,
+    name: secondary.name,
+    street: "2 Main",
+    suite: "Suite 8",
+    phone: "555-0112",
+    fax: "555-0113",
+    email: "uptown@example.test",
+  } as unknown as Facility;
+
+  it("preserves the selected secondary and current full facility details", () => {
+    expect(
+      resolveFreshCasePdfFacility([primary, secondary], [fullSecondary], primary.id, secondary.id),
+    ).toEqual({ status: "ready", facilityId: secondary.id, facility: fullSecondary });
+  });
+
+  it("rejects a location removed from the refreshed case set instead of falling back", () => {
+    expect(resolveFreshCasePdfFacility([primary], [], primary.id, secondary.id)).toEqual({
+      status: "blocked",
+      reason: "selection_invalid",
+    });
+  });
+
+  it("requires a choice when no valid primary mirror remains, while empty sets stay location-free", () => {
+    expect(
+      resolveFreshCasePdfFacility([secondary], [fullSecondary], primary.id, undefined),
+    ).toEqual({
+      status: "blocked",
+      reason: "selection_required",
+    });
+    expect(resolveFreshCasePdfFacility([], [], primary.id, undefined)).toEqual({
+      status: "ready",
+      facilityId: undefined,
+      facility: null,
+    });
+  });
+
+  it("blocks when the case row exists but current full facility details do not", () => {
+    expect(resolveFreshCasePdfFacility([primary], [], primary.id, undefined)).toEqual({
+      status: "blocked",
+      reason: "facility_unavailable",
+    });
+  });
+});
+
+describe("isSameCasePdfScope", () => {
+  const scope = {
+    id: "case-a",
+    orgId: "org-a",
+    providerId: "provider-a",
+    groupId: "group-a",
+    state: "KS",
+  };
+
+  it.each([
+    ["group", { ...scope, groupId: "group-b" }],
+    ["state", { ...scope, state: "CO" }],
+    ["case", { ...scope, id: "case-b" }],
+  ])("rejects a changed %s between page load and PDF generation", (_name, current) => {
+    expect(isSameCasePdfScope(scope, current)).toBe(false);
   });
 });
 

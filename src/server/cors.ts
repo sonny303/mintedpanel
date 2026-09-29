@@ -7,7 +7,8 @@
 // still answer OPTIONS preflights because an Authorization header always
 // triggers one.
 const ALLOWED_METHODS = "GET, POST, PATCH, OPTIONS";
-const ALLOWED_HEADERS = "authorization, content-type, x-org-id";
+const ALLOWED_HEADERS =
+  "authorization, content-type, x-org-id, x-enrollment-audience, x-minted-context-revision";
 
 function allowedOrigins(): Set<string> {
   const raw = process.env.API_CORS_ORIGINS ?? "";

@@ -1,4 +1,10 @@
-import { test, expect, type Route, type Page, type BrowserContext } from "@playwright/test";
+import {
+  test,
+  expect,
+  type Route,
+  type Page,
+  type BrowserContext,
+} from "./fixtures/legacy-access-context";
 
 // E1.3 TE-10 — Provider Roster coverage over the mock harness:
 //   TS-33 Tree Hill first provider: CAQH baseline + required group

@@ -22,6 +22,7 @@ import { insertAssignmentRows } from "@/services/providerAssignments";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError, toError } from "@/lib/dbErrors";
 import { licenseSnapshotFields, type LicenseCommand } from "@/lib/licenseCommands";
+import { hasValidLicenseDateOrder, LICENSE_DATE_ORDER_ERROR } from "@/lib/licenseDates";
 export type { LicenseCommand } from "@/lib/licenseCommands";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -566,6 +567,8 @@ export async function updateProviderWithLicenses(
     const values = command.values;
     const state = normalizeStateCode(values.state);
     if (!/^[A-Z]{2}$/.test(state)) throw new Error("State must be a two-letter code.");
+    if (!hasValidLicenseDateOrder(values.issueDate, values.expirationDate))
+      throw new Error(LICENSE_DATE_ORDER_ERROR);
     const psv = resolvePsvColumns(
       {
         verifiedStatus: values.verifiedStatus ?? "unverified",

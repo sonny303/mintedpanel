@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.8 TE-9 — Onboarding-shell coverage over the mock harness (CLAUDE.md recipe):
 //   TS-17 standalone onboarding page: intake run lands in the wizard flow; the

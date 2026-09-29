@@ -7,7 +7,7 @@
 // unmet attributes). Gated providers are simply absent from the confirmed set —
 // the E2.1 RPC is unchanged. No stored blocked state: re-derived every preview.
 
-import { pickTemplate } from "./pickTemplate";
+import { pickTemplate, topRankedTemplates } from "./pickTemplate";
 import {
   evaluateProfileGate,
   normalizeRequiredAttributes,
@@ -27,6 +27,8 @@ export interface GatingResult {
   confirmable: GenerationPreviewRow[];
   /** Proposed rows blocked by a missing required attribute. */
   gated: GatedRow[];
+  /** Rows requiring an operator to choose among equal-priority SOPs. */
+  ambiguous: GenerationPreviewRow[];
 }
 
 export interface GatingInput {
@@ -38,9 +40,14 @@ export interface GatingInput {
 export function evaluateGeneration({ rows, templates, factsById }: GatingInput): GatingResult {
   const confirmable: GenerationPreviewRow[] = [];
   const gated: GatedRow[] = [];
+  const ambiguous: GenerationPreviewRow[] = [];
 
   for (const row of rows) {
     if (row.disposition !== "proposed") continue; // only proposed rows are confirmable/gated
+    if (topRankedTemplates(templates, row.payerId, row.state, row.groupId).length > 1) {
+      ambiguous.push(row);
+      continue;
+    }
     const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
     const required = normalizeRequiredAttributes(template?.requiredProfileAttributes);
     const facts = factsById.get(row.providerId);
@@ -56,5 +63,5 @@ export function evaluateGeneration({ rows, templates, factsById }: GatingInput):
     }
   }
 
-  return { confirmable, gated };
+  return { confirmable, gated, ambiguous };
 }

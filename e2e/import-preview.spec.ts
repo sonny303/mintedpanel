@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E3.1 TE-11 — import preview / dedupe / conflict review / staged commit over
 // the mock harness:

@@ -4,7 +4,7 @@
 // globally-sequential Case# that is the row click-through, and URL back-compat
 // (?pivot / ?chip / ?ids / ?runId; /work redirect). The former "to-do" pivot is
 // retired as a tab, but its E2.3 deadline ranking IS Flat's default sort.
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

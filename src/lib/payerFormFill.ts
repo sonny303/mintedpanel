@@ -20,6 +20,7 @@ export type PayerFormFillOutcome =
   "token" | "fixed" | "empty_token" | "manual" | "undecided" | "stale";
 
 export interface PayerFormFillEntry {
+  mapId: string;
   selector: string;
   label: string;
   token: string | null;
@@ -72,6 +73,7 @@ export function planPayerFormFill(
   for (const row of rows) {
     const classification = classifyFieldMap(row);
     const base = {
+      mapId: row.id,
       selector: row.selector,
       label: displayNameOf(row),
       token: row.token ?? null,

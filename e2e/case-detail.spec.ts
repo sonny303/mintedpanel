@@ -6,7 +6,7 @@
 // touchlog composer/entries, the Details card (case facts incl. the facility's
 // full address · identifiers incl. the payer-issued IDs · provenance), the
 // unified status timeline with its evidence link, and the §2.7 removals.
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Route } from "./fixtures/legacy-access-context";
 import {
   HANDOFF_CASE_ID_FIXTURE,
   HANDOFF_EXTENSION_ID_FIXTURE,

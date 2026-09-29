@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { verifyOperationalProof } from "./auth-rest-qualifier.mjs";
 test("active services cannot produce quiescent proof", () =>
   assert.throws(() => verifyOperationalProof({ serviceSessions: 1 })));
@@ -146,6 +147,7 @@ function semanticFixture() {
         "public.profiles",
         "public.organizations",
         "public.memberships",
+        "public.roster_templates",
         "public.notes",
       ].map((t) => [t, []]),
     ),
@@ -213,6 +215,25 @@ function semanticFixture() {
       });
     rows["public.profiles"].push({ id, email, full_name: `Recovery ${i}` });
     rows["public.organizations"].push({ id: f.orgs[i], name: `Recovery ${f.runId} ${i}` });
+    for (const [slug, payer_name, name] of [
+      ["bcbs-nc-roster", "Blue Cross Blue Shield of North Carolina", "BCBS NC Roster"],
+      ["humana-provider-roster", "Humana", "Humana Provider Roster"],
+      ["medicare-reassignment-worksheet", "Medicare", "Medicare Reassignment Worksheet"],
+    ])
+      rows["public.roster_templates"].push({
+        id: randomUUID(),
+        org_id: f.orgs[i],
+        slug,
+        payer_name,
+        name,
+        schema_version: 1,
+        is_verified: false,
+        verification_status: "draft_pending_payer_spec",
+        grains: ["provider", "provider_location", "provider_location_tin"],
+        columns: [{ key: "npi" }],
+        created_at: time,
+        updated_at: time,
+      });
     rows["public.memberships"].push({
       id: f.members[i],
       org_id: f.orgs[i],
@@ -274,6 +295,21 @@ test("fixture semantic rows and exact lineage pass", () => {
   const { rows, f } = semanticFixture();
   assert.equal(validateFixtureRows(rows, f), true);
 });
+test("local Auth/REST fixture allows only the observed roster seeding trigger", async () => {
+  const { requireFixtureTriggerBoundary } = await import("./auth-rest-qualifier.mjs");
+  const allowed = {
+    schema: "public",
+    table: "organizations",
+    name: "roster_engine_seed_org_templates",
+    enabled: "O",
+    functionSchema: "public",
+    functionName: "roster_engine_seed_templates_for_new_org",
+  };
+  assert.equal(requireFixtureTriggerBoundary([allowed]), true);
+  assert.throws(() => requireFixtureTriggerBoundary([]));
+  assert.throws(() => requireFixtureTriggerBoundary([{ ...allowed, enabled: "D" }]));
+  assert.throws(() => requireFixtureTriggerBoundary([allowed, allowed]));
+});
 for (const [name, { change, reason }] of Object.entries({
   missing: {
     change: (r) => delete r["auth.users"][0].raw_user_meta_data.email_verified,
@@ -312,6 +348,7 @@ for (const [name, change] of Object.entries({
   revocation: (r) => (r["auth.refresh_tokens"][0].revoked = false),
   role: (r) => (r["auth.users"][0].role = "service_role"),
   profile: (r) => (r["public.profiles"][0].full_name = "wrong"),
+  template: (r) => (r["public.roster_templates"][0].verification_status = "verified"),
   audit: (r) => (r["auth.audit_log_entries"][0].payload.traits.user_email = "wrong"),
   auditExtra: (r) => (r["auth.audit_log_entries"][0].payload.extra = true),
   note: (r) => (r["public.notes"][0].content = "forbidden"),

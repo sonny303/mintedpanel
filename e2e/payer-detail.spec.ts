@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // Payer & Cases design bundle, screen 3 (Slice C) — the TABBED Payer Detail
 // over the mock harness, one test per designed state:
@@ -486,6 +486,40 @@ test("overview — identity, both ID expectations, aliases, delegation, coverage
   await expect(page.getByText("escalations@aetna.test")).toBeVisible({ timeout: 15000 });
   expect(rpcCalls.filter((c) => c.path === "upsert_payer_contact")).toHaveLength(1);
   expect(tableWrites.filter((w) => w.table === "payer_contacts")).toEqual([]);
+});
+
+test("P037: Add contact clears reachability feedback after email or phone is supplied", async ({
+  context,
+  page,
+}) => {
+  await seed(context);
+  await openDetail(page);
+  await page.getByRole("button", { name: "+ Add contact" }).click();
+  const addContact = page.getByRole("button", { name: "Add contact", exact: true });
+  const message = page.getByRole("alert");
+
+  await addContact.click();
+  await expect(message).toHaveText("A contact needs an email address or a phone number.");
+  expect(rpcCalls.filter((c) => c.path === "upsert_payer_contact")).toHaveLength(0);
+
+  await page.getByLabel("Name", { exact: false }).fill("Provider relations");
+  await expect(message).toHaveText("A contact needs an email address or a phone number.");
+  await page.locator("#contact-phone").fill("   ");
+  await expect(message).toHaveText("A contact needs an email address or a phone number.");
+  await page.locator("#contact-phone").fill("555-555-0100");
+  await expect(message).toHaveCount(0);
+  expect(rpcCalls.filter((c) => c.path === "upsert_payer_contact")).toHaveLength(0);
+
+  await addContact.click();
+  await expect(page.getByText("555-555-0100")).toBeVisible();
+  expect(rpcCalls.filter((c) => c.path === "upsert_payer_contact")).toHaveLength(1);
+
+  await page.getByRole("button", { name: "+ Add contact" }).click();
+  await addContact.click();
+  await expect(message).toHaveText("A contact needs an email address or a phone number.");
+  await page.locator("#contact-email").fill("desk@payer.test");
+  await expect(message).toHaveCount(0);
+  expect(rpcCalls.filter((c) => c.path === "upsert_payer_contact")).toHaveLength(1);
 });
 
 test("a NULL-column payer reads provider-EXPECTED (the shared chain, never a local default)", async ({

@@ -325,7 +325,13 @@ function ProvidersRoster() {
         description="Sorted A→Z by last name. Gap pills point at the exact record section to fix."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8" onClick={handleExportRoster}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={handleExportRoster}
+              disabled={providersQ.isLoading || !filtered?.length}
+            >
               Export roster
             </Button>
             {canWrite ? (

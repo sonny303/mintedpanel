@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // E1.6 TE-6 + E4.2 payer governance, retargeted by the payer-and-cases

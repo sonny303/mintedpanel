@@ -4,6 +4,8 @@
 
 The `staging-delivery.yml` workflow is manually dispatched from main while private-repository branch and environment reviewer controls remain unenforced. The operator supplies the current successful main push CI run ID and exact source SHA. The job checks out the immutable trusted workflow revision and verifies both inputs against GitHub's run and current main. It rejects automatic events, reruns, forks, non-push CI runs, failed/skipped CI, wrong workflow paths and mismatched or stale source. The hosted delivery entrypoint then stops before acquiring a lease or calling Vercel/Supabase. Existing product checks and defects retain their outcomes. Production remains blocked.
 
+Agreed release sequence: **PR → CI → merge to main → manually initiated staging deployment and verification → owner-approved production release.** Keep automatic Git deployments disabled, use existing resources within included allowances, and retain the hosted activation and credential-isolation gates.
+
 ## What is implemented
 
 - `github.mjs`: authenticated GitHub transport; successful main admission; run/artifact provenance checks; bounded archive download with its provider SHA-256 digest; a single expected JSON entry without extracting files to disk. Tokens are not forwarded to the artifact download host. Downloaded records still require reviewed provider collectors to establish the facts they contain.

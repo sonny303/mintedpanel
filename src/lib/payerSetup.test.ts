@@ -3,6 +3,7 @@ import {
   activeOrgPayers,
   archivedPayerIds,
   catalogSetupPayers,
+  manualCasePayers,
   networkPayerIdsFromTargets,
 } from "./payerSetup";
 import type { Payer, PayerNetworkTarget } from "@/types";
@@ -98,6 +99,26 @@ describe("catalogSetupPayers — Payer Setup lists the catalog, not group attach
       payer({ id: "a", name: "Alpha" }),
     ]);
     expect(rows.map((r) => r.payer.name)).toEqual(["Alpha", "Beta"]);
+  });
+});
+
+describe("manualCasePayers — F2.1.4 exception picker", () => {
+  it("offers an unattached global payer alongside an own-org payer", () => {
+    const rows = manualCasePayers([
+      payer({ id: "legacy", name: "Legacy Plan", orgId: "org-1" }),
+      payer({ id: "global", name: "Global Plan", orgId: null }),
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(["global", "legacy"]);
+  });
+
+  it("does not offer archived, merged, or setup-sentinel rows for a new case", () => {
+    const rows = manualCasePayers([
+      payer({ id: "active", name: "Active Plan" }),
+      payer({ id: "archived", name: "Archived Plan", archivedAt: "2026-07-27T00:00:00Z" }),
+      payer({ id: "merged", name: "Merged Plan", status: "merged" }),
+      payer({ id: "setup", name: "Pre-Credentialing Setup" }),
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(["active"]);
   });
 });
 

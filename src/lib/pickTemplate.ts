@@ -140,14 +140,30 @@ export function pickTemplate(
   state: string,
   groupId: string | null,
 ): SOPTemplate | null {
-  let best: { t: SOPTemplate; rank: number } | null = null;
+  return topRankedTemplates(templates, payerId, state, groupId)[0] ?? null;
+}
+
+/** All eligible templates at the highest precedence tier. A caller that writes
+ * tasks must require an explicit choice when this contains multiple rows. */
+export function topRankedTemplates(
+  templates: SOPTemplate[],
+  payerId: string,
+  state: string,
+  groupId: string | null,
+): SOPTemplate[] {
+  let bestRank: number | null = null;
+  const best: SOPTemplate[] = [];
   for (const t of templates) {
     if (isArchived(t)) continue;
     const rank = candidateRank(t, payerId, state, groupId);
     if (rank === null) continue;
-    if (best === null || rank < best.rank || (rank === best.rank && compareWithin(t, best.t) < 0)) {
-      best = { t, rank };
+    if (bestRank === null || rank < bestRank) {
+      bestRank = rank;
+      best.length = 0;
+      best.push(t);
+    } else if (rank === bestRank) {
+      best.push(t);
     }
   }
-  return best?.t ?? null;
+  return best.sort(compareWithin);
 }

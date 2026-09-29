@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.6 TE-7 + E6.6 F6.6.1–F6.6.4 — the Reporting Center (authenticated,
 // cross-org). Uses the mock harness: seed the GoTrue session + active org in

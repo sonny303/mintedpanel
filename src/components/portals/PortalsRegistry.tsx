@@ -73,11 +73,15 @@ function StatusCell({ portal }: { portal: Portal }) {
 function LastFillCell({ fill, mapped }: { fill: FillSession | null; mapped: number }) {
   if (!fill) return <span className="text-[#78716C]">No fills yet</span>;
   const when = fmtDate(fill.completedAt ?? fill.startedAt);
-  if (fill.fieldsFilled > 0) {
+  const isV2 = fill.eventSchemaVersion === 2;
+  const verified = isV2 ? (fill.fieldsVerified ?? 0) : fill.fieldsFilled;
+  if (isV2 || verified > 0) {
     return (
       <span className="whitespace-nowrap">
-        <span className="text-[#059669] font-medium tabular-nums">
-          {fill.fieldsFilled} of {mapped}
+        <span
+          className={`${verified > 0 ? "text-[#059669]" : "text-[#78716C]"} font-medium tabular-nums`}
+        >
+          {isV2 ? `${verified} verified` : `${verified} of ${mapped}`}
         </span>
         <span className="text-[#99A49B]"> · {when}</span>
       </span>

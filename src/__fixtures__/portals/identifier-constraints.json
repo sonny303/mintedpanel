@@ -1,0 +1,24 @@
+{
+  "fixtureId": "identifier-shape-synthetic-01",
+  "synthetic": true,
+  "notPayerEvidence": true,
+  "label": "Optum-shaped illustration from the supplied ticket; not observed portal behavior.",
+  "fields": [
+    {
+      "fieldKey": "group-npi-pair",
+      "label": "Group NPI",
+      "inputMode": "numeric",
+      "pattern": "^[0-9]{10}(?: [0-9]{10})+$",
+      "example": "1234567890 2345678901",
+      "ruleSource": "synthetic fixture design; validate against an approved live capture before product use"
+    },
+    {
+      "fieldKey": "provider-identifier-pair",
+      "label": "Provider ID",
+      "inputMode": "text",
+      "pattern": "^[A-Z0-9]{1,18}(?: [A-Z0-9]{1,18})+$",
+      "example": "SIM123 SIM456",
+      "ruleSource": "synthetic fixture design; validate against an approved live capture before product use"
+    }
+  ]
+}

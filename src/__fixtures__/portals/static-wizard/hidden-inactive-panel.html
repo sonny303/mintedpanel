@@ -1,0 +1,29 @@
+<!doctype html>
+<html
+  lang="en"
+  data-fixture="synthetic"
+  data-fixture-url="https://credentialing-simulator.example.invalid/application/edit"
+>
+  <head>
+    <meta charset="utf-8" />
+    <title>Enrollment — inactive conditional panel</title>
+  </head>
+  <body>
+    <nav aria-label="Application progress">
+      <ol>
+        <li aria-current="step" data-trained-anchor="organization">Page 2: Organization</li>
+      </ol>
+    </nav>
+    <main data-active-panel="organization">
+      <h1>Enrollment</h1>
+      <section>
+        <h2>Organization Details</h2>
+        <label for="group-name">Synthetic group name</label><input id="group-name" />
+      </section>
+      <section hidden data-inactive-panel="credentials">
+        <h2>Education and Licenses</h2>
+        <label for="hidden-license">Synthetic license number</label><input id="hidden-license" />
+      </section>
+    </main>
+  </body>
+</html>

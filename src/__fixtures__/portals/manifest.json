@@ -1,0 +1,46 @@
+{
+  "fixtureSet": "portal-pdf-refresh-r0",
+  "synthetic": true,
+  "provenance": "Invented static HTML and generated PDFs; no payer capture, provider record, or live portal behavior is represented.",
+  "portalOrigin": "https://credentialing-simulator.example.invalid",
+  "wizardUrl": "https://credentialing-simulator.example.invalid/application/edit",
+  "wizardStepFiles": [
+    { "file": "static-wizard/step-01.html", "stepId": "profile", "heading": "Provider Profile" },
+    {
+      "file": "static-wizard/step-02.html",
+      "stepId": "organization",
+      "heading": "Organization Details"
+    },
+    {
+      "file": "static-wizard/step-03.html",
+      "stepId": "credentials",
+      "heading": "Education and Licenses"
+    },
+    {
+      "file": "static-wizard/step-04.html",
+      "stepId": "locations",
+      "heading": "Practice Locations"
+    },
+    { "file": "static-wizard/step-05.html", "stepId": "identifiers", "heading": "Identifiers" },
+    { "file": "static-wizard/step-06.html", "stepId": "disclosures", "heading": "Disclosures" },
+    { "file": "static-wizard/step-07.html", "stepId": "review", "heading": "Review Application" }
+  ],
+  "identityCases": [
+    "static-wizard/page-unknown.html",
+    "static-wizard/delayed-before.html",
+    "static-wizard/delayed-after.html",
+    "static-wizard/hidden-inactive-panel.html",
+    "static-wizard/duplicate-headings.html",
+    "static-wizard/frames/parent.html",
+    "static-wizard/frames/frame-a.html",
+    "static-wizard/frames/frame-b.html"
+  ],
+  "specialCases": ["date-mask-reversion.json", "identifier-constraints.json"],
+  "limits": [
+    "Page numbers are presentational and are never sufficient identity evidence.",
+    "A heading alone is not a trained step identity.",
+    "The date mutation only demonstrates a synthetic rejected-write fixture.",
+    "Identifier constraints are invented shape examples, not Optum requirements.",
+    "The XFA PDF contains a dictionary marker only; cryptographic signed/encrypted samples are not generated."
+  ]
+}

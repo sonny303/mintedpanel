@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 // E0.5 TE-7/TE-6 — the PUBLIC inbound "contact us" route (/contact). No token, no
 // session. Mocks the anon submit_inbound_lead RPC. A submitted inquiry becomes a

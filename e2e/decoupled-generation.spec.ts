@@ -13,7 +13,7 @@
 // The harness write-throughs the create_case_with_tasks RPC (enforcing the
 // UNIQUE NULLS NOT DISTINCT 4-part key → 23505 on a duplicate) and records
 // every write so the read-only posture of the grid render is pinned.
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";

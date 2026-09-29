@@ -37,12 +37,12 @@ import {
 } from "@/hooks/useProviders";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { usePayers, useSops } from "@/hooks/useAdmin";
-import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { resolveCaseFacilityId } from "@/lib/caseFacility";
-import { networkPayerIdsFromTargets } from "@/lib/payerSetup";
-import { pickTemplate } from "@/lib/pickTemplate";
+import { manualCasePayers } from "@/lib/payerSetup";
+import { topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
+import { isAllStates, templateStates } from "@/lib/sopMatchKey";
 import { US_STATES } from "@/lib/usStates";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 
@@ -61,7 +61,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const facilityAssignmentsQ = useProviderAssignments();
   const facilitiesQ = useFacilities();
   const payersQ = usePayers();
-  const targetsQ = usePayerNetworkTargets();
   const templatesQ = useSops();
   const casesQ = useCases();
   const createCase = useCreateCase();
@@ -72,6 +71,45 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const [groupId, setGroupId] = useState(NONE);
   const [payerId, setPayerId] = useState(NONE);
   const [state, setState] = useState(NONE);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+
+  // Auto-selected template according to standard match precedence
+  const autoTemplate = useMemo(() => {
+    if (payerId === NONE || state === NONE || groupId === NONE) return null;
+    const top = topRankedTemplates(templatesQ.data ?? [], payerId, state, groupId);
+    return top.length === 1 ? top[0] : null;
+  }, [payerId, state, groupId, templatesQ.data]);
+
+  const candidateTemplates = useMemo(() => {
+    if (payerId === NONE || state === NONE || groupId === NONE) return [];
+    const all = templatesQ.data ?? [];
+    return all.filter((t) => {
+      if (t.archived) return false;
+      if (t.payerId !== payerId) return false;
+      if (t.groupId !== null && t.groupId !== groupId) return false;
+      const states = templateStates(t);
+      if (states.length > 0 && !isAllStates(states) && !states.includes(state)) return false;
+      return true;
+    });
+  }, [payerId, groupId, state, templatesQ.data]);
+
+  const templateOptions = useMemo(() => {
+    const list = [...candidateTemplates];
+    if (autoTemplate && !list.some((t) => t.id === autoTemplate.id)) {
+      list.push(autoTemplate);
+    }
+    return list;
+  }, [candidateTemplates, autoTemplate]);
+
+  const effectiveTemplateId = useMemo(() => {
+    if (selectedTemplateId !== null) return selectedTemplateId;
+    return autoTemplate?.id ?? NONE;
+  }, [selectedTemplateId, autoTemplate]);
+
+  const effectiveTemplate = useMemo(() => {
+    if (effectiveTemplateId === NONE) return null;
+    return templateOptions.find((t) => t.id === effectiveTemplateId) ?? null;
+  }, [effectiveTemplateId, templateOptions]);
 
   const roster = useMemo(
     () => (providersQ.data ?? []).filter((p) => p.status !== "terminated"),
@@ -89,12 +127,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     const assignedProviderIds = new Set(currentProviderAssignments.map((a) => a.providerId));
     return roster.filter((p) => assignedProviderIds.has(p.id));
   }, [currentProviderAssignments, roster]);
-  const payers = useMemo(() => {
-    const inNetwork = networkPayerIdsFromTargets(targetsQ.data ?? []);
-    return (payersQ.data ?? []).filter(
-      (p) => (p.status ?? "active") === "active" && inNetwork.has(p.id),
-    );
-  }, [payersQ.data, targetsQ.data]);
+  const payers = useMemo(() => manualCasePayers(payersQ.data ?? []), [payersQ.data]);
 
   // TE-6: the group select offers the provider's groups from
   // provider_group_assignments (un-ended memberships, the E1.3 semantic).
@@ -137,7 +170,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     facilityAssignmentsQ.isLoading ||
     facilitiesQ.isLoading ||
     payersQ.isLoading ||
-    targetsQ.isLoading ||
     templatesQ.isLoading ||
     casesQ.isLoading;
   const failed =
@@ -147,7 +179,6 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     facilityAssignmentsQ.isError ||
     facilitiesQ.isError ||
     payersQ.isError ||
-    targetsQ.isError ||
     templatesQ.isError ||
     casesQ.isError;
   const prerequisitesReady = providers.length > 0 && payers.length > 0;
@@ -159,22 +190,22 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     void facilityAssignmentsQ.refetch();
     void facilitiesQ.refetch();
     void payersQ.refetch();
-    void targetsQ.refetch();
     void templatesQ.refetch();
     void casesQ.refetch();
   };
 
   const submit = () => {
-    if (!selection || blockingCase) return;
+    if (
+      !selection ||
+      blockingCase ||
+      (templateOptions.length > 0 && autoTemplate === null && selectedTemplateId === null) ||
+      (effectiveTemplateId !== NONE && !effectiveTemplate)
+    )
+      return;
     const provider = providers.find((p) => p.id === selection.providerId);
     if (!provider) return;
     const group = (groupsQ.data ?? []).find((g) => g.id === selection.groupId) ?? null;
-    const template = pickTemplate(
-      templatesQ.data ?? [],
-      selection.payerId,
-      selection.state,
-      selection.groupId,
-    );
+    const template = effectiveTemplate;
     // Stamp primary-or-sole facility under the selected group (null when
     // ambiguous); case detail can edit it after create.
     const facilityId = resolveCaseFacilityId(
@@ -306,7 +337,14 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-group">Group</Label>
-              <Select value={groupId} onValueChange={setGroupId} disabled={providerId === NONE}>
+              <Select
+                value={groupId}
+                onValueChange={(v) => {
+                  setGroupId(v);
+                  setSelectedTemplateId(null);
+                }}
+                disabled={providerId === NONE}
+              >
                 <SelectTrigger id="manual-case-group">
                   <SelectValue
                     placeholder={
@@ -330,7 +368,13 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-payer">Payer</Label>
-              <Select value={payerId} onValueChange={setPayerId}>
+              <Select
+                value={payerId}
+                onValueChange={(v) => {
+                  setPayerId(v);
+                  setSelectedTemplateId(null);
+                }}
+              >
                 <SelectTrigger id="manual-case-payer">
                   <SelectValue placeholder="Select a payer" />
                 </SelectTrigger>
@@ -346,7 +390,13 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-state">State</Label>
-              <Select value={state} onValueChange={setState}>
+              <Select
+                value={state}
+                onValueChange={(v) => {
+                  setState(v);
+                  setSelectedTemplateId(null);
+                }}
+              >
                 <SelectTrigger id="manual-case-state">
                   <SelectValue placeholder="Select a state" />
                 </SelectTrigger>
@@ -359,6 +409,33 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            {payerId !== NONE && templateOptions.length > 0 ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="manual-case-template">Template</Label>
+                <Select value={effectiveTemplateId} onValueChange={(v) => setSelectedTemplateId(v)}>
+                  <SelectTrigger id="manual-case-template">
+                    <SelectValue placeholder="Select a template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templateOptions.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                        {t.taskDefinitions?.length
+                          ? ` (${t.taskDefinitions.length} task${t.taskDefinitions.length === 1 ? "" : "s"})`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={NONE}>None (empty checklist)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {templateOptions.length > 1 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Multiple templates match this payer. Select the one to apply.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             {blockingCase ? (
               <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]">
@@ -388,6 +465,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
               !prerequisitesReady ||
               !selection ||
               Boolean(blockingCase) ||
+              (templateOptions.length > 0 &&
+                autoTemplate === null &&
+                selectedTemplateId === null) ||
+              (effectiveTemplateId !== NONE && !effectiveTemplate) ||
               loading ||
               failed ||
               createCase.isPending

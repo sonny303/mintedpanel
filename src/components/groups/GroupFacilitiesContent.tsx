@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/EmptyState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -104,6 +106,55 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
   const groupedStates = [...grouped.keys()].sort();
   const defaultOpen = groupFacilities.length <= COLLAPSE_THRESHOLD;
 
+  const facilitiesUnavailable = facilitiesQ.isError || facilitiesQ.isLoading || !facilitiesQ.data;
+  const assignmentsUnavailable =
+    assignmentsQ.isError || assignmentsQ.isLoading || !assignmentsQ.data;
+
+  const readState =
+    facilitiesUnavailable || assignmentsUnavailable ? (
+      <>
+        {facilitiesQ.isError ? (
+          <Card className="border-[#E8E5E0]" role="alert">
+            <CardContent className="p-4">
+              <EmptyState
+                message="Failed to load facilities"
+                action={
+                  <Button variant="outline" size="sm" onClick={() => void facilitiesQ.refetch()}>
+                    Retry facilities
+                  </Button>
+                }
+              />
+            </CardContent>
+          </Card>
+        ) : facilitiesUnavailable ? (
+          <div role="status" className="space-y-2" aria-label="Loading facilities">
+            <p className="text-[13px] text-muted-foreground">Loading facilities…</p>
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : null}
+        {assignmentsQ.isError ? (
+          <Card className="border-[#E8E5E0]" role="alert">
+            <CardContent className="p-4">
+              <EmptyState
+                message="Failed to load provider assignments"
+                description="Provider counts and case generation require a successful read."
+                action={
+                  <Button variant="outline" size="sm" onClick={() => void assignmentsQ.refetch()}>
+                    Retry provider assignments
+                  </Button>
+                }
+              />
+            </CardContent>
+          </Card>
+        ) : assignmentsUnavailable ? (
+          <div role="status" className="space-y-2" aria-label="Loading provider assignments">
+            <p className="text-[13px] text-muted-foreground">Loading provider assignments…</p>
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : null}
+      </>
+    ) : null;
+
   return (
     <div className="space-y-4">
       <p className="text-[12.5px] text-muted-foreground">
@@ -111,142 +162,151 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
         entered once per group (payers see per-TIN service locations).
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search locations…"
-          aria-label="Search facilities"
-          className="h-9 max-w-xs"
-        />
-        <Select value={stateFilter} onValueChange={setStateFilter}>
-          <SelectTrigger className="h-9 w-36" aria-label="Filter by state">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All states</SelectItem>
-            {states.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={providerFilter}
-          onValueChange={(v) => setProviderFilter(v as ProviderFilter)}
-        >
-          <SelectTrigger className="h-9 w-44" aria-label="Filter by providers">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All locations</SelectItem>
-            <SelectItem value="with">With providers</SelectItem>
-            <SelectItem value="without">Without providers</SelectItem>
-          </SelectContent>
-        </Select>
-        {canWrite ? (
-          <Button
-            className="ml-auto h-9 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-            onClick={() => setModal({ facility: null })}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            Add facility
-          </Button>
-        ) : null}
-      </div>
+      <div className="space-y-4">
+        {readState ?? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search locations…"
+                aria-label="Search facilities"
+                className="h-9 max-w-xs"
+              />
+              <Select value={stateFilter} onValueChange={setStateFilter}>
+                <SelectTrigger className="h-9 w-36" aria-label="Filter by state">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All states</SelectItem>
+                  {states.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={providerFilter}
+                onValueChange={(v) => setProviderFilter(v as ProviderFilter)}
+              >
+                <SelectTrigger className="h-9 w-44" aria-label="Filter by providers">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  <SelectItem value="with">With providers</SelectItem>
+                  <SelectItem value="without">Without providers</SelectItem>
+                </SelectContent>
+              </Select>
+              {canWrite ? (
+                <Button
+                  className="ml-auto h-9 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+                  onClick={() => setModal({ facility: null })}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add facility
+                </Button>
+              ) : null}
+            </div>
 
-      {groupFacilities.length === 0 ? (
-        <Card className="border-[#E8E5E0]">
-          <CardContent className="p-6 text-[13px] text-muted-foreground">
-            No active locations yet. Add the group&apos;s practice locations here or import them
-            from a CSV below.
-          </CardContent>
-        </Card>
-      ) : filtered.length === 0 ? (
-        <Card className="border-[#E8E5E0]">
-          <CardContent className="p-6 text-[13px] text-muted-foreground">
-            No locations match the current search and filters.
-          </CardContent>
-        </Card>
-      ) : (
-        groupedStates.map((state) => {
-          const rows = grouped.get(state) ?? [];
-          return (
-            <Collapsible key={state} defaultOpen={defaultOpen}>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-3 py-2 text-left">
-                <span className="text-[13px] font-semibold text-foreground">
-                  {state} — {rows.length} {rows.length === 1 ? "location" : "locations"}
-                </span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden />
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <ul className="mt-2 space-y-2">
-                  {rows.map((f) => {
-                    const count = providerCount(f.id);
-                    return (
-                      <li
-                        key={f.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#E8E5E0] bg-white px-4 py-3"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[13.5px] font-medium text-foreground">
-                              {f.name}
-                            </span>
-                            <span className="rounded bg-[var(--mp-neutral-tint)] px-1.5 py-0.5 text-[11.5px] text-[var(--mp-neutral-ink)]">
-                              {count} {count === 1 ? "provider" : "providers"}
-                            </span>
-                            {count === 0 ? (
-                              <span className="rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[11.5px] text-[#92400E]">
-                                No providers — can&apos;t generate cases
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-                            {[f.street, f.city].filter(Boolean).join(", ") || "No address"}
-                            {f.effectiveDate ? ` · Go-live ${fmtDate(f.effectiveDate)}` : ""}
-                          </div>
-                        </div>
-                        {canWrite ? (
-                          <div className="flex flex-none items-center gap-2">
-                            {count > 0 ? (
-                              // E6.3 — the launch-context entry: opens the ONE
-                              // shared grid pre-filtered to this location's
-                              // providers (the retired launch dialog's job).
-                              <Button asChild variant="outline" size="sm" className="h-8">
-                                <Link to="/generation" search={{ group: group.id, facility: f.id }}>
-                                  Generate cases
-                                </Link>
-                              </Button>
-                            ) : null}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8"
-                              onClick={() => setModal({ facility: f })}
+            {groupFacilities.length === 0 ? (
+              <Card className="border-[#E8E5E0]">
+                <CardContent className="p-6 text-[13px] text-muted-foreground">
+                  No active locations yet. Add the group&apos;s practice locations here or import
+                  them from a CSV below.
+                </CardContent>
+              </Card>
+            ) : filtered.length === 0 ? (
+              <Card className="border-[#E8E5E0]">
+                <CardContent className="p-6 text-[13px] text-muted-foreground">
+                  No locations match the current search and filters.
+                </CardContent>
+              </Card>
+            ) : (
+              groupedStates.map((state) => {
+                const rows = grouped.get(state) ?? [];
+                return (
+                  <Collapsible key={state} defaultOpen={defaultOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-3 py-2 text-left">
+                      <span className="text-[13px] font-semibold text-foreground">
+                        {state} — {rows.length} {rows.length === 1 ? "location" : "locations"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <ul className="mt-2 space-y-2">
+                        {rows.map((f) => {
+                          const count = providerCount(f.id);
+                          return (
+                            <li
+                              key={f.id}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#E8E5E0] bg-white px-4 py-3"
                             >
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-[#B91C1C]"
-                              onClick={() => setDeactivating(f)}
-                            >
-                              Deactivate
-                            </Button>
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        })
-      )}
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[13.5px] font-medium text-foreground">
+                                    {f.name}
+                                  </span>
+                                  <span className="rounded bg-[var(--mp-neutral-tint)] px-1.5 py-0.5 text-[11.5px] text-[var(--mp-neutral-ink)]">
+                                    {count} {count === 1 ? "provider" : "providers"}
+                                  </span>
+                                  {count === 0 ? (
+                                    <span className="rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[11.5px] text-[#92400E]">
+                                      No providers — can&apos;t generate cases
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="mt-0.5 text-[12.5px] text-muted-foreground">
+                                  {[f.street, f.city].filter(Boolean).join(", ") || "No address"}
+                                  {f.effectiveDate ? ` · Go-live ${fmtDate(f.effectiveDate)}` : ""}
+                                </div>
+                              </div>
+                              {canWrite ? (
+                                <div className="flex flex-none items-center gap-2">
+                                  {count > 0 ? (
+                                    // E6.3 — the launch-context entry: opens the ONE
+                                    // shared grid pre-filtered to this location's
+                                    // providers (the retired launch dialog's job).
+                                    <Button asChild variant="outline" size="sm" className="h-8">
+                                      <Link
+                                        to="/generation"
+                                        search={{ group: group.id, facility: f.id }}
+                                      >
+                                        Generate cases
+                                      </Link>
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8"
+                                    onClick={() => setModal({ facility: f })}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-[#B91C1C]"
+                                    onClick={() => setDeactivating(f)}
+                                  >
+                                    Deactivate
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })
+            )}
+          </>
+        )}
+      </div>
 
       {isAdmin ? (
         <CsvImportPanel

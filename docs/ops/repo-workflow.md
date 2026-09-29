@@ -64,6 +64,14 @@ Summary:
 4. Protected files unchanged unless the slice explicitly authorizes them.
 5. PM verifies UI/preview where the slice touches journeys; agent runs CI only.
 
+### Single-branch integration rule (Dual-branch merging retired)
+
+To eliminate branch divergence and prevent unpromoted staging drift:
+
+- **All PRs target `main`**: Feature branches, bug fixes, spikes, and 3M slices must always target `main`. Merging PRs directly into `staging` is strictly retired.
+- **`staging` is a deployment pointer only**: `refs/heads/staging` exists solely as an ancestry-enforced deployment tracking pointer for admitted `main` commits (`scripts/delivery/staging-source.mjs`). It is not an integration branch and must never accept independent feature development or divergent history.
+- **Advancing `staging`**: The `staging` branch is updated exclusively by fast-forwarding to a specific, admitted commit SHA from `main` (via governed `staging-delivery.yml` admission or an explicit fast-forward PR from `main`).
+
 ### Authorized merge execution
 
 Because automatic deployments from Git pushes are disabled in `vercel.json` (`git.deploymentEnabled: false`), merging to `main` is strictly a code integration step and does not trigger an uncontrolled release. To balance governance with developer velocity:
@@ -105,13 +113,13 @@ the extension (JWT + panel `/api` only).
 These are not agent-verifiable. Checklist:
 [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md).
 
-| Step                                                      | Why manual                                                                                   |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet                                             |
-| Provision Vault secret `ssn_vault_key`                    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed                                         |
-| Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op                                         |
-| Merge PRs / approve epics                                 | Governance: PM approval required (no autonomous self-merge; PM may delegate merge execution) |
-| Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat                                            |
+| Step                                      | Why manual                                                                                                                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reconcile and activate tracked migrations | CI runner and release readiness gates are implemented; hosted activation requires the [reconciliation plan](migration-tracking.md). SQL Editor schema changes are prohibited. |
+| Provision Vault secret `ssn_vault_key`    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed                                                                                                                          |
+| Confirm UAT portals seeded                | Empty registry ⇒ extension fill/capture silent no-op                                                                                                                          |
+| Merge PRs / approve epics                 | Governance: PM approval required (no autonomous self-merge; PM may delegate merge execution)                                                                                  |
+| Preview / UAT sign-off                    | AGENTS.md: no self-testing panel journeys in chat                                                                                                                             |
 
 ---
 
@@ -126,26 +134,28 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 
 ## Strip / simplify register (process muda)
 
-| Item                                                     | Status                                                    |
-| -------------------------------------------------------- | --------------------------------------------------------- |
-| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge to `main` is approval |
-| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — deliver epic docs to `main`         |
-| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough  |
-| Postman `/api` collection                                | **Out of scope** for 3M                                   |
-| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules     |
+| Item                                                     | Status                                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge to `main` is approval                                  |
+| Dual-branch merge pattern (merging to staging)           | **Retired** 2026-09-23 — all PRs target `main`; `staging` is strictly a deployment pointer |
+| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — deliver epic docs to `main`                                          |
+| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough                                   |
+| Postman `/api` collection                                | **Out of scope** for 3M                                                                    |
+| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules                                      |
 
 ---
 
 ## Quick links
 
-| Doc                                                                | Role                                                |
-| ------------------------------------------------------------------ | --------------------------------------------------- |
-| [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents                     |
-| [`environment-architecture.md`](./environment-architecture.md)     | Repos, Vercel/Supabase envs, promotion & data flows |
-| [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                         |
-| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                   |
-| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                               |
-| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)       | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation   |
-| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)               | Slice 5 — closed items + TD-49/TD-50 backlog        |
-| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions) |
-| Extension `CLAUDE.md`                                              | Extension architecture + wire contracts             |
+| Doc                                                                        | Role                                                                     |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [`AGENTS.md`](../../AGENTS.md)                                             | Binding coding rules for agents                                          |
+| [`environment-architecture.md`](./environment-architecture.md)             | Repos, Vercel/Supabase envs, promotion & data flows                      |
+| [`docs/redesign/README.md`](../redesign/README.md)                         | Epic lifecycle + merge gate                                              |
+| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                         | New epic skeleton                                                        |
+| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md)         | Hosted / UAT sign-off                                                    |
+| [`production-catch-up-2026-09-28.md`](./production-catch-up-2026-09-28.md) | Panel/database/extension catch-up requirements and hosted action packets |
+| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)               | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation                        |
+| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)                       | Slice 5 — closed items + TD-49/TD-50 backlog                             |
+| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md)         | Platform vs org adoption (Slice 6 locked decisions)                      |
+| Extension `CLAUDE.md`                                                      | Extension architecture + wire contracts                                  |

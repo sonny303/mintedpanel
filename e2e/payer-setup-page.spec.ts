@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route } from "./fixtures/legacy-access-context";
 import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // Payer & Cases design bundle, screen 1 (Slice A) — the single-view Payer

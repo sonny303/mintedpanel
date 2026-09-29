@@ -39,6 +39,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
+import { composeFacilityAddressTokens, composeProviderNameTokens } from "@/lib/entityTokens";
 import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
 import { pickLicenseForState } from "@/lib/licensePick";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
@@ -62,6 +63,7 @@ export interface UnresolvedToken {
 export interface ProviderProfileFacility {
   id: string;
   name: string;
+  state?: string | null;
 }
 
 export interface ProviderProfile {
@@ -75,24 +77,33 @@ export interface ProviderProfile {
   // isolation gate — like the R2 touches body, not the camelCase row payloads.
   facilities: ProviderProfileFacility[];
   selected_facility_id: string | null;
+  // Exact case binding for active case fills; null is the legacy provider-only
+  // profile shape. Consumers must require an exact echo for case requests.
+  case_id: string | null;
 }
 
 export interface ProviderProfileOptions {
-  // Two-letter state filter: selects the state license (the portal being
-  // filled is state-specific, mirroring sopResolver's stateLicenseNumber).
+  // Two-letter state filter. For ad hoc fills with an explicit facility,
+  // the facility's stored state takes precedence over this client hint.
   state?: string;
+  // When supplied, case-owned group/state/location context overrides provider
+  // primary context. The caller validates UUID syntax at the route boundary.
+  caseId?: string;
   // Explicit facility selection for the facility.*/assignment.* tokens. Must
   // be in the caller's org AND the provider's facility set, else the result
   // is facility_not_found (the route's 404) — cross-org ids resolve nothing.
   facilityId?: string;
+  // Explicit group selection for group.* / groupInsurance.* tokens.
+  groupId?: string;
 }
 
-// getProviderProfile result: both not-found kinds map to a 404 at the route,
+// getProviderProfile result: not-found kinds map to a 404 at the route,
 // with messages that tell the extension WHICH reference was bad.
 export type ProviderProfileResult =
   | { kind: "ok"; profile: ProviderProfile; needsFacility: boolean }
   | { kind: "provider_not_found" }
-  | { kind: "facility_not_found" };
+  | { kind: "facility_not_found" }
+  | { kind: "group_not_found" };
 
 // Explicit projections: every column the token catalog references for the
 // table, plus the keys resolution needs. Never select('*') here.
@@ -130,11 +141,36 @@ const PROFILE_POLICY_COLUMNS =
   "id, insurance_type, coverage_level, insurer_name, policy_number, policy_start_date, policy_end_date, notes";
 
 const CASE_SCOPED_TABLES = new Set(["payers", "msos", "contracts"]);
+const COMPUTED_PROFILE_TOKENS = new Set([
+  "provider.fullName",
+  "provider.fullNameWithCredentials",
+  "provider.lastFirst",
+  "facility.address",
+  "facility.streetAddress",
+  "facility.fullAddress",
+]);
+
+const COMPUTED_PROFILE_TOKEN_KEYS = [
+  "provider.fullName",
+  "provider.fullNameWithCredentials",
+  "provider.lastFirst",
+  "facility.address",
+  "facility.streetAddress",
+  "facility.fullAddress",
+] as const;
 
 interface CatalogEntry {
   table: string;
   token: string;
   column: string;
+}
+
+interface ProfileCaseContext {
+  id: string;
+  provider_id: string;
+  group_id: string | null;
+  state: string;
+  facility_id: string | null;
 }
 
 type Row = Record<string, unknown>;
@@ -180,6 +216,10 @@ function pickLicense(licenses: Row[], state: string | undefined): SourcePick {
   return picked.row ? { row: picked.row } : { row: null, reason: picked.reason };
 }
 
+function sameId(left: string | null | undefined, right: string): boolean {
+  return typeof left === "string" && left.toLowerCase() === right.toLowerCase();
+}
+
 // Which facility (if any) the facility.*/assignment.* tokens resolve from.
 // `facilities` is the provider's org-scoped facility set; an explicit
 // facilityId outside it is invalid (the caller either crossed orgs or named a
@@ -199,7 +239,7 @@ function selectFacility(
   facilityId: string | undefined,
 ): FacilitySelection {
   if (facilityId) {
-    const match = facilities.find((f) => f.id === facilityId) ?? null;
+    const match = facilities.find((f) => sameId(f.id, facilityId)) ?? null;
     if (!match) return { facility: null, invalid: true, needsFacility: false };
     return { facility: match, invalid: false, needsFacility: false };
   }
@@ -224,6 +264,32 @@ function selectFacility(
   };
 }
 
+/** Case locations are authoritative. Only an explicit choice or the primary
+ * mirror when it is represented in case_facilities can select a row. */
+function selectCaseFacility(
+  facilities: ProviderProfileFacility[],
+  primaryFacilityId: string | null,
+  facilityId: string | undefined,
+): FacilitySelection {
+  if (facilityId) {
+    const match = facilities.find((facility) => sameId(facility.id, facilityId)) ?? null;
+    return match
+      ? { facility: match, invalid: false, needsFacility: false }
+      : { facility: null, invalid: true, needsFacility: false };
+  }
+  if (primaryFacilityId) {
+    const primary = facilities.find((facility) => sameId(facility.id, primaryFacilityId)) ?? null;
+    if (primary) return { facility: primary, invalid: false, needsFacility: false };
+  }
+  return {
+    facility: null,
+    invalid: false,
+    needsFacility: facilities.length > 0,
+    reason:
+      facilities.length > 0 ? "choose a facility attached to this case" : "case has no facilities",
+  };
+}
+
 // Delegates to the shared rule so the payer-PDF fill cannot pick a DIFFERENT
 // policy than this route would for the same group. Behavior is unchanged; the
 // definition simply moved (src/lib/groupInsurancePick.ts).
@@ -238,6 +304,9 @@ export async function getProviderProfile(
   options: ProviderProfileOptions = {},
 ): Promise<ProviderProfileResult> {
   const { db, orgId } = ctx;
+  // Do not turn explicitly empty case intent into a provider-only response if
+  // another internal caller bypasses the HTTP query parser.
+  if (options.caseId === "") return { kind: "provider_not_found" };
 
   // Org membership check first: a provider in another org is a 404, the same
   // contract the isolation gate proves for the provider routes.
@@ -250,7 +319,52 @@ export async function getProviderProfile(
   if (providerErr) throw providerErr;
   if (!providerRow) return { kind: "provider_not_found" };
   const provider = providerRow as unknown as Row;
-  const groupId = (provider.group_id as string | null) ?? null;
+  let caseContext: ProfileCaseContext | null = null;
+  if (options.caseId) {
+    const { data: caseRow, error: caseErr } = await db
+      .from("credential_cases")
+      .select("id, provider_id, group_id, state, facility_id")
+      .eq("id", options.caseId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (caseErr) throw caseErr;
+    if (!caseRow || !sameId(caseRow.provider_id as string | null, providerId)) {
+      return { kind: "provider_not_found" };
+    }
+    caseContext = caseRow as unknown as ProfileCaseContext;
+    if (
+      caseContext.group_id != null &&
+      options.groupId != null &&
+      options.groupId !== caseContext.group_id
+    ) {
+      return { kind: "group_not_found" };
+    }
+  }
+
+  const groupId =
+    options.groupId ??
+    (caseContext ? caseContext.group_id : ((provider.group_id as string | null) ?? null));
+
+  // Group relationship check: if a groupId is resolved, the provider must be
+  // affiliated with it (either as primary group, case group, or via provider_group_assignments).
+  if (groupId != null) {
+    const isDirectlyLinked =
+      provider.group_id === groupId ||
+      (caseContext?.group_id != null && caseContext.group_id === groupId);
+    if (!isDirectlyLinked) {
+      const { data: assignmentRow, error: assignErr } = await db
+        .from("provider_group_assignments")
+        .select("group_id")
+        .eq("provider_id", providerId)
+        .eq("group_id", groupId)
+        .eq("org_id", orgId)
+        .maybeSingle();
+      if (assignErr) throw assignErr;
+      if (!assignmentRow) {
+        return { kind: "group_not_found" };
+      }
+    }
+  }
 
   const { data: catalogRaw, error: catalogErr } = await db.rpc("get_sop_field_tokens");
   if (catalogErr) throw catalogErr;
@@ -289,55 +403,105 @@ export async function getProviderProfile(
   }
 
   const group = (groupRes.data as Row | null) ?? null;
+  if (groupId != null && !group) return { kind: "group_not_found" };
   const licenses = (licenseRes.data ?? []) as unknown as Row[];
   const assignments = (assignmentRes.data ?? []) as unknown as Row[];
   const policies = (policyRes.data ?? []) as unknown as Row[];
 
-  const licensePick = pickLicense(licenses, options.state);
   const policyPick = pickPolicy(policies, group != null);
 
   // The provider→facility linkage is provider_facility_assignments (unique
   // (provider_id, facility_id)); the resolvable facility set is every assigned
-  // facility that still exists in the caller's org. Fetched id+name only —
-  // this list is part of the response payload, not a token source.
+  // facility that still exists in the caller's org. State also identifies the
+  // license jurisdiction for an explicit ad hoc location.
   const assignmentFacilityIds = [
     ...new Set(assignments.map((a) => a.facility_id as string).filter(Boolean)),
   ];
   let facilities: ProviderProfileFacility[] = [];
-  if (assignmentFacilityIds.length > 0) {
+  let caseFacilityRows: Array<{ is_primary: boolean; facility: Row | null }> = [];
+  if (caseContext) {
+    const { data: rows, error: caseFacilitiesErr } = await db
+      .from("case_facilities")
+      .select(`is_primary, facility:facilities!inner(${PROFILE_FACILITY_COLUMNS})`)
+      .eq("case_id", caseContext.id)
+      .eq("org_id", orgId)
+      .eq("facility.org_id", orgId);
+    if (caseFacilitiesErr) throw caseFacilitiesErr;
+    caseFacilityRows = (
+      (rows ?? []) as unknown as Array<{
+        is_primary: boolean;
+        facility: Row | null;
+      }>
+    ).filter((row) => row.facility != null);
+    caseFacilityRows.sort((a, b) => {
+      if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+      return String(a.facility?.name ?? "").localeCompare(String(b.facility?.name ?? ""));
+    });
+    facilities = caseFacilityRows.map(({ facility }) => ({
+      id: String(facility?.id ?? ""),
+      name: String(facility?.name ?? ""),
+    }));
+  } else if (assignmentFacilityIds.length > 0) {
     const { data: facilityRows, error: facilityListErr } = await db
       .from("facilities")
-      .select("id, name")
+      .select("id, name, state")
       .in("id", assignmentFacilityIds)
       .eq("org_id", orgId)
       .order("name")
       .order("id");
     if (facilityListErr) throw facilityListErr;
-    facilities = ((facilityRows ?? []) as Array<{ id: string; name: string | null }>).map((f) => ({
+    facilities = (
+      (facilityRows ?? []) as Array<{ id: string; name: string | null; state: string | null }>
+    ).map((f) => ({
       id: f.id,
       name: f.name ?? "",
+      state: f.state ?? null,
     }));
   }
 
-  const selection = selectFacility(facilities, assignments.length > 0, options.facilityId);
+  const selection = caseContext
+    ? selectCaseFacility(facilities, caseContext.facility_id, options.facilityId)
+    : selectFacility(facilities, assignments.length > 0, options.facilityId);
   if (selection.invalid) return { kind: "facility_not_found" };
   const selectedFacilityId = selection.facility?.id ?? null;
+  const adHocLocation = !options.caseId && !!options.facilityId;
+  const caseState = caseContext?.state?.trim() || undefined;
+  const facilityState = selection.facility?.state?.trim() || undefined;
+  const licenseState = caseContext
+    ? (caseState ?? options.state)
+    : adHocLocation
+      ? facilityState
+      : options.state;
+  const licensePick =
+    adHocLocation && !licenseState
+      ? { row: null, reason: "selected facility has no state" }
+      : pickLicense(licenses, licenseState);
 
   // The assignment row follows the facility selection — it IS the link row of
   // the selected facility, so assignment.* and facility.* always agree.
   let facilityPick: SourcePick;
   let assignmentPick: SourcePick;
+  let selectedFacilityRow: Row | null = null;
   if (selectedFacilityId) {
-    const { data: facilityRow, error: facilityErr } = await db
-      .from("facilities")
-      .select(PROFILE_FACILITY_COLUMNS)
-      .eq("id", selectedFacilityId)
-      .eq("org_id", orgId)
-      .maybeSingle();
-    if (facilityErr) throw facilityErr;
+    const facilityRow = caseContext
+      ? (caseFacilityRows.find((row) => row.facility?.id === selectedFacilityId)?.facility ?? null)
+      : await (async () => {
+          const { data: facilityRow, error: facilityErr } = await db
+            .from("facilities")
+            .select(PROFILE_FACILITY_COLUMNS)
+            .eq("id", selectedFacilityId)
+            .eq("org_id", orgId)
+            .maybeSingle();
+          if (facilityErr) throw facilityErr;
+          return (facilityRow as unknown as Row | null) ?? null;
+        })();
+    selectedFacilityRow = facilityRow as Row | null;
     facilityPick = facilityRow
-      ? { row: facilityRow as unknown as Row }
-      : { row: null, reason: "assigned facility not found" };
+      ? { row: facilityRow as Row }
+      : {
+          row: null,
+          reason: caseContext ? "case facility not found" : "assigned facility not found",
+        };
     const assignmentRow = assignments.find((a) => a.facility_id === selectedFacilityId) ?? null;
     assignmentPick = assignmentRow
       ? { row: assignmentRow }
@@ -350,7 +514,9 @@ export async function getProviderProfile(
 
   const picks: Record<string, SourcePick> = {
     providers: { row: provider },
-    provider_groups: group ? { row: group } : { row: null, reason: "provider has no group" },
+    provider_groups: group
+      ? { row: group }
+      : { row: null, reason: caseContext ? "case has no group" : "provider has no group" },
     state_licenses: licensePick,
     provider_facility_assignments: assignmentPick,
     facilities: facilityPick,
@@ -360,6 +526,7 @@ export async function getProviderProfile(
   const tokens: ProfileToken[] = [];
   const unresolved: UnresolvedToken[] = [];
   for (const entry of catalog) {
+    if (COMPUTED_PROFILE_TOKENS.has(entry.token)) continue;
     if (CASE_SCOPED_TABLES.has(entry.table)) {
       tokens.push({ token: entry.token, value: null });
       unresolved.push({
@@ -390,6 +557,26 @@ export async function getProviderProfile(
     tokens.push({ token: entry.token, value: (pick.row[entry.column] ?? null) as Json | null });
   }
 
+  const computedValues = {
+    ...composeProviderNameTokens(camelizeRow<Provider>(provider)),
+    ...composeFacilityAddressTokens(
+      selectedFacilityRow as unknown as {
+        street?: string | null;
+        suite?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zip?: string | null;
+      } | null,
+    ),
+  };
+  for (const token of COMPUTED_PROFILE_TOKEN_KEYS) {
+    const value = computedValues[token];
+    tokens.push({ token, value: value ?? null });
+    if (!value) {
+      unresolved.push({ token, reason: "required composite parts are not available" });
+    }
+  }
+
   return {
     kind: "ok",
     profile: {
@@ -398,6 +585,9 @@ export async function getProviderProfile(
       unresolved,
       facilities,
       selected_facility_id: selectedFacilityId,
+      // Keep the exact validated request spelling as binding proof. PostgreSQL
+      // stores UUIDs canonically, which may lowercase a mixed-case request.
+      case_id: caseContext ? (options.caseId ?? caseContext.id) : null,
     },
     needsFacility: selection.needsFacility,
   };
