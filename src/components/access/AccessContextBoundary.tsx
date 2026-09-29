@@ -273,7 +273,7 @@ export function AccessContextBoundary({ children }: AccessContextBoundaryProps) 
 
   if (!session) return <>{children}</>;
   if (error) return <FailureState message={error} />;
-  if (loading || membershipsLoading || !context) return <LoadingState />;
+  if (!context) return <LoadingState />;
 
   const hasStaff = context.staffOrgs.length > 0;
   const hasClient = context.clientOrgs.length > 0;
