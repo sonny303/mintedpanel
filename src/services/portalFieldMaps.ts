@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
 import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
-import { validateControlOptionsInput } from "@/lib/controlOptions";
+import { isAuthorableTransform, validateControlOptionsInput } from "@/lib/controlOptions";
 import { normalizeFieldLabel, normalizePortalKey, normalizeTokenKey } from "@/lib/tokenFormat";
 import {
   suggestTokenForLabel,
@@ -496,9 +496,7 @@ export async function setFieldMapTransform(
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
   const next = transform?.trim() || null;
-  if (next && next !== "state_abbrev" && next !== "date_mmddyyyy") {
-    throw new Error("Invalid transform");
-  }
+  if (next && !isAuthorableTransform(next)) throw new Error("Invalid transform");
   const row = await updateFieldMapRow(orgId, id, { transform: next });
   await writeAudit({
     actionType: "UPDATE",
@@ -547,7 +545,7 @@ export interface GlobalTrainPatch {
   /** E6.9 F6.9.4: the fixed-literal decision. Required when
    * `source === 'hardcoded'`; the RPC rejects an empty one. */
   hardcodedValue?: string | null;
-  /** E6.10 F6.10.5 — `state_abbrev` | `date_mmddyyyy` | null (no shaping). */
+  /** A value-shaping transform supported by both web and PDF fill paths. */
   transform?: string | null;
 }
 

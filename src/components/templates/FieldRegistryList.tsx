@@ -26,7 +26,7 @@ import {
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { TokenPicker } from "@/components/templates/TokenPicker";
 import {
-  AUTHORABLE_TRANSFORMS,
+  AUTHORABLE_TRANSFORM_OPTIONS,
   STRUCTURED_FIELD_TYPES,
   controlTypeLabel,
   hardcodedValueMissingFromOptions,
@@ -453,8 +453,11 @@ function RegistryRowEditor({
               }}
             >
               <option value="">No shaping</option>
-              <option value={AUTHORABLE_TRANSFORMS[0]}>State name → 2-letter code</option>
-              <option value={AUTHORABLE_TRANSFORMS[1]}>Date → MM/DD/YYYY</option>
+              {AUTHORABLE_TRANSFORM_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           ) : null}
 

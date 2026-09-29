@@ -183,8 +183,16 @@ const LABEL_OVERRIDES: Readonly<Record<string, string>> = {
   "provider.ssnLast4": "SSN (last 4)",
   "group.npiType2": "Group NPI (Type 2)",
   "group.tin": "Tax ID (TIN)",
+  "group.payerIssuedId": "Payer-issued group ID / Medicare PTAN (case required)",
   "assignment.isPrimary": "Primary location",
 };
+
+/** Case-scoped value that has existing group × payer × state storage but is
+ * computed outside the schema catalog. Its label says a selected case is
+ * required because a provider-only quick card cannot infer a payer. */
+const CASE_CONTEXT_FIELDS: readonly TokenCatalogEntry[] = [
+  { table: "payer_network_targets", token: "group.payerIssuedId", column: "payer_issued_id" },
+];
 
 /** camelCase token field -> human label: split on case and digit boundaries,
  * uppercase known acronyms, sentence-case the rest. `caqhLastAttestedDate` ->
@@ -262,6 +270,17 @@ export function buildQuickCardCatalog(entries: readonly TokenCatalogEntry[]): Qu
       label: LABEL_OVERRIDES[key] ?? humanizeTokenField(fieldParts.join(".")),
       group,
       groupLabel: GROUP_LABELS[group] ?? contactFamilyLabel(group),
+    });
+  }
+  for (const entry of CASE_CONTEXT_FIELDS) {
+    if (seen.has(entry.token)) continue;
+    seen.add(entry.token);
+    const [group, ...fieldParts] = entry.token.split(".");
+    fields.push({
+      key: entry.token,
+      label: LABEL_OVERRIDES[entry.token] ?? humanizeTokenField(fieldParts.join(".")),
+      group,
+      groupLabel: GROUP_LABELS[group] ?? group,
     });
   }
   return fields;

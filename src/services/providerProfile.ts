@@ -149,6 +149,7 @@ const COMPUTED_PROFILE_TOKENS = new Set([
   "facility.cityStateZip",
   "facility.streetAddress",
   "facility.fullAddress",
+  "group.payerIssuedId",
 ]);
 
 const COMPUTED_PROFILE_TOKEN_KEYS = [
@@ -171,6 +172,8 @@ interface ProfileCaseContext {
   id: string;
   provider_id: string;
   group_id: string | null;
+  payer_id: string | null;
+  payer_group_provider_id: string | null;
   state: string;
   facility_id: string | null;
 }
@@ -325,7 +328,7 @@ export async function getProviderProfile(
   if (options.caseId) {
     const { data: caseRow, error: caseErr } = await db
       .from("credential_cases")
-      .select("id, provider_id, group_id, state, facility_id")
+      .select("id, provider_id, group_id, payer_id, payer_group_provider_id, state, facility_id")
       .eq("id", options.caseId)
       .eq("org_id", orgId)
       .maybeSingle();
@@ -371,6 +374,36 @@ export async function getProviderProfile(
   const { data: catalogRaw, error: catalogErr } = await db.rpc("get_sop_field_tokens");
   if (catalogErr) throw catalogErr;
   const catalog = parseCatalog(catalogRaw as Json);
+
+  // Payer-issued IDs are scoped by the selected case's group, payer, and
+  // state. Never resolve a case fallback against an ad hoc group override.
+  let payerIssuedGroupId: string | null = null;
+  let payerIssuedGroupIdReason = "a selected case with payer, group, and state is required";
+  if (
+    caseContext &&
+    caseContext.group_id != null &&
+    caseContext.group_id === groupId &&
+    caseContext.payer_id &&
+    caseContext.state?.trim()
+  ) {
+    const { data: target, error: targetErr } = await db
+      .from("payer_network_targets")
+      .select("payer_issued_id")
+      .eq("org_id", orgId)
+      .eq("group_id", caseContext.group_id)
+      .eq("payer_id", caseContext.payer_id)
+      .eq("state", caseContext.state)
+      .eq("status", "active")
+      .maybeSingle();
+    if (targetErr) throw targetErr;
+    const targetId = (target as Row | null)?.payer_issued_id;
+    const caseFallbackId = caseContext.payer_group_provider_id;
+    const targetValue = typeof targetId === "string" ? targetId.trim() : "";
+    const caseFallbackValue = typeof caseFallbackId === "string" ? caseFallbackId.trim() : "";
+    payerIssuedGroupId = targetValue || caseFallbackValue || null;
+    payerIssuedGroupIdReason =
+      "no payer-issued group ID is recorded for this case's group, payer, and state";
+  }
 
   const [groupRes, licenseRes, assignmentRes, policyRes] = await Promise.all([
     groupId
@@ -577,6 +610,11 @@ export async function getProviderProfile(
     if (!value) {
       unresolved.push({ token, reason: "required composite parts are not available" });
     }
+  }
+
+  tokens.push({ token: "group.payerIssuedId", value: payerIssuedGroupId });
+  if (!payerIssuedGroupId) {
+    unresolved.push({ token: "group.payerIssuedId", reason: payerIssuedGroupIdReason });
   }
 
   return {

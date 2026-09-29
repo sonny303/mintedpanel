@@ -38,7 +38,7 @@ import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
 import { createFillRunGuard } from "@/lib/fillRunGuard";
 import { registryCoverage, sectionRenamePatches, type RegistryRow } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
-import { filterMappingTokens, isPdfFillableToken } from "@/lib/fillTokenReach";
+import { filterPdfMappingTokens, isPdfFillableToken } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
 
@@ -81,10 +81,10 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
     [mapsQ.data, portalKey],
   );
   const coverage = useMemo(() => registryCoverage(maps as RegistryRow[], new Set()), [maps]);
-  // DYN-TOKEN-06 — payer.*/contract.*/mso.* are case-scoped with no case in
-  // hand on either fill path, so a field mapped to one could only stay blank.
+  // The PDF trainer has no case in hand. Its picker also omits group-issued
+  // payer IDs, which require the selected case's payer, group, and state.
   const groupedTokens = useMemo(
-    () => groupTokens(filterMappingTokens(tokensQ.data ?? [])),
+    () => groupTokens(filterPdfMappingTokens(tokensQ.data ?? [])),
     [tokensQ.data],
   );
 

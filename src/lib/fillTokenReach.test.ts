@@ -10,6 +10,7 @@ import {
   WEB_FILL_FAMILIES,
   WITHDRAWN_TOKENS,
   filterMappingTokens,
+  filterPdfMappingTokens,
   isPdfFillableToken,
   isUnfillableToken,
   isWebFillableToken,
@@ -44,6 +45,7 @@ describe("isPdfFillableToken", () => {
     ]) {
       expect(isPdfFillableToken(token)).toBe(false);
     }
+    expect(isPdfFillableToken("group.payerIssuedId")).toBe(false);
   });
 
   // The bug this constant exists to prevent: ENTITY_TOKEN_FAMILIES includes
@@ -69,6 +71,7 @@ describe("isWebFillableToken", () => {
     for (const token of [
       "provider.npi",
       "group.tin",
+      "group.payerIssuedId",
       "facility.city",
       "license.expirationDate",
       "assignment.isPrimary",
@@ -202,5 +205,17 @@ describe("filterMappingTokens", () => {
     // A bare key is not one of the three withdrawn families, so it stays
     // visible. Swallowing unrecognized tokens would hide a catalog bug.
     expect(filterMappingTokens([{ token: "weird" }, { token: "" }])).toHaveLength(2);
+  });
+});
+
+describe("filterPdfMappingTokens", () => {
+  it("keeps the case-bound PTAN token in web mapping while hiding it from case-less PDF training", () => {
+    const catalog = [{ token: "group.payerIssuedId" }, { token: "group.tin" }];
+    expect(filterMappingTokens(catalog).map((entry) => entry.token)).toEqual([
+      "group.payerIssuedId",
+      "group.tin",
+    ]);
+    expect(filterPdfMappingTokens(catalog).map((entry) => entry.token)).toEqual(["group.tin"]);
+    expect(isWebFillableToken("group.payerIssuedId")).toBe(true);
   });
 });

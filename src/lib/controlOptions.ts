@@ -7,8 +7,39 @@ export interface ControlOption {
   label: string;
 }
 
-export const AUTHORABLE_TRANSFORMS = ["state_abbrev", "date_mmddyyyy"] as const;
+export const AUTHORABLE_TRANSFORMS = [
+  "state_abbrev",
+  "date_mmddyyyy",
+  "date_mmddyyyy_dash",
+  "date_ddmmyyyy",
+  "date_ddmmyyyy_dash",
+  "date_yyyymmdd_slash",
+  "date_yyyymmdd",
+  "zip5",
+  "phone_digits",
+  "phone_dashed",
+  "phone_country_dashed",
+  "phone_e164",
+] as const;
 export type AuthorableTransform = (typeof AUTHORABLE_TRANSFORMS)[number];
+
+export const AUTHORABLE_TRANSFORM_OPTIONS: readonly {
+  value: AuthorableTransform;
+  label: string;
+}[] = [
+  { value: "state_abbrev", label: "State name → 2-letter code" },
+  { value: "date_mmddyyyy", label: "Date → MM/DD/YYYY" },
+  { value: "date_mmddyyyy_dash", label: "Date → MM-DD-YYYY" },
+  { value: "date_ddmmyyyy", label: "Date → DD/MM/YYYY" },
+  { value: "date_ddmmyyyy_dash", label: "Date → DD-MM-YYYY" },
+  { value: "date_yyyymmdd_slash", label: "Date → YYYY/MM/DD" },
+  { value: "date_yyyymmdd", label: "Date → YYYY-MM-DD" },
+  { value: "zip5", label: "ZIP+4 → 5-digit ZIP" },
+  { value: "phone_digits", label: "Phone → 10 digits" },
+  { value: "phone_dashed", label: "Phone → XXX-XXX-XXXX" },
+  { value: "phone_country_dashed", label: "Phone → (1) XXX-XXX-XXXX" },
+  { value: "phone_e164", label: "Phone → +1XXXXXXXXXX" },
+];
 
 export const CONTROL_TYPE_LABELS: Record<string, string> = {
   text: "Text",
@@ -30,7 +61,7 @@ export const OPTION_SAMPLE_SIZE = 3;
 export function isAuthorableTransform(
   value: string | null | undefined,
 ): value is AuthorableTransform {
-  return value === "state_abbrev" || value === "date_mmddyyyy";
+  return AUTHORABLE_TRANSFORMS.some((transform) => transform === value);
 }
 
 export function controlTypeLabel(fieldType: string | null | undefined): string {
@@ -111,7 +142,5 @@ export function optionSample(
 }
 
 export function transformEffectCopy(transform: string | null | undefined): string | null {
-  if (transform === "state_abbrev") return "Kansas → KS";
-  if (transform === "date_mmddyyyy") return "Date → MM/DD/YYYY";
-  return null;
+  return AUTHORABLE_TRANSFORM_OPTIONS.find((option) => option.value === transform)?.label ?? null;
 }
