@@ -82,8 +82,8 @@ function harness(settings = {}) {
       const isVersion = args[0] === "--version";
       const isRoles = basename(path) === "pg_dumpall";
       let program = isVersion
-        ? `process.stdout.write(${JSON.stringify(`${basename(path)} (PostgreSQL) 17.10\n`)});`
-        : `process.stdout.write(${JSON.stringify(isRoles ? 'CREATE ROLE "synthetic_role";\n' : "PGDMPsynthetic-archive-canary")});`;
+        ? `process.stdout.write(${JSON.stringify(`${basename(path)} (PostgreSQL) 17.10\n`)}, () => process.exit(0));`
+        : `process.stdout.write(${JSON.stringify(isRoles ? 'CREATE ROLE "synthetic_role";\n' : "PGDMPsynthetic-archive-canary")}, () => process.exit(0));`;
       program = settings.program?.({ isVersion, isRoles, program }) ?? program;
       const child = spawn(process.execPath, ["-e", program], configuration);
       children.push(child);
