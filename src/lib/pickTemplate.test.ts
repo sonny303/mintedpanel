@@ -3,6 +3,7 @@ import {
   isFallbackTemplate,
   pickTemplate,
   resolutionTier,
+  topRankedTemplates,
   ALL_STATES_SENTINEL,
 } from "./pickTemplate";
 import type { SOPTemplate } from "@/types";
@@ -247,6 +248,16 @@ describe("pickTemplate — deterministic tiebreak within a tier", () => {
     const newer = tmpl({ id: "a-newer", groupId: null, createdAt: "2026-06-01T00:00:00Z" });
     expect(pickTemplate([older, newer], "p1", "KS", "g1")?.id).toBe("b-older");
     expect(pickTemplate([newer, older], "p1", "KS", "g1")?.id).toBe("b-older");
+  });
+
+  it("exposes equal-priority choices to write paths without hiding the tie", () => {
+    const older = tmpl({ id: "older", createdAt: "2026-01-01T00:00:00Z" });
+    const newer = tmpl({ id: "newer", createdAt: "2026-06-01T00:00:00Z" });
+    const lower = globalPayerTmpl({ id: "global" });
+    expect(topRankedTemplates([newer, lower, older], "p1", "KS", null).map((t) => t.id)).toEqual([
+      "older",
+      "newer",
+    ]);
   });
 });
 
