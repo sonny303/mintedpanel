@@ -430,6 +430,7 @@ export async function collectFixtureManifest(
     "public.profiles": `id IN (${ids})`,
     "public.organizations": `id IN (${orgs})`,
     "public.memberships": `id IN (${fixture.members.map(literal).join(",")}) AND role='admin' AND ((org_id=${literal(fixture.orgs[0])} AND user_id=${literal(fixture.users[0])}) OR (org_id=${literal(fixture.orgs[1])} AND user_id=${literal(fixture.users[1])}))`,
+    "public.roster_templates": `org_id IN (${orgs})`,
     "public.notes": `id=${literal(fixture.note)} AND org_id=${literal(fixture.orgs[0])} AND author_id=${literal(fixture.users[0])} AND entity_id=${literal(fixture.entity)} AND entity_type='provider' AND content='recovery-updated'`,
   };
   const manifest = {},
@@ -498,6 +499,19 @@ import { writeFile, readFile, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { rehearseStagingRestore, destroyIsolatedTarget } from "./restore.mjs";
 import { collectLocalTarget } from "./local-target.mjs";
+export function requireFixtureTriggerBoundary(triggers) {
+  requireService(
+    Array.isArray(triggers) &&
+      triggers.length === 1 &&
+      triggers[0]?.schema === "public" &&
+      triggers[0].table === "organizations" &&
+      triggers[0].name === "roster_engine_seed_org_templates" &&
+      triggers[0].enabled === "O" &&
+      triggers[0].functionSchema === "public" &&
+      triggers[0].functionName === "roster_engine_seed_templates_for_new_org",
+  );
+  return true;
+}
 import {
   generateLocalCredentials,
   serviceEnvironment,
@@ -547,14 +561,15 @@ export async function qualifyLocalAuthRest({ workspace, identityPath }, dependen
       { write: true },
     );
     const before = await collectQuiescentState(target);
-    // Exact captured fixture-table trigger boundary must hold before services exist.
+    // The observed organization trigger seeds three roster templates per new
+    // synthetic organization. Keep every other fixture-table trigger denied.
     const triggers = JSON.parse(
       await localSql(
         target,
-        "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE NOT t.tgisinternal AND ((n.nspname='auth' AND c.relname='users') OR (n.nspname='public' AND c.relname IN ('profiles','organizations','memberships','notes')));",
+        "SELECT coalesce(json_agg(json_build_object('schema',n.nspname,'table',c.relname,'name',t.tgname,'enabled',t.tgenabled,'functionSchema',fn.nspname,'functionName',p.proname) ORDER BY n.nspname,c.relname,t.tgname),'[]') FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace fn ON fn.oid=p.pronamespace WHERE NOT t.tgisinternal AND ((n.nspname='auth' AND c.relname='users') OR (n.nspname='public' AND c.relname IN ('profiles','organizations','memberships','notes')));",
       ),
     );
-    requireService(triggers === 0);
+    requireFixtureTriggerBoundary(triggers);
     phase = "SERVICE_START";
     await createServices(target, serviceEnvironment(target.runId, credentials));
     let ready = false;
@@ -852,6 +867,29 @@ export function validateFixtureRows(rows, f) {
       (r) =>
         r.id === f.members[i] && r.org_id === f.orgs[i] && r.user_id === id && r.role === "admin",
     );
+    for (const [slug, payerName, name] of [
+      ["bcbs-nc-roster", "Blue Cross Blue Shield of North Carolina", "BCBS NC Roster"],
+      ["humana-provider-roster", "Humana", "Humana Provider Roster"],
+      ["medicare-reassignment-worksheet", "Medicare", "Medicare Reassignment Worksheet"],
+    ]) {
+      const template = one(
+        "public.roster_templates",
+        (r) => r.org_id === f.orgs[i] && r.slug === slug,
+      );
+      requireService(
+        UUID.test(template.id) &&
+          template.payer_name === payerName &&
+          template.name === name &&
+          template.schema_version === 1 &&
+          template.is_verified === false &&
+          template.verification_status === "draft_pending_payer_spec" &&
+          same(template.grains, ["provider", "provider_location", "provider_location_tin"]) &&
+          Array.isArray(template.columns) &&
+          template.columns.length > 0 &&
+          inRun(template.created_at) &&
+          inRun(template.updated_at),
+      );
+    }
   }
   one(
     "public.notes",
