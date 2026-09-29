@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AUTHORABLE_TRANSFORM_OPTIONS,
+  AUTHORABLE_TRANSFORMS,
   hardcodedValueMissingFromOptions,
   isAuthorableTransform,
   optionSample,
@@ -63,10 +65,20 @@ describe("optionSample", () => {
 });
 
 describe("isAuthorableTransform", () => {
-  it("allows only the two applyTransform cases", () => {
+  it("allows exactly the shared shaping contract", () => {
     expect(isAuthorableTransform("state_abbrev")).toBe(true);
     expect(isAuthorableTransform("date_mmddyyyy")).toBe(true);
-    expect(isAuthorableTransform("phone_digits")).toBe(false);
+    expect(isAuthorableTransform("date_mmddyyyy_dash")).toBe(true);
+    expect(isAuthorableTransform("date_ddmmyyyy")).toBe(true);
+    expect(isAuthorableTransform("date_ddmmyyyy_dash")).toBe(true);
+    expect(isAuthorableTransform("date_yyyymmdd_slash")).toBe(true);
+    expect(isAuthorableTransform("date_yyyymmdd")).toBe(true);
+    expect(isAuthorableTransform("zip5")).toBe(true);
+    expect(isAuthorableTransform("phone_digits")).toBe(true);
+    expect(isAuthorableTransform("phone_dashed")).toBe(true);
+    expect(isAuthorableTransform("phone_country_dashed")).toBe(true);
+    expect(isAuthorableTransform("phone_e164")).toBe(true);
     expect(isAuthorableTransform("uppercase")).toBe(false);
+    expect(AUTHORABLE_TRANSFORM_OPTIONS.map(({ value }) => value)).toEqual(AUTHORABLE_TRANSFORMS);
   });
 });

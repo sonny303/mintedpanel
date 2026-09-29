@@ -37,6 +37,14 @@ const COMPUTED_TOKENS: TokenCatalogEntry[] = [
   { token: "facility.address", table: "facilities", column: "composite" },
   { token: "facility.streetAddress", table: "facilities", column: "composite" },
   { token: "facility.fullAddress", table: "facilities", column: "composite" },
+  // payer_network_targets is keyed by group × payer × state, so this value is
+  // resolved only when the web fill has a validated case context. It is a
+  // computed token, not a provider_groups column.
+  {
+    token: "group.payerIssuedId",
+    table: "payer_network_targets",
+    column: "payer_issued_id",
+  },
 ];
 
 // Role-specific contact tokens are code-owned (ROLE × FIELD), not emitted by

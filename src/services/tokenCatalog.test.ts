@@ -23,6 +23,7 @@ describe("listTokenCatalog", () => {
         "facility.address",
         "facility.streetAddress",
         "facility.fullAddress",
+        "group.payerIssuedId",
         "user.name",
         "user.firstName",
         "user.lastName",
@@ -36,13 +37,18 @@ describe("listTokenCatalog", () => {
     expect(new Set(tokens).size).toBe(tokens.length);
   });
 
-  it("preserves schema-derived entries and does not invent group contact aliases", async () => {
+  it("preserves schema-derived entries and includes the case-bound group PTAN token", async () => {
     rpcMock.mockResolvedValue({
       data: [{ token: "group.tin", table: "provider_groups", column: "tin" }],
       error: null,
     });
     const catalog = await listTokenCatalog();
     expect(catalog).toContainEqual({ token: "group.tin", table: "provider_groups", column: "tin" });
+    expect(catalog).toContainEqual({
+      token: "group.payerIssuedId",
+      table: "payer_network_targets",
+      column: "payer_issued_id",
+    });
     expect(catalog.some((entry) => entry.token === "group.billingContactName")).toBe(false);
     expect(catalog.some((entry) => entry.token === "group.ptan")).toBe(false);
   });
