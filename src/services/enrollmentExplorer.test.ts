@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import {
   downloadEnrollmentProof,
+  getEnrollmentReportSnapshot,
+  getEnrollmentScopeHistoryPage,
   saveEnrollmentRevision,
   type EnrollmentExplorerContext,
 } from "./enrollmentExplorer";
@@ -138,5 +140,72 @@ describe("enrollment explorer service contract", () => {
       downloadEnrollmentProof(makeContext({ rpc, storage: { from } }), PUBLICATION),
     ).rejects.toMatchObject({ code: "40001" });
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls the authorized report snapshot RPC with exact taxonomy codes and keyset cursor", async () => {
+    const snapshot = {
+      accessState: "ready",
+      snapshotDigest: "a".repeat(64),
+      sections: [],
+      filterChoices: {},
+      providers: [],
+      records: [],
+      providerCount: 0,
+      rowCount: 0,
+      tooLarge: false,
+      hasMore: false,
+      nextCursorKey: null,
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: snapshot, error: null });
+    const cursor = { lastName: "smith", firstName: "ada", providerId: DOCUMENT };
+
+    await expect(
+      getEnrollmentReportSnapshot(makeContext({ rpc }, "client"), {
+        filters: { discipline: "PT" },
+        cursor,
+        mode: "page",
+      }),
+    ).resolves.toEqual(snapshot);
+    expect(rpc).toHaveBeenCalledWith(
+      "get_enrollment_report_snapshot",
+      expect.objectContaining({
+        p_actor_user_id: ACTOR,
+        p_org_id: ORG,
+        p_audience: "client",
+        p_filters: { discipline: "PT" },
+        p_known_codes: expect.arrayContaining(["225100000X"]),
+        p_discipline_codes: expect.arrayContaining(["225100000X"]),
+        p_cursor: cursor,
+        p_mode: "page",
+      }),
+    );
+  });
+
+  it("encodes and strictly decodes the opaque history keyset cursor", async () => {
+    const nextCursor = { createdAt: "2026-09-25T12:00:00Z", revisionId: REVISION };
+    const rpc = vi.fn().mockResolvedValue({
+      data: { audience: "staff", scopeId: SCOPE, items: [], nextCursor },
+      error: null,
+    });
+    const first = await getEnrollmentScopeHistoryPage(makeContext({ rpc }), {
+      scopeId: SCOPE,
+      cursor: null,
+      limit: 20,
+    });
+
+    expect(first.nextCursor).toBe(Buffer.from(JSON.stringify(nextCursor)).toString("base64url"));
+    await getEnrollmentScopeHistoryPage(makeContext({ rpc }), {
+      scopeId: SCOPE,
+      cursor: JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString("utf8")),
+      limit: 20,
+    });
+    expect(rpc).toHaveBeenLastCalledWith(
+      "get_enrollment_scope_history_page",
+      expect.objectContaining({
+        p_scope_id: SCOPE,
+        p_cursor: nextCursor,
+        p_limit: 20,
+      }),
+    );
   });
 });

@@ -6,17 +6,35 @@ import type {
   EnrollmentEvidenceKind,
   EnrollmentExplorerAudience,
   EnrollmentProofField,
+  EnrollmentReportFilters,
+  EnrollmentScopeHistoryPage,
   EnrollmentScopeDetail,
   EnrollmentScopeSaveInput,
   EnrollmentUnresolvedPage,
 } from "@/types";
 import { DOCUMENT_BUCKET } from "@/lib/documents";
+import { getNuccCodesForDiscipline, KNOWN_NUCC_CODES } from "@/lib/providerDiscipline";
 
 export interface EnrollmentExplorerContext {
   db: SupabaseClient<Database>;
   actorUserId: string;
   orgId: string;
   audience: EnrollmentExplorerAudience;
+  contextRevision?: string;
+}
+
+export interface EnrollmentReportSnapshotRpc {
+  accessState: "ready" | "no_grants" | "empty_cohort";
+  snapshotDigest: string;
+  sections: Json;
+  filterChoices: Json;
+  providers: Json[];
+  records: Json[];
+  providerCount: number;
+  rowCount: number;
+  tooLarge: boolean;
+  hasMore: boolean;
+  nextCursorKey: Json;
 }
 
 export class EnrollmentExplorerRpcError extends Error {
@@ -47,6 +65,24 @@ function asObject(value: unknown, source: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function reportSnapshot(value: unknown): EnrollmentReportSnapshotRpc {
+  const result = asObject(value, "get_enrollment_report_snapshot");
+  if (
+    !["ready", "no_grants", "empty_cohort"].includes(String(result.accessState)) ||
+    typeof result.snapshotDigest !== "string" ||
+    !/^[0-9a-f]{64}$/i.test(result.snapshotDigest) ||
+    !Array.isArray(result.providers) ||
+    !Array.isArray(result.records) ||
+    !Number.isInteger(result.providerCount) ||
+    !Number.isInteger(result.rowCount) ||
+    typeof result.tooLarge !== "boolean" ||
+    typeof result.hasMore !== "boolean"
+  ) {
+    throw new Error("get_enrollment_report_snapshot returned an invalid response");
+  }
+  return result as unknown as EnrollmentReportSnapshotRpc;
+}
+
 async function call<T>(
   ctx: EnrollmentExplorerContext,
   name: string,
@@ -60,6 +96,68 @@ async function call<T>(
   });
   if (error) throw new EnrollmentExplorerRpcError(error.message, error.code ?? null);
   return data as T;
+}
+
+/** Recompute one fully authorized report snapshot through the service-only RPC. */
+export async function getEnrollmentReportSnapshot(
+  ctx: EnrollmentExplorerContext,
+  input: {
+    filters: EnrollmentReportFilters;
+    cursor: Record<string, string> | null;
+    mode: "page" | "export";
+  },
+): Promise<EnrollmentReportSnapshotRpc> {
+  const disciplineCodes =
+    input.filters.discipline && input.filters.discipline !== "Unknown"
+      ? getNuccCodesForDiscipline(input.filters.discipline)
+      : [];
+  const result = await call<unknown>(ctx, "get_enrollment_report_snapshot", {
+    p_filters: input.filters as unknown as Json,
+    p_known_codes: [...KNOWN_NUCC_CODES],
+    p_discipline_codes: [...disciplineCodes],
+    p_cursor: input.cursor as unknown as Json,
+    p_mode: input.mode,
+  });
+  return reportSnapshot(result);
+}
+
+function historyCursor(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  const cursor = asObject(value, "get_enrollment_scope_history_page cursor");
+  if (
+    typeof cursor.createdAt !== "string" ||
+    Number.isNaN(Date.parse(cursor.createdAt)) ||
+    typeof cursor.revisionId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor.revisionId)
+  ) {
+    throw new EnrollmentExplorerRpcError("enrollment_invalid", "22023");
+  }
+  return { createdAt: cursor.createdAt, revisionId: cursor.revisionId };
+}
+
+/** Load one audience-projected immutable history page. */
+export async function getEnrollmentScopeHistoryPage(
+  ctx: EnrollmentExplorerContext,
+  input: { scopeId: string; cursor: unknown | null; limit: number },
+): Promise<EnrollmentScopeHistoryPage> {
+  const raw = asObject(
+    await call<unknown>(ctx, "get_enrollment_scope_history_page", {
+      p_scope_id: input.scopeId,
+      p_cursor: historyCursor(input.cursor) as unknown as Json,
+      p_limit: input.limit,
+    }),
+    "get_enrollment_scope_history_page",
+  );
+  if (raw.audience !== ctx.audience || raw.scopeId !== input.scopeId || !Array.isArray(raw.items)) {
+    throw new Error("get_enrollment_scope_history_page returned an invalid response");
+  }
+  const nextCursor = historyCursor(raw.nextCursor);
+  return {
+    ...(raw as unknown as Omit<EnrollmentScopeHistoryPage, "nextCursor">),
+    nextCursor: nextCursor
+      ? Buffer.from(JSON.stringify(nextCursor), "utf8").toString("base64url")
+      : null,
+  };
 }
 
 export function getEnrollmentCatalog(
