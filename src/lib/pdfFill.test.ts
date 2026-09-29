@@ -157,6 +157,7 @@ describe("buildProviderTokenValues", () => {
     expect(map["group.tin"]).toBe("12-3456789");
     expect(map["facility.name"]).toBe("Riverbend Clinic");
     expect(map["facility.address"]).toBe("1 Main St, Austin, TX, 78701");
+    expect(map["facility.cityStateZip"]).toBe("Austin, TX 78701");
     expect(map["facility.phone"]).toBe("555-0131");
     expect(map["facility.fax"]).toBe("555-0132");
     expect(map["facility.email"]).toBe("riverbend@example.test");
@@ -165,6 +166,16 @@ describe("buildProviderTokenValues", () => {
     expect(map["provider.lastFirst"]).toBe("Rivera, Jordan");
     expect(map["facility.streetAddress"]).toBe("1 Main St, Suite 4");
     expect(map["facility.fullAddress"]).toBe("1 Main St, Suite 4, Austin, TX 78701");
+  });
+
+  it("fills one PDF field from the strict cityStateZip token", () => {
+    const tokenValues = buildProviderTokenValues(provider, group, facility);
+    const { fill, unfilled } = resolvePdfValues(
+      [{ field: "City, State ZIP", token: "facility.cityStateZip" }],
+      tokenValues,
+    );
+    expect(fill).toEqual([{ field: "City, State ZIP", value: "Austin, TX 78701" }]);
+    expect(unfilled).toEqual([]);
   });
 
   it("omits null and whitespace-only values so they resolve to no_value, not a blank fill", () => {

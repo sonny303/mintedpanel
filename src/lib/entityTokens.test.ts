@@ -119,6 +119,7 @@ describe("canonical computed entity tokens", () => {
       }),
     ).toEqual({
       "facility.address": "1 Main St, Austin, Texas, 78701",
+      "facility.cityStateZip": "Austin, Texas 78701",
       "facility.streetAddress": "1 Main St, Suite 2",
       "facility.fullAddress": "1 Main St, Suite 2, Austin, Texas 78701",
     });
@@ -130,6 +131,35 @@ describe("canonical computed entity tokens", () => {
     });
     expect(composeFacilityAddressTokens({ city: "Austin", state: "TX", zip: "78701" })).toEqual({
       "facility.address": "Austin, TX, 78701",
+      "facility.cityStateZip": "Austin, TX 78701",
     });
+  });
+
+  it("requires and trims every city, state, and ZIP part for cityStateZip", () => {
+    expect(
+      composeFacilityAddressTokens({ city: "  Austin  ", state: " TX ", zip: " 78701 " })[
+        "facility.cityStateZip"
+      ],
+    ).toBe("Austin, TX 78701");
+
+    for (const missing of ["city", "state", "zip"] as const) {
+      for (const missingValue of [null, undefined, "", "   "]) {
+        const facility: {
+          city?: string | null;
+          state?: string | null;
+          zip?: string | null;
+        } = { city: "Austin", state: "TX", zip: "78701" };
+        facility[missing] = missingValue;
+        expect(composeFacilityAddressTokens(facility)).not.toHaveProperty("facility.cityStateZip");
+      }
+    }
+  });
+
+  it("preserves long city and ZIP parts without truncating the composite", () => {
+    const city = "North " + "Verylongcityname ".repeat(12);
+    const zip = "1234567890-".repeat(8);
+    expect(composeFacilityAddressTokens({ city, state: "TX", zip })["facility.cityStateZip"]).toBe(
+      `${city.trim()}, TX ${zip}`,
+    );
   });
 });

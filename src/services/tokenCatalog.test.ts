@@ -21,6 +21,7 @@ describe("listTokenCatalog", () => {
         "provider.fullNameWithCredentials",
         "provider.lastFirst",
         "facility.address",
+        "facility.cityStateZip",
         "facility.streetAddress",
         "facility.fullAddress",
         "user.name",
