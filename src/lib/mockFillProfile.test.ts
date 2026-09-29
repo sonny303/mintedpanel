@@ -30,6 +30,7 @@ describe("mock fill profile", () => {
   it("resolves curated tokens from the map", () => {
     expect(mockValueForToken("provider.npi")).toBe(MOCK_FILL_VALUES["provider.npi"]);
     expect(mockValueForToken("license.licenseNumber")).toBe("SAMPLE-12345");
+    expect(mockValueForToken("facility.cityStateZip")).toBe("Sampleville, NC 27601");
   });
 
   it("heuristics cover unknown tokens by field name", () => {

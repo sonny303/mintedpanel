@@ -35,6 +35,7 @@ const COMPUTED_TOKENS: TokenCatalogEntry[] = [
   { token: "provider.fullNameWithCredentials", table: "providers", column: "composite" },
   { token: "provider.lastFirst", table: "providers", column: "composite" },
   { token: "facility.address", table: "facilities", column: "composite" },
+  { token: "facility.cityStateZip", table: "facilities", column: "composite" },
   { token: "facility.streetAddress", table: "facilities", column: "composite" },
   { token: "facility.fullAddress", table: "facilities", column: "composite" },
 ];

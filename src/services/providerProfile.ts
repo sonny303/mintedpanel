@@ -146,6 +146,7 @@ const COMPUTED_PROFILE_TOKENS = new Set([
   "provider.fullNameWithCredentials",
   "provider.lastFirst",
   "facility.address",
+  "facility.cityStateZip",
   "facility.streetAddress",
   "facility.fullAddress",
 ]);
@@ -155,6 +156,7 @@ const COMPUTED_PROFILE_TOKEN_KEYS = [
   "provider.fullNameWithCredentials",
   "provider.lastFirst",
   "facility.address",
+  "facility.cityStateZip",
   "facility.streetAddress",
   "facility.fullAddress",
 ] as const;

@@ -12,7 +12,7 @@
 // curated values or the heuristics change materially — recorded dry runs are
 // interpreted against the profile that produced them.
 
-export const MOCK_FILL_PROFILE_VERSION = 1;
+export const MOCK_FILL_PROFILE_VERSION = 2;
 
 // Curated values for the common catalog tokens (bare form, the extension join
 // contract). Everything else falls through to the field-name heuristics below.
@@ -49,6 +49,7 @@ export const MOCK_FILL_VALUES: Readonly<Record<string, string>> = {
   "facility.city": "Sampleville",
   "facility.state": "NC",
   "facility.zip": "27601",
+  "facility.cityStateZip": "Sampleville, NC 27601",
   "user.name": "Sample Operator",
   "user.email": "sample.operator@example.com",
 };
