@@ -22,7 +22,12 @@ vi.mock("@/lib/audit", () => ({
   writeAudit: writeAuditMock,
 }));
 
-import { appendCaseTasks, createCase, type CaseTaskPayload } from "./cases";
+import {
+  appendCaseTasks,
+  createCase,
+  replaceUnstartedCaseSop,
+  type CaseTaskPayload,
+} from "./cases";
 
 const stampedTask: CaseTaskPayload = {
   title: "Submit application",
@@ -118,5 +123,42 @@ describe("appendCaseTasks stamp round-trip (reapply, F2.2.3)", () => {
     });
     expect(insertedRows[1]).toMatchObject({ sop_template_id: null, sop_version: null });
     expect(writeAuditMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("replaceUnstartedCaseSop", () => {
+  beforeEach(() => rpcMock.mockReset());
+
+  it("sends the chosen template and resolved checklist to the atomic replacement RPC", async () => {
+    rpcMock.mockResolvedValue({ data: 1, error: null });
+
+    const count = await replaceUnstartedCaseSop("case-1", "tpl-aetna-co", 4, [stampedTask]);
+
+    expect(count).toBe(1);
+    expect(rpcMock).toHaveBeenCalledWith("replace_unstarted_case_sop", {
+      p_org_id: "org-1",
+      p_case_id: "case-1",
+      p_template_id: "tpl-aetna-co",
+      p_expected_version: 4,
+      p_tasks: [
+        {
+          title: "Submit application",
+          description: null,
+          sop_content: [{ label: "Submit the online form" }],
+          sort_order: 0,
+          due_date: "2026-07-20",
+          execution_type: null,
+        },
+      ],
+    });
+  });
+
+  it("explains a concurrent task start without making a second write", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: "case_sop_tasks_started" } });
+
+    await expect(
+      replaceUnstartedCaseSop("case-1", "tpl-aetna-co", 4, [stampedTask]),
+    ).rejects.toThrow("This checklist has activity or a manual task");
+    expect(rpcMock).toHaveBeenCalledTimes(1);
   });
 });
