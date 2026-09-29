@@ -37,6 +37,7 @@ export const ADDITIONS = Object.freeze({
   "public.profiles": 2,
   "public.organizations": 2,
   "public.memberships": 2,
+  "public.roster_templates": 6,
   "public.notes": 1,
 });
 export function requireService(value) {

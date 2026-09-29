@@ -307,7 +307,8 @@ export const useAuthStore = create<AuthState>()(
           } else {
             const discovery = await fetchEnrollmentContext({ signal });
             const preservedAudience = previous?.audience ?? selectionHint?.audience;
-            const preservedOrgId = previous?.selectedOrgId ?? selectionHint?.orgId;
+            const preservedOrgId =
+              previous?.selectedOrgId ?? selectionHint?.orgId ?? get().activeOrgId;
             const canPreserveStaff =
               preservedAudience === "staff" &&
               !!preservedOrgId &&
@@ -485,13 +486,14 @@ export async function applyAuthStateChange(
   const nextUserId = session?.user?.id ?? null;
   const sameActor = Boolean(previousUserId && nextUserId && previousUserId === nextUserId);
   const clearingCache = !session || !sameActor;
-  invalidateProtectedWork({ resetRevision: true, clearQueryCache: clearingCache });
+  invalidateProtectedWork({ resetRevision: !sameActor, clearQueryCache: clearingCache });
   const previousContext = current.accessContext;
+  const targetOrgId = previousContext?.selectedOrgId ?? current.activeOrgId;
   const selectionHint =
-    sameActor && previousContext?.audience && previousContext.selectedOrgId
+    sameActor && previousContext?.audience && targetOrgId
       ? {
           audience: previousContext.audience,
-          orgId: previousContext.selectedOrgId,
+          orgId: targetOrgId,
         }
       : null;
   const eventEpoch = current.contextEpoch + 1;
@@ -499,12 +501,12 @@ export async function applyAuthStateChange(
   useAuthStore.setState({
     session,
     user: session?.user ?? null,
-    memberships: [],
+    memberships: sameActor ? current.memberships : [],
     membershipsLoading: Boolean(session),
-    activeOrgId: null,
-    fullName: null,
+    activeOrgId: sameActor ? current.activeOrgId : null,
+    fullName: sameActor ? current.fullName : null,
     initError: null,
-    accessContext: null,
+    accessContext: sameActor ? current.accessContext : null,
     selectionHint,
     accessContextError: null,
     accessContextLoading: false,

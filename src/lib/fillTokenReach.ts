@@ -79,6 +79,11 @@ export const WEB_FILL_FAMILIES: readonly string[] = [
  */
 export const UNFILLABLE_FAMILIES: readonly string[] = ["payer", "contract", "mso"];
 
+/** Values stored at group × payer × state grain need a case in hand. The PDF
+ * trainer's sample fill has no case context, and the live PDF builder does not
+ * currently load payer network targets, so this key is web-fillable only. */
+export const PDF_CONTEXT_REQUIRED_TOKENS: readonly string[] = ["group.payerIssuedId"];
+
 /**
  * Individual tokens withdrawn from the mapping pickers, as opposed to whole
  * families. DYN-TOKEN-05.
@@ -111,7 +116,9 @@ function familyOf(token: string): string {
 
 /** Can the real payer-PDF fill put a value in this field? */
 export function isPdfFillableToken(token: string): boolean {
-  return PDF_FILL_FAMILIES.includes(familyOf(token));
+  return (
+    PDF_FILL_FAMILIES.includes(familyOf(token)) && !PDF_CONTEXT_REQUIRED_TOKENS.includes(token)
+  );
 }
 
 /** Can the web portal fill put a value in this field? */
@@ -143,5 +150,12 @@ export function isWithdrawnToken(token: string): boolean {
 export function filterMappingTokens<T extends { token: string }>(catalog: readonly T[]): T[] {
   return catalog.filter(
     (entry) => !isUnfillableToken(entry.token) && !isWithdrawnToken(entry.token),
+  );
+}
+
+/** PDF trainer mapping choices additionally omit values with no case context. */
+export function filterPdfMappingTokens<T extends { token: string }>(catalog: readonly T[]): T[] {
+  return filterMappingTokens(catalog).filter(
+    (entry) => !PDF_CONTEXT_REQUIRED_TOKENS.includes(entry.token),
   );
 }

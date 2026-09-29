@@ -47,7 +47,7 @@ import {
 } from "@/services/caseGenerationExclusions";
 import { listGenerationCaseRows, listGenerationContractRows } from "@/services/generationPreview";
 import { planGenerationConfirm } from "@/lib/generationConfirm";
-import { isFallbackTemplate, pickTemplate } from "@/lib/pickTemplate";
+import { isFallbackTemplate, pickTemplate, topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks, stampExecutionTypes, templateProvenance } from "@/lib/sopStamp";
 import { evaluateGeneration, type GatedRow } from "@/lib/generationGating";
@@ -131,6 +131,7 @@ export interface GenerationPreviewData {
   exclusions: CaseGenerationExclusion[] | undefined;
   /** E4.2 TE-13 — proposed rows blocked by a missing required attribute. */
   gated: GatedRow[] | undefined;
+  ambiguous: GenerationPreviewRow[] | undefined;
   /** GEN-SILENT — group members dropped before candidacy with an explanation. */
   skips: GenerationSkipRow[] | undefined;
   /** E4.2 SOP hardening — keys of PROPOSED rows that resolve to the generic
@@ -293,6 +294,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       rows,
       readinessByKey,
       gated: gating.gated,
+      ambiguous: gating.ambiguous,
       skips,
       providerFacilities,
       fallbackRowKeys,
@@ -326,6 +328,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     readinessByKey: derived?.readinessByKey,
     exclusions: exclusionsQ.data,
     gated: derived?.gated,
+    ambiguous: derived?.ambiguous,
     skips: derived?.skips,
     fallbackRowKeys: derived?.fallbackRowKeys,
     providerFacilities: derived?.providerFacilities,
@@ -415,6 +418,9 @@ export function useConfirmGeneration() {
       // keeps the exact file it was generated with.
       const templateByRowKey = new Map<string, ReturnType<typeof pickTemplate>>();
       for (const row of plan.toCreate) {
+        if (topRankedTemplates(templates, row.payerId, row.state, row.groupId).length > 1) {
+          throw new Error("Multiple SOP templates match this case. Select a template manually.");
+        }
         templateByRowKey.set(
           previewRowKey(row),
           pickTemplate(templates, row.payerId, row.state, row.groupId),

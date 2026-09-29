@@ -5,8 +5,12 @@
 // browser-only part, and it stays untested here on purpose).
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
+import { buildProviderTokenValues } from "@/lib/pdfFill";
+import { planPayerFormFill } from "@/lib/payerFormFill";
 import { fillPayerFormBytes } from "@/lib/payerFormFillClient";
 import type { PayerFormFillEntry, PayerFormFillPlan } from "@/lib/payerFormFill";
+import type { RegistryRow } from "@/lib/fieldRegistry";
+import type { Facility } from "@/types";
 
 const PAGE_OPTS = { x: 0, y: 0, width: 100, height: 20 };
 
@@ -20,6 +24,12 @@ async function buildFixtureForm(): Promise<ArrayBuffer> {
 
   const npi = form.createTextField("Npi");
   npi.addToPage(page, PAGE_OPTS);
+
+  form.createTextField("CityStateZip").addToPage(page, PAGE_OPTS);
+
+  const limitedCityStateZip = form.createTextField("CityStateZipLimited");
+  limitedCityStateZip.setMaxLength(10);
+  limitedCityStateZip.addToPage(page, PAGE_OPTS);
 
   const state = form.createDropdown("State");
   state.addOptions(["NC", "SC", "VA"]);
@@ -72,6 +82,44 @@ describe("fillPayerFormBytes", () => {
 
     const saved = await PDFDocument.load(result.output);
     expect(saved.getForm().getTextField("Npi").getText()).toBe("1999999984");
+  });
+
+  it("reports a cityStateZip value rejected by a PDF text field length limit", async () => {
+    const bytes = await buildFixtureForm();
+    const result = await fillPayerFormBytes(
+      bytes,
+      plan([
+        entry({
+          selector: "CityStateZipLimited",
+          value: "Austin, TX 78701",
+          label: "City, State ZIP",
+        }),
+      ]),
+    );
+    expect(result.written).toBe(0);
+    expect(result.rejected).toEqual(["City, State ZIP"]);
+  });
+
+  it("composes a facility token through the payer planner into saved PDF bytes", async () => {
+    const bytes = await buildFixtureForm();
+    const facility = { city: " Austin ", state: " TX ", zip: " 78701 " } as Facility;
+    const tokenValues = buildProviderTokenValues(null, null, facility);
+    const mapping = {
+      id: "11111111-2222-4333-8444-555555555555",
+      selector: "CityStateZip",
+      status: "approved",
+      source: "token",
+      token: "facility.cityStateZip",
+      fieldLabel: "City, State ZIP",
+    } as RegistryRow;
+    const fillPlan = planPayerFormFill([mapping], tokenValues);
+    expect(fillPlan.fill[0]).toMatchObject({ value: "Austin, TX 78701", outcome: "token" });
+
+    const result = await fillPayerFormBytes(bytes, fillPlan);
+    expect(result.written).toBe(1);
+    expect(result.rejected).toEqual([]);
+    const saved = await PDFDocument.load(result.output);
+    expect(saved.getForm().getTextField("CityStateZip").getText()).toBe("Austin, TX 78701");
   });
 
   it("matches a dropdown option case/space-insensitively", async () => {

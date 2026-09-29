@@ -47,6 +47,7 @@ import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
 import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launches'
 import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
 import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
+import { Route as ReportingEnrollmentExplorerRouteImport } from './routes/reporting.enrollment-explorer'
 import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
 import { Route as ReportingContractsMatrixRouteImport } from './routes/reporting.contracts-matrix'
 import { Route as ReportingBillingReadinessRouteImport } from './routes/reporting.billing-readiness'
@@ -293,6 +294,12 @@ const ReportingExpiringCredentialsRoute =
   ReportingExpiringCredentialsRouteImport.update({
     id: '/reporting/expiring-credentials',
     path: '/reporting/expiring-credentials',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingEnrollmentExplorerRoute =
+  ReportingEnrollmentExplorerRouteImport.update({
+    id: '/reporting/enrollment-explorer',
+    path: '/reporting/enrollment-explorer',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
@@ -625,6 +632,7 @@ export interface FileRoutesByFullPath {
   '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/contracts-matrix': typeof ReportingContractsMatrixRoute
   '/reporting/denials': typeof ReportingDenialsRoute
+  '/reporting/enrollment-explorer': typeof ReportingEnrollmentExplorerRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
   '/reporting/launches': typeof ReportingLaunchesRoute
@@ -710,6 +718,7 @@ export interface FileRoutesByTo {
   '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/contracts-matrix': typeof ReportingContractsMatrixRoute
   '/reporting/denials': typeof ReportingDenialsRoute
+  '/reporting/enrollment-explorer': typeof ReportingEnrollmentExplorerRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
   '/reporting/launches': typeof ReportingLaunchesRoute
@@ -805,6 +814,7 @@ export interface FileRoutesById {
   '/reporting/billing-readiness': typeof ReportingBillingReadinessRoute
   '/reporting/contracts-matrix': typeof ReportingContractsMatrixRoute
   '/reporting/denials': typeof ReportingDenialsRoute
+  '/reporting/enrollment-explorer': typeof ReportingEnrollmentExplorerRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
   '/reporting/launches': typeof ReportingLaunchesRoute
@@ -901,6 +911,7 @@ export interface FileRouteTypes {
     | '/reporting/billing-readiness'
     | '/reporting/contracts-matrix'
     | '/reporting/denials'
+    | '/reporting/enrollment-explorer'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
     | '/reporting/launches'
@@ -986,6 +997,7 @@ export interface FileRouteTypes {
     | '/reporting/billing-readiness'
     | '/reporting/contracts-matrix'
     | '/reporting/denials'
+    | '/reporting/enrollment-explorer'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
     | '/reporting/launches'
@@ -1080,6 +1092,7 @@ export interface FileRouteTypes {
     | '/reporting/billing-readiness'
     | '/reporting/contracts-matrix'
     | '/reporting/denials'
+    | '/reporting/enrollment-explorer'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
     | '/reporting/launches'
@@ -1171,6 +1184,7 @@ export interface RootRouteChildren {
   ReportingBillingReadinessRoute: typeof ReportingBillingReadinessRoute
   ReportingContractsMatrixRoute: typeof ReportingContractsMatrixRoute
   ReportingDenialsRoute: typeof ReportingDenialsRoute
+  ReportingEnrollmentExplorerRoute: typeof ReportingEnrollmentExplorerRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
   ReportingFacilitiesWithoutProvidersRoute: typeof ReportingFacilitiesWithoutProvidersRoute
   ReportingLaunchesRoute: typeof ReportingLaunchesRoute
@@ -1461,6 +1475,13 @@ declare module '@tanstack/react-router' {
       path: '/reporting/expiring-credentials'
       fullPath: '/reporting/expiring-credentials'
       preLoaderRoute: typeof ReportingExpiringCredentialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/enrollment-explorer': {
+      id: '/reporting/enrollment-explorer'
+      path: '/reporting/enrollment-explorer'
+      fullPath: '/reporting/enrollment-explorer'
+      preLoaderRoute: typeof ReportingEnrollmentExplorerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reporting/denials': {
@@ -2029,6 +2050,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportingBillingReadinessRoute: ReportingBillingReadinessRoute,
   ReportingContractsMatrixRoute: ReportingContractsMatrixRoute,
   ReportingDenialsRoute: ReportingDenialsRoute,
+  ReportingEnrollmentExplorerRoute: ReportingEnrollmentExplorerRoute,
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
   ReportingFacilitiesWithoutProvidersRoute:
     ReportingFacilitiesWithoutProvidersRoute,

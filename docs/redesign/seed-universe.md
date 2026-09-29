@@ -339,6 +339,21 @@ reuse E6.12's neutral Org A/Org B replicas and `.test` identities for the named
 persona/organization roles. No production seed, real credentials, or invented
 production payer products are introduced.
 
+## E6.14 / WP1.1 scenario mapping
+
+| Scenario ID | Requirement scenario                                       | Fixture mapping                                                                                                          | Expected validation                                                                                                                                                         |
+| ----------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TS-171      | Authorized population and stable matrix pagination         | Synthetic active, reference and terminated clinicians across two groups/states with current, stale and historical scopes | Group eligibility is explicit; columns precede 50-provider keyset paging; all matching locations remain; test providers and wrong-group records stay private.               |
+| TS-172      | Restricted report shell, URL filters and accessible detail | E6.12 client, staff, dual and no-grant identities; exact NUCC codes; desktop and mobile viewports                        | Staff hooks never mount for clients; context changes discard reads/drawers; filters, error states, location picker, Escape and focus return work.                           |
+| TS-173      | Reachable staff capture and audience-safe history          | Synthetic catalog targets, partially mapped sources and immutable document versions; admin and specialist personas       | Staff drafts, corrections, summary/proof publication and retraction use E6.13; client current/history DTOs omit private provenance and revoked proof.                       |
+| TS-174      | Direct bounded CSV snapshot and denial                     | Synthetic actual scopes, dangerous cell values and exact row/UTF-8 byte boundary fixtures                                | Fixed 28-column allowlist matches filters; no-data cells excluded; either overflow returns 413 with no CSV bytes; fresh authority checks precede complete native streaming. |
+| TS-175      | Matrix workload and stream performance evidence            | 3,000 synthetic clinicians × 20 products with two locations; direct export larger than 4.5 MB                            | Measure actual payload, API/derivation/scroll behavior and full stream length/hash; preserve all scope locations; separate local/CI/hosted results and unmet targets.       |
+
+**TS-171–TS-175 added (2026-09-25):** allocated with
+`node scripts/check-epic-hygiene.mjs --next` for E6.14. The one stacked build PR
+uses disposable synthetic SQL/HTTP and browser fixtures. It does not seed a
+hosted project or activate client access.
+
 **TS-158–TS-162 added (2026-08-13):** E6.10 structured-control autofill
 (option-vocabulary capture, re-capture refresh, option-picked fixed values,
 authored value shaping, named vocabulary-mismatch reasons). No new baseline

@@ -168,12 +168,14 @@ describe("provider profile service — injected server context", () => {
 
     expect(rpcCalls).toEqual(["get_sop_field_tokens"]);
     // Every catalog entry appears in tokens, resolved or not.
-    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 6);
+    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 7);
     expect(profile.case_id).toBeNull();
     expect(valueOf(profile, "provider.firstName")).toBe("Ana");
     expect(valueOf(profile, "group.name")).toBe("Group One");
     expect(valueOf(profile, "license.licenseNumber")).toBe("KS-100");
     expect(valueOf(profile, "facility.name")).toBe("Main Clinic");
+    expect(valueOf(profile, "facility.cityStateZip")).toBeNull();
+    expect(reasonFor(profile, "facility.cityStateZip")).toContain("required composite parts");
     expect(valueOf(profile, "assignment.isPrimary")).toBe(true);
     expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("POL-9");
 
@@ -471,6 +473,7 @@ describe("provider profile service — injected server context", () => {
     expect(valueOf(profile, "facility.fullAddress")).toBe(
       "2 Main, Suite 5, Denver, Colorado 80202",
     );
+    expect(valueOf(profile, "facility.cityStateZip")).toBe("Denver, Colorado 80202");
     expect(valueOf(profile, "assignment.isPrimary")).toBe(false);
 
     const caseCap = captures.find((capture) => capture.table === "credential_cases");
@@ -738,7 +741,7 @@ describe("provider profile service — injected server context", () => {
   describe("group validation and case context agreement", () => {
     it("rejects group choice that mismatches selected case group", async () => {
       const caseRow = { id: "c1", provider_id: "p1", group_id: "g1" };
-      const { db } = makeFakeDb(
+      const { db, captures } = makeFakeDb(
         { ...happyTables(), credential_cases: { data: caseRow } },
         { data: CATALOG },
       );
@@ -749,6 +752,7 @@ describe("provider profile service — injected server context", () => {
       });
 
       expect(result.kind).toBe("group_not_found");
+      expect(captures.some((capture) => capture.table === "payer_network_targets")).toBe(false);
     });
 
     it("rejects group choice unaffiliated with provider", async () => {
@@ -803,6 +807,98 @@ describe("provider profile service — injected server context", () => {
       if (result.kind === "ok") {
         expect(valueOf(result.profile, "group.name")).toBe("Second Group");
       }
+    });
+  });
+
+  describe("payer-issued group identifier", () => {
+    const caseWithPayer = {
+      id: "case-nc",
+      provider_id: "p1",
+      group_id: "g1",
+      payer_id: "payer-humana",
+      payer_group_provider_id: "CASE-FALLBACK",
+      state: "NC",
+      facility_id: null,
+    };
+
+    it("resolves the active group/payer/state identifier and records its exact lookup scope", async () => {
+      const { db, captures } = makeFakeDb(
+        {
+          ...happyTables(),
+          credential_cases: { data: caseWithPayer },
+          case_facilities: { data: [] },
+          payer_network_targets: { data: { payer_issued_id: " PTAN-123 " } },
+        },
+        { data: CATALOG },
+      );
+
+      const profile = must(await getProviderProfile(ctxWith(db), "p1", { caseId: "case-nc" }));
+
+      expect(valueOf(profile, "group.payerIssuedId")).toBe("PTAN-123");
+      expect(reasonFor(profile, "group.payerIssuedId")).toBe("");
+      const targetQuery = captures.find((capture) => capture.table === "payer_network_targets");
+      expect(targetQuery?.selectCols).toBe("payer_issued_id");
+      expect(targetQuery?.filters).toEqual([
+        ["org_id", "org-1"],
+        ["group_id", "g1"],
+        ["payer_id", "payer-humana"],
+        ["state", "NC"],
+        ["status", "active"],
+      ]);
+    });
+
+    it("uses the same validated case's legacy payer group ID when no active target value exists", async () => {
+      const { db, captures } = makeFakeDb(
+        {
+          ...happyTables(),
+          credential_cases: { data: caseWithPayer },
+          case_facilities: { data: [] },
+          // An inactive/absent target is excluded by the active-status filter.
+          payer_network_targets: { data: null },
+        },
+        { data: CATALOG },
+      );
+
+      const profile = must(await getProviderProfile(ctxWith(db), "p1", { caseId: "case-nc" }));
+
+      expect(valueOf(profile, "group.payerIssuedId")).toBe("CASE-FALLBACK");
+      expect(
+        captures.find((capture) => capture.table === "payer_network_targets")?.filters,
+      ).toContainEqual(["status", "active"]);
+    });
+
+    it("keeps the token unresolved without a case, even when the provider has a group", async () => {
+      const { db, captures } = makeFakeDb(happyTables(), { data: CATALOG });
+
+      const profile = must(await getProviderProfile(ctxWith(db), "p1"));
+
+      expect(valueOf(profile, "group.payerIssuedId")).toBeNull();
+      expect(reasonFor(profile, "group.payerIssuedId")).toContain("selected case");
+      expect(captures.some((capture) => capture.table === "payer_network_targets")).toBe(false);
+    });
+
+    it("does not apply a case fallback to a group override when the case has no group", async () => {
+      const { db, captures } = makeFakeDb(
+        {
+          ...happyTables(),
+          credential_cases: {
+            data: {
+              ...caseWithPayer,
+              group_id: null,
+            },
+          },
+          case_facilities: { data: [] },
+        },
+        { data: CATALOG },
+      );
+
+      const profile = must(
+        await getProviderProfile(ctxWith(db), "p1", { caseId: "case-nc", groupId: "g1" }),
+      );
+
+      expect(valueOf(profile, "group.payerIssuedId")).toBeNull();
+      expect(reasonFor(profile, "group.payerIssuedId")).toContain("selected case");
+      expect(captures.some((capture) => capture.table === "payer_network_targets")).toBe(false);
     });
   });
 });

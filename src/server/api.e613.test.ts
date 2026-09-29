@@ -60,6 +60,7 @@ describe("E6.13 explicit audience and context boundary", () => {
     expect(routeMock).toHaveBeenCalledWith(expect.any(Request), user, {
       orgId: ORG,
       audience: "client",
+      contextRevision: "revision-a",
     });
     expect(authenticateMock).not.toHaveBeenCalled();
   });

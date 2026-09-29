@@ -300,7 +300,20 @@ describe("quick-card catalog — exclusion policy", () => {
       "provider.npi",
       ...USER_TOKEN_FIELDS,
       ...CONTACT_TOKEN_FIELDS,
+      "group.payerIssuedId",
     ]);
+  });
+
+  it("offers the stored group identifier under payer ID and Medicare PTAN search labels", () => {
+    const field = buildQuickCardCatalog(derivedTokens()).find(
+      (entry) => entry.key === "group.payerIssuedId",
+    );
+    expect(field).toEqual({
+      key: "group.payerIssuedId",
+      label: "Payer-issued group ID / Medicare PTAN (case required)",
+      group: "group",
+      groupLabel: "Provider group",
+    });
   });
 
   it("offers ssnLast4 (product decision 2026-07-28) but no full-SSN token exists", () => {

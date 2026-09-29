@@ -2,9 +2,9 @@
 
 ```jsx
 <GroupedList
-  defaultOpen={["brian"]}
+  defaultOpen={["alex"]}
   groups={[
-    { id: "brian", title: "Brian Hershberger, PT", subtitle: "Kansas · 5 payers",
+    { id: "alex", title: "Alex Sample, PT", subtitle: "Kansas · 5 payers",
       count: 5, action: "needs", items: [
         { label: "Aetna", meta: "2h ago", action: "needs" },
         { label: "Cigna", meta: "12d ago", action: "stalled" },

@@ -23,6 +23,33 @@ describe("providerTaxonomy", () => {
     expect(taxonomyLabel("133V00000X")).toBe("Dietitian, Nutrition, Registered");
   });
 
+  it("offers exact OT, OTA, and SLP catalog codes for enrollment capture", () => {
+    for (const code of [
+      "225X00000X",
+      "225XR0403X",
+      "225XE0001X",
+      "225XE1200X",
+      "225XF0002X",
+      "225XG0600X",
+      "225XH1200X",
+      "225XH1300X",
+      "225XL0004X",
+      "225XM0800X",
+      "225XN1300X",
+      "225XP0200X",
+      "225XP0019X",
+      "224Z00000X",
+      "224ZR0403X",
+      "224ZE0001X",
+      "224ZF0002X",
+      "224ZL0004X",
+      "235Z00000X",
+    ]) {
+      expect(isKnownTaxonomyCode(code), code).toBe(true);
+      expect(taxonomyLabel(code), code).not.toBeNull();
+    }
+  });
+
   it("normalizes case and surrounding whitespace", () => {
     expect(isKnownTaxonomyCode("  225100000x  ")).toBe(true);
     expect(isKnownTaxonomyCode("  133v00000x  ")).toBe(true);
@@ -30,7 +57,7 @@ describe("providerTaxonomy", () => {
 
   it("rejects codes outside the catalog", () => {
     expect(isKnownTaxonomyCode("207Q00000X")).toBe(false); // family medicine
-    expect(isKnownTaxonomyCode("225X00000X")).toBe(false); // pattern-looking, not a real code
+    expect(isKnownTaxonomyCode("225X99999X")).toBe(false); // looks plausible, absent from catalog
     expect(isKnownTaxonomyCode("")).toBe(false);
   });
 

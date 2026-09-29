@@ -1315,6 +1315,8 @@ async function main() {
     licensePdf,
     globalPayerId,
   });
+  const { runE614HttpStreamProbes } = await import("/tmp/e614-http-stream-probes.mjs");
+  await runE614HttpStreamProbes({ id, tokens, request, app, anonKey, assert });
   const documentDownload = await request(app, `/api/documents/${documentId}/download`, {
     headers: headers(tokens.billing, { "x-org-id": id.orgA }),
   });

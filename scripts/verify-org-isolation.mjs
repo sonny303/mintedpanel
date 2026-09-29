@@ -135,7 +135,13 @@ async function apiGet(path, { token, orgId, extraHeaders = {} } = {}) {
   } catch {
     /* non-JSON (e.g. an SSO HTML gate) → body stays null; raw holds the page */
   }
-  return { status: res.status, body, raw };
+  return {
+    status: res.status,
+    body,
+    raw,
+    contentType: res.headers.get("content-type"),
+    cacheControl: res.headers.get("cache-control"),
+  };
 }
 
 // One POST against the deploy. Same header handling as apiGet.
@@ -684,6 +690,71 @@ function looksLikeVercelGate(r) {
       "31d. E6.13 does not infer client capability from a staff session",
       e613ClientAudience.status === 403 && e613ClientAudience.body?.data == null,
       `status=${e613ClientAudience.status} dataPresent=${e613ClientAudience.body?.data != null}`,
+    );
+
+    const e614Page = await apiGet("/api/enrollment-explorer/report/page", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: selectedHeaders,
+    });
+    check(
+      "32. E6.14 own-org report page returns its restricted DTO",
+      e614Page.status === 200 &&
+        e614Page.body?.data?.accessState === "ready" &&
+        typeof e614Page.body?.data?.viewToken === "string" &&
+        Array.isArray(e614Page.body?.data?.providers),
+      `status=${e614Page.status} accessState=${e614Page.body?.data?.accessState ?? "missing"}`,
+    );
+    const e614History = await apiGet(
+      `/api/enrollment-explorer/scopes/${env.KANSAS_PROVIDER_ID}/history`,
+      { token: kansasTok, orgId: env.KANSAS_ORG, extraHeaders: selectedHeaders },
+    );
+    check(
+      "32b. E6.14 own-org history is paged through the authenticated route",
+      e614History.status === 200 &&
+        e614History.body?.data?.audience === "staff" &&
+        e614History.body?.data?.scopeId === env.KANSAS_PROVIDER_ID &&
+        Array.isArray(e614History.body?.data?.items),
+      `status=${e614History.status}`,
+    );
+    const e614Csv = await apiGet(
+      "/api/enrollment-explorer/report.csv?viewToken=mock-e614-view-token",
+      {
+        token: kansasTok,
+        orgId: env.KANSAS_ORG,
+        extraHeaders: selectedHeaders,
+      },
+    );
+    check(
+      "32c. E6.14 CSV uses a no-store text/csv response",
+      e614Csv.status === 200 &&
+        e614Csv.contentType === "text/csv; charset=utf-8" &&
+        e614Csv.cacheControl?.includes("no-store") &&
+        e614Csv.raw.startsWith('"Provider Name","NPI","Discipline"'),
+      `status=${e614Csv.status} contentType=${e614Csv.contentType ?? "missing"} cache=${e614Csv.cacheControl ?? "missing"}`,
+    );
+    const e614CrossOrg = await apiGet(
+      `/api/enrollment-explorer/report/page?org=${encodeURIComponent(env.SOUTHPARK_ORG)}`,
+      { token: kansasTok, orgId: env.KANSAS_ORG, extraHeaders: selectedHeaders },
+    );
+    check(
+      "32d. E6.14 rejects URL organization mismatch before report data",
+      e614CrossOrg.status === 403 && e614CrossOrg.body?.data == null,
+      `status=${e614CrossOrg.status} dataPresent=${e614CrossOrg.body?.data != null}`,
+      { leak: true },
+    );
+    const e614ClientAudience = await apiGet("/api/enrollment-explorer/report/page", {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+      extraHeaders: {
+        "x-enrollment-audience": "client",
+        "x-minted-context-revision": selectedHeaders["x-minted-context-revision"],
+      },
+    });
+    check(
+      "32e. E6.14 does not infer client capability from staff context",
+      e614ClientAudience.status === 403 && e614ClientAudience.body?.data == null,
+      `status=${e614ClientAudience.status} dataPresent=${e614ClientAudience.body?.data != null}`,
     );
   }
 

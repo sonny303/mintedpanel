@@ -361,13 +361,25 @@ async function removeAndVerifyStagingLoginRole({
 }
 
 export const EXCLUSIVE_STAGING_MAINTENANCE = "exclusive-staging-maintenance";
+const EXPIRED_STAGING_ROLE = "cli_login_postgres";
+const EXPIRED_STAGING_ROLE_QUERY =
+  "SELECT r.rolname, r.rolvaliduntil::text AS expires_at, " +
+  "(r.rolvaliduntil < now() - interval '1 hour') AS expired, " +
+  "(SELECT count(*)::integer FROM pg_catalog.pg_stat_activity AS a WHERE a.usename = r.rolname) AS session_count " +
+  "FROM pg_catalog.pg_roles AS r WHERE r.rolname LIKE 'cli\\_login\\_%' ESCAPE '\\' ORDER BY r.rolname";
 
 // The provider DELETE is project-wide. This opt-in is valid only while the
 // operator holds the explicitly authorized exclusive staging CLI window.
 // Inventory checks cannot eliminate a concurrent actor racing that window.
-async function removeExclusiveStagingLoginRole({ token, role, fetchImpl, clock }) {
+async function removeExclusiveStagingLoginRole({
+  token,
+  role,
+  fetchImpl,
+  clock,
+  allowSessionTermination = true,
+}) {
   check(TOKEN.test(token) && CLI_ROLE.test(role));
-  const soleOwnedRole = async () => {
+  const soleTargetRole = async () => {
     const inventory = await readStagingCliRoleInventory({ token, fetchImpl, clock });
     check(inventory.roleCount === 1 && inventory.roleNames[0] === role);
   };
@@ -396,8 +408,9 @@ async function removeExclusiveStagingLoginRole({ token, role, fetchImpl, clock }
     );
     return rows;
   };
-  await soleOwnedRole();
+  await soleTargetRole();
   if ((await sessions()).length) {
+    check(allowSessionTermination);
     // Never terminate another role, even in the exclusive window.
     const rows = await request(fetchImpl, token, `/v1/projects/${STAGING.ref}/database/query`, {
       method: "POST",
@@ -407,7 +420,7 @@ async function removeExclusiveStagingLoginRole({ token, role, fetchImpl, clock }
     });
     check(Array.isArray(rows) && rows.every((row) => row?.terminated === true));
   }
-  await soleOwnedRole();
+  await soleTargetRole();
   check((await sessions()).length === 0);
   const cleanupRequestedAt = exactTimestamp(clock());
   let cleanupFailed = false;
@@ -438,6 +451,130 @@ async function removeExclusiveStagingLoginRole({ token, role, fetchImpl, clock }
     poststateRoleCount: 0,
     exactRoleAbsent: true,
   };
+}
+
+// Recovery preflight only: remove the one expired, sessionless staging CLI role
+// after a separately approved exclusive maintenance decision. The expected
+// inventory digest binds the operator's observed prestate; the fixed provider
+// DELETE is still followed by an authenticated empty-inventory readback.
+export async function cleanupExpiredStagingLoginRole({
+  token,
+  expectedInventoryDigest,
+  fetchImpl = fetch,
+  clock = () => new Date().toISOString(),
+} = {}) {
+  try {
+    check(TOKEN.test(token) && /^[a-f0-9]{64}$/.test(expectedInventoryDigest));
+    const source = await observeStagingProvider({ token, fetchImpl, clock });
+    const before = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(
+      before.roleCount === 1 &&
+        before.roleNames[0] === EXPIRED_STAGING_ROLE &&
+        before.inventoryDigest === expectedInventoryDigest,
+    );
+    const rows = await request(
+      fetchImpl,
+      token,
+      `/v1/projects/${STAGING.ref}/database/query/read-only`,
+      { method: "POST", body: JSON.stringify({ query: EXPIRED_STAGING_ROLE_QUERY }) },
+    );
+    check(
+      Array.isArray(rows) &&
+        rows.length === 1 &&
+        plainObject(rows[0]) &&
+        Object.keys(rows[0]).sort().join(",") === "expired,expires_at,rolname,session_count" &&
+        rows[0].rolname === EXPIRED_STAGING_ROLE &&
+        rows[0].expired === true &&
+        Number.isFinite(Date.parse(rows[0].expires_at)) &&
+        rows[0].session_count === 0,
+    );
+    const latest = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(latest.inventoryDigest === before.inventoryDigest);
+    const cleanup = await removeExclusiveStagingLoginRole({
+      token,
+      role: EXPIRED_STAGING_ROLE,
+      fetchImpl,
+      clock,
+      allowSessionTermination: false,
+    });
+    return {
+      status: "EXPIRED_STAGING_ROLE_REMOVED",
+      projectRef: STAGING.ref,
+      sourceProviderDigest: source.providerDigest,
+      prestateInventoryDigest: before.inventoryDigest,
+      roleDigest: canonicalDigest(EXPIRED_STAGING_ROLE),
+      expiredAt: rows[0].expires_at,
+      cleanup,
+    };
+  } catch {
+    throw fail();
+  }
+}
+
+// An interrupted capture can leave its newly created CLI role behind if the
+// default exact-role SQL cleanup is rejected by the provider. Reconcile only
+// the freshly observed, sole, sessionless staging role under the same approved
+// exclusive maintenance window; never terminate its sessions or retry DELETE.
+export async function cleanupFailedCaptureStagingLoginRole({
+  token,
+  expectedInventoryDigest,
+  expectedExpiry,
+  fetchImpl = fetch,
+  clock = () => new Date().toISOString(),
+} = {}) {
+  try {
+    check(
+      TOKEN.test(token) &&
+        /^[a-f0-9]{64}$/.test(expectedInventoryDigest) &&
+        typeof expectedExpiry === "string" &&
+        Number.isFinite(Date.parse(expectedExpiry)),
+    );
+    const source = await observeStagingProvider({ token, fetchImpl, clock });
+    const before = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(
+      before.roleCount === 1 &&
+        before.roleNames[0] === EXPIRED_STAGING_ROLE &&
+        before.inventoryDigest === expectedInventoryDigest,
+    );
+    const rows = await request(
+      fetchImpl,
+      token,
+      `/v1/projects/${STAGING.ref}/database/query/read-only`,
+      { method: "POST", body: JSON.stringify({ query: EXPIRED_STAGING_ROLE_QUERY }) },
+    );
+    const now = Date.parse(exactTimestamp(clock()));
+    check(
+      Array.isArray(rows) &&
+        rows.length === 1 &&
+        plainObject(rows[0]) &&
+        Object.keys(rows[0]).sort().join(",") === "expired,expires_at,rolname,session_count" &&
+        rows[0].rolname === EXPIRED_STAGING_ROLE &&
+        rows[0].expires_at === expectedExpiry &&
+        rows[0].session_count === 0 &&
+        Date.parse(expectedExpiry) >= now - 3_600_000 &&
+        Date.parse(expectedExpiry) <= now + 3_600_000,
+    );
+    const latest = await readStagingCliRoleInventory({ token, fetchImpl, clock });
+    check(latest.inventoryDigest === before.inventoryDigest);
+    const cleanup = await removeExclusiveStagingLoginRole({
+      token,
+      role: EXPIRED_STAGING_ROLE,
+      fetchImpl,
+      clock,
+      allowSessionTermination: false,
+    });
+    return {
+      status: "FAILED_CAPTURE_ROLE_REMOVED",
+      projectRef: STAGING.ref,
+      sourceProviderDigest: source.providerDigest,
+      prestateInventoryDigest: before.inventoryDigest,
+      roleDigest: canonicalDigest(EXPIRED_STAGING_ROLE),
+      observedExpiry: expectedExpiry,
+      cleanup,
+    };
+  } catch {
+    throw fail();
+  }
 }
 
 // Default cleanup remains exact-role SQL. The explicit maintenance mode is a

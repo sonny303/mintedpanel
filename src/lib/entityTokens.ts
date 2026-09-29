@@ -167,14 +167,17 @@ export function composeFacilityAddressTokens(
     facility?.zip,
   ]);
   const tokens: Record<string, string> = legacyAddress ? { "facility.address": legacyAddress } : {};
+  const city = cleanPart(facility?.city);
+  const state = cleanPart(facility?.state);
+  const zip = cleanPart(facility?.zip);
+  if (city && state && zip) {
+    tokens["facility.cityStateZip"] = `${city}, ${state} ${zip}`;
+  }
   if (!street) return tokens;
 
   const suite = cleanPart(facility?.suite);
   const streetAddress = suite ? `${street}, ${suite}` : street;
   tokens["facility.streetAddress"] = streetAddress;
-  const city = cleanPart(facility?.city);
-  const state = cleanPart(facility?.state);
-  const zip = cleanPart(facility?.zip);
   if (city && state && zip) {
     tokens["facility.fullAddress"] = `${streetAddress}, ${city}, ${state} ${zip}`;
   }

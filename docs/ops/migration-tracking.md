@@ -55,20 +55,24 @@ The `readiness` command only validates a committed plan; it is not runtime proof
 Perform separately for staging and production. Existing alignment PRs #402 and
 #406 are dependencies to assess, not migrations this runner may silently replay.
 
-| Order | Required work                                                                                              | Acceptance artifact                                                                                                                     |
-| ----- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Capture fresh project identity, cluster system identifier, complete ledger, and actual application catalog | Encrypted capture tied to target and capture time                                                                                       |
-| 2     | Verify backup and isolated restore; freeze out-of-band schema writers                                      | Successful recovery evidence and exact baseline digests                                                                                 |
-| 3     | Crosswalk every source migration to actual objects and ledger entries                                      | Applied, missing, partial, superseded and conflicting changes explicitly classified                                                     |
-| 4     | Resolve duplicate `20260903210000` and the historical baseline                                             | Reviewed lineage transition with exact SQL hashes; do not rename files or bulk-mark applied in this PR                                  |
-| 5     | Rehearse the preservation-aware additive upgrade on the restored database                                  | Row/relationship preservation, RLS/grants, Auth/REST and old/new application compatibility                                              |
-| 6     | Apply only the approved reconciliation and ledger repair, then recapture                                   | Canonical unique source inventory matches a known ledger prefix; real objects prove each applied entry                                  |
-| 7     | Commit each environment's reconciled plan                                                                  | Fields below, with evidence references reviewed in the PR; no environment-variable PASS override                                        |
-| 8     | Connect `createHostedMigrationExecutor` inside the authenticated provider factory                          | Exact source checkout, correct project-bound credential, release bundle, backup/rehearsal and lease checks; close the adapter after use |
-| 9     | Exercise staging before production and add **Migration runner** to required checks                         | Successful hosted run, deliberate denial tests, and separately approved production run                                                  |
+| Order | Required work                                                                                              | Acceptance artifact                                                                                                       |
+| ----- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Capture fresh project identity, cluster system identifier, complete ledger, and actual application catalog | Target-bound catalog/ledger snapshot; production encrypted capture                                                        |
+| 2     | Bind each target to its recovery policy; freeze out-of-band schema writers                                 | Staging route and baseline evidence; independent production backup and isolated restore                                   |
+| 3     | Crosswalk every source migration to actual objects and ledger entries                                      | Applied, missing, partial, superseded and conflicting changes explicitly classified                                       |
+| 4     | Resolve duplicate `20260903210000` and the historical baseline                                             | Reviewed lineage transition with exact SQL hashes; do not rename files or bulk-mark applied in this PR                    |
+| 5     | Rehearse staging reset/reseed or in-place, and the production populated upgrade                            | Staging scenario/access proof; production row/relationship preservation; RLS/grants, Auth/REST and app compatibility      |
+| 6     | Apply only the approved route, reconcile its ledger, then recapture                                        | Canonical unique source inventory matches the resulting ledger; real objects prove each applied entry                     |
+| 7     | Commit each environment's reconciled plan                                                                  | Fields below, with evidence references reviewed in the PR; no environment-variable PASS override                          |
+| 8     | Connect `createHostedMigrationExecutor` inside the authenticated provider factory                          | Exact source, project credential, release bundle, target recovery/rehearsal and lease checks; close the adapter after use |
+| 9     | Exercise staging before production and add **Migration runner** to required checks                         | Successful hosted run, deliberate denial tests, and separately approved production run                                    |
 
-Do not reset a populated database. `migration repair` only changes history; it
-does not create missing columns, functions, policies or grants. Never declare
+Do not reset production. Staging data is disposable, but a staging reset needs
+its exact scope, fixture plan, hosted approval and verified poststate. The
+current delivery contract still requires staging backup/restore evidence, so
+its policy and tests must be revised before a reset/reseed route is admitted.
+`migration repair` only changes history; it does not create missing columns,
+functions, policies or grants. Never declare
 an entry applied based only on its filename or an empty dry-run.
 
 The reconciliation plan must have `status: "reconciled"`, the captured
