@@ -2,6 +2,12 @@ import type { UserContext } from "./guard";
 import type {
   EnrollmentEvidenceKind,
   EnrollmentExplorerAudience,
+  EnrollmentReportCsvRecord,
+  EnrollmentReportDiscipline,
+  EnrollmentReportFilters,
+  EnrollmentReportPage,
+  EnrollmentScopeHistoryClientItem,
+  EnrollmentScopeHistoryPage,
   EnrollmentProofField,
   EnrollmentScopeSaveInput,
 } from "@/types";
@@ -10,7 +16,9 @@ import {
   curateEnrollmentProduct,
   downloadEnrollmentProof,
   getEnrollmentCatalog,
+  getEnrollmentReportSnapshot,
   getEnrollmentProofCaptureTarget,
+  getEnrollmentScopeHistoryPage,
   getEnrollmentScopeDetail,
   getEnrollmentUnresolvedPage,
   publishEnrollmentProof,
@@ -21,7 +29,18 @@ import {
   setEnrollmentProductTarget,
   sha256DocumentBlob,
   type EnrollmentExplorerContext,
+  type EnrollmentReportSnapshotRpc,
 } from "@/services/enrollmentExplorer";
+import { serializeEnrollmentReportCsv } from "@/lib/enrollmentReportCsv";
+import { providerDisciplineForTaxonomy } from "@/lib/providerDiscipline";
+import {
+  createEnrollmentReportCursor,
+  createEnrollmentReportViewToken,
+  verifyEnrollmentReportCursor,
+  verifyEnrollmentReportViewToken,
+  type EnrollmentReportCursorKey,
+  type EnrollmentReportTokenContext,
+} from "./enrollmentReportToken";
 import { fail, ok } from "./envelope";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,6 +65,52 @@ const PROOF_FIELDS = new Set<EnrollmentProofField>([
   "payer_acknowledged_date",
   "license_current",
 ]);
+const REPORT_DISCIPLINES = new Set<EnrollmentReportDiscipline>([
+  "PT",
+  "PTA",
+  "OT",
+  "OTA",
+  "SLP",
+  "Other",
+  "Unknown",
+]);
+const REPORT_STATUSES = new Set([
+  "not_started",
+  "in_progress",
+  "submitted",
+  "in_review",
+  "action_required",
+  "approved",
+  "denied",
+  "not_pursuing",
+  "terminated",
+  "needs_verification",
+]);
+const PROVIDER_STATUSES = new Set(["onboarding", "active", "terminated"]);
+const PROVIDER_VERIFICATION_STATES = new Set(["verified", "pending_verification"]);
+const PUBLICATION_STATES = new Set(["published", "stale", "retracted", "superseded", "draft"]);
+const CELL_STATES = new Set(["published", "needs_verification", "staff_draft"]);
+const HISTORY_PUBLICATION_STATES = new Set(["published", "retracted", "superseded"]);
+const HISTORY_PUBLICATION_EVENT_STATES = new Set(["published", "revoked", "superseded", "expired"]);
+const ENROLLMENT_REVISION_ALIASES = {
+  status: "status",
+  intakeDate: "intake_date",
+  completeToSubmitDate: "complete_to_submit_date",
+  submittedDate: "submitted_date",
+  payerAcknowledgedDate: "payer_acknowledged_date",
+  approvedDate: "approved_date",
+  effectiveDate: "effective_date",
+  terminationDate: "termination_date",
+  payerReference: "payer_reference",
+  clientSafeBlocker: "client_safe_blocker",
+  owner: "action_owner",
+  retroStatus: "retro_status",
+  retroDays: "retro_days",
+  retroDate: "retro_date",
+  retroBasis: "retro_basis",
+  staffNote: "staff_note",
+  observedAt: "observed_at",
+} as const;
 const FORGED_KEYS = new Set([
   "actorUserId",
   "actorId",
@@ -105,6 +170,471 @@ async function readBody(request: Request): Promise<unknown> {
 
 function uuid(value: unknown): value is string {
   return typeof value === "string" && UUID_RE.test(value);
+}
+
+function oneQueryValue(params: URLSearchParams, key: string): string | null | undefined {
+  const values = params.getAll(key);
+  if (values.length > 1) return undefined;
+  return values[0] ?? null;
+}
+
+function parseReportFilters(
+  params: URLSearchParams,
+): { filters: EnrollmentReportFilters; cursor: string | null; viewToken: string | null } | null {
+  const raw: Record<string, string | null | undefined> = {};
+  for (const key of [
+    "groupId",
+    "state",
+    "facilityId",
+    "productId",
+    "discipline",
+    "status",
+    "search",
+    "historical",
+    "cursor",
+    "viewToken",
+  ]) {
+    raw[key] = oneQueryValue(params, key);
+    if (raw[key] === undefined) return null;
+  }
+  const filters: EnrollmentReportFilters = {};
+  for (const key of ["groupId", "facilityId", "productId"] as const) {
+    const value = raw[key];
+    if (value == null || value === "") continue;
+    if (!uuid(value)) return null;
+    filters[key] = value.toLowerCase();
+  }
+  if (raw.state != null && raw.state !== "") {
+    if (!/^[A-Za-z]{2}$/.test(raw.state)) return null;
+    filters.state = raw.state.toUpperCase();
+  }
+  if (raw.discipline != null && raw.discipline !== "") {
+    if (!REPORT_DISCIPLINES.has(raw.discipline as EnrollmentReportDiscipline)) return null;
+    filters.discipline = raw.discipline as EnrollmentReportDiscipline;
+  }
+  if (raw.status != null && raw.status !== "") {
+    if (!REPORT_STATUSES.has(raw.status)) return null;
+    filters.status = raw.status as EnrollmentReportFilters["status"];
+  }
+  if (raw.search != null && raw.search !== "") {
+    const search = raw.search.trim();
+    if (
+      !search ||
+      search.length > 120 ||
+      Array.from(search).some((character) => {
+        const code = character.charCodeAt(0);
+        return code <= 31 || code === 127;
+      })
+    )
+      return null;
+    filters.search = search;
+  }
+  if (raw.historical != null) {
+    if (raw.historical !== "true" && raw.historical !== "false") return null;
+    filters.historical = raw.historical === "true";
+  }
+  if (raw.cursor && raw.cursor.length > 2048) return null;
+  if (raw.viewToken && raw.viewToken.length > 2048) return null;
+  return {
+    filters,
+    cursor: raw.cursor || null,
+    viewToken: raw.viewToken || null,
+  };
+}
+
+function string(value: unknown, field: string): string {
+  if (typeof value !== "string") throw new Error(`Report response is missing ${field}`);
+  return value;
+}
+
+function nullableString(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  return string(value, field);
+}
+
+function stringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`Report response is missing ${field}`);
+  }
+  return value as string[];
+}
+
+function objectArray(value: unknown, field: string): Record<string, unknown>[] {
+  if (!Array.isArray(value) || value.some((item) => !isObject(item))) {
+    throw new Error(`Report response is missing ${field}`);
+  }
+  return value as Record<string, unknown>[];
+}
+
+function projectReportSections(value: unknown): EnrollmentReportPage["sections"] {
+  return objectArray(value, "sections").map((section) => ({
+    key: string(section.key, "section.key"),
+    groupId: string(section.groupId, "section.groupId"),
+    groupLabel: string(section.groupLabel, "section.groupLabel"),
+    state: string(section.state, "section.state"),
+    columns: objectArray(section.columns, "section.columns").map((column) => ({
+      key: string(column.key, "column.key"),
+      productId: string(column.productId, "column.productId"),
+      payerLabel: string(column.payerLabel, "column.payerLabel"),
+      productLabel: string(column.productLabel, "column.productLabel"),
+    })),
+  }));
+}
+
+function projectReportFilterChoices(value: unknown): EnrollmentReportPage["filterChoices"] {
+  if (!isObject(value)) throw new Error("Report response is missing filter choices");
+  const groups = objectArray(value.groups, "filterChoices.groups").map((group) => ({
+    id: string(group.id, "filterChoices.group.id"),
+    label: string(group.label, "filterChoices.group.label"),
+  }));
+  const facilities = objectArray(value.facilities, "filterChoices.facilities").map((facility) => ({
+    id: string(facility.id, "filterChoices.facility.id"),
+    label: string(facility.label, "filterChoices.facility.label"),
+    groupId: string(facility.groupId, "filterChoices.facility.groupId"),
+    state: string(facility.state, "filterChoices.facility.state"),
+  }));
+  const products = objectArray(value.products, "filterChoices.products").map((product) => ({
+    id: string(product.id, "filterChoices.product.id"),
+    payerLabel: string(product.payerLabel, "filterChoices.product.payerLabel"),
+    label: string(product.label, "filterChoices.product.label"),
+  }));
+  const disciplines = stringArray(value.disciplines, "filterChoices.disciplines").filter(
+    (discipline): discipline is EnrollmentReportDiscipline =>
+      REPORT_DISCIPLINES.has(discipline as EnrollmentReportDiscipline),
+  );
+  const statuses = stringArray(value.statuses, "filterChoices.statuses").filter((status) =>
+    REPORT_STATUSES.has(status),
+  ) as EnrollmentReportPage["filterChoices"]["statuses"];
+  return {
+    groups,
+    states: stringArray(value.states, "filterChoices.states"),
+    facilities,
+    products,
+    disciplines,
+    statuses,
+  };
+}
+
+function projectReportProviders(value: unknown): EnrollmentReportPage["providers"] {
+  return objectArray(value, "providers").map((provider) => {
+    const providerStatus = string(provider.status, "provider.status");
+    const verificationState = string(provider.verificationState, "provider.verificationState");
+    if (
+      !PROVIDER_STATUSES.has(providerStatus) ||
+      !PROVIDER_VERIFICATION_STATES.has(verificationState)
+    ) {
+      throw new Error("Report response contains an invalid provider state");
+    }
+    if (typeof provider.referenceOnly !== "boolean") {
+      throw new Error("Report response contains an invalid reference flag");
+    }
+    const cells = objectArray(provider.cells, "provider.cells").map((cell) => {
+      const cellState = string(cell.state, "cell.state");
+      if (!CELL_STATES.has(cellState))
+        throw new Error("Report response contains an invalid cell state");
+      const locations = objectArray(cell.locations, "cell.locations").map((location) => {
+        const publicationState = string(location.publicationState, "location.publicationState");
+        const status = string(location.status, "location.status");
+        if (!PUBLICATION_STATES.has(publicationState) || !REPORT_STATUSES.has(status)) {
+          throw new Error("Report response contains an invalid location state");
+        }
+        if (typeof location.historical !== "boolean") {
+          throw new Error("Report response contains an invalid history flag");
+        }
+        return {
+          sectionKey: string(location.sectionKey, "location.sectionKey"),
+          scopeId: string(location.scopeId, "location.scopeId"),
+          facilityId: string(location.facilityId, "location.facilityId"),
+          facilityLabel: string(location.facilityLabel, "location.facilityLabel"),
+          publicationState:
+            publicationState as EnrollmentReportPage["providers"][number]["cells"][number]["locations"][number]["publicationState"],
+          historical: location.historical,
+          status:
+            status as EnrollmentReportPage["providers"][number]["cells"][number]["locations"][number]["status"],
+        };
+      });
+      const locationCount = cell.locationCount;
+      if (!Number.isInteger(locationCount) || locationCount !== locations.length) {
+        throw new Error("Report response contains an invalid location count");
+      }
+      return {
+        key: string(cell.key, "cell.key"),
+        sectionKey: string(cell.sectionKey, "cell.sectionKey"),
+        productId: string(cell.productId, "cell.productId"),
+        state: cellState as EnrollmentReportPage["providers"][number]["cells"][number]["state"],
+        locationCount,
+        locations,
+      };
+    });
+    return {
+      providerId: string(provider.providerId, "provider.providerId"),
+      name: string(provider.name, "provider.name"),
+      npi: nullableString(provider.npi, "provider.npi"),
+      discipline: providerDisciplineForTaxonomy(
+        nullableString(provider.taxonomyCode, "provider.taxonomyCode"),
+      ),
+      status: providerStatus as EnrollmentReportPage["providers"][number]["status"],
+      referenceOnly: provider.referenceOnly,
+      verificationState:
+        verificationState as EnrollmentReportPage["providers"][number]["verificationState"],
+      sectionKeys: stringArray(provider.sectionKeys, "provider.sectionKeys"),
+      cells,
+    };
+  });
+}
+
+function tokenContext(
+  user: UserContext,
+  context: { orgId: string; audience: EnrollmentExplorerAudience; contextRevision?: string },
+  filters: EnrollmentReportFilters,
+): EnrollmentReportTokenContext {
+  if (!context.contextRevision)
+    throw new EnrollmentExplorerRpcError("Access context changed; retry the request", "40001");
+  return {
+    actorUserId: user.userId,
+    orgId: context.orgId,
+    audience: context.audience,
+    contextRevision: context.contextRevision,
+    filters,
+  };
+}
+
+function reportSnapshotStale(): Response {
+  return bad("report_snapshot_stale", 409);
+}
+
+function requestedOrgMatches(url: URL, orgId: string): true | Response {
+  const org = oneQueryValue(url.searchParams, "org");
+  const orgIdParam = oneQueryValue(url.searchParams, "orgId");
+  if (org === undefined || orgIdParam === undefined) return bad("org must appear once");
+  if ((org && org !== orgId) || (orgIdParam && orgIdParam !== orgId)) {
+    return bad("Selected organization does not match the verified request", 403);
+  }
+  return true;
+}
+
+function reportNextCursor(snapshot: EnrollmentReportSnapshotRpc, viewToken: string): string | null {
+  if (!snapshot.hasMore) return null;
+  if (!isObject(snapshot.nextCursorKey))
+    throw new Error("Report response is missing the next cursor key");
+  const key: EnrollmentReportCursorKey = {
+    lastName: string(snapshot.nextCursorKey.lastName, "nextCursorKey.lastName"),
+    firstName: string(snapshot.nextCursorKey.firstName, "nextCursorKey.firstName"),
+    providerId: string(snapshot.nextCursorKey.providerId, "nextCursorKey.providerId"),
+  };
+  return createEnrollmentReportCursor(viewToken, key);
+}
+
+function projectHistoryRevision(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) throw new Error("History response contains an invalid revision");
+  return Object.fromEntries(
+    Object.entries(ENROLLMENT_REVISION_ALIASES)
+      .filter(([camel, snake]) => camel in value || snake in value)
+      .map(([camel, snake]) => [camel, value[camel] ?? value[snake]]),
+  );
+}
+
+const CLIENT_HISTORY_FIELDS = [
+  "scopeId",
+  "orgId",
+  "providerId",
+  "groupId",
+  "payerProductId",
+  "facilityId",
+  "state",
+  "providerName",
+  "groupLabel",
+  "payerLabel",
+  "productLabel",
+  "facilityLabel",
+  "status",
+  "historicalStatus",
+  "clientSafeBlocker",
+  "owner",
+  "reviewedAt",
+  "cycleNo",
+  "revisionNo",
+  "intakeDate",
+  "completeToSubmitDate",
+  "submittedDate",
+  "payerAcknowledgedDate",
+  "approvedDate",
+  "effectiveDate",
+  "terminationDate",
+  "payerReference",
+  "retroStatus",
+  "retroDays",
+  "retroDate",
+  "retroBasis",
+] as const;
+
+function projectClientHistoryItem(value: unknown): EnrollmentScopeHistoryClientItem {
+  if (!isObject(value) || !Array.isArray(value.proofs)) {
+    throw new Error("History response contains an invalid client item");
+  }
+  const item = Object.fromEntries(
+    CLIENT_HISTORY_FIELDS.filter((key) => key in value).map((key) => [key, value[key]]),
+  );
+  item.proofs = objectArray(value.proofs, "history.proofs").map((proof) => {
+    const evidenceKind = string(proof.evidenceKind, "history.proof.evidenceKind");
+    const supportedFields = stringArray(proof.supportedFields, "history.proof.supportedFields");
+    if (
+      !EVIDENCE_KINDS.has(evidenceKind as EnrollmentEvidenceKind) ||
+      supportedFields.some((field) => !PROOF_FIELDS.has(field as EnrollmentProofField))
+    ) {
+      throw new Error("History response contains an invalid proof projection");
+    }
+    return {
+      publicationId: string(proof.publicationId, "history.proof.publicationId"),
+      evidenceKind,
+      supportedFields,
+      publishedAt: string(proof.publishedAt, "history.proof.publishedAt"),
+    };
+  });
+  const publicationState = string(value.publicationState, "history.publicationState");
+  const status = string(value.status, "history.status");
+  if (
+    !HISTORY_PUBLICATION_STATES.has(publicationState) ||
+    value.historical !== true ||
+    !REPORT_STATUSES.has(status)
+  ) {
+    throw new Error("History response contains an invalid client history state");
+  }
+  for (const key of [
+    "providerName",
+    "groupLabel",
+    "payerLabel",
+    "productLabel",
+    "facilityLabel",
+  ] as const) {
+    item[key] = string(value[key], `history.${key}`);
+  }
+  return {
+    ...(item as unknown as EnrollmentScopeHistoryClientItem),
+    historical: true,
+    publicationState: publicationState as EnrollmentScopeHistoryClientItem["publicationState"],
+    publishedAt: string(value.publishedAt, "history.publishedAt"),
+  };
+}
+
+function projectStaffHistoryItem(value: unknown): Record<string, unknown> {
+  if (!isObject(value) || !Array.isArray(value.sources) || !Array.isArray(value.publications)) {
+    throw new Error("History response contains an invalid staff item");
+  }
+  return {
+    revisionId: string(value.revisionId, "history.revisionId"),
+    cycleNo: value.cycleNo,
+    revisionNo: value.revisionNo,
+    createdAt: string(value.createdAt, "history.createdAt"),
+    status: string(value.status, "history.status"),
+    revision: projectHistoryRevision(value.revision),
+    sources: objectArray(value.sources, "history.sources").map((source) => ({
+      sourceKind: string(source.sourceKind, "history.source.sourceKind"),
+      sourceId: string(source.sourceId, "history.source.sourceId"),
+      sourceFingerprint: string(source.sourceFingerprint, "history.source.sourceFingerprint"),
+      sourceSnapshot: isObject(source.sourceSnapshot) ? source.sourceSnapshot : {},
+    })),
+    publications: objectArray(value.publications, "history.publications").map((publication) => {
+      const state = string(publication.state, "history.publication.state");
+      if (!HISTORY_PUBLICATION_EVENT_STATES.has(state)) {
+        throw new Error("History response contains an invalid publication state");
+      }
+      return {
+        publicationId: string(publication.publicationId, "history.publication.id"),
+        kind: string(publication.kind, "history.publication.kind"),
+        state,
+        publishedAt: string(publication.publishedAt, "history.publication.publishedAt"),
+        ...(typeof publication.evidenceKind === "string"
+          ? { evidenceKind: publication.evidenceKind }
+          : {}),
+        ...(Array.isArray(publication.supportedFields)
+          ? {
+              supportedFields: stringArray(
+                publication.supportedFields,
+                "history.publication.supportedFields",
+              ),
+            }
+          : {}),
+      };
+    }),
+  };
+}
+
+function decodeHistoryCursor(value: string | null): unknown | null {
+  if (!value) return null;
+  if (value.length > 2048 || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new EnrollmentExplorerRpcError("Enrollment request is invalid", "22023");
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  } catch {
+    throw new EnrollmentExplorerRpcError("Enrollment request is invalid", "22023");
+  }
+  if (!isObject(decoded))
+    throw new EnrollmentExplorerRpcError("Enrollment request is invalid", "22023");
+  return decoded;
+}
+
+function projectCsvRecord(value: unknown): EnrollmentReportCsvRecord {
+  if (!isObject(value)) throw new Error("Report export returned an invalid record");
+  const status = string(value.status, "record.status");
+  const publicationState = string(value.publicationState, "record.publicationState");
+  if (!REPORT_STATUSES.has(status) || !PUBLICATION_STATES.has(publicationState)) {
+    throw new Error("Report export returned an invalid record state");
+  }
+  const retroType = value.retroType == null ? null : string(value.retroType, "record.retroType");
+  if (retroType != null && !["unknown", "not_supported", "documented"].includes(retroType)) {
+    throw new Error("Report export returned an invalid retro status");
+  }
+  const owner = value.owner == null ? null : string(value.owner, "record.owner");
+  if (owner != null && !["Minted", "Client", "Payer", "Complete", "Unassigned"].includes(owner)) {
+    throw new Error("Report export returned an invalid owner");
+  }
+  if (value.cycleNo != null && !Number.isInteger(value.cycleNo)) {
+    throw new Error("Report export returned an invalid cycle number");
+  }
+  if (value.authenticatedReportUrl !== "/reporting/enrollment-explorer") {
+    throw new Error("Report export returned an invalid report URL");
+  }
+  return {
+    providerName: string(value.providerName, "record.providerName"),
+    npi: nullableString(value.npi, "record.npi"),
+    discipline: providerDisciplineForTaxonomy(
+      nullableString(value.taxonomyCode, "record.taxonomyCode"),
+    ),
+    groupLabel: string(value.groupLabel, "record.groupLabel"),
+    payerLabel: string(value.payerLabel, "record.payerLabel"),
+    productLabel: string(value.productLabel, "record.productLabel"),
+    state: string(value.state, "record.state"),
+    facilityLabel: string(value.facilityLabel, "record.facilityLabel"),
+    status: status as EnrollmentReportCsvRecord["status"],
+    publicationState: publicationState as EnrollmentReportCsvRecord["publicationState"],
+    intakeDate: nullableString(value.intakeDate, "record.intakeDate"),
+    completeToSubmitDate: nullableString(value.completeToSubmitDate, "record.completeToSubmitDate"),
+    submittedDate: nullableString(value.submittedDate, "record.submittedDate"),
+    payerAcknowledgedDate: nullableString(
+      value.payerAcknowledgedDate,
+      "record.payerAcknowledgedDate",
+    ),
+    approvedDate: nullableString(value.approvedDate, "record.approvedDate"),
+    effectiveDate: nullableString(value.effectiveDate, "record.effectiveDate"),
+    terminationDate: nullableString(value.terminationDate, "record.terminationDate"),
+    cycleNo: (value.cycleNo as number | null | undefined) ?? null,
+    payerReference: nullableString(value.payerReference, "record.payerReference"),
+    retroType: retroType as EnrollmentReportCsvRecord["retroType"],
+    retroValue: nullableString(value.retroValue, "record.retroValue"),
+    retroBasis: nullableString(value.retroBasis, "record.retroBasis"),
+    clientSafeBlocker: nullableString(value.clientSafeBlocker, "record.clientSafeBlocker"),
+    owner: owner as EnrollmentReportCsvRecord["owner"],
+    reviewedAsOf: nullableString(value.reviewedAsOf, "record.reviewedAsOf"),
+    proofLabel: nullableString(value.proofLabel, "record.proofLabel"),
+    proofType: nullableString(
+      value.proofType,
+      "record.proofType",
+    ) as EnrollmentReportCsvRecord["proofType"],
+    authenticatedReportUrl: "/reporting/enrollment-explorer",
+  };
 }
 
 function rpcErrorResponse(error: unknown): Response {
@@ -193,22 +723,159 @@ function parseScopeSaveInput(body: unknown): EnrollmentScopeSaveInput | null {
 
 function buildContext(
   user: UserContext,
-  orgId: string,
-  audience: EnrollmentExplorerAudience,
+  context: { orgId: string; audience: EnrollmentExplorerAudience; contextRevision?: string },
 ): EnrollmentExplorerContext {
-  return { db: user.db, actorUserId: user.userId, orgId, audience };
+  return {
+    db: user.db,
+    actorUserId: user.userId,
+    orgId: context.orgId,
+    audience: context.audience,
+    contextRevision: context.contextRevision,
+  };
 }
 
 export async function handleEnrollmentExplorerRequest(
   request: Request,
   user: UserContext,
-  context: { orgId: string; audience: EnrollmentExplorerAudience },
+  context: { orgId: string; audience: EnrollmentExplorerAudience; contextRevision?: string },
 ): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/$/, "");
   const method = request.method.toUpperCase();
-  const ctx = buildContext(user, context.orgId, context.audience);
+  const ctx = buildContext(user, context);
   try {
+    if (path === "/api/enrollment-explorer/report/page") {
+      if (method !== "GET") return bad("Method not allowed", 405);
+      const orgCheck = requestedOrgMatches(url, context.orgId);
+      if (orgCheck !== true) return orgCheck;
+      const input = parseReportFilters(url.searchParams);
+      if (!input) return bad("Invalid enrollment report filters");
+      if (input.cursor && !input.viewToken) return bad("A report cursor requires its view token");
+      const cursorKey = input.cursor
+        ? verifyEnrollmentReportCursor(input.cursor, input.viewToken ?? "")
+        : null;
+      if (input.cursor && !cursorKey) return bad("Invalid enrollment report cursor");
+      const snapshot = await getEnrollmentReportSnapshot(ctx, {
+        filters: input.filters,
+        cursor: cursorKey ? { ...cursorKey } : null,
+        mode: "page",
+      });
+      const binding = tokenContext(user, context, input.filters);
+      const viewToken = input.viewToken
+        ? input.viewToken
+        : createEnrollmentReportViewToken(binding, snapshot.snapshotDigest);
+      if (
+        input.viewToken &&
+        !verifyEnrollmentReportViewToken(input.viewToken, binding, snapshot.snapshotDigest)
+      ) {
+        return reportSnapshotStale();
+      }
+      const data: EnrollmentReportPage = {
+        contextRevision: context.contextRevision ?? "",
+        viewToken,
+        accessState: snapshot.accessState,
+        filters: input.filters,
+        filterChoices: projectReportFilterChoices(snapshot.filterChoices),
+        sections: projectReportSections(snapshot.sections),
+        providers: projectReportProviders(snapshot.providers),
+        nextCursor: reportNextCursor(snapshot, viewToken),
+      };
+      return okNoStore(data);
+    }
+
+    if (path === "/api/enrollment-explorer/report.csv") {
+      if (method !== "GET") return bad("Method not allowed", 405);
+      const orgCheck = requestedOrgMatches(url, context.orgId);
+      if (orgCheck !== true) return orgCheck;
+      const input = parseReportFilters(url.searchParams);
+      if (!input) return bad("Invalid enrollment report filters");
+      if (!input.viewToken || input.cursor)
+        return bad("A report export requires a first-page view token");
+      const binding = tokenContext(user, context, input.filters);
+      const snapshot = await getEnrollmentReportSnapshot(ctx, {
+        filters: input.filters,
+        cursor: null,
+        mode: "export",
+      });
+      if (!verifyEnrollmentReportViewToken(input.viewToken, binding, snapshot.snapshotDigest)) {
+        return reportSnapshotStale();
+      }
+      if (snapshot.tooLarge || snapshot.rowCount > 100_000) {
+        return bad("report_csv_limit_exceeded", 413);
+      }
+      if (snapshot.rowCount !== snapshot.records.length) {
+        throw new Error("Report export row count did not match its complete snapshot");
+      }
+      const records = snapshot.records.map(projectCsvRecord);
+      const serialized = serializeEnrollmentReportCsv(records);
+      if (!serialized.ok) return bad("report_csv_limit_exceeded", 413);
+      const bytes = new TextEncoder().encode(serialized.csv);
+
+      // This second, fresh RPC re-resolves the actor, audience and grants and
+      // recomputes the complete digest after serialization, immediately before
+      // the native Response stream is constructed.
+      const fresh = await getEnrollmentReportSnapshot(ctx, {
+        filters: input.filters,
+        cursor: null,
+        mode: "page",
+      });
+      if (
+        fresh.snapshotDigest !== snapshot.snapshotDigest ||
+        !verifyEnrollmentReportViewToken(input.viewToken, binding, fresh.snapshotDigest)
+      ) {
+        return reportSnapshotStale();
+      }
+      let offset = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const end = Math.min(offset + 64 * 1024, bytes.byteLength);
+          controller.enqueue(bytes.subarray(offset, end));
+          offset = end;
+          if (offset >= bytes.byteLength) controller.close();
+        },
+      });
+      return noStore(
+        new Response(body, {
+          status: 200,
+          headers: {
+            "content-type": "text/csv; charset=utf-8",
+            "content-disposition": 'attachment; filename="enrollment-report.csv"',
+            "x-content-type-options": "nosniff",
+          },
+        }),
+      );
+    }
+
+    const history = /^\/api\/enrollment-explorer\/scopes\/([^/]+)\/history$/.exec(path);
+    if (history) {
+      if (method !== "GET") return bad("Method not allowed", 405);
+      if (!uuid(history[1])) return bad("scopeId must be a UUID");
+      const rawCursor = oneQueryValue(url.searchParams, "cursor");
+      const rawLimit = oneQueryValue(url.searchParams, "limit");
+      if (rawCursor === undefined || rawLimit === undefined)
+        return bad("History parameters must appear once");
+      const limit = rawLimit == null ? 20 : Number(rawLimit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+        return bad("limit must be between 1 and 20");
+      }
+      const page = await getEnrollmentScopeHistoryPage(ctx, {
+        scopeId: history[1].toLowerCase(),
+        cursor: decodeHistoryCursor(rawCursor),
+        limit,
+      });
+      const items =
+        context.audience === "client"
+          ? page.items.map(projectClientHistoryItem)
+          : page.items.map(projectStaffHistoryItem);
+      const data: EnrollmentScopeHistoryPage = {
+        audience: context.audience,
+        scopeId: history[1].toLowerCase(),
+        items: items as EnrollmentScopeHistoryPage["items"],
+        nextCursor: page.nextCursor,
+      };
+      return okNoStore(data);
+    }
+
     if (path === "/api/enrollment-explorer/catalog") {
       if (method !== "GET") return bad("Method not allowed", 405);
       const groupId = url.searchParams.get("groupId");

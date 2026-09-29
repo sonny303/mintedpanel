@@ -8,7 +8,8 @@ import { BarChart3, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { useInboundLeads } from "@/hooks/useInboundLeads";
-import { REPORT_GROUPS, reportsInGroup, type ReportDef } from "@/lib/reports";
+import { useAuthStore } from "@/lib/auth-store";
+import { REPORTS, REPORT_GROUPS, reportsInGroup, type ReportDef } from "@/lib/reports";
 
 export const Route = createFileRoute("/reporting/")({
   component: ReportingCenterPage,
@@ -44,6 +45,28 @@ function ReportCard({ report, badge }: { report: ReportDef; badge?: number }) {
 }
 
 function ReportingCenterPage() {
+  const audience = useAuthStore((state) => state.accessContext?.audience);
+  return audience === "client" ? <ClientReportingCenter /> : <InternalReportingCenter />;
+}
+
+function ClientReportingCenter() {
+  const report = REPORTS.find((item) => item.key === "enrollment-explorer");
+  return (
+    <div>
+      <PageHeader
+        title="Reporting Center"
+        description="View payer enrollment published for your assigned provider groups."
+      />
+      {report ? (
+        <section aria-label="Credentialing reports" className="max-w-3xl">
+          <ReportCard report={report} />
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function InternalReportingCenter() {
   // The Intake badge: new (untriaged) leads, rendered only when > 0 (F6.6.1).
   const leadsQ = useInboundLeads();
   const newLeadCount = (leadsQ.data ?? []).filter((l) => l.status === "new").length;

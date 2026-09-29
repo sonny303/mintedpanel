@@ -4413,10 +4413,34 @@ export type Database = {
         };
         Returns: Json;
       };
+      get_enrollment_report_snapshot: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_cursor: Json;
+          p_discipline_codes: string[];
+          p_filters: Json;
+          p_known_codes: string[];
+          p_mode: string;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
       get_enrollment_scope_detail: {
         Args: {
           p_actor_user_id: string;
           p_audience: string;
+          p_org_id: string;
+          p_scope_id: string;
+        };
+        Returns: Json;
+      };
+      get_enrollment_scope_history_page: {
+        Args: {
+          p_actor_user_id: string;
+          p_audience: string;
+          p_cursor: Json;
+          p_limit: number;
           p_org_id: string;
           p_scope_id: string;
         };

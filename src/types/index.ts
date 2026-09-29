@@ -948,6 +948,163 @@ export interface EnrollmentScopeDetailStaff {
 
 export type EnrollmentScopeDetail = EnrollmentScopeDetailStaff | EnrollmentClientScopeSummary;
 
+/** E6.14 matrix/report contracts. Empty target cells are UI-only projections. */
+export type EnrollmentReportDiscipline = "PT" | "PTA" | "OT" | "OTA" | "SLP" | "Other" | "Unknown";
+
+export type EnrollmentReportStatus = EnrollmentStatus | "needs_verification";
+
+export interface EnrollmentReportFilters {
+  groupId?: string;
+  state?: string;
+  facilityId?: string;
+  productId?: string;
+  discipline?: EnrollmentReportDiscipline;
+  status?: EnrollmentReportStatus;
+  search?: string;
+  historical?: boolean;
+}
+
+export interface EnrollmentReportPageRequest extends EnrollmentReportFilters {
+  cursor?: string | null;
+  viewToken?: string | null;
+}
+
+export interface EnrollmentReportFilterChoices {
+  groups: Array<{ id: string; label: string }>;
+  states: string[];
+  facilities: Array<{ id: string; label: string; groupId: string; state: string }>;
+  products: Array<{ id: string; payerLabel: string; label: string }>;
+  disciplines: EnrollmentReportDiscipline[];
+  statuses: EnrollmentReportStatus[];
+}
+
+export interface EnrollmentReportProductColumn {
+  key: string;
+  productId: string;
+  payerLabel: string;
+  productLabel: string;
+}
+
+export interface EnrollmentReportSection {
+  key: string;
+  groupId: string;
+  groupLabel: string;
+  state: string;
+  columns: EnrollmentReportProductColumn[];
+}
+
+export type EnrollmentReportPublicationState =
+  "published" | "stale" | "retracted" | "superseded" | "draft";
+
+export interface EnrollmentReportLocation {
+  sectionKey: string;
+  scopeId: string;
+  facilityId: string;
+  facilityLabel: string;
+  publicationState: EnrollmentReportPublicationState;
+  historical: boolean;
+  status: EnrollmentReportStatus;
+}
+
+export interface EnrollmentReportCell {
+  key: string;
+  sectionKey: string;
+  productId: string;
+  state: "published" | "needs_verification" | "staff_draft";
+  locationCount: number;
+  locations: EnrollmentReportLocation[];
+}
+
+export interface EnrollmentReportProvider {
+  providerId: string;
+  name: string;
+  npi: string | null;
+  discipline: EnrollmentReportDiscipline;
+  status: ProviderStatus;
+  referenceOnly: boolean;
+  verificationState: ProviderVerificationState;
+  sectionKeys: string[];
+  cells: EnrollmentReportCell[];
+}
+
+export interface EnrollmentReportPage {
+  contextRevision: string;
+  viewToken: string;
+  accessState: "ready" | "no_grants" | "empty_cohort";
+  filters: EnrollmentReportFilters;
+  filterChoices: EnrollmentReportFilterChoices;
+  sections: EnrollmentReportSection[];
+  providers: EnrollmentReportProvider[];
+  nextCursor: string | null;
+}
+
+export interface EnrollmentScopeHistoryStaffItem {
+  revisionId: string;
+  cycleNo: number;
+  revisionNo: number;
+  createdAt: string;
+  status: EnrollmentStatus;
+  revision: EnrollmentRevisionDraft;
+  sources: Array<EnrollmentSourceLink & { sourceSnapshot: Record<string, unknown> }>;
+  publications: Array<{
+    publicationId: string;
+    kind: "summary" | "proof";
+    state: "published" | "revoked" | "superseded" | "expired";
+    publishedAt: string;
+    evidenceKind?: EnrollmentEvidenceKind;
+    supportedFields?: EnrollmentProofField[];
+  }>;
+}
+
+export interface EnrollmentScopeHistoryClientItem extends EnrollmentClientScopeSummary {
+  providerName: string;
+  groupLabel: string;
+  payerLabel: string;
+  productLabel: string;
+  facilityLabel: string;
+  historical: true;
+  publicationState: "published" | "retracted" | "superseded";
+  publishedAt: string;
+}
+
+export interface EnrollmentScopeHistoryPage {
+  audience: EnrollmentExplorerAudience;
+  scopeId: string;
+  items: Array<EnrollmentScopeHistoryStaffItem | EnrollmentScopeHistoryClientItem>;
+  nextCursor: string | null;
+}
+
+export interface EnrollmentReportCsvRecord {
+  providerName: string;
+  npi: string | null;
+  discipline: EnrollmentReportDiscipline;
+  groupLabel: string;
+  payerLabel: string;
+  productLabel: string;
+  state: string;
+  facilityLabel: string;
+  status: EnrollmentReportStatus;
+  publicationState: EnrollmentReportPublicationState;
+  intakeDate: string | null;
+  completeToSubmitDate: string | null;
+  submittedDate: string | null;
+  payerAcknowledgedDate: string | null;
+  approvedDate: string | null;
+  effectiveDate: string | null;
+  terminationDate: string | null;
+  cycleNo: number | null;
+  payerReference: string | null;
+  retroType: EnrollmentRetroStatus | null;
+  retroValue: string | null;
+  retroBasis: string | null;
+  clientSafeBlocker: string | null;
+  owner: EnrollmentActionOwner | null;
+  reviewedAsOf: string | null;
+  proofLabel: string | null;
+  proofType: EnrollmentEvidenceKind | null;
+  authenticatedReportUrl: string;
+}
+
 export interface EnrollmentProofCaptureInput {
   scopeId: string;
   revisionId: string;

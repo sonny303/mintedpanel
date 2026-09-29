@@ -1,11 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { LogOut, ShieldCheck } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
 import type { EnrollmentClientOrg, EnrollmentStaffOrg } from "@/services/clientAccess";
 
 interface AccessContextBoundaryProps {
   children: ReactNode;
+  /** The root route supplies a shell-free outlet only for the two allowed
+   * client Reporting Center routes. Other client paths keep the E6.12 fence. */
+  clientReportOutlet?: ReactNode;
 }
 
 function BoundaryFrame({ children }: { children: ReactNode }) {
@@ -264,7 +268,80 @@ function ClientContextSurface({
   );
 }
 
-export function AccessContextBoundary({ children }: AccessContextBoundaryProps) {
+function ClientReportSurface({
+  children,
+  orgName,
+  canSwitchToStaff,
+  staffOrgs,
+}: {
+  children: ReactNode;
+  orgName: string;
+  canSwitchToStaff: boolean;
+  staffOrgs: EnrollmentStaffOrg[];
+}) {
+  const loadAccessContext = useAuthStore((state) => state.loadAccessContext);
+  const signOut = useAuthStore((state) => state.signOut);
+  const setActiveOrg = useAuthStore((state) => state.setActiveOrg);
+  const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
+
+  async function switchToStaff(orgId: string) {
+    setSwitchingOrgId(orgId);
+    try {
+      await loadAccessContext({ audience: "staff", orgId });
+      setActiveOrg(orgId);
+    } finally {
+      setSwitchingOrgId(null);
+    }
+  }
+
+  return (
+    <div className="min-h-dvh bg-background text-foreground">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            to="/reporting"
+            className="shrink-0 text-[13px] font-semibold text-foreground hover:underline"
+          >
+            Reporting Center
+          </Link>
+          <span className="truncate border-l border-border pl-3 text-[12px] text-muted-foreground">
+            {orgName}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {canSwitchToStaff
+            ? staffOrgs.map((org) => (
+                <Button
+                  key={org.orgId}
+                  type="button"
+                  variant="outline"
+                  className="h-8"
+                  disabled={switchingOrgId !== null}
+                  onClick={() => void switchToStaff(org.orgId).catch(() => undefined)}
+                >
+                  {switchingOrgId === org.orgId ? "Switching…" : `Internal: ${org.orgName}`}
+                </Button>
+              ))
+            : null}
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground"
+            onClick={() => void signOut()}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign out
+          </button>
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-[1800px] p-4">{children}</main>
+    </div>
+  );
+}
+
+export function AccessContextBoundary({
+  children,
+  clientReportOutlet,
+}: AccessContextBoundaryProps) {
   const session = useAuthStore((state) => state.session);
   const context = useAuthStore((state) => state.accessContext);
   const loading = useAuthStore((state) => state.accessContextLoading);
@@ -299,6 +376,21 @@ export function AccessContextBoundary({ children }: AccessContextBoundaryProps) 
         title="No provider groups assigned"
         message="Your client access is active, but no provider groups are currently assigned. Ask an administrator to update access."
       />
+    );
+  }
+  if (
+    clientReportOutlet &&
+    selectedClientOrg &&
+    (context.audience === "client" || context.restrictedExternal)
+  ) {
+    return (
+      <ClientReportSurface
+        orgName={selectedClientOrg.orgName}
+        canSwitchToStaff={hasStaff && !context.restrictedExternal}
+        staffOrgs={context.staffOrgs}
+      >
+        {clientReportOutlet}
+      </ClientReportSurface>
     );
   }
   if (context.restrictedExternal && context.audience !== "client") {

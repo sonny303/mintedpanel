@@ -96,6 +96,13 @@ export const REPORTS: ReportDef[] = [
     path: "/reporting/contracts-matrix",
     group: "credentialing",
   },
+  {
+    key: "enrollment-explorer",
+    title: "Enrollment Explorer",
+    description: "Review published payer enrollment by provider, group, product, and location.",
+    path: "/reporting/enrollment-explorer",
+    group: "credentialing",
+  },
   // E6.6 F6.6.4 — the Audit Log admin page, relocated (same read surface).
   {
     key: "audit-log",

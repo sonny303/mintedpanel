@@ -248,6 +248,34 @@ test("blocks shell and staff hooks until a client context resolves", async ({ co
   await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
 });
 
+test("client Reporting Center exposes only Enrollment Explorer before internal hooks", async ({
+  context,
+  page,
+}) => {
+  const state: FixtureState = {
+    context: clientContext(),
+    memberships: [],
+    authTokenRequests: 0,
+    seenTables: [],
+    selectionRequests: [],
+  };
+  await installMockNetwork(context, state);
+  await seedAuth(context);
+
+  await page.goto("/reporting");
+  await expect(page.getByRole("heading", { name: "Reporting Center" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enrollment Explorer" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inbound Leads" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Find a provider/i })).toHaveCount(0);
+  expect(state.seenTables.every((table) => ["profiles", "memberships"].includes(table))).toBe(true);
+  expect(
+    state.seenTables.some((table) =>
+      /inbound_leads|cases|providers|provider_groups|facilities/i.test(table),
+    ),
+  ).toBe(false);
+});
+
 for (const scenario of [
   {
     name: "pending identity",
