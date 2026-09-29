@@ -144,10 +144,10 @@ function harness(expected, scenario = "success") {
       const version = args[0] === "--version";
       const sourcePsql = basename(path) === "psql" && !version;
       const script = version
-        ? `process.stdout.write(${JSON.stringify(`${basename(path)} (PostgreSQL) 17.10\n`)});`
+        ? `process.stdout.write(${JSON.stringify(`${basename(path)} (PostgreSQL) 17.10\n`)}, () => process.exit(0));`
         : sourcePsql
           ? program
-          : 'process.stdout.write("synthetic-archive-or-roles");';
+          : 'process.stdout.write("synthetic-archive-or-roles", () => process.exit(0));';
       const child = spawn(process.execPath, ["-e", script], configuration);
       children.push(child);
       child.on("close", () => closed.push(child.pid));
