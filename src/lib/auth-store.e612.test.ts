@@ -439,4 +439,88 @@ describe("E6.12 auth lifecycle", () => {
     expect(useAuthStore.getState().accessContextLoading).toBe(false);
     expect(useAuthStore.getState().accessContext?.contextRevision).toBe("rev-current");
   });
+
+  it("preserves access context, active org, and memberships synchronously during TOKEN_REFRESHED for the same actor", async () => {
+    const queryClient = new QueryClient();
+    registerQueryClient(queryClient);
+    queryClient.setQueryData(["cases", ORG_A], [{ id: "keep-case" }]);
+
+    const initialMemberships = [
+      {
+        orgId: ORG_A,
+        orgName: "Org A",
+        role: "admin" as const,
+        lifecycleState: "active" as const,
+        createdAt: "2026-07-01T00:00:00Z",
+      },
+    ];
+
+    useAuthStore.setState({
+      user: { id: ACTOR_A, email: "a@example.test" } as never,
+      session: session(ACTOR_A, "a@example.test"),
+      activeOrgId: ORG_A,
+      fullName: "Actor A",
+      accessContext: context(ACTOR_A, "rev-current", ORG_A),
+      memberships: initialMemberships,
+      accessContextLoading: false,
+    });
+
+    const delayed = deferred<EnrollmentContext>();
+    fetchContextMock.mockReturnValueOnce(delayed.promise);
+
+    const changePromise = applyAuthStateChange(
+      "TOKEN_REFRESHED",
+      session(ACTOR_A, "a-refreshed@example.test"),
+    );
+
+    // In-flight state MUST NOT wipe context, active org, or memberships:
+    const inFlightState = useAuthStore.getState();
+    expect(inFlightState.accessContext).toMatchObject({
+      contextRevision: "rev-current",
+      selectedOrgId: ORG_A,
+    });
+    expect(inFlightState.activeOrgId).toBe(ORG_A);
+    expect(inFlightState.memberships).toEqual(initialMemberships);
+    expect(inFlightState.fullName).toBe("Actor A");
+    expect(queryClient.getQueryData(["cases", ORG_A])).toEqual([{ id: "keep-case" }]);
+
+    delayed.resolve(context(ACTOR_A, "rev-current", ORG_A));
+    await changePromise;
+  });
+
+  it("preserves active staff org when previous context had selectedOrgId null", async () => {
+    useAuthStore.setState({
+      activeOrgId: ORG_A,
+      accessContext: {
+        ...context(ACTOR_A, "rev-staff"),
+        audience: "staff",
+        selectedOrgId: null,
+      },
+    });
+
+    const discovery = {
+      ...context(ACTOR_A, "rev-staff-new"),
+      audience: null,
+      selectedOrgId: null,
+      staffOrgs: [{ orgId: ORG_A, orgName: "Org A", role: "admin", reportStaff: true, clientManage: true }],
+    };
+    fetchContextMock.mockResolvedValueOnce(discovery);
+    selectContextMock.mockResolvedValueOnce({
+      ...discovery,
+      audience: "staff",
+      selectedOrgId: ORG_A,
+    });
+
+    await useAuthStore.getState().loadAccessContext();
+
+    expect(selectContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audience: "staff",
+        orgId: ORG_A,
+        contextRevision: "rev-staff-new",
+      }),
+      expect.any(Object),
+    );
+    expect(useAuthStore.getState().accessContext?.selectedOrgId).toBe(ORG_A);
+  });
 });
