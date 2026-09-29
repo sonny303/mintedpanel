@@ -45,20 +45,20 @@ separately approved extension package.
 
 ### First hosted decision: staging encrypted baseline capture
 
-Target **only** `vmznysvietfaddakkegt`. Current read-only state: 143 ledger
+Target **only** `vmznysvietfaddakkegt`. Pre-capture read-only state: 143 ledger
 entries; four organizations, zero contracts, 659 portal maps and 90 fill
 sessions; eight existing contracting statuses would be updated by #427. The
 crosswalk records 120 source SQL hashes, including a duplicate version; no
 schema repair is authorized by this capture. Prior September 23 isolated
 restore passed for an older staging snapshot, but it cannot stand in for a
-fresh baseline. Recheck identity, ledger, catalog and counts immediately before
-this operation.
+fresh baseline. Refresh ledger, catalog and counts before any later staging
+schema decision.
 
-The requested first hosted operation is the reviewed
+The owner-approved first hosted operation used the reviewed
 `scripts/recovery/live-backup.mjs capture` path: create a bounded temporary
 staging login, take a consistent encrypted age snapshot, and verify that exact
-login is removed. The output remains local private ciphertext with `CAPTURED_ONLY`
-status. Then restore that capture into an isolated local database and verify
+login is removed. The output is local private ciphertext with `CAPTURED_ONLY`
+status. That capture was restored into an isolated local database to verify
 row/sequence/catalog/ledger integrity. No staging application SQL, Vercel setting,
 alias, production resource or Store item changes in this checkpoint. The owner
 approved staging capture and isolated restore on September 28; the private age
@@ -69,11 +69,30 @@ stops the wave for reconciliation.
 The September 28 preflight found one pre-existing `cli_login_postgres` role,
 expired September 26 at 14:42:45 UTC, with zero active sessions. Its inventory
 digest was `1d6cd6736d8066f8c1d95d383c6afcafd3e99a61af40af6205d8c256d6b8a0a7`.
-The capture command rejects this nonempty prestate. A separate exclusive staging
-CLI maintenance approval is required for the fixed expired-role cleanup in
-[`staging-recovery.md`](staging-recovery.md); refresh the inventory and sessions
-at action time, then use the fresh digest. Only after verified empty inventory
-may the approved capture and isolated restore proceed.
+The capture command rejects this nonempty prestate. The owner separately
+approved exclusive staging CLI maintenance for the fixed expired-role cleanup
+in [`staging-recovery.md`](staging-recovery.md). The operator refreshed inventory
+and sessions at action time, then used the fresh digest. The subsequent capture
+started only after verified empty inventory.
+
+### Approved staging recovery checkpoint — completed September 28
+
+| Step                               | Exact result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Expired-role preflight and cleanup | The sole `cli_login_postgres` role was expired and sessionless; the owner-approved exclusive cleanup verified zero roles at `2026-09-28T23:36:14.091Z`. Provider digest `b7f247b2f9f4d26aa8adff68f135b42d59298cff89ab184e067ab460eebd7590`.                                                                                                                                                                                                                                                                                       |
+| Interrupted first capture          | Returned `RECOVERY_BACKUP_REJECTED` after writing encrypted files but without `capture.json`; it supplied no valid backup receipt. Its new, sessionless temporary login was removed through the guarded failed-capture path, with zero roles verified at `2026-09-28T23:41:24.175Z`. That workspace was not restored.                                                                                                                                                                                                             |
+| Fresh encrypted capture            | `CAPTURED_ONLY` at `2026-09-28T23:42:59.042Z` from staging `vmznysvietfaddakkegt`; five age artifacts, combined observed artifact digest `8920a5d7c5558ec893f1856317b8e9cec7cb79cdca9ae205c4308a8ac3f4add3`, schema digest `fce311a4389766f67a41f68184912ca4d60ef9eb2311bf0ef989f1a95ab8d71f`, lineage digest `5f1565676af4f133e55deb8cf0141a04315ffe5f9096547037a11f93aa399421`. Exclusive cleanup verified zero roles at `2026-09-28T23:43:05.334Z`; independent inventory was still empty at `2026-09-28T23:56:46.659Z`.       |
+| Isolated restore                   | `REHEARSED_ONLY` at `2026-09-28T23:56:24.413Z`, run `b15f6a8cce36b8f4`, capture digest `b915f49239295bbfc579ba46fe29b7e158e43a932af99f21a6c57401c46d7451`. The internal-only ARM64 PostgreSQL 17.6 target had zero published ports. Access, roles, structure, lineage and outbound-isolation comparisons passed; 121 physical tables, 4,697 rows, three sequences, zero sequence drift; data digest `e07e137bfc47a1b55a33163651b67761c8543ae84fb44670f82cb6235a8929e8`. The owned target is retained for reviewed follow-on work. |
+| Local Auth/REST boundary           | A separate disposable restore passed 15 login, refresh, identity, negative and cross-tenant probes at `2026-09-29T00:02:15.712Z`, run `e0abaca00a56ad1c`. Its DB/Auth/REST resources were destroyed with zero remaining at `2026-09-29T00:02:16.413Z`. The exact observed `roster_engine_seed_org_templates` trigger was included in fixture-delta proof as six expected new template rows; all other fixture-table triggers remain denied.                                                                                       |
+
+The first restore attempt exposed a local `pg_restore` role switch that blocked
+ownership restoration; after correction, the verifier exposed three extension
+owner mismatches. Both fixes are in draft PR #459 and were validated against the
+sealed capture before the successful receipts above. This checkpoint does not
+qualify a production backup or release: `releaseAdmission` remains `BLOCKED`,
+`qualifiedRecoveryScopes` is empty, and hosted schema changes, source lineage
+reconciliation, complete Storage/Vault recovery proof, deployment and Store
+publication retain their later decisions.
 
 The three missing feature SQL files are pinned for the **later, separate**
 rehearsal/hosted approval: #427

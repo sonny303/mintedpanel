@@ -4,10 +4,23 @@ This slice supplies local encryption, a fixed staging credential provider, an
 owned backup coordinator, an isolated database restore executor, the reviewed
 local Auth/REST qualifier and evidence guards. A live run remains evidence, not
 an effect of merging this code. The coordinator requires an authenticated
-Supabase CLI token source and a separately protected age identity. The latest
-local run used the old pre-cleanup capture method, passed the full recovery
-suite 321/321 and verified the local Auth/REST boundary only. Its success and
-cleanup receipts are retained at:
+Supabase CLI token source and a separately protected age identity.
+
+The owner-approved September 28 staging capture used exclusive maintenance,
+verified zero temporary roles after capture, and produced five encrypted age
+artifacts. The isolated restore verified 121 physical tables, 4,697 rows and
+three sequences with zero sequence drift; its target remains internal-only for
+reviewed follow-on work. A separate disposable restore passed all 15 local
+Auth/REST probes after accounting for the one observed organization roster
+template seed trigger. Its owned DB/Auth/REST resources were destroyed. The
+private capture, restore, Auth/REST and cleanup receipts are in the September 28
+recovery workspaces, with only digests and counts in the release packet. These
+are `REHEARSED_ONLY` and `LOCAL_AUTH_REST_VERIFIED_ONLY` results: release
+admission remains `BLOCKED` and no recovery scope is qualified.
+
+The earlier September 23 local run used the old pre-cleanup capture method,
+passed the full recovery suite 321/321 and verified the local Auth/REST
+boundary only. Its success and cleanup receipts are retained at:
 
 - `/Users/ar/Codex-Minted/recovery-qualify-core-20260923-Ki8PJ9/auth-rest.json`
 - `/Users/ar/Codex-Minted/recovery-qualify-core-20260923-Ki8PJ9/auth-rest-89414b39111817b9-cleanup.json`
