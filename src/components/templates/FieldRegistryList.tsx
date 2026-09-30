@@ -42,6 +42,7 @@ import {
   type RegistryRow,
 } from "@/lib/fieldRegistry";
 import type { TokenGroup } from "@/lib/tokenGroups";
+import { suggestionEvidence, type LabelSuggestion } from "@/lib/labelLearning";
 
 /** The three decisions a trainer actually has (D2), plus the reversal, plus
  * E6.10 value-shaping on a token-mapped row. */
@@ -64,6 +65,7 @@ interface Props {
   staleIds?: ReadonlySet<string>;
   canEdit: boolean;
   groupedTokens: TokenGroup[];
+  suggestions?: ReadonlyMap<string, LabelSuggestion>;
   onDecide: (row: RegistryRow, decision: RegistryDecision) => void | Promise<void>;
   onRename: (row: RegistryRow, displayLabel: string | null) => void | Promise<void>;
   /** Rename the admin section for every row in a group (writes `section`). */
@@ -84,6 +86,7 @@ export function FieldRegistryList({
   staleIds = new Set(),
   canEdit,
   groupedTokens,
+  suggestions,
   onDecide,
   onRename,
   onRenameSection,
@@ -117,6 +120,7 @@ export function FieldRegistryList({
                 stale={staleIds.has(row.id)}
                 canEdit={canEdit}
                 groupedTokens={groupedTokens}
+                suggestion={suggestions?.get(row.id)}
                 onDecide={onDecide}
                 onRename={onRename}
               />
@@ -223,6 +227,7 @@ function RegistryRowEditor({
   stale,
   canEdit,
   groupedTokens,
+  suggestion,
   onDecide,
   onRename,
 }: {
@@ -230,6 +235,7 @@ function RegistryRowEditor({
   stale: boolean;
   canEdit: boolean;
   groupedTokens: TokenGroup[];
+  suggestion?: LabelSuggestion;
   onDecide: Props["onDecide"];
   onRename: Props["onRename"];
 }) {
@@ -341,6 +347,24 @@ function RegistryRowEditor({
           Fixed value “{row.hardcodedValue}” is not in the captured options.
         </p>
       ) : null}
+      {suggestion && classification.decision === "undecided" ? (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <span>
+            Suggested mapping: {suggestion.token}
+            {suggestionEvidence(suggestion) ? ` · ${suggestionEvidence(suggestion)}` : ""}
+          </span>
+          {canEdit ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[12px]"
+              onClick={() => void onDecide(row, { kind: "token", token: suggestion.token })}
+            >
+              Use suggestion
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {capturedOptions.length > 0 ? (
         <details className="text-[11px] text-muted-foreground">
           <summary className="cursor-pointer">
@@ -356,9 +380,11 @@ function RegistryRowEditor({
             ))}
           </ul>
         </details>
-      ) : isStructured ? (
+      ) : isStructured && !checkboxBoolean ? (
         <p className="text-[11px] text-muted-foreground">
-          No captured options — re-capture this page to read what the control accepts.
+          {row.mapType === "pdf"
+            ? "This PDF does not list accepted values for this control. Check the source form."
+            : "No captured options — re-capture this page to read what the control accepts."}
         </p>
       ) : null}
 

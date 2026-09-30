@@ -26,7 +26,9 @@ import { StatusPill } from "@/components/StatusPill";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { usePortalFieldMaps } from "@/hooks/usePortals";
+import { queryKeys } from "@/hooks/queryKeys";
 import {
+  useFieldDictionary,
   useImportPdfFormFields,
   useTokenCatalog,
   useUpdateSharedFieldRegistry,
@@ -35,6 +37,12 @@ import { useTrainGlobalFieldMap } from "@/hooks/useGlobalAuthoring";
 import { useFillPayerForm, usePayerFormDownload } from "@/hooks/usePayerForms";
 import { mockValueForToken } from "@/lib/mockFillProfile";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
+import {
+  normalizePdfMatchLabel,
+  pdfLabelIsUnique,
+  suggestPdfFieldMappings,
+} from "@/lib/pdfFieldSuggestions";
+import { upsertDictionaryEntry } from "@/services/fieldDictionary";
 import { createFillRunGuard } from "@/lib/fillRunGuard";
 import { registryCoverage, sectionRenamePatches, type RegistryRow } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
@@ -57,6 +65,8 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   const qc = useQueryClient();
 
   const mapsQ = usePortalFieldMaps(portalKey);
+  const evidenceQ = usePortalFieldMaps(undefined, open);
+  const dictionaryQ = useFieldDictionary(open);
   const tokensQ = useTokenCatalog();
   const download = usePayerFormDownload();
   const importMut = useImportPdfFormFields();
@@ -87,6 +97,16 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
     () => groupTokens(filterPdfMappingTokens(tokensQ.data ?? [])),
     [tokensQ.data],
   );
+  const suggestions = useMemo(
+    () =>
+      suggestPdfFieldMappings(
+        maps,
+        evidenceQ.data ?? [],
+        dictionaryQ.data ?? [],
+        new Set(filterPdfMappingTokens(tokensQ.data ?? []).map((entry) => entry.token)),
+      ),
+    [maps, evidenceQ.data, dictionaryQ.data, tokensQ.data],
+  );
 
   const invalidateMaps = () => {
     void qc.invalidateQueries({ queryKey: ["portal-field-maps", orgId] });
@@ -96,7 +116,13 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
     try {
       const signed = await download.mutateAsync(formId);
       const result = await importMut.mutateAsync({ familyId, signedUrl: signed.url });
-      invalidateMaps();
+      if (result.failed > 0) {
+        setOpen(true);
+        toast.error(
+          `Imported ${result.imported} of ${result.rows.length} fillable PDF fields. ${result.failed} failed; retry the import to finish.`,
+        );
+        return;
+      }
       if (result.totalFields === 0) {
         toast.error(
           "This PDF has no fillable fields — it is a flat scan, so there is nothing to map yet.",
@@ -113,7 +139,7 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
       toast.success(
         `Imported ${result.imported} field${result.imported === 1 ? "" : "s"}${
           result.skipped > 0 ? ` · skipped ${result.skipped} (buttons, signatures)` : ""
-        }`,
+        }${result.unclearLabels > 0 ? ` · ${result.unclearLabels} need label review` : ""}`,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not read the fields from that form.");
@@ -152,6 +178,14 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
     try {
       await trainMut.mutateAsync({ id: map.id, patch });
       invalidateMaps();
+      if (decision.kind === "token" && pdfLabelIsUnique(map.fieldLabel, maps)) {
+        try {
+          await upsertDictionaryEntry(normalizePdfMatchLabel(map.fieldLabel), decision.token);
+          void qc.invalidateQueries({ queryKey: queryKeys.fieldDictionary(orgId) });
+        } catch {
+          // The approved shared mapping is saved; dictionary learning is best-effort.
+        }
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save the decision");
     }
@@ -305,6 +339,10 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
               generated from this template fills them from the provider, group, facility and the
               user running the fill. What a person must still write stays listed as theirs.
             </p>
+            <p className="text-[12px] text-muted-foreground">
+              Import reads interactive PDF fields only. Printed lines and boxes without PDF form
+              controls still need review in the original form. Unlabeled fields are grouped by page.
+            </p>
 
             {maps.length > 0 ? (
               <p className="text-[12px] text-muted-foreground">
@@ -332,7 +370,7 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
 
             {maps.length === 0 && !busy ? (
               <p className="text-[12px] text-muted-foreground">
-                Nothing imported yet. Import reads the field names the payer built into the PDF — it
+                No interactive fields are mapped yet. Import reads the PDF's embedded fields; it
                 changes nothing in the file.
               </p>
             ) : null}
@@ -366,6 +404,7 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
                   rows={maps}
                   canEdit={canEdit}
                   groupedTokens={groupedTokens}
+                  suggestions={suggestions}
                   onDecide={decideRegistry}
                   onRename={renameRegistryRow}
                   onRenameSection={renameRegistrySection}

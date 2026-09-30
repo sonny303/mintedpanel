@@ -168,7 +168,7 @@ describe("provider profile service — injected server context", () => {
 
     expect(rpcCalls).toEqual(["get_sop_field_tokens"]);
     // Every catalog entry appears in tokens, resolved or not.
-    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 7);
+    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 8);
     expect(profile.case_id).toBeNull();
     expect(valueOf(profile, "provider.firstName")).toBe("Ana");
     expect(valueOf(profile, "group.name")).toBe("Group One");

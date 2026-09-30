@@ -6,6 +6,7 @@ import {
   pdfFieldLabel,
   pdfFieldSection,
   pdfFormPortalKey,
+  proposePdfImportRows,
   summarizePdfImport,
   type PdfAcroFieldDescriptor,
 } from "@/lib/pdfFieldImport";
@@ -53,6 +54,16 @@ describe("pdfFieldLabel", () => {
     expect(pdfFieldLabel(field())).toBe("Provider Name");
     expect(pdfFieldLabel(field({ tooltip: "   " }))).toBe("Provider Name");
   });
+
+  it("does not show broken PDF metadata as a field label", () => {
+    expect(pdfFieldLabel(field({ name: "undefined_5", tooltip: "undefined" }), 65)).toBe(
+      "Unlabeled PDF field 65",
+    );
+    expect(pdfFieldLabel(field({ name: "E Á   šv", tooltip: "E Á >}  š]}v" }), 8)).toBe(
+      "Unlabeled PDF field 8",
+    );
+    expect(pdfFieldLabel(field({ name: "French", tooltip: "French \u0006 P" }))).toBe("French");
+  });
 });
 
 describe("pdfFieldSection", () => {
@@ -85,6 +96,15 @@ describe("pdfFieldImportRows", () => {
   it("keeps the raw hierarchical field name as the selector", () => {
     const [row] = pdfFieldImportRows("fam", [field()]);
     expect(row.selector).toBe("form1[0].Page1[0].ProviderName[0]");
+  });
+
+  it("locates flat PDF fields by page while preserving their selectors", () => {
+    const [row] = pdfFieldImportRows("fam", [
+      field({ name: "undefined_5", tooltip: "undefined", pageNumber: 2 }),
+    ]);
+    expect(row.selector).toBe("undefined_5");
+    expect(row.fieldLabel).toBe("Unlabeled PDF field 1");
+    expect(row.pageStep).toBe("Page 2");
   });
 
   it("captures a control's option vocabulary, and nothing for a bare text box", () => {
@@ -138,5 +158,28 @@ describe("pdfFieldImportRows", () => {
   it("returns nothing for a flat scan, which is a real answer not a failure", () => {
     expect(pdfFieldImportRows("fam", [])).toEqual([]);
     expect(summarizePdfImport("fam", []).totalFields).toBe(0);
+  });
+});
+
+describe("proposePdfImportRows", () => {
+  it("reports partial failures after attempting every field, with bounded concurrency", async () => {
+    const rows = pdfFieldImportRows(
+      "fam",
+      Array.from({ length: 11 }, (_, index) => field({ name: `Field${index + 1}` })),
+    );
+    let active = 0;
+    let maximum = 0;
+    const attempted: string[] = [];
+    const result = await proposePdfImportRows(rows, async (row) => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      attempted.push(row.selector);
+      await Promise.resolve();
+      active -= 1;
+      if (row.selector === "Field9") throw new Error("temporary RPC failure");
+    });
+    expect(result).toEqual({ imported: 10, failed: 1 });
+    expect(attempted).toHaveLength(11);
+    expect(maximum).toBe(8);
   });
 });

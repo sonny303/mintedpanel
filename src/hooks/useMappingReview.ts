@@ -3,7 +3,7 @@
 // persist each decision but do NOT invalidate the field-maps query mid-flow
 // (that would re-split the deck under the user). The route invalidates the
 // field-map / portal / fix-it caches on finish and on exit.
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
@@ -24,17 +24,17 @@ import { markPortalVerified } from "@/services/portals";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
 import { newManualSelector } from "@/lib/fieldRegistry";
-import { summarizePdfImport } from "@/lib/pdfFieldImport";
+import { proposePdfImportRows, summarizePdfImport } from "@/lib/pdfFieldImport";
 import { fetchPdfBytes, readPdfAcroFields } from "@/lib/pdfFieldImportClient";
 
 const STATIC = { staleTime: Infinity, gcTime: Infinity } as const;
 
-export function useFieldDictionary() {
+export function useFieldDictionary(enabled = true) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: queryKeys.fieldDictionary(orgId),
     queryFn: listFieldDictionary,
-    enabled: orgId !== "no-org",
+    enabled: enabled && orgId !== "no-org",
   });
 }
 
@@ -132,28 +132,28 @@ export function useAddSharedRegistryField() {
 // E6.11 B4 — import a blank payer PDF's AcroForm fields into the shared
 // registry, under the FORM FAMILY's portal key.
 //
-// One proposal per field, IN PARALLEL: each call targets a different
-// `selector`, so there is no row to contend over, and the RPC is idempotent
-// on the shared unique index — a re-import of a replaced blank refreshes
-// labels/sections/order on the rows the trainer already decided and adds
-// only what is new, whatever order the calls land in. A row's decision is
-// never touched here, and a suggestion is never applied — deciding stays
-// human. A real payer form can carry 60-150+ fields; sequential round trips
-// made import visibly slow for exactly the forms where it matters most.
+// Propose in bounded parallel batches. A payer PDF may have 100+ fields, but
+// flooding the RPC with all of them at once makes partial failures opaque.
+// Each proposal is idempotent, so a retry repairs only missing rows and keeps
+// every existing decision.
 //
 // A file with no AcroForm fields resolves with `totalFields: 0`; that is the
 // "this PDF is a flat scan" answer, not an error, and the caller says so.
 export function useImportPdfFormFields() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: async (input: { familyId: string; signedUrl: string }) => {
-      const bytes = await fetchPdfBytes(input.signedUrl);
+    mutationFn: async (input: { familyId: string } & ({ signedUrl: string } | { file: File })) => {
+      const bytes =
+        "file" in input ? await input.file.arrayBuffer() : await fetchPdfBytes(input.signedUrl);
       const descriptors = await readPdfAcroFields(bytes);
       const summary = summarizePdfImport(input.familyId, descriptors);
-      const imported = await Promise.all(
-        summary.rows.map((row) => proposeSharedFieldMap({ ...row, mapType: "pdf" })),
+      const outcome = await proposePdfImportRows(summary.rows, (row) =>
+        proposeSharedFieldMap({ ...row, mapType: "pdf" }),
       );
-      return { ...summary, imported: imported.length };
+      return { ...summary, ...outcome };
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["portal-field-maps", orgId] }),
   });
 }
 

@@ -29,12 +29,12 @@ export function usePortals() {
   });
 }
 
-export function usePortalFieldMaps(portalKey?: string) {
+export function usePortalFieldMaps(portalKey?: string, enabled = true) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: queryKeys.portalFieldMaps(orgId, portalKey),
     queryFn: () => listPortalFieldMapsFromApp(portalKey),
-    enabled: orgId !== "no-org",
+    enabled: enabled && orgId !== "no-org",
     staleTime: FIVE_MINUTES,
   });
 }

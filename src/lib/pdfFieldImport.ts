@@ -24,6 +24,8 @@ export interface PdfAcroFieldDescriptor {
   tooltip?: string | null;
   /** A control's option vocabulary (checkbox export values, dropdown options). */
   options?: readonly string[] | null;
+  /** One-based page containing the first widget, when the PDF provides it. */
+  pageNumber?: number | null;
 }
 
 /** One row to propose. Field names match the browser propose service's input. */
@@ -32,6 +34,7 @@ export interface PdfFieldImportRow {
   selector: string;
   fieldLabel: string;
   formSection: string | null;
+  pageStep: string | null;
   fieldType: "text" | "select" | "radio" | "checkbox";
   sortOrder: number;
   controlOptions: { value: string; label: string }[] | null;
@@ -92,15 +95,40 @@ export function pdfFieldSection(name: string): string | null {
 
 /** The label a human reads: the tooltip when the payer wrote one, else the
  * camel-split leaf name. */
-export function pdfFieldLabel(field: PdfAcroFieldDescriptor): string {
+export function isReadablePdfLabel(raw: string | null | undefined): boolean {
+  const label = raw?.trim();
+  const hasBrokenCharacters = Array.from(label ?? "").some((character) => {
+    const code = character.charCodeAt(0);
+    return code === 0xfffd || code === 127 || (code < 32 && ![9, 10, 13].includes(code));
+  });
+  return Boolean(
+    label &&
+    !/^(?:(?:undefined|null)(?:[\s_-]*\d+)?|(?:text|field)[\s_-]*\d+)$/i.test(label) &&
+    !hasBrokenCharacters &&
+    !/[>\]}]{2,}/.test(label),
+  );
+}
+
+export function pdfFieldLabel(field: PdfAcroFieldDescriptor, fieldNumber?: number): string {
   const tooltip = field.tooltip?.trim();
-  if (tooltip) return tooltip;
+  if (isReadablePdfLabel(tooltip)) return tooltip as string;
+  const unreadable = `Unlabeled PDF field${fieldNumber ? ` ${fieldNumber}` : ""}`;
+  const lettersAndNumbers = (value: string) => value.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+  if (
+    tooltip &&
+    !isReadablePdfLabel(tooltip) &&
+    lettersAndNumbers(tooltip) === lettersAndNumbers(field.name)
+  ) {
+    return unreadable;
+  }
   const segments = stripIndices(field.name)
     .split(".")
     .map((s) => s.trim())
     .filter((s) => s !== "");
   const leaf = segments.length > 0 ? segments[segments.length - 1] : field.name;
-  return humanizeFieldName(leaf) || field.name;
+  const fallback = humanizeFieldName(leaf);
+  if (isReadablePdfLabel(fallback)) return fallback;
+  return unreadable;
 }
 
 // A pushbutton has nothing to fill and a signature box cannot be filled
@@ -144,8 +172,9 @@ export function pdfFieldImportRows(
     rows.push({
       portalKey,
       selector,
-      fieldLabel: pdfFieldLabel(field),
+      fieldLabel: pdfFieldLabel(field, rows.length + 1),
       formSection: pdfFieldSection(selector),
+      pageStep: field.pageNumber ? `Page ${field.pageNumber}` : null,
       fieldType: REGISTRY_FIELD_TYPE[field.type] ?? "text",
       sortOrder: rows.length + 1,
       controlOptions:
@@ -164,6 +193,7 @@ export interface PdfImportSummary {
   rows: PdfFieldImportRow[];
   totalFields: number;
   skipped: number;
+  unclearLabels: number;
 }
 
 export function summarizePdfImport(
@@ -171,5 +201,26 @@ export function summarizePdfImport(
   fields: readonly PdfAcroFieldDescriptor[],
 ): PdfImportSummary {
   const rows = pdfFieldImportRows(familyId, fields);
-  return { rows, totalFields: fields.length, skipped: fields.length - rows.length };
+  return {
+    rows,
+    totalFields: fields.length,
+    skipped: fields.length - rows.length,
+    unclearLabels: rows.filter((row) => row.fieldLabel.startsWith("Unlabeled PDF field")).length,
+  };
+}
+
+/** Keep partial imports visible and retryable without flooding the proposal RPC. */
+export async function proposePdfImportRows(
+  rows: readonly PdfFieldImportRow[],
+  propose: (row: PdfFieldImportRow) => Promise<unknown>,
+): Promise<{ imported: number; failed: number }> {
+  let imported = 0;
+  let failed = 0;
+  for (let offset = 0; offset < rows.length; offset += 8) {
+    const outcomes = await Promise.allSettled(rows.slice(offset, offset + 8).map(propose));
+    const succeeded = outcomes.filter((outcome) => outcome.status === "fulfilled").length;
+    imported += succeeded;
+    failed += outcomes.length - succeeded;
+  }
+  return { imported, failed };
 }
