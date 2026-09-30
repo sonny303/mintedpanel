@@ -12,7 +12,8 @@ type PdfSuggestionRow = Pick<
 /** Payer PDFs often append a required-field marker that web labels omit. */
 export function normalizePdfMatchLabel(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  return normalizeFieldLabel(raw.replace(/\s*[:*]?\s*\*?\s*required\s*$/i, ""));
+  const normalized = normalizeFieldLabel(raw.replace(/\s*[:*]?\s*\*?\s*required\s*$/i, ""));
+  return normalized === "" ? null : normalized;
 }
 
 /** A label repeated on this PDF can refer to different data (e.g. Group NPI
@@ -20,6 +21,7 @@ export function normalizePdfMatchLabel(raw: string | null | undefined): string |
 export function pdfLabelIsUnique(label: string | null, rows: readonly PdfSuggestionRow[]): boolean {
   if (!isReadablePdfLabel(label) || label?.startsWith("Unlabeled PDF field")) return false;
   const normalized = normalizePdfMatchLabel(label);
+  if (!normalized) return false;
   return rows.filter((row) => normalizePdfMatchLabel(row.fieldLabel) === normalized).length === 1;
 }
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { pdfLabelIsUnique, suggestPdfFieldMappings } from "@/lib/pdfFieldSuggestions";
+import {
+  normalizePdfMatchLabel,
+  pdfLabelIsUnique,
+  suggestPdfFieldMappings,
+} from "@/lib/pdfFieldSuggestions";
 import type { PortalFieldMap } from "@/types";
 
 type Row = Pick<PortalFieldMap, "id" | "portalKey" | "fieldLabel" | "status" | "source" | "token">;
@@ -11,6 +15,21 @@ const row = (over: Partial<Row> = {}): Row => ({
   source: "manual",
   token: null,
   ...over,
+});
+
+describe("normalizePdfMatchLabel and pdfLabelIsUnique", () => {
+  it("normalizes required markers and returns null for empty or marker-only labels", () => {
+    expect(normalizePdfMatchLabel("")).toBeNull();
+    expect(normalizePdfMatchLabel("   ")).toBeNull();
+    expect(normalizePdfMatchLabel("Required")).toBeNull();
+    expect(normalizePdfMatchLabel("* Required")).toBeNull();
+    expect(normalizePdfMatchLabel("TAX ID NUMBER: *Required")).toBe("tax id number");
+  });
+
+  it("does not consider marker-only labels unique", () => {
+    expect(pdfLabelIsUnique("Required", [row({ fieldLabel: "Required" })])).toBe(false);
+    expect(pdfLabelIsUnique("* Required", [row({ fieldLabel: "* Required" })])).toBe(false);
+  });
 });
 
 describe("suggestPdfFieldMappings", () => {
