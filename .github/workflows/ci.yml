@@ -363,6 +363,9 @@ jobs:
       - name: Verify portal field-map flywheel RPC on disposable PostgreSQL
         run: node scripts/security/verify-portal-field-map-learning.mjs
 
+      - name: Verify MINT-45 case-type and mapping metadata boundaries on disposable PostgreSQL
+        run: node scripts/security/verify-case-type-mapping-metadata.mjs
+
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
   # Two specs run (login render, dashboard redirect); three write scenarios are
