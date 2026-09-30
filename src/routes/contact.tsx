@@ -3,15 +3,15 @@
 // Rendered outside the app shell by __root. Baseline anti-abuse: required fields
 // + a hidden honeypot field (a bot fills it; a human never sees it).
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { submitInboundLead } from "@/services/inboundLeads";
 import { isValidEmail } from "@/lib/contactValidation";
 import type { InboundLeadInput } from "@/types";
+import logoAsset from "@/assets/minted-mark.png.asset.json";
+import "./landing.css";
 
 export const Route = createFileRoute("/contact")({
   component: ContactPage,
@@ -62,7 +62,7 @@ function Field({
   const errId = `${id}-error`;
   return (
     <div>
-      <Label className="text-[12px]" htmlFor={id}>
+      <Label className="mp-contact-label" htmlFor={id}>
         {label}
       </Label>
       <Input
@@ -72,7 +72,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errId : undefined}
-        className="h-9"
+        className="mp-contact-input"
       />
       {error ? (
         <div id={errId} aria-live="polite" className={errClass}>
@@ -114,39 +114,64 @@ function ContactPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-muted/40 px-4 py-10">
-      <div className="mx-auto w-full max-w-lg">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#1B4D3E] text-white">
-            <Mail className="h-4 w-4" />
-          </div>
-          <span className="text-[15px] font-semibold text-foreground">Minted Panel</span>
+    <div className="mp-site mp-contact-page">
+      <header className="mp-contact-header">
+        <div className="mp-container mp-contact-header-inner">
+          <Link className="mp-brand" to="/" aria-label="Minted Panel home">
+            <span className="mp-brand-mark">
+              <img src={logoAsset.url} alt="" />
+            </span>
+            <span>
+              minted<span className="mp-brand-panel">panel</span>
+            </span>
+          </Link>
+          <Link to="/" className="mp-contact-back">
+            <ArrowLeft size={16} /> Back to site
+          </Link>
         </div>
-
-        {done ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
-              <div className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                <CheckCircle2 className="h-5 w-5" />
+      </header>
+      <main className="mp-container mp-contact-grid">
+        <section className="mp-contact-intro" aria-labelledby="mp-contact-title">
+          <div className="mp-eyebrow">
+            <span className="mp-eyebrow-dot" /> Let's talk
+          </div>
+          <h1 id="mp-contact-title">Tell us where credentialing needs support.</h1>
+          <p>
+            Share a few details about your organization. We’ll follow up to learn about your
+            provider and payer workload and where our team can help.
+          </p>
+          <div className="mp-contact-topics">
+            <div>
+              <span>01</span> Your provider and payer workload
+            </div>
+            <div>
+              <span>02</span> Where applications and follow-ups need support
+            </div>
+            <div>
+              <span>03</span> How you want to stay informed
+            </div>
+          </div>
+        </section>
+        <section className="mp-contact-panel" aria-label="Contact form">
+          {done ? (
+            <div className="mp-contact-success" role="status">
+              <span>
+                <CheckCircle2 size={25} />
+              </span>
+              <h2>Thanks for reaching out.</h2>
+              <p>We received your details. Our team will review your inquiry and follow up.</p>
+              <Link to="/" className="mp-text-link">
+                Back to Minted Panel <ArrowRight size={17} />
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="mp-contact-form-heading">
+                <div className="mp-eyebrow">Get in touch</div>
+                <h2>Tell us about your organization.</h2>
+                <p>We’ll reach out to discuss the credentialing support you need.</p>
               </div>
-              <div className="text-[16px] font-semibold text-foreground">
-                Thanks for reaching out
-              </div>
-              <p className="max-w-sm text-[13px] text-muted-foreground">
-                We received your details and someone from our team will be in touch shortly.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="p-6">
-              <h1 className="text-[18px] font-semibold text-foreground">Get in touch</h1>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                Tell us about your organization and we'll reach out about getting your providers
-                credentialed.
-              </p>
-
-              <form onSubmit={onSubmit} noValidate className="mt-5 space-y-4">
+              <form onSubmit={onSubmit} noValidate className="mp-contact-form">
                 {/* Honeypot: visually hidden, off the tab order. Bots fill it; the
                     server drops any submission that carries a value. */}
                 <div aria-hidden="true" className="hidden">
@@ -175,7 +200,7 @@ function ContactPage() {
                   onChange={(v) => set({ contactName: v })}
                   error={errors.contactName}
                 />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="mp-contact-form-row">
                   <Field
                     id="lead-email"
                     label="Email"
@@ -202,18 +227,22 @@ function ContactPage() {
                   </div>
                 ) : null}
 
-                <Button
+                <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+                  className="mp-button mp-button-dark mp-contact-submit"
                 >
-                  {submitting ? "Sending…" : "Send"}
-                </Button>
+                  {submitting ? "Sending…" : "Send details"}
+                  {!submitting && <ArrowRight size={17} />}
+                </button>
+                <p className="mp-contact-privacy">
+                  See how we handle information in our <Link to="/privacy">privacy policy</Link>.
+                </p>
               </form>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </>
+          )}
+        </section>
+      </main>
     </div>
   );
 }

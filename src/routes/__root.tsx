@@ -83,26 +83,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Minted Panel Credentialing" },
+      { title: "Minted Panel | Provider Credentialing Services" },
       {
         name: "description",
         content:
-          "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.",
+          "Minted Panel supports healthcare teams with provider credentialing, payer applications, portal work, and follow-ups. Human-led service supported by practical tools.",
       },
       { name: "author", content: "Minted Panel" },
-      { property: "og:title", content: "Minted Panel Credentialing" },
+      { property: "og:title", content: "Minted Panel | Provider Credentialing Services" },
       {
         property: "og:description",
         content:
-          "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.",
+          "Minted Panel supports healthcare teams with provider credentialing, payer applications, portal work, and follow-ups. Human-led service supported by practical tools.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "Minted Panel Credentialing" },
+      { name: "twitter:title", content: "Minted Panel | Provider Credentialing Services" },
       {
         name: "twitter:description",
         content:
-          "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.",
+          "Minted Panel supports healthcare teams with provider credentialing, payer applications, portal work, and follow-ups. Human-led service supported by practical tools.",
       },
       {
         property: "og:image",
