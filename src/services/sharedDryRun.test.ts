@@ -262,4 +262,27 @@ describe("proveSharedPortal", () => {
     const result = await proveSharedPortal({ db: {} as never, userId: "u1" }, {});
     expect(result).toMatchObject({ kind: "rejected", status: 422 });
   });
+
+  it("passes the generation to the proof RPC and reports a stale conflict", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: "mapping_generation_stale" },
+    });
+    const result = await proveSharedPortal(
+      { db: { rpc } as never, userId: "u1" },
+      { id: FILL_ID, expectedMappingGeneration: 2 },
+    );
+
+    expect(rpc).toHaveBeenCalledWith(
+      "set_global_portal_flags",
+      expect.objectContaining({
+        p_id: FILL_ID,
+        p_proven: true,
+        p_expected_mapping_generation: 2,
+      }),
+    );
+    expect(result).toMatchObject({ kind: "rejected", status: 409 });
+    if (result.kind !== "rejected") throw new Error("expected a rejected result");
+    expect(result.message).toContain("Reload the configuration");
+  });
 });

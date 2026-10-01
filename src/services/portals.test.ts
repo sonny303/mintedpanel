@@ -146,6 +146,7 @@ describe("configuration rename and global creation", () => {
     formUrl: "https://payer.example/form",
     caseType: "enrollment" as const,
     requiresExplicitSelection: true,
+    mappingGeneration: 1,
     isVerified: false,
     lastVerifiedAt: null,
     provenAt: null,
@@ -155,19 +156,29 @@ describe("configuration rename and global creation", () => {
   };
 
   it("renames an org config by updating only its name, preserving the bound key", async () => {
-    const captures = installDb({
-      ...CREATED_ROW,
-      portal_key: typedPortal.portalKey,
-      name: "New display name",
-      case_type: "enrollment",
-      requires_explicit_selection: true,
+    rpcMock.mockResolvedValue({
+      data: {
+        ...CREATED_ROW,
+        portal_key: typedPortal.portalKey,
+        name: "New display name",
+        case_type: "enrollment",
+        requires_explicit_selection: true,
+        mapping_generation: 1,
+      },
+      error: null,
     });
 
     const renamed = await updatePortalName(typedPortal, " New display name ");
 
-    expect(captures[0].payload).toEqual({ name: "New display name" });
-    expect(captures[0].eqs).toContainEqual(["id", "portal-1"]);
-    expect(captures[0].eqs).toContainEqual(["org_id", "org-1"]);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "update_org_portal_configuration",
+      expect.objectContaining({
+        p_org_id: "org-1",
+        p_id: "portal-1",
+        p_expected_mapping_generation: 1,
+        p_patch: { name: "New display name" },
+      }),
+    );
     expect(renamed.portalKey).toBe(typedPortal.portalKey);
     expect(writeAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -229,6 +240,7 @@ describe("updatePortalPayer", () => {
     portalKey: "bcbs_ks_enrollment",
     name: "BCBS KS Enrollment",
     payerId: "payer-1",
+    mappingGeneration: 1,
     formUrl: null,
     isVerified: false,
     lastVerifiedAt: null,
@@ -315,12 +327,20 @@ describe("updatePortalPayer", () => {
   });
 
   it("still allows detaching an organization portal", async () => {
-    const captures = installDb(CREATED_ROW);
+    rpcMock.mockResolvedValue({ data: { ...CREATED_ROW, payer_id: null }, error: null });
 
     const updated = await updatePortalPayer({ ...globalPortal, orgId: "org-1" }, null);
 
     expect(updated.payerId).toBeNull();
-    expect(captures[0].payload).toEqual({ payer_id: null });
+    expect(rpcMock).toHaveBeenCalledWith(
+      "update_org_portal_configuration",
+      expect.objectContaining({
+        p_org_id: "org-1",
+        p_id: "portal-1",
+        p_expected_mapping_generation: 1,
+        p_patch: { payer_id: null },
+      }),
+    );
     expect(writeAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({ before: { payerId: "payer-1" }, after: { payerId: null } }),
     );
@@ -328,7 +348,7 @@ describe("updatePortalPayer", () => {
 
   it("updates payer_id for an org portal and audits the change", async () => {
     const updatedRow = { ...CREATED_ROW, payer_id: "payer-123" };
-    const captures = installDb(updatedRow);
+    rpcMock.mockResolvedValue({ data: updatedRow, error: null });
 
     const portal = {
       id: "portal-1",
@@ -338,6 +358,7 @@ describe("updatePortalPayer", () => {
       payerId: null,
       formUrl: null,
       isVerified: false,
+      mappingGeneration: 1,
       lastVerifiedAt: null,
       urlChangedAt: null,
       createdAt: "2026-07-01T00:00:00Z",
@@ -346,10 +367,15 @@ describe("updatePortalPayer", () => {
 
     const res = await updatePortalPayer(portal, "payer-123");
 
-    expect(captures[0].op).toBe("update");
-    expect(captures[0].payload).toEqual({ payer_id: "payer-123" });
-    expect(captures[0].eqs).toContainEqual(["id", "portal-1"]);
-    expect(captures[0].eqs).toContainEqual(["org_id", "org-1"]);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "update_org_portal_configuration",
+      expect.objectContaining({
+        p_org_id: "org-1",
+        p_id: "portal-1",
+        p_expected_mapping_generation: 1,
+        p_patch: { payer_id: "payer-123" },
+      }),
+    );
     expect(res.payerId).toBe("payer-123");
     expect(writeAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({

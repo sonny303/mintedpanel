@@ -3,6 +3,7 @@
 // (Surface 1) reuse — all org-scoped via queryKeys.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
+import { supabase } from "@/integrations/supabase/externalClient";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import {
   createPortal,
@@ -14,7 +15,11 @@ import {
   updatePortalUrl,
   type PortalInput,
 } from "@/services/portals";
-import { listPortalFieldMapsFromApp } from "@/services/portalFieldMaps";
+import {
+  listPortalFieldMapsFromApp,
+  listStaleOrgOverridesForReview,
+  reviewOrgPortalFieldMapBase,
+} from "@/services/portalFieldMaps";
 import { listRecentFillsFromApp } from "@/services/fillSessions";
 import { publishTemplate } from "@/services/templates";
 import { listPortalStepReferences, unlinkPortalKeyFromTasks } from "@/lib/portalRetirement";
@@ -37,6 +42,28 @@ export function usePortalFieldMaps(portalKey?: string) {
     queryFn: () => listPortalFieldMapsFromApp(portalKey),
     enabled: orgId !== "no-org",
     staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useStaleOrgOverridesForReview(portalKey?: string) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.stalePortalFieldMaps(orgId, portalKey ?? "none"),
+    queryFn: () => listStaleOrgOverridesForReview({ db: supabase, orgId }, portalKey ?? ""),
+    enabled: orgId !== "no-org" && Boolean(portalKey),
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useReviewOrgPortalFieldMapBase() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: reviewOrgPortalFieldMapBase,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["portal-field-maps", orgId] });
+      void qc.invalidateQueries({ queryKey: ["portal-field-map-base-review", orgId] });
+    },
   });
 }
 
@@ -85,7 +112,15 @@ export function useUpdatePortalUrl() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: ({ id, formUrl }: { id: string; formUrl: string }) => updatePortalUrl(id, formUrl),
+    mutationFn: ({
+      id,
+      formUrl,
+      expectedMappingGeneration,
+    }: {
+      id: string;
+      formUrl: string;
+      expectedMappingGeneration?: number | null;
+    }) => updatePortalUrl(id, formUrl, expectedMappingGeneration),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
   });
 }

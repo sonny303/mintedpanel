@@ -45,12 +45,15 @@ function rpcSql(ids, actorId, options = {}) {
   const fillSessionId = options.fillSessionId ?? ids.fillSessionId;
   const urlPattern = options.urlPattern ?? "https://portal.example/forms/application";
   const mappings = options.mappings ?? [mapping("#flywheel-single")];
+  const expectedMappingGeneration = options.expectedMappingGeneration;
+  const generationArgument =
+    expectedMappingGeneration === undefined ? "" : `, ${expectedMappingGeneration}`;
   return `SET ROLE service_role;
 SELECT public.learn_portal_field_maps_from_touch(
   ${sqlText(ids.orgId)}::uuid, ${sqlText(actorId)}::uuid,
   ${sqlText(caseId)}::uuid, ${sqlText(providerId)}::uuid,
   ${sqlText(fillSessionId)}::uuid, ${sqlText(portalKey)},
-  ${sqlText(urlPattern)}, ${sqlText(JSON.stringify(mappings))}::jsonb
+  ${sqlText(urlPattern)}, ${sqlText(JSON.stringify(mappings))}::jsonb${generationArgument}
 )::text;
 RESET ROLE;`;
 }
@@ -129,6 +132,8 @@ INSERT INTO public.credential_cases (id, org_id, provider_id, payer_id, state) V
   ('${ids.caseId}', '${ids.orgId}', '${ids.providerId}', '${ids.payerId}', 'KS'),
   ('${ids.otherCaseId}', '${ids.otherOrgId}', '${ids.otherProviderId}', '${ids.otherPayerId}', 'CO');
 INSERT INTO public.portals (org_id, portal_key, name, form_url, mapping_generation) VALUES
+  (NULL, '${ids.portalKey}', 'Synthetic shared legacy flywheel portal', 'https://portal.example/forms/application', 1),
+  ('${ids.orgId}', '${ids.portalKey}', 'Synthetic org legacy flywheel portal', 'https://portal.example/forms/application', 1),
   (NULL, '${ids.generationPortalKey}', 'Synthetic shared generation portal', 'https://portal.example/forms/application', 4),
   ('${ids.orgId}', '${ids.generationPortalKey}', 'Synthetic org generation portal', 'https://portal.example/forms/application', 3),
   ('${ids.otherOrgId}', '${ids.generationPortalKey}', 'Synthetic foreign generation portal', 'https://portal.example/forms/application', 7),
@@ -392,6 +397,9 @@ WHERE portal_key = '${ids.portalKey}' AND selector IN ('#tier-org-match','#tier-
   // the new generations and current shared base; stale same-tier selectors
   // remain stored for review because the per-tier unique index still owns them.
   await runPsql(`
+-- Seed pre-reset rows in their historical generation. Only this test fixture
+-- bypasses the map write guard; production writes must carry the generation.
+ALTER TABLE public.portal_field_maps DISABLE TRIGGER portal_field_maps_generation_write_guard;
 INSERT INTO public.portal_field_maps
   (org_id, portal_key, map_type, selector, source, token, field_type, status, mapping_generation)
 VALUES
@@ -399,21 +407,35 @@ VALUES
   ('${ids.orgId}', '${ids.generationPortalKey}', 'web', '#stale-org-generation', 'token', 'provider.npi', 'text', 'approved', 2),
   ('${ids.orgId}', '${ids.generationPortalKey}', 'web', '#stale-org-base', 'token', 'provider.npi', 'text', 'approved', 4),
   ('${ids.orgId}', '${ids.siblingPortalKey}', 'web', '#sibling-only', 'token', 'provider.npi', 'text', 'approved', 1);
+ALTER TABLE public.portal_field_maps ENABLE TRIGGER portal_field_maps_generation_write_guard;
 
 -- A test-only trusted reset simulation; production generations remain guarded.
-ALTER TABLE public.portals DISABLE TRIGGER portals_mapping_generation_guard;
+SELECT set_config('minted.mapping_reset', 'true', false);
+SELECT set_config('minted.expected_mapping_generation', '4', false);
 UPDATE public.portals SET mapping_generation = 5
  WHERE org_id IS NULL AND portal_key = '${ids.generationPortalKey}';
+SELECT set_config('minted.expected_mapping_generation', '3', false);
 UPDATE public.portals SET mapping_generation = 4
  WHERE org_id = '${ids.orgId}' AND portal_key = '${ids.generationPortalKey}';
-ALTER TABLE public.portals ENABLE TRIGGER portals_mapping_generation_guard;
+SELECT set_config('minted.mapping_reset', '', false);
+SELECT set_config('minted.expected_mapping_generation', '', false);
 
+SELECT set_config('minted.expected_mapping_generation', '5', false);
 INSERT INTO public.portal_field_maps
   (org_id, portal_key, map_type, selector, source, token, field_type, status, mapping_generation)
 VALUES
-  (NULL, '${ids.generationPortalKey}', 'web', '#current-shared', 'token', 'provider.npi', 'text', 'approved', 5),
-  ('${ids.orgId}', '${ids.generationPortalKey}', 'web', '#current-org', 'token', 'provider.firstName', 'text', 'approved', 4),
+  (NULL, '${ids.generationPortalKey}', 'web', '#current-shared', 'token', 'provider.npi', 'text', 'approved', 5);
+SELECT set_config('minted.expected_mapping_generation', '4', false);
+INSERT INTO public.portal_field_maps
+  (org_id, portal_key, map_type, selector, source, token, field_type, status, mapping_generation)
+VALUES
+  ('${ids.orgId}', '${ids.generationPortalKey}', 'web', '#current-org', 'token', 'provider.firstName', 'text', 'approved', 4);
+SELECT set_config('minted.expected_mapping_generation', '7', false);
+INSERT INTO public.portal_field_maps
+  (org_id, portal_key, map_type, selector, source, token, field_type, status, mapping_generation)
+VALUES
   ('${ids.otherOrgId}', '${ids.generationPortalKey}', 'web', '#other-org-only', 'token', 'provider.npi', 'text', 'approved', 7);
+SELECT set_config('minted.expected_mapping_generation', '', false);
 `);
 
   const afterReset = parseJsonOutput(
@@ -421,6 +443,7 @@ VALUES
       rpcSql(ids, ids.actorId, {
         portalKey: ids.generationPortalKey,
         fillSessionId: ids.generationFillId,
+        expectedMappingGeneration: 4,
         mappings: [
           mapping("#current-shared", "provider.npi"),
           mapping("#current-org", "provider.firstName"),

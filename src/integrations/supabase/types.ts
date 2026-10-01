@@ -4862,16 +4862,28 @@ export type Database = {
       document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
       learn_portal_field_maps_from_touch: {
-        Args: {
-          p_actor_id: string;
-          p_case_id: string;
-          p_fill_session_id: string;
-          p_mappings: Json;
-          p_org_id: string;
-          p_portal_key: string;
-          p_provider_id: string;
-          p_url_pattern: string;
-        };
+        Args:
+          | {
+              p_actor_id: string;
+              p_case_id: string;
+              p_fill_session_id: string;
+              p_mappings: Json;
+              p_org_id: string;
+              p_portal_key: string;
+              p_provider_id: string;
+              p_url_pattern: string;
+            }
+          | {
+              p_actor_id: string;
+              p_case_id: string;
+              p_fill_session_id: string;
+              p_mappings: Json;
+              p_org_id: string;
+              p_portal_key: string;
+              p_provider_id: string;
+              p_url_pattern: string;
+              p_expected_mapping_generation: number | null;
+            };
         Returns: Json;
       };
       insert_contact_party:
@@ -4935,6 +4947,7 @@ export type Database = {
           p_portal_key: string;
           p_selector: string;
           p_sort_order?: number;
+          p_expected_mapping_generation?: number | null;
         };
         Returns: {
           confidence: number | null;
@@ -5075,7 +5088,12 @@ export type Database = {
         Returns: Json;
       };
       set_global_portal_flags: {
-        Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };
+        Args: {
+          p_id: string;
+          p_proven?: boolean;
+          p_verified?: boolean;
+          p_expected_mapping_generation?: number | null;
+        };
         Returns: {
           created_at: string;
           form_url: string | null;
@@ -5127,6 +5145,7 @@ export type Database = {
           p_status: string;
           p_token?: string;
           p_transform?: string;
+          p_expected_mapping_generation?: number | null;
         };
         Returns: {
           confidence: number | null;
@@ -5243,6 +5262,50 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      update_org_portal_configuration: {
+        Args: {
+          p_expected_mapping_generation: number | null;
+          p_id: string;
+          p_org_id: string;
+          p_patch: Json;
+        };
+        Returns: Json;
+      };
+      update_org_portal_field_map: {
+        Args: {
+          p_expected_mapping_generation: number | null;
+          p_id: string;
+          p_org_id: string;
+          p_patch: Json;
+        };
+        Returns: Json;
+      };
+      review_org_portal_field_map_base: {
+        Args: {
+          p_expected_mapping_generation: number;
+          p_expected_shared_base_generation: number | null;
+          p_id: string;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
+      update_org_portal_field_maps_batch: {
+        Args: {
+          p_entries: Json;
+          p_expected_mapping_generation: number | null;
+          p_org_id: string;
+          p_portal_key: string;
+        };
+        Returns: Json[];
+      };
+      capture_org_portal_field_map: {
+        Args: {
+          p_capture: Json;
+          p_expected_mapping_generation: number | null;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
       upsert_global_portal: {
         Args: {
           p_case_type?: string | null;
@@ -5251,6 +5314,7 @@ export type Database = {
           p_name: string;
           p_payer_id?: string;
           p_portal_key: string;
+          p_expected_mapping_generation?: number | null;
         };
         Returns: {
           created_at: string;

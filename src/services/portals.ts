@@ -266,24 +266,39 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
 // Editing the form URL invalidates trust: field selectors were captured on the
 // prior page, so the portal drops to Unverified and stamps url_changed_at,
 // which the "Needs re-verify" pill reads. updated_at is set by the DB trigger.
-export async function updatePortalUrl(id: string, formUrl: string): Promise<Portal> {
+async function updateOrgPortalConfiguration(
+  orgId: string,
+  id: string,
+  expectedMappingGeneration: number | null | undefined,
+  patch: Record<string, unknown>,
+): Promise<Portal> {
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc(
+    "update_org_portal_configuration" as never,
+    {
+      p_org_id: orgId,
+      p_id: id,
+      p_expected_mapping_generation: expectedMappingGeneration ?? null,
+      p_patch: patch as never,
+    } as never,
+  );
+  if (error) throw error;
+  return camelizeRow<Portal>(data as unknown);
+}
+
+export async function updatePortalUrl(
+  id: string,
+  formUrl: string,
+  expectedMappingGeneration?: number | null,
+): Promise<Portal> {
   const orgId = requireActiveOrg();
   const trimmed = formUrl.trim() || null;
-  const { data, error } = await supabase
-    .from("portals")
-    .update({
-      form_url: trimmed,
-      is_verified: false,
-      // A new page invalidates the dry-run proof along with verification (E6.5).
-      proven_at: null,
-      url_changed_at: new Date().toISOString(),
-    } as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, id, expectedMappingGeneration, {
+    form_url: trimmed,
+    is_verified: false,
+    proven_at: null,
+    url_changed_at: new Date().toISOString(),
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -306,18 +321,13 @@ export async function updatePortalName(portal: Portal, name: string): Promise<Po
       payerId: portal.payerId,
       formUrl: portal.formUrl,
       caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   }
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({ name: trimmed } as never)
-    .eq("id", portal.id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, portal.id, portal.mappingGeneration, {
+    name: trimmed,
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -331,17 +341,14 @@ export async function updatePortalName(portal: Portal, name: string): Promise<Po
 
 // E6.5 F6.5.3 — an ORG portal passes its mock dry run (every live mapping
 // resolved). Global rows flip through setGlobalPortalFlags instead.
-export async function markPortalProven(id: string): Promise<Portal> {
+export async function markPortalProven(
+  id: string,
+  expectedMappingGeneration?: number | null,
+): Promise<Portal> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({ proven_at: new Date().toISOString() } as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, id, expectedMappingGeneration, {
+    proven_at: new Date().toISOString(),
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -369,6 +376,7 @@ export interface GlobalPortalInput {
   caseType?: CaseType | null;
   payerId?: string | null;
   formUrl?: string | null;
+  expectedMappingGeneration?: number | null;
 }
 
 export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Portal> {
@@ -381,6 +389,7 @@ export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Port
     p_payer_id: (input.payerId ?? null) as unknown as string,
     p_form_url: (input.formUrl?.trim() || null) as unknown as string,
     p_case_type: (input.caseType ?? null) as unknown as string,
+    p_expected_mapping_generation: (input.expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) {
     if (error.message.includes("global_portal_key_exists")) {
@@ -394,6 +403,7 @@ export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Port
 export async function setGlobalPortalFlags(
   id: string,
   flags: { verified?: boolean; proven?: boolean },
+  expectedMappingGeneration?: number | null,
 ): Promise<Portal> {
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
@@ -401,26 +411,22 @@ export async function setGlobalPortalFlags(
     p_id: id,
     p_verified: (flags.verified ?? null) as unknown as boolean,
     p_proven: (flags.proven ?? null) as unknown as boolean,
+    p_expected_mapping_generation: (expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) throw error;
   return camelizeRow<Portal>(data);
 }
 
 // Completing a training pass verifies the portal (a human reviewed every field).
-export async function markPortalVerified(id: string): Promise<Portal> {
+export async function markPortalVerified(
+  id: string,
+  expectedMappingGeneration?: number | null,
+): Promise<Portal> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({
-      is_verified: true,
-      last_verified_at: new Date().toISOString(),
-    } as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, id, expectedMappingGeneration, {
+    is_verified: true,
+    last_verified_at: new Date().toISOString(),
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -442,9 +448,10 @@ export async function savePortalFormUrl(portal: Portal, formUrl: string): Promis
       payerId: portal.payerId,
       formUrl,
       caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   }
-  return updatePortalUrl(portal.id, formUrl);
+  return updatePortalUrl(portal.id, formUrl, portal.mappingGeneration);
 }
 
 /** FE-only hide-from-pickers: prefix the display name (see portalRetirement.ts).
@@ -461,18 +468,13 @@ export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
       payerId: portal.payerId,
       formUrl: portal.formUrl,
       caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   }
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({ name: nextName } as never)
-    .eq("id", portal.id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, portal.id, portal.mappingGeneration, {
+    name: nextName,
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -500,18 +502,13 @@ export async function updatePortalPayer(portal: Portal, payerId: string | null):
       payerId,
       formUrl: portal.formUrl,
       caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   } else {
     const orgId = requireActiveOrg();
-    const { data, error } = await supabase
-      .from("portals")
-      .update({ payer_id: payerId } as never)
-      .eq("id", portal.id)
-      .eq("org_id", orgId)
-      .select(PORTAL_COLUMNS)
-      .single();
-    if (error) throw error;
-    after = camelizeRow<Portal>(data);
+    after = await updateOrgPortalConfiguration(orgId, portal.id, portal.mappingGeneration, {
+      payer_id: payerId,
+    });
   }
   await writeAudit({
     actionType: "UPDATE",

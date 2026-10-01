@@ -685,12 +685,19 @@ async function main() {
       ["anon", anonKey],
     ]) {
       const result = await trainingRpc(name, body, token);
+      const isRegistryUpdate = name === "update_shared_field_registry";
       const trainingDenied =
         label === "anon"
           ? result.response.status === 401 && result.body?.code === "42501"
-          : result.response.status === 400 &&
-            result.body?.code === "P0001" &&
-            /Restricted client|not authorized|Not authenticated/i.test(result.body?.message ?? "");
+          : isRegistryUpdate
+            ? result.response.status === 403 &&
+              result.body?.code === "42501" &&
+              result.body?.message === "not_authorized"
+            : result.response.status === 400 &&
+              result.body?.code === "P0001" &&
+              /Restricted client|not authorized|Not authenticated/i.test(
+                result.body?.message ?? "",
+              );
       assert(
         `rest.${label}_${name}_denied`,
         trainingDenied,
