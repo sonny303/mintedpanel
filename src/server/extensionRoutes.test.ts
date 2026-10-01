@@ -6,6 +6,7 @@ import type { ProviderProfile, ProviderProfileResult } from "@/services/provider
 vi.mock("@/services/portalFieldMaps", () => ({
   listEffectivePortalMapResolutions: vi.fn(),
   listLegacyClientPortalMapResolutions: vi.fn(),
+  resolveEffectivePortalMaps: vi.fn(),
   proposeFieldMap: vi.fn(),
 }));
 vi.mock("@/services/portalFieldMapLearning", () => ({ batchLearnPortalFieldMaps: vi.fn() }));
@@ -42,6 +43,7 @@ vi.mock("@/services/extensionViewPrefs", () => ({
 import {
   listEffectivePortalMapResolutions,
   listLegacyClientPortalMapResolutions,
+  resolveEffectivePortalMaps,
   proposeFieldMap,
 } from "@/services/portalFieldMaps";
 import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
@@ -82,6 +84,7 @@ import {
 
 const effectiveMapsMock = vi.mocked(listEffectivePortalMapResolutions);
 const legacyMapsMock = vi.mocked(listLegacyClientPortalMapResolutions);
+const exactMapsMock = vi.mocked(resolveEffectivePortalMaps);
 const proposeMapMock = vi.mocked(proposeFieldMap);
 const batchLearnMapMock = vi.mocked(batchLearnPortalFieldMaps);
 const listPortalsMock = vi.mocked(listPortalsForApi);
@@ -165,6 +168,7 @@ beforeEach(() => {
   supportsFillEventV2Mock.mockResolvedValue(false);
   effectiveMapsMock.mockResolvedValue([]);
   legacyMapsMock.mockResolvedValue([]);
+  exactMapsMock.mockReset();
 });
 
 describe("provider profile handler", () => {
@@ -611,6 +615,203 @@ describe("portal field maps handler", () => {
       { db: user.db, orgId: null },
       { portalKey: "availity", mapType: "all" },
     );
+  });
+});
+
+describe("explicit shared Train/Test targets", () => {
+  const sharedPortalsUrl = (query: string) => new URL(`https://x.test/api/shared-portals${query}`);
+  const sharedMapsUrl = (query: string) => new URL(`https://x.test/api/shared-field-maps${query}`);
+
+  const user = (): UserContext => ({
+    userId: "u1",
+    email: "tester@minted.com",
+    userMetadata: null,
+    db: {} as UserContext["db"],
+  });
+
+  it("keeps the legacy shared registry filtered while listing both equal-URL explicit candidates", async () => {
+    const contract = {
+      id: "aetna-contract",
+      portalKey: "aetna_contract",
+      name: "Aetna — New group contract",
+      orgId: null,
+      caseType: "contract",
+      formUrl: "https://payer.example/app",
+      requiresExplicitSelection: true,
+      mappingGeneration: null,
+      isVerified: false,
+      lastVerifiedAt: null,
+      provenAt: null,
+    };
+    const enrollment = {
+      ...contract,
+      id: "aetna-enrollment",
+      portalKey: "aetna_enrollment",
+      name: "Aetna — Add provider to existing contract",
+      caseType: "enrollment",
+    };
+    // Reverse the display order intentionally. Neither same-URL row may be
+    // treated as the identity winner on this candidate-list endpoint.
+    listSharedPortalsMock.mockResolvedValue([enrollment, contract] as never);
+    effectiveMapsMock.mockResolvedValue([
+      {
+        ...emptyPortalResolution(enrollment.id, "global", null),
+        portalKey: enrollment.portalKey,
+        caseType: "enrollment",
+        requiresExplicitSelection: true,
+        mappingGeneration: 2,
+      },
+      {
+        ...emptyPortalResolution(contract.id, "global", null),
+        portalKey: contract.portalKey,
+        caseType: "contract",
+        requiresExplicitSelection: true,
+        mappingGeneration: 4,
+      },
+    ] as never);
+    const caller = user();
+
+    const legacy = await body(await handleListSharedPortals(caller));
+    const candidates = await body(
+      await handleListSharedPortals(caller, sharedPortalsUrl("?selection=explicit")),
+    );
+
+    expect(legacy.data).toEqual([]);
+    const candidateRows = candidates.data as Array<Record<string, unknown>>;
+    expect(candidateRows.map(({ portalKey }) => portalKey)).toEqual([
+      "aetna_enrollment",
+      "aetna_contract",
+    ]);
+    expect(candidateRows).toEqual([
+      expect.objectContaining({
+        portalKey: "aetna_enrollment",
+        caseType: "enrollment",
+        mappingGeneration: 2,
+        requiresExplicitSelection: true,
+      }),
+      expect.objectContaining({
+        portalKey: "aetna_contract",
+        caseType: "contract",
+        mappingGeneration: 4,
+        requiresExplicitSelection: true,
+      }),
+    ]);
+    expect(candidates.meta).toMatchObject({
+      portal_mappings: [
+        { portal_key: "aetna_enrollment", case_type: "enrollment", mapping_generation: 2 },
+        { portal_key: "aetna_contract", case_type: "contract", mapping_generation: 4 },
+      ],
+    });
+  });
+
+  it("looks up the selected shared target by normalized exact key", async () => {
+    listSharedPortalsMock.mockResolvedValue([
+      {
+        id: "aetna-contract",
+        portalKey: "aetna_contract",
+        orgId: null,
+        caseType: "contract",
+        mappingGeneration: 1,
+        requiresExplicitSelection: true,
+      },
+    ] as never);
+    effectiveMapsMock.mockResolvedValue([
+      {
+        ...emptyPortalResolution("aetna-contract", "global", null),
+        portalKey: "aetna_contract",
+        caseType: "contract",
+        mappingGeneration: 1,
+      },
+    ] as never);
+    const caller = user();
+
+    const response = await handleListSharedPortals(
+      caller,
+      sharedPortalsUrl("?selection=explicit&portal_key=%20AETNA_CONTRACT%20"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(listSharedPortalsMock).toHaveBeenCalledWith(caller.db, {
+      portalKey: "aetna_contract",
+    });
+    expect((await body(response)).data).toEqual([
+      expect.objectContaining({ portalKey: "aetna_contract", caseType: "contract" }),
+    ]);
+  });
+
+  it("returns 404 for an unknown explicit target and 422 for a blank target", async () => {
+    listSharedPortalsMock.mockResolvedValue([]);
+    const caller = user();
+
+    const missing = await handleListSharedPortals(
+      caller,
+      sharedPortalsUrl("?selection=explicit&portal_key=missing"),
+    );
+    const blank = await handleListSharedPortals(
+      caller,
+      sharedPortalsUrl("?selection=explicit&portal_key=%20%20"),
+    );
+
+    expect(missing.status).toBe(404);
+    expect(blank.status).toBe(422);
+    expect(listSharedPortalsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads maps only for the explicitly named target and returns current mapping metadata", async () => {
+    const caller = user();
+    const resolution = {
+      ...emptyPortalResolution("aetna-contract", "global", null),
+      portalKey: "aetna_contract",
+      caseType: "contract",
+      requiresExplicitSelection: true,
+      mappingGeneration: 5,
+      maps: [{ id: "contract-map", portalKey: "aetna_contract" }],
+      activeFieldCount: 1,
+      isReady: true,
+      status: "ready" as const,
+    };
+    exactMapsMock.mockResolvedValue(resolution as never);
+
+    const response = await handleListSharedFieldMaps(
+      sharedMapsUrl("?selection=explicit&portal_key=AETNA_CONTRACT"),
+      caller,
+    );
+
+    expect(response.status).toBe(200);
+    expect(exactMapsMock).toHaveBeenCalledWith(
+      { db: caller.db, orgId: null },
+      { portalKey: "aetna_contract", mapType: "all" },
+    );
+    expect(legacyMapsMock).not.toHaveBeenCalled();
+    expect((await body(response)).meta).toMatchObject({
+      portal_mappings: [
+        {
+          portal_key: "aetna_contract",
+          case_type: "contract",
+          mapping_generation: 5,
+          effective_mapping_fingerprint: "sha256:empty",
+        },
+      ],
+    });
+  });
+
+  it("requires an exact key and returns 404 when its explicit map target is missing", async () => {
+    const caller = user();
+    exactMapsMock.mockResolvedValue({
+      ...emptyPortalResolution("missing", "global", null),
+      status: "configuration_missing",
+    } as never);
+
+    const noKey = await handleListSharedFieldMaps(sharedMapsUrl("?selection=explicit"), caller);
+    const missing = await handleListSharedFieldMaps(
+      sharedMapsUrl("?selection=explicit&portal_key=missing"),
+      caller,
+    );
+
+    expect(noKey.status).toBe(422);
+    expect(missing.status).toBe(404);
+    expect(exactMapsMock).toHaveBeenCalledTimes(1);
+    expect(legacyMapsMock).not.toHaveBeenCalled();
   });
 });
 

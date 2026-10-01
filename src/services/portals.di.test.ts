@@ -141,6 +141,20 @@ describe("listSharedPortals — GET /api/shared-portals (Train)", () => {
     const { db } = fakeDb(GHOSTS);
     await expect(listSharedPortals(db)).resolves.toEqual([]);
   });
+
+  it("normalizes and filters an explicit Train/Test target by exact portal key", async () => {
+    const { db, captured } = fakeDb([
+      portalRow({ id: "contract", portal_key: "aetna_contract", case_type: "contract" }),
+    ]);
+
+    const rows = await listSharedPortals(db, { portalKey: " AETNA_CONTRACT " });
+
+    expect(captured.filters).toContainEqual({
+      method: "eq",
+      args: ["portal_key", "aetna_contract"],
+    });
+    expect(rows.map(({ portalKey }) => portalKey)).toEqual(["aetna_contract"]);
+  });
 });
 
 describe("listPortalsForApi — GET /api/portals (Work recognition)", () => {
