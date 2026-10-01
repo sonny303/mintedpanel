@@ -20,7 +20,8 @@ import {
   type LabelSuggestion,
   type ObservedMapping,
 } from "@/lib/labelLearning";
-import type { PortalFieldMap } from "@/types";
+import type { CaseType } from "@/lib/caseTypes";
+import type { FillMode, PortalFieldMap } from "@/types";
 
 export interface PortalFieldMapServiceCtx {
   db: SupabaseClient<Database>;
@@ -31,9 +32,57 @@ export interface PortalFieldMapFilters {
   portalKey?: string;
 }
 
+export interface EffectivePortalMapContext {
+  db: SupabaseClient<Database>;
+  /** null is the signed-in global-training scope; it never includes org rows. */
+  orgId: string | null;
+}
+
+export type EffectivePortalMapType = FillMode | "all";
+
+export interface EffectivePortalMapResolution {
+  portalKey: string;
+  portalId: string | null;
+  ownerScope: "global" | "organization" | null;
+  ownerOrgId: string | null;
+  caseType: CaseType | null;
+  formUrl: string | null;
+  payerId: string | null;
+  requiresExplicitSelection: boolean;
+  mappingGeneration: number | null;
+  effectiveMappingFingerprint: string | null;
+  maps: PortalFieldMap[];
+  activeFieldCount: number;
+  isVerified: boolean;
+  isReady: boolean;
+  status: "ready" | "empty" | "configuration_missing";
+}
+
 const PORTAL_FIELD_MAP_COLUMNS =
-  "id, org_id, portal_key, url_pattern, page_step, map_type, selector, selector_fallbacks, source, token, hardcoded_value, transform, field_type, notes, status, control_options, created_at, updated_at";
+  "id, org_id, portal_key, url_pattern, page_step, map_type, selector, selector_fallbacks, source, token, hardcoded_value, transform, field_type, notes, status, control_options, mapping_generation, shared_base_generation, created_at, updated_at";
 const PORTAL_FIELD_MAP_FILL_COLUMNS = `${PORTAL_FIELD_MAP_COLUMNS}, learned_via`;
+const PORTAL_FIELD_MAP_LEARNING_COLUMNS = `${PORTAL_FIELD_MAP_FILL_COLUMNS}, field_label`;
+const PORTAL_MAP_CONFIG_COLUMNS =
+  "id, org_id, portal_key, name, payer_id, form_url, case_type, requires_explicit_selection, mapping_generation, is_verified, proven_at";
+
+interface EffectivePortalConfig {
+  id: string;
+  orgId: string | null;
+  portalKey: string;
+  name: string;
+  payerId: string | null;
+  formUrl: string | null;
+  caseType: CaseType | null;
+  requiresExplicitSelection: boolean | null;
+  mappingGeneration: number | null;
+  isVerified: boolean;
+  provenAt: string | null;
+}
+
+interface EffectivePortalMapSnapshot {
+  configs: EffectivePortalConfig[];
+  maps: PortalFieldMap[];
+}
 
 function isMissingLearnedViaColumn(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -44,35 +93,366 @@ function isMissingLearnedViaColumn(error: unknown): boolean {
   return missingColumn && (row.code === "42703" || row.code === "PGRST204");
 }
 
-// Global catalog rows plus the caller's own org overrides. Another org's
-// org-scoped rows can never match the filter.
+async function loadEffectivePortalMapSnapshot(
+  ctx: EffectivePortalMapContext,
+  portalKey: string | undefined,
+  mapColumns: string,
+): Promise<EffectivePortalMapSnapshot> {
+  const key = portalKey ? (normalizePortalKey(portalKey) ?? undefined) : undefined;
+  const loadMaps = async (columns: string) => {
+    let query = ctx.db
+      .from("portal_field_maps")
+      .select(columns)
+      .order("portal_key", { ascending: true })
+      .order("selector", { ascending: true });
+    query = ctx.orgId
+      ? query.or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+      : query.is("org_id", null);
+    if (key !== undefined) query = query.eq("portal_key", key);
+    return query;
+  };
+
+  let configQuery = ctx.db
+    .from("portals")
+    .select(PORTAL_MAP_CONFIG_COLUMNS)
+    .order("portal_key", { ascending: true })
+    .order("id", { ascending: true });
+  configQuery = ctx.orgId
+    ? configQuery.or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+    : configQuery.is("org_id", null);
+  if (key !== undefined) configQuery = configQuery.eq("portal_key", key);
+
+  const configResult = await configQuery;
+  if (configResult.error) throw configResult.error;
+
+  let mapResult = await loadMaps(mapColumns);
+  // A staged extension deployment may lack only this provenance column. Keep
+  // generation columns required: they are the active-read boundary.
+  if (mapResult.error && isMissingLearnedViaColumn(mapResult.error)) {
+    mapResult = await loadMaps(
+      mapColumns
+        .split(",")
+        .map((column) => column.trim())
+        .filter((column) => column !== "learned_via")
+        .join(", "),
+    );
+  }
+  if (mapResult.error) throw mapResult.error;
+
+  const configs = camelizeRow<EffectivePortalConfig[]>(
+    Array.isArray(configResult.data) ? configResult.data : [],
+  );
+  const maps = camelizeRow<PortalFieldMap[]>(
+    Array.isArray(mapResult.data) ? mapResult.data : [],
+  ).map((row) => ({
+    ...row,
+    token: normalizeTokenKey(row.token),
+  }));
+  return { configs, maps };
+}
+
+function mapGeneration(config: EffectivePortalConfig | undefined): number {
+  return config?.mappingGeneration ?? 1;
+}
+
+// These are the executable/configuration fields that change the selected fill
+// plan. Timestamps, names and trainer-only labels are intentionally excluded.
+function executionMapShape(map: PortalFieldMap) {
+  return {
+    id: map.id,
+    orgId: map.orgId,
+    portalKey: map.portalKey,
+    mappingGeneration: map.mappingGeneration ?? 1,
+    sharedBaseGeneration: map.sharedBaseGeneration ?? null,
+    mapType: map.mapType,
+    urlPattern: map.urlPattern,
+    pageStep: map.pageStep,
+    selector: map.selector,
+    selectorFallbacks: map.selectorFallbacks ?? null,
+    source: map.source,
+    token: map.token,
+    hardcodedValue: map.hardcodedValue,
+    transform: map.transform,
+    fieldType: map.fieldType,
+    controlOptions: map.controlOptions ?? null,
+    status: map.status,
+  };
+}
+
+async function sha256Fingerprint(value: unknown): Promise<string> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error("Web Crypto is required to fingerprint effective portal maps");
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  const digest = await subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"));
+  return `sha256:${hex.join("")}`;
+}
+
+function sortEffectiveMaps(maps: PortalFieldMap[]): PortalFieldMap[] {
+  const compareCodeUnits = (left: string, right: string) =>
+    left < right ? -1 : left > right ? 1 : 0;
+  return [...maps].sort(
+    (left, right) =>
+      compareCodeUnits(left.mapType, right.mapType) ||
+      compareCodeUnits(left.pageStep ?? "", right.pageStep ?? "") ||
+      compareCodeUnits(left.urlPattern ?? "", right.urlPattern ?? "") ||
+      compareCodeUnits(left.selector, right.selector) ||
+      compareCodeUnits(left.id, right.id),
+  );
+}
+
+async function resolvePortalMapSnapshot(
+  ctx: EffectivePortalMapContext,
+  snapshot: EffectivePortalMapSnapshot,
+  portalKey: string,
+  mapType: EffectivePortalMapType,
+): Promise<EffectivePortalMapResolution> {
+  const key = normalizePortalKey(portalKey) ?? "";
+  const scopedConfigs = snapshot.configs.filter((config) => config.portalKey === key);
+  const globalConfig = scopedConfigs.find((config) => config.orgId === null);
+  const orgConfig = ctx.orgId
+    ? scopedConfigs.find((config) => config.orgId === ctx.orgId)
+    : undefined;
+  // PDF maps use `payer-form:<family-id>` keys and intentionally have no
+  // portals row. Keep their legacy generation-1 reader working while making
+  // all registered web/configuration reads depend on an exact portal row.
+  const hasLegacyPdfConfig =
+    (mapType === "pdf" || mapType === "all") &&
+    key.startsWith("payer-form:") &&
+    snapshot.maps.some(
+      (map) => map.portalKey === key && map.mapType === "pdf" && (map.mappingGeneration ?? 1) === 1,
+    );
+  const syntheticPdfConfig: EffectivePortalConfig | undefined = hasLegacyPdfConfig
+    ? {
+        id: `legacy-pdf:${key}`,
+        orgId:
+          ctx.orgId && snapshot.maps.some((map) => map.portalKey === key && map.orgId === ctx.orgId)
+            ? ctx.orgId
+            : null,
+        portalKey: key,
+        name: key,
+        payerId: null,
+        formUrl: null,
+        caseType: null,
+        requiresExplicitSelection: false,
+        mappingGeneration: 1,
+        isVerified: false,
+        provenAt: null,
+      }
+    : undefined;
+  const selectedConfig = orgConfig ?? globalConfig ?? syntheticPdfConfig;
+
+  const base = {
+    portalKey: key,
+    portalId: selectedConfig?.id ?? null,
+    ownerScope: selectedConfig ? (selectedConfig.orgId === null ? "global" : "organization") : null,
+    ownerOrgId: selectedConfig?.orgId ?? null,
+    caseType: selectedConfig?.caseType ?? null,
+    formUrl: selectedConfig?.formUrl ?? null,
+    payerId: selectedConfig?.payerId ?? null,
+    requiresExplicitSelection: selectedConfig?.requiresExplicitSelection ?? false,
+    mappingGeneration: selectedConfig ? mapGeneration(selectedConfig) : null,
+  } as const;
+
+  if (!selectedConfig) {
+    return {
+      ...base,
+      effectiveMappingFingerprint: null,
+      maps: [],
+      activeFieldCount: 0,
+      isVerified: false,
+      isReady: false,
+      status: "configuration_missing",
+    };
+  }
+
+  const sharedGeneration = mapGeneration(globalConfig);
+  const orgGeneration = mapGeneration(orgConfig);
+  const candidates = snapshot.maps.filter((map) => {
+    if (map.portalKey !== key || (mapType !== "all" && map.mapType !== mapType)) return false;
+    const generation = map.mappingGeneration ?? 1;
+    if (map.orgId === null) {
+      return globalConfig !== undefined
+        ? generation === sharedGeneration
+        : hasLegacyPdfConfig && map.mapType === "pdf" && generation === 1;
+    }
+    if (!ctx.orgId || map.orgId !== ctx.orgId || generation !== orgGeneration) return false;
+    return globalConfig
+      ? map.sharedBaseGeneration === sharedGeneration
+      : map.sharedBaseGeneration == null;
+  });
+
+  // Org rows shadow the shared selector they override. Keeping both means the
+  // extension writes the same control twice and can let the shared value win.
+  const bySelector = new Map<string, PortalFieldMap>();
+  for (const map of candidates.filter((row) => row.orgId === null)) {
+    bySelector.set(`${map.mapType}\u0000${map.selector}`, map);
+  }
+  for (const map of candidates.filter((row) => row.orgId === ctx.orgId && ctx.orgId !== null)) {
+    bySelector.set(`${map.mapType}\u0000${map.selector}`, map);
+  }
+  const maps = sortEffectiveMaps([...bySelector.values()]);
+  // Only approved maps are executable by the extension. Proposed/retired rows
+  // remain visible to review surfaces but cannot enter the execution hash or
+  // make a configuration fill-ready.
+  const activeMaps = maps.filter((map) => map.status === "approved");
+  const activeFieldCount = activeMaps.length;
+  const isVerified = activeFieldCount > 0 && selectedConfig.isVerified;
+  const sharedBase =
+    globalConfig && selectedConfig.orgId !== null
+      ? {
+          id: globalConfig.id,
+          orgId: null,
+          portalKey: globalConfig.portalKey,
+          mappingGeneration: sharedGeneration,
+          payerId: globalConfig.payerId,
+          caseType: globalConfig.caseType,
+          formUrl: globalConfig.formUrl,
+          requiresExplicitSelection: globalConfig.requiresExplicitSelection ?? false,
+        }
+      : null;
+  const effectiveMappingFingerprint = await sha256Fingerprint({
+    version: 1,
+    mapType,
+    selectedConfig: {
+      id: selectedConfig.id,
+      orgId: selectedConfig.orgId,
+      portalKey: selectedConfig.portalKey,
+      mappingGeneration: mapGeneration(selectedConfig),
+      payerId: selectedConfig.payerId,
+      caseType: selectedConfig.caseType,
+      formUrl: selectedConfig.formUrl,
+      requiresExplicitSelection: selectedConfig.requiresExplicitSelection ?? false,
+    },
+    sharedBase,
+    maps: activeMaps.map(executionMapShape),
+  });
+
+  return {
+    ...base,
+    effectiveMappingFingerprint,
+    maps,
+    activeFieldCount,
+    isVerified,
+    isReady: activeFieldCount > 0,
+    status: activeFieldCount > 0 ? "ready" : "empty",
+  };
+}
+
+export async function resolveEffectivePortalMaps(
+  ctx: EffectivePortalMapContext,
+  input: { portalKey: string; mapType: EffectivePortalMapType },
+): Promise<EffectivePortalMapResolution> {
+  const portalKey = normalizePortalKey(input.portalKey) ?? "";
+  const snapshot = await loadEffectivePortalMapSnapshot(
+    ctx,
+    portalKey,
+    PORTAL_FIELD_MAP_FILL_COLUMNS,
+  );
+  return resolvePortalMapSnapshot(ctx, snapshot, portalKey, input.mapType);
+}
+
+async function loadPortalMapResolutionBatch(
+  ctx: EffectivePortalMapContext,
+  portalKey: string | undefined,
+  mapColumns: string,
+  mapType: EffectivePortalMapType = "all",
+): Promise<{ resolutions: EffectivePortalMapResolution[]; legacyBlockedKeys: Set<string> }> {
+  const key = portalKey ? (normalizePortalKey(portalKey) ?? "") : undefined;
+  const snapshot = await loadEffectivePortalMapSnapshot(ctx, key, mapColumns);
+  const keys =
+    key !== undefined
+      ? [key]
+      : [
+          ...new Set([
+            ...snapshot.configs.map((config) => config.portalKey),
+            ...snapshot.maps
+              .filter((map) => map.portalKey.startsWith("payer-form:") && map.mapType === "pdf")
+              .map((map) => map.portalKey),
+          ]),
+        ].sort();
+  const resolutions = await Promise.all(
+    keys.map((portalKeyValue) => resolvePortalMapSnapshot(ctx, snapshot, portalKeyValue, mapType)),
+  );
+  const legacyBlockedKeys = new Set(
+    snapshot.configs
+      .filter((config) => config.requiresExplicitSelection === true)
+      .map((config) => config.portalKey),
+  );
+  return { resolutions, legacyBlockedKeys };
+}
+
+async function listResolvedPortalMapSnapshots(
+  ctx: EffectivePortalMapContext,
+  portalKey: string | undefined,
+  mapColumns: string,
+  mapType: EffectivePortalMapType = "all",
+): Promise<EffectivePortalMapResolution[]> {
+  return (await loadPortalMapResolutionBatch(ctx, portalKey, mapColumns, mapType)).resolutions;
+}
+
+/** Batch exact-key resolution for handlers that return readiness metadata. */
+export function listEffectivePortalMapResolutions(
+  ctx: EffectivePortalMapContext,
+  filters: { portalKey?: string; mapType?: EffectivePortalMapType } = {},
+): Promise<EffectivePortalMapResolution[]> {
+  return listResolvedPortalMapSnapshots(
+    ctx,
+    filters.portalKey,
+    PORTAL_FIELD_MAP_FILL_COLUMNS,
+    filters.mapType ?? "all",
+  );
+}
+
+/** Legacy URL-based routes must block a portal_key if any visible tier needs
+ * explicit selection. Exact Panel readers keep using the unfiltered resolver. */
+export async function listLegacyClientPortalMapResolutions(
+  ctx: EffectivePortalMapContext,
+  filters: { portalKey?: string; mapType?: EffectivePortalMapType } = {},
+): Promise<EffectivePortalMapResolution[]> {
+  const { resolutions, legacyBlockedKeys } = await loadPortalMapResolutionBatch(
+    ctx,
+    filters.portalKey,
+    PORTAL_FIELD_MAP_FILL_COLUMNS,
+    filters.mapType ?? "all",
+  );
+  return resolutions.filter((resolution) => !legacyBlockedKeys.has(resolution.portalKey));
+}
+
+function orderMapsForReader(
+  maps: PortalFieldMap[],
+  order: "created" | "registry" | "section",
+): PortalFieldMap[] {
+  return [...maps].sort((left, right) => {
+    const keyOrder = left.portalKey.localeCompare(right.portalKey);
+    if (keyOrder !== 0) return keyOrder;
+    if (order === "registry") {
+      const sortOrder =
+        (left.sortOrder ?? Number.MAX_SAFE_INTEGER) - (right.sortOrder ?? Number.MAX_SAFE_INTEGER);
+      if (sortOrder !== 0) return sortOrder;
+    }
+    if (order === "section") {
+      const sectionOrder = (left.formSection ?? "").localeCompare(right.formSection ?? "");
+      if (sectionOrder !== 0) return sectionOrder;
+    }
+    return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+  });
+}
+
+// The extension-facing map API is legacy URL selection. Only current maps
+// from unflagged configurations cross this boundary. Panel callers use the
+// exact resolver and can still access explicitly selected configurations.
 export async function listPortalFieldMaps(
   ctx: PortalFieldMapServiceCtx,
   filters: PortalFieldMapFilters = {},
 ): Promise<PortalFieldMap[]> {
-  const queryRows = async (columns: string) => {
-    let query = ctx.db
-      .from("portal_field_maps")
-      .select(columns)
-      .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
-      .order("portal_key", { ascending: true })
-      .order("created_at", { ascending: true });
-    if (filters.portalKey) query = query.eq("portal_key", filters.portalKey);
-    return query;
-  };
-  let { data, error } = await queryRows(PORTAL_FIELD_MAP_FILL_COLUMNS);
-  // A staged extension deployment can read from a database before the additive
-  // flywheel migration is applied. Retry only that precise schema-cache/column
-  // error; all other failures remain visible to the caller.
-  if (error && isMissingLearnedViaColumn(error)) {
-    ({ data, error } = await queryRows(PORTAL_FIELD_MAP_COLUMNS));
-  }
-  if (error) throw error;
-  const rows = camelizeRow<PortalFieldMap[]>(data ?? []);
-  // DB rows hold whatever form a human pasted ("{{provider.firstName}}" or
-  // bare); the endpoint's contract is the bare catalog form so the extension
-  // can join token → profile token literally (see lib/tokenFormat.ts).
-  return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
+  const resolutions = await listLegacyClientPortalMapResolutions(ctx, filters);
+  return orderMapsForReader(
+    resolutions
+      .filter((resolution) => resolution.status !== "configuration_missing")
+      .flatMap((resolution) => resolution.maps),
+    "created",
+  );
 }
 
 /** GET /api/shared-field-maps?portal_key= — the SHARED tier only.
@@ -89,18 +469,18 @@ export async function listSharedFieldMaps(
   db: SupabaseClient<Database>,
   portalKey?: string,
 ): Promise<PortalFieldMap[]> {
-  let query = db
-    .from("portal_field_maps")
-    .select(APP_PORTAL_FIELD_MAP_COLUMNS)
-    .is("org_id", null)
-    .order("portal_key", { ascending: true })
-    .order("sort_order", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: true });
-  if (portalKey) query = query.eq("portal_key", normalizePortalKey(portalKey) ?? "");
-  const { data, error } = await query;
-  if (error) throw error;
-  const rows = camelizeRow<PortalFieldMap[]>(data ?? []);
-  return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
+  const resolutions = await loadPortalMapResolutionBatch(
+    { db, orgId: null },
+    portalKey,
+    APP_PORTAL_FIELD_MAP_COLUMNS,
+  );
+  return orderMapsForReader(
+    resolutions.resolutions
+      .filter((resolution) => resolution.status !== "configuration_missing")
+      .filter((resolution) => !resolutions.legacyBlockedKeys.has(resolution.portalKey))
+      .flatMap((resolution) => resolution.maps),
+    "registry",
+  );
 }
 
 // Wire shape of POST /api/portal-field-maps — snake_case per the extension's
@@ -134,24 +514,15 @@ async function learnedSuggestion(
   portalKey: string,
 ): Promise<LabelSuggestion | null> {
   if (!label) return null;
-  const [dictRes, observedRes] = await Promise.all([
+  const [dictRes, currentResolutions] = await Promise.all([
     ctx.db
       .from("field_dictionary")
       .select("label_normalized, token, status")
       .eq("org_id", ctx.orgId)
       .eq("label_normalized", label),
-    // Approved, tokened maps carrying this label — global catalog rows plus
-    // the org's own, the same shared-catalog read as the list.
-    ctx.db
-      .from("portal_field_maps")
-      .select("portal_key, token, field_label, status")
-      .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
-      .eq("field_label", label)
-      .eq("status", "approved")
-      .not("token", "is", null),
+    listResolvedPortalMapSnapshots(ctx, undefined, PORTAL_FIELD_MAP_LEARNING_COLUMNS),
   ]);
   if (dictRes.error) throw dictRes.error;
-  if (observedRes.error) throw observedRes.error;
 
   // Defensive: a non-array payload (a degraded read, a shape change) yields no
   // suggestion rather than throwing — a missing suggestion costs the user a
@@ -170,20 +541,14 @@ async function learnedSuggestion(
       status: d.status,
     }));
 
-  const observed: ObservedMapping[] = (
-    (Array.isArray(observedRes.data) ? observedRes.data : []) as Array<{
-      portal_key: string;
-      token: string | null;
-      field_label: string | null;
-    }>
-  )
-    .filter((r) => r.token && r.field_label)
-    .map((r) => ({
-      label: r.field_label as string,
-      token: normalizeTokenKey(r.token) ?? "",
-      portalKey: normalizePortalKey(r.portal_key) ?? "",
+  const observed: ObservedMapping[] = currentResolutions
+    .flatMap((resolution) => resolution.maps)
+    .filter((row) => row.status === "approved" && row.token && row.fieldLabel === label)
+    .map((row) => ({
+      label,
+      token: normalizeTokenKey(row.token) ?? "",
+      portalKey: normalizePortalKey(row.portalKey) ?? "",
     }));
-
   return suggestTokenForLabel(label, dictionary, observed, portalKey);
 }
 
@@ -366,18 +731,15 @@ const APP_PORTAL_FIELD_MAP_COLUMNS = `${PORTAL_FIELD_MAP_COLUMNS}, field_label, 
 // form. Same shape as listPortalFieldMaps but org resolved from the store.
 export async function listPortalFieldMapsFromApp(portalKey?: string): Promise<PortalFieldMap[]> {
   const orgId = requireActiveOrg();
-  let query = supabase
-    .from("portal_field_maps")
-    .select(APP_PORTAL_FIELD_MAP_COLUMNS)
-    .or(`org_id.is.null,org_id.eq.${orgId}`)
-    .order("portal_key", { ascending: true })
-    .order("form_section", { ascending: true, nullsFirst: true })
-    .order("created_at", { ascending: true });
-  if (portalKey) query = query.eq("portal_key", portalKey);
-  const { data, error } = await query;
-  if (error) throw error;
-  const rows = camelizeRow<PortalFieldMap[]>(data ?? []);
-  return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
+  const resolutions = await listResolvedPortalMapSnapshots(
+    { db: supabase, orgId },
+    portalKey,
+    APP_PORTAL_FIELD_MAP_COLUMNS,
+  );
+  return orderMapsForReader(
+    resolutions.flatMap((resolution) => resolution.maps),
+    "section",
+  );
 }
 
 // --- Mapping review training mutations (Surface 2), org rows only. RLS blocks

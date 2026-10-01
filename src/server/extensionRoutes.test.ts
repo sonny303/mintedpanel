@@ -4,12 +4,15 @@ import type { AuthContext, UserContext } from "./guard";
 import type { ProviderProfile, ProviderProfileResult } from "@/services/providerProfile";
 
 vi.mock("@/services/portalFieldMaps", () => ({
-  listPortalFieldMaps: vi.fn(),
-  listSharedFieldMaps: vi.fn(),
+  listEffectivePortalMapResolutions: vi.fn(),
+  listLegacyClientPortalMapResolutions: vi.fn(),
   proposeFieldMap: vi.fn(),
 }));
 vi.mock("@/services/portalFieldMapLearning", () => ({ batchLearnPortalFieldMaps: vi.fn() }));
-vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
+vi.mock("@/services/portals", () => ({
+  listPortalsForApi: vi.fn(),
+  listSharedPortals: vi.fn(),
+}));
 vi.mock("@/services/fillSessions", () => ({
   recordFillEvent: vi.fn(),
   supportsFillEventV2: vi.fn(),
@@ -37,12 +40,12 @@ vi.mock("@/services/extensionViewPrefs", () => ({
 }));
 
 import {
-  listPortalFieldMaps,
-  listSharedFieldMaps,
+  listEffectivePortalMapResolutions,
+  listLegacyClientPortalMapResolutions,
   proposeFieldMap,
 } from "@/services/portalFieldMaps";
 import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
-import { listPortalsForApi } from "@/services/portals";
+import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2 } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
@@ -62,6 +65,7 @@ import {
   handleListPortalFieldMaps,
   handleListSharedFieldMaps,
   handleListPortals,
+  handleListSharedPortals,
   handleProposeFieldMap,
   handleBatchLearnPortalFieldMaps,
   handleCompleteTaskStep,
@@ -76,11 +80,12 @@ import {
   handleSsnRelease,
 } from "./extensionRoutes";
 
-const listMapsMock = vi.mocked(listPortalFieldMaps);
-const listSharedMapsMock = vi.mocked(listSharedFieldMaps);
+const effectiveMapsMock = vi.mocked(listEffectivePortalMapResolutions);
+const legacyMapsMock = vi.mocked(listLegacyClientPortalMapResolutions);
 const proposeMapMock = vi.mocked(proposeFieldMap);
 const batchLearnMapMock = vi.mocked(batchLearnPortalFieldMaps);
 const listPortalsMock = vi.mocked(listPortalsForApi);
+const listSharedPortalsMock = vi.mocked(listSharedPortals);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const supportsFillEventV2Mock = vi.mocked(supportsFillEventV2);
 const getProfileMock = vi.mocked(getProviderProfile);
@@ -130,10 +135,36 @@ async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
 }
 
+function emptyPortalResolution(
+  portalId: string,
+  ownerScope: "global" | "organization",
+  ownerOrgId: string | null,
+) {
+  return {
+    portalKey: "availity",
+    portalId,
+    ownerScope,
+    ownerOrgId,
+    caseType: null,
+    formUrl: "https://portal.example/forms/app",
+    payerId: null,
+    requiresExplicitSelection: false,
+    mappingGeneration: 3,
+    effectiveMappingFingerprint: "sha256:empty",
+    maps: [],
+    activeFieldCount: 0,
+    isVerified: false,
+    isReady: false,
+    status: "empty" as const,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   catalogMock.mockResolvedValue(CATALOG);
   supportsFillEventV2Mock.mockResolvedValue(false);
+  effectiveMapsMock.mockResolvedValue([]);
+  legacyMapsMock.mockResolvedValue([]);
 });
 
 describe("provider profile handler", () => {
@@ -424,10 +455,33 @@ describe("me orgs handler", () => {
 });
 
 describe("portal field maps handler", () => {
+  const resolution = (over: Record<string, unknown> = {}) => ({
+    portalKey: "availity",
+    portalId: "portal-1",
+    ownerScope: "organization",
+    ownerOrgId: "org-1",
+    caseType: "enrollment",
+    formUrl: "https://portal.example/forms/app",
+    payerId: "payer-1",
+    requiresExplicitSelection: false,
+    mappingGeneration: 4,
+    effectiveMappingFingerprint: "sha256:abc123",
+    maps: [{ id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" }],
+    activeFieldCount: 1,
+    isVerified: true,
+    isReady: true,
+    status: "ready",
+    ...over,
+  });
+
   it("returns the rows with meta.total", async () => {
-    listMapsMock.mockResolvedValue([
-      { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
-      { id: "m2" },
+    legacyMapsMock.mockResolvedValue([
+      resolution({
+        maps: [
+          { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
+          { id: "m2" },
+        ],
+      }),
     ] as never);
     const res = await handleListPortalFieldMaps(
       new URL("https://x.test/api/portal-field-maps"),
@@ -439,22 +493,69 @@ describe("portal field maps handler", () => {
       { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
       { id: "m2" },
     ]);
-    expect(b.meta).toEqual({ total: 2 });
+    expect(b.meta).toEqual({
+      total: 2,
+      portal_mappings: [
+        {
+          portal_key: "availity",
+          portal_id: "portal-1",
+          case_type: "enrollment",
+          requires_explicit_selection: false,
+          mapping_generation: 4,
+          active_field_count: 1,
+          mapping_ready: true,
+          is_verified: true,
+          effective_mapping_fingerprint: "sha256:abc123",
+        },
+      ],
+    });
   });
 
-  it("forwards ?portal_key to the service", async () => {
-    listMapsMock.mockResolvedValue([] as never);
+  it("resolves the exact ?portal_key using the authenticated organization", async () => {
     await handleListPortalFieldMaps(
       new URL("https://x.test/api/portal-field-maps?portal_key=availity"),
       ctx(),
     );
-    expect(listMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
+    expect(legacyMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
       portalKey: "availity",
+      mapType: "all",
+    });
+  });
+
+  it("hides an explicit-only exact key without leaking its capability metadata", async () => {
+    legacyMapsMock.mockResolvedValue([]);
+    const res = await handleListPortalFieldMaps(
+      new URL("https://x.test/api/portal-field-maps?portal_key=availity"),
+      ctx(),
+    );
+    const response = await body(res);
+    expect(response.data).toEqual([]);
+    expect(response.meta).toEqual({ total: 0, registry_empty: true });
+  });
+
+  it("hides mixed global-explicit and org-legacy maps from the old extension endpoint", async () => {
+    // The exact Panel resolver can still return the unflagged org's effective
+    // maps; the legacy capability resolver blocks the entire shared key.
+    effectiveMapsMock.mockResolvedValue([
+      resolution({ requiresExplicitSelection: false, maps: [{ id: "org-map" }] }),
+    ] as never);
+    legacyMapsMock.mockResolvedValue([]);
+
+    const response = await body(
+      await handleListPortalFieldMaps(
+        new URL("https://x.test/api/portal-field-maps?portal_key=availity"),
+        ctx(),
+      ),
+    );
+    expect(response.data).toEqual([]);
+    expect(response.meta).toEqual({ total: 0, registry_empty: true });
+    expect(legacyMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
+      portalKey: "availity",
+      mapType: "all",
     });
   });
 
   it("advertises V2 only when the authenticated database exposes the new columns", async () => {
-    listMapsMock.mockResolvedValue([] as never);
     supportsFillEventV2Mock.mockResolvedValue(true);
     const authenticated = ctx();
 
@@ -468,7 +569,6 @@ describe("portal field maps handler", () => {
   });
 
   it("advertises the same checked capability on the shared field-map route", async () => {
-    listSharedMapsMock.mockResolvedValue([] as never);
     supportsFillEventV2Mock.mockResolvedValue(true);
     const db = {} as UserContext["db"];
     const user: UserContext = {
@@ -485,6 +585,32 @@ describe("portal field maps handler", () => {
 
     expect((await body(res)).meta).toEqual({ total: 0, fill_event_schema_version: 2 });
     expect(supportsFillEventV2Mock).toHaveBeenCalledWith({ db });
+    expect(legacyMapsMock).toHaveBeenCalledWith(
+      { db, orgId: null },
+      {
+        portalKey: undefined,
+        mapType: "all",
+      },
+    );
+  });
+
+  it("keeps shared map reads global-only and hides explicit-only configs", async () => {
+    legacyMapsMock.mockResolvedValue([]);
+    const user: UserContext = {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db: {} as UserContext["db"],
+    };
+    const res = await handleListSharedFieldMaps(
+      new URL("https://x.test/api/shared-field-maps?portal_key=availity"),
+      user,
+    );
+    expect((await body(res)).data).toEqual([]);
+    expect(legacyMapsMock).toHaveBeenCalledWith(
+      { db: user.db, orgId: null },
+      { portalKey: "availity", mapType: "all" },
+    );
   });
 });
 
@@ -790,6 +916,81 @@ describe("portals registry handler", () => {
     expect(b.meta).toEqual({ total: 0, registry_empty: true });
     expect(listPortalsMock).toHaveBeenCalledWith(expect.anything(), {
       portalKey: "aetna_contract",
+    });
+  });
+
+  it("blocks every same-key row when only one registry sibling needs explicit selection", async () => {
+    listPortalsMock.mockResolvedValue([
+      {
+        id: "global-explicit",
+        portalKey: "same-key",
+        orgId: null,
+        requiresExplicitSelection: true,
+      },
+      {
+        id: "org-legacy",
+        portalKey: "same-key",
+        orgId: "org-1",
+        requiresExplicitSelection: false,
+      },
+    ] as never);
+
+    const b = await body(await handleListPortals(url(), ctx()));
+    expect(b.data).toEqual([]);
+    expect(b.meta).toEqual({ total: 0, registry_empty: true });
+  });
+
+  it("masks persisted verification proof when the current API configuration has no active maps", async () => {
+    const staleProofRow = {
+      id: "portal-1",
+      portalKey: "availity",
+      orgId: "org-1",
+      requiresExplicitSelection: false,
+      isVerified: true,
+      lastVerifiedAt: "2026-08-01T00:00:00Z",
+      provenAt: "2026-08-01T00:00:00Z",
+    };
+    listPortalsMock.mockResolvedValue([staleProofRow] as never);
+    effectiveMapsMock.mockResolvedValue([
+      emptyPortalResolution("portal-1", "organization", "org-1"),
+    ] as never);
+
+    const response = await body(await handleListPortals(url(), ctx()));
+    expect(response.data).toEqual([
+      { ...staleProofRow, isVerified: false, lastVerifiedAt: null, provenAt: null },
+    ]);
+    expect(response.meta).toMatchObject({
+      portal_mappings: [{ active_field_count: 0, mapping_ready: false, is_verified: false }],
+    });
+  });
+
+  it("masks stale proof on the global shared registry response too", async () => {
+    const staleProofRow = {
+      id: "portal-1",
+      portalKey: "availity",
+      orgId: null,
+      requiresExplicitSelection: false,
+      isVerified: true,
+      lastVerifiedAt: "2026-08-01T00:00:00Z",
+      provenAt: "2026-08-01T00:00:00Z",
+    };
+    listSharedPortalsMock.mockResolvedValue([staleProofRow] as never);
+    effectiveMapsMock.mockResolvedValue([
+      emptyPortalResolution("portal-1", "global", null),
+    ] as never);
+    const user: UserContext = {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db: {} as UserContext["db"],
+    };
+
+    const response = await body(await handleListSharedPortals(user));
+    expect(response.data).toEqual([
+      { ...staleProofRow, isVerified: false, lastVerifiedAt: null, provenAt: null },
+    ]);
+    expect(response.meta).toMatchObject({
+      portal_mappings: [{ active_field_count: 0, mapping_ready: false, is_verified: false }],
     });
   });
 

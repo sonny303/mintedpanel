@@ -107,36 +107,58 @@ const dbRow = {
   updated_at: "2026-07-02T00:00:00Z",
 };
 
+const portalDbRow = {
+  id: "p1",
+  org_id: null,
+  portal_key: "availity",
+  name: "Availity",
+  payer_id: null,
+  form_url: "https://apps.availity.com/*",
+  case_type: null,
+  requires_explicit_selection: false,
+  mapping_generation: 1,
+  is_verified: true,
+  proven_at: "2026-07-02T00:00:00Z",
+};
+
+function mapReadDb(mapData: unknown, mapError?: unknown) {
+  return makeFakeDb([{ data: [portalDbRow] }, { data: mapData, error: mapError }]);
+}
+
 describe("portal field map service — injected server context", () => {
   it("scopes to global rows plus the caller's org via the .or() filter", async () => {
-    const { db, captures } = makeFakeDb([{ data: [dbRow] }]);
+    const { db, captures } = mapReadDb([dbRow]);
     await listPortalFieldMaps(ctxWith(db));
 
-    const cap = captures[0];
+    const cap = captures.find((capture) => capture.table === "portal_field_maps")!;
     expect(cap.table).toBe("portal_field_maps");
     expect(cap.or).toBe("org_id.is.null,org_id.eq.org-1");
     // Deterministic catalog order: portal_key, then created_at.
     expect(cap.orders).toEqual([
       ["portal_key", { ascending: true }],
-      ["created_at", { ascending: true }],
+      ["selector", { ascending: true }],
     ]);
   });
 
   it("applies the portalKey filter when given and omits it otherwise", async () => {
-    const filtered = makeFakeDb([{ data: [] }]);
+    const filtered = mapReadDb([]);
     await listPortalFieldMaps(ctxWith(filtered.db), { portalKey: "availity" });
-    expect(filtered.captures[0].filters).toContainEqual(["portal_key", "availity"]);
+    expect(filtered.captures[0]?.filters).toContainEqual(["portal_key", "availity"]);
 
-    const unfiltered = makeFakeDb([{ data: [] }]);
+    const unfiltered = mapReadDb([]);
     await listPortalFieldMaps(ctxWith(unfiltered.db), {});
-    expect(unfiltered.captures[0].filters).toHaveLength(0);
+    expect(unfiltered.captures[0]?.filters).toHaveLength(0);
   });
 
   it("selects the explicit column list, never *", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }]);
+    const { db, captures } = mapReadDb([]);
     await listPortalFieldMaps(ctxWith(db));
 
-    const cols = (captures[0].selectCols ?? "").split(",").map((c) => c.trim());
+    const cols = (
+      captures.find((capture) => capture.table === "portal_field_maps")?.selectCols ?? ""
+    )
+      .split(",")
+      .map((c) => c.trim());
     for (const col of [
       "id",
       "org_id",
@@ -154,6 +176,8 @@ describe("portal field map service — injected server context", () => {
       "notes",
       "status",
       "control_options",
+      "mapping_generation",
+      "shared_base_generation",
       "learned_via",
       "created_at",
       "updated_at",
@@ -164,7 +188,7 @@ describe("portal field map service — injected server context", () => {
   });
 
   it("camelizes rows at the boundary", async () => {
-    const { db } = makeFakeDb([{ data: [dbRow] }]);
+    const { db } = mapReadDb([dbRow]);
     const rows = await listPortalFieldMaps(ctxWith(db));
 
     expect(rows).toHaveLength(1);
@@ -193,6 +217,7 @@ describe("portal field map service — injected server context", () => {
       message: "column portal_field_maps.learned_via does not exist",
     };
     const { db, captures } = makeFakeDb([
+      { data: [portalDbRow] },
       { data: null, error: missingColumn },
       { data: [{ ...dbRow, learned_via: undefined }] },
     ]);
@@ -201,30 +226,29 @@ describe("portal field map service — injected server context", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.learnedVia).toBeUndefined();
-    expect(captures).toHaveLength(2);
-    expect(captures[0]?.selectCols).toContain("learned_via");
-    expect(captures[1]?.selectCols).not.toContain("learned_via");
-    expect(captures.map((capture) => capture.or)).toEqual([
+    const mapCaptures = captures.filter((capture) => capture.table === "portal_field_maps");
+    expect(mapCaptures).toHaveLength(2);
+    expect(mapCaptures[0]?.selectCols).toContain("learned_via");
+    expect(mapCaptures[1]?.selectCols).not.toContain("learned_via");
+    expect(mapCaptures.map((capture) => capture.or)).toEqual([
       "org_id.is.null,org_id.eq.org-1",
       "org_id.is.null,org_id.eq.org-1",
     ]);
-    expect(captures.map((capture) => capture.filters)).toEqual([
+    expect(mapCaptures.map((capture) => capture.filters)).toEqual([
       [["portal_key", "availity"]],
       [["portal_key", "availity"]],
     ]);
   });
 
   it("does not retry the old projection for an unrelated database error", async () => {
-    const { db, captures } = makeFakeDb([
-      { data: null, error: { code: "42501", message: "permission denied" } },
-    ]);
+    const { db, captures } = mapReadDb([], { code: "42501", message: "permission denied" });
 
     await expect(listPortalFieldMaps(ctxWith(db))).rejects.toMatchObject({ code: "42501" });
-    expect(captures).toHaveLength(1);
+    expect(captures.filter((capture) => capture.table === "portal_field_maps")).toHaveLength(1);
   });
 
   it("returns [] when the query yields no rows", async () => {
-    const { db } = makeFakeDb([{ data: null }]);
+    const { db } = makeFakeDb([]);
     await expect(listPortalFieldMaps(ctxWith(db))).resolves.toEqual([]);
   });
 
@@ -233,9 +257,14 @@ describe("portal field map service — injected server context", () => {
   // contract is the bare catalog form — the extension joins these strings
   // literally against profile tokens (tonight's 0-fields-filled bug).
   it("normalizes braced DB tokens to the bare catalog form at the read boundary", async () => {
-    const bracedRow = { ...dbRow, id: "m2", token: "{{provider.firstName}}" };
-    const spacedRow = { ...dbRow, id: "m3", token: " {{ group.tin }} " };
-    const { db } = makeFakeDb([{ data: [dbRow, bracedRow, spacedRow] }]);
+    const bracedRow = {
+      ...dbRow,
+      id: "m2",
+      selector: "#first-name",
+      token: "{{provider.firstName}}",
+    };
+    const spacedRow = { ...dbRow, id: "m3", selector: "#group-tin", token: " {{ group.tin }} " };
+    const { db } = mapReadDb([dbRow, bracedRow, spacedRow]);
 
     const rows = await listPortalFieldMaps(ctxWith(db));
 
@@ -244,7 +273,7 @@ describe("portal field map service — injected server context", () => {
 
   it("leaves manual rows' null token as null", async () => {
     const manualRow = { ...dbRow, id: "m4", source: "manual", token: null };
-    const { db } = makeFakeDb([{ data: [manualRow] }]);
+    const { db } = mapReadDb([manualRow]);
 
     const rows = await listPortalFieldMaps(ctxWith(db));
 
@@ -325,6 +354,47 @@ describe("proposeFieldMap — propose-only write", () => {
     expect(payload?.portal_key).toBe("availity");
     expect(payload?.field_label).toBe("npi number");
     expect(payload?.selector).toBe("#npi");
+  });
+
+  it("builds label suggestions from current maps while retaining current other-key evidence", async () => {
+    const registryConfig = (portalKey: string, generation: number) => ({
+      ...portalDbRow,
+      id: `config-${portalKey}`,
+      portal_key: portalKey,
+      mapping_generation: generation,
+    });
+    const learnedMap = (id: string, portalKey: string, generation: number, token: string) => ({
+      ...dbRow,
+      id,
+      portal_key: portalKey,
+      field_label: "npi number",
+      token,
+      mapping_generation: generation,
+      shared_base_generation: null,
+      status: "approved",
+    });
+    const { db, captures } = makeFakeDb([
+      { data: [] },
+      { data: proposedRow },
+      { data: [registryConfig("stale_other", 4), registryConfig("current_other", 2)] },
+      { data: [] },
+      {
+        data: [
+          learnedMap("stale-observation", "stale_other", 1, "group.tin"),
+          learnedMap("current-observation", "current_other", 2, "provider.npi"),
+        ],
+      },
+    ]);
+
+    const result = await proposeFieldMap(proposeCtx(db), input);
+
+    expect(result.kind).toBe("created");
+    if (result.kind !== "created") throw new Error("expected a created proposal");
+    expect(result.suggestion).toEqual({
+      token: "provider.npi",
+      portalCount: 1,
+      fromDictionary: false,
+    });
   });
 
   it("returns the existing row without inserting when the selector is already known", async () => {
