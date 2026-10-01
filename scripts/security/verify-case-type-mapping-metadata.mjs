@@ -87,10 +87,15 @@ INSERT INTO public.memberships (org_id, user_id, role) VALUES
 INSERT INTO private.client_identity_classifications (auth_user_id, org_id, email_normalized, state)
 VALUES ('${ids.restrictedActor}', '${ids.orgA}', 'mint45-restricted-${ids.restrictedActor}@example.invalid', 'active');
 
+-- Reconstruct typed portal rows written before MINT-48. Their marker and
+-- payer state are historical fixture data, so bypass only the fresh-insert
+-- stamper while inserting them; production guards remain enabled afterward.
+ALTER TABLE public.portals DISABLE TRIGGER portals_guard_explicit_configuration_identity;
 INSERT INTO public.portals (id, org_id, portal_key, name, case_type, requires_explicit_selection, mapping_generation) VALUES
   ('${ids.portalGlobal}', NULL, '${portalKey}', 'MINT-45 global', 'contract', true, 1),
   ('${ids.portalA}', '${ids.orgA}', '${portalKey}', 'MINT-45 org A', 'enrollment', false, 1),
   ('${ids.portalB}', '${ids.orgB}', '${portalKey}', 'MINT-45 org B', 'recredentialing', false, 1);
+ALTER TABLE public.portals ENABLE TRIGGER portals_guard_explicit_configuration_identity;
 INSERT INTO public.portals (id, org_id, portal_key, name)
 VALUES ('${ids.portalLegacy}', '${ids.orgA}', '${legacyKey}', 'MINT-45 legacy defaults');
 INSERT INTO public.portals (id, org_id, portal_key, name)
@@ -310,7 +315,7 @@ await expectSqlFailure(
 );
 
 await expectSqlFailure(
-  `INSERT INTO public.portals (org_id, portal_key, name, case_type) VALUES ('${ids.orgA}', '${legacyKey}_bad', 'bad', 'other');`,
+  `INSERT INTO public.portals (org_id, payer_id, portal_key, name, case_type) VALUES ('${ids.orgA}', '${ids.payerA}', '${legacyKey}_bad', 'bad', 'other');`,
   "portals_case_type_check",
   "closed case_type set",
 );
