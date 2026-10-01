@@ -95,8 +95,7 @@ try {
     fail("MINT8_LOCAL_DOCKER_CONTEXT_REQUIRED");
   }
 
-  const imageId = docker(["image", "inspect", image, "--format", "{{.Id}}"])
-    .trim();
+  const imageId = docker(["image", "inspect", image, "--format", "{{.Id}}"]).trim();
   if (!/^sha256:[a-f0-9]{64}$/.test(imageId)) fail("MINT8_CACHED_POSTGRES_IMAGE_REQUIRED");
 
   docker([
@@ -150,10 +149,7 @@ try {
 
   emit(
     sql(
-      readFileSync(
-        `${root}supabase/tests/mint8-audit-actor-integrity-pre-migration.sql`,
-        "utf8",
-      ),
+      readFileSync(`${root}supabase/tests/mint8-audit-actor-integrity-pre-migration.sql`, "utf8"),
     ).trim(),
   );
 
