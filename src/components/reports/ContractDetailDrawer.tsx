@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,10 @@ import {
 import { useUpsertContract } from "@/hooks/useContracts";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { ContractSopAssignmentPanel } from "@/components/reports/ContractSopAssignmentPanel";
+import { supabase } from "@/integrations/supabase/externalClient";
+import { useActiveOrgId } from "@/lib/auth-store";
+import { normalizePortalKey } from "@/lib/tokenFormat";
+import { listEffectivePortalMapResolutions } from "@/services/portalFieldMaps";
 import type { Contract, ContractingStatusLabel } from "@/types";
 
 export const CANONICAL_CONTRACTING_STATUSES: ContractingStatusLabel[] = [
@@ -58,6 +63,58 @@ export function ContractDetailDrawer({
 }: ContractDetailDrawerProps) {
   const upsertM = useUpsertContract();
   const statusesQ = useStatusConfigs("contracting");
+  const activeOrgId = useActiveOrgId();
+  const portalResolutionsQ = useQuery({
+    queryKey: ["contract-sop-portal-resolutions", activeOrgId ?? "no-org", "web"],
+    queryFn: () =>
+      listEffectivePortalMapResolutions(
+        { db: supabase, orgId: activeOrgId as string },
+        { mapType: "web" },
+      ),
+    enabled: open && Boolean(activeOrgId) && Boolean(contract?.id),
+    staleTime: 30_000,
+  });
+  const portalConfigurationForKey = useMemo(() => {
+    if (!portalResolutionsQ.data) return undefined;
+    const byKey = new Map(
+      portalResolutionsQ.data.flatMap((resolution) => {
+        const key = normalizePortalKey(resolution.portalKey);
+        return key ? [[key, resolution] as const] : [];
+      }),
+    );
+    return (portalKey: string) => {
+      const key = normalizePortalKey(portalKey);
+      if (!key) return null;
+      // The canonical list omits a key with neither a config nor maps. Treat
+      // that successful absence as the resolver's explicit missing state.
+      return (
+        byKey.get(key) ?? {
+          portalKey: key,
+          portalId: null,
+          ownerScope: null,
+          ownerOrgId: null,
+          caseType: null,
+          formUrl: null,
+          payerId: null,
+          requiresExplicitSelection: false,
+          mappingGeneration: null,
+          effectiveMappingFingerprint: null,
+          maps: [],
+          activeFieldCount: 0,
+          isVerified: false,
+          isReady: false,
+          status: "configuration_missing" as const,
+        }
+      );
+    };
+  }, [portalResolutionsQ.data]);
+  const portalResolverState = !activeOrgId
+    ? "unavailable"
+    : portalResolutionsQ.isError
+      ? "error"
+      : portalResolutionsQ.isPending
+        ? "loading"
+        : "ready";
 
   const [statusId, setStatusId] = useState<string>("");
   const [specialty, setSpecialty] = useState<string>("");
@@ -130,6 +187,9 @@ export function ContractDetailDrawer({
             groupId={groupId}
             payerId={payerId}
             state={state}
+            orgId={activeOrgId}
+            portalConfigurationForKey={portalConfigurationForKey}
+            portalResolverState={portalResolverState}
           />
 
           {/* Status Field */}

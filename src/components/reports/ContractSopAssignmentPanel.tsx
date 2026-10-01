@@ -30,8 +30,10 @@ interface ContractSopAssignmentPanelProps {
   groupId: string;
   payerId: string;
   state: string;
-  /** Injected by the Matrix once MINT-52's exact-key resolver is connected. */
+  orgId: string | null;
+  /** Injected by the mounted Matrix from MINT-52's exact-key resolver. */
   portalConfigurationForKey?: (portalKey: string) => ContractPortalConfiguration | null;
+  portalResolverState?: "loading" | "ready" | "error" | "unavailable";
 }
 
 function compatibleContractSops<
@@ -64,7 +66,9 @@ export function ContractSopAssignmentPanel({
   groupId,
   payerId,
   state,
+  orgId,
   portalConfigurationForKey,
+  portalResolverState = "unavailable",
 }: ContractSopAssignmentPanelProps) {
   const sopsQ = useSops();
   const assignmentQ = useContractSopAssignment(contract?.id);
@@ -202,7 +206,7 @@ export function ContractSopAssignmentPanel({
                         step.stepType === "online_form" && assignmentQ.data?.assignment
                           ? buildContractSopLaunchTuple({
                               contractId: assignmentQ.data.assignment.contractId,
-                              orgId: contract?.orgId ?? "",
+                              orgId: orgId ?? "",
                               payerId,
                               assignment: assignmentQ.data.assignment,
                               taskIndex,
@@ -229,6 +233,16 @@ export function ContractSopAssignmentPanel({
                                   className="mt-1 space-y-0.5"
                                   data-testid="contract-launch-tuple"
                                   data-step-identity={launchTuple.stepIdentity}
+                                  data-org-id={launchTuple.orgId}
+                                  data-portal-id={launchTuple.portalId ?? ""}
+                                  data-portal-scope={launchTuple.portalScope ?? ""}
+                                  data-mapping-generation={launchTuple.mappingGeneration ?? ""}
+                                  data-effective-mapping-fingerprint={
+                                    launchTuple.effectiveMappingFingerprint ?? ""
+                                  }
+                                  data-provider-id={launchTuple.providerId ?? ""}
+                                  data-facility-id={launchTuple.facilityId ?? ""}
+                                  data-readiness-outcome={launchTuple.readiness.outcome}
                                 >
                                   <div>
                                     Step tuple: task {launchTuple.taskIndex}, step{" "}
@@ -250,6 +264,17 @@ export function ContractSopAssignmentPanel({
                                     Launch readiness: {launchTuple.readiness.outcome} —{" "}
                                     {launchTuple.readiness.reason}
                                   </div>
+                                </div>
+                              ) : null}
+                              {portalResolverState === "loading" ? (
+                                <div role="status">Resolving the exact form configuration…</div>
+                              ) : portalResolverState === "error" ? (
+                                <div role="status">
+                                  Form configuration lookup failed; launch remains gated.
+                                </div>
+                              ) : portalResolverState === "unavailable" ? (
+                                <div role="status">
+                                  Active organization unavailable; launch remains gated.
                                 </div>
                               ) : null}
                               <Button

@@ -71,6 +71,18 @@ describe("Contract SOP launch tuple", () => {
   it.each([
     ["missing resolver", null, "resolver_unavailable"],
     [
+      "missing configuration",
+      {
+        ...base.configuration!,
+        portalId: null,
+        ownerScope: null,
+        ownerOrgId: null,
+        mappingGeneration: null,
+        status: "configuration_missing",
+      },
+      "configuration_missing",
+    ],
+    [
       "empty mapping",
       { ...base.configuration!, status: "empty", isReady: false },
       "mapping_not_ready",

@@ -18,6 +18,7 @@ export interface ContractPortalConfiguration {
 export type ContractLaunchReadinessOutcome =
   | "invalid_step"
   | "resolver_unavailable"
+  | "configuration_missing"
   | "configuration_mismatch"
   | "legacy_configuration"
   | "mapping_not_ready"
@@ -124,6 +125,9 @@ export function buildContractSopLaunchTuple(
   } else if (!input.configuration) {
     outcome = "resolver_unavailable";
     reason = "The exact portal configuration has not been resolved.";
+  } else if (input.configuration.status === "configuration_missing") {
+    outcome = "configuration_missing";
+    reason = "No visible portal configuration matches this exact SOP key.";
   } else if (
     !input.configuration.portalId ||
     configurationKey !== portalKey ||

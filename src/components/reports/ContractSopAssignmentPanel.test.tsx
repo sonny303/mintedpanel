@@ -49,6 +49,7 @@ function renderPanel() {
       groupId="group-1"
       payerId="payer-1"
       state="NY"
+      orgId="org-1"
     />,
   );
 }
