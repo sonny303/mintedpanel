@@ -502,7 +502,9 @@ describe("E6.12 auth lifecycle", () => {
       ...context(ACTOR_A, "rev-staff-new"),
       audience: null,
       selectedOrgId: null,
-      staffOrgs: [{ orgId: ORG_A, orgName: "Org A", role: "admin", reportStaff: true, clientManage: true }],
+      staffOrgs: [
+        { orgId: ORG_A, orgName: "Org A", role: "admin", reportStaff: true, clientManage: true },
+      ],
     };
     fetchContextMock.mockResolvedValueOnce(discovery);
     selectContextMock.mockResolvedValueOnce({
