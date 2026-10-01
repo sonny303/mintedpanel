@@ -45,6 +45,7 @@ import {
 } from "@/hooks/useGlobalAuthoring";
 import { useCreatePortal } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
+import { createIndependentPortalInput } from "@/lib/portalKey";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
@@ -541,6 +542,60 @@ function WorkbenchHandoffBlock({
   );
 }
 
+type PortalRegistrationInput = {
+  name: string;
+  portalKey: string;
+  payerId: string;
+  caseType: CaseType;
+  formUrl: string | null;
+};
+
+type PortalRegistrationPlan =
+  | { mode: "new"; input: PortalRegistrationInput }
+  | { mode: "repair"; input: PortalRegistrationInput };
+
+export function buildPortalRegistrationPlan(input: {
+  name: string;
+  initialKey: string;
+  templatePayerId: string | null;
+  templateCaseType: CaseType | null;
+  formUrl: string;
+}): PortalRegistrationPlan {
+  const name = input.name.trim();
+  const payerId = input.templatePayerId?.trim();
+  if (!name) throw new Error("Portal name is required");
+  if (!payerId || !input.templateCaseType) {
+    throw new Error(
+      "Choose a payer and case type in Basics before registering a form configuration",
+    );
+  }
+
+  const formUrl = input.formUrl.trim() || null;
+  const existingKey = normalizePortalKey(input.initialKey);
+  if (existingKey) {
+    return {
+      mode: "repair",
+      input: {
+        name,
+        portalKey: existingKey,
+        payerId,
+        caseType: input.templateCaseType,
+        formUrl,
+      },
+    };
+  }
+
+  return {
+    mode: "new",
+    input: createIndependentPortalInput({
+      name,
+      payerId,
+      caseType: input.templateCaseType,
+      formUrl: input.formUrl,
+    }),
+  };
+}
+
 function RegisterPortalDialog({
   isGlobalAuthoring,
   templatePayerId,
@@ -557,42 +612,39 @@ function RegisterPortalDialog({
   onRegistered: (portalKey: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [key, setKey] = useState(initialKey);
   const [formUrl, setFormUrl] = useState("");
   const upsertGlobalMut = useUpsertGlobalPortal();
   const createOrgMut = useCreatePortal();
   const busy = upsertGlobalMut.isPending || createOrgMut.isPending;
+  const repairKey = normalizePortalKey(initialKey);
+  const mode = repairKey ? "repair" : "new";
 
   async function register() {
-    const normalized = normalizePortalKey(key);
-    if (!name.trim() || !normalized) {
-      toast.error("Portal name and key are required");
-      return;
-    }
-    if (!templatePayerId || !templateCaseType) {
-      toast.error("Choose a payer and case type in Basics before registering a form configuration");
+    let plan: PortalRegistrationPlan;
+    try {
+      plan = buildPortalRegistrationPlan({
+        name,
+        initialKey,
+        templatePayerId,
+        templateCaseType,
+        formUrl,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not register the portal");
       return;
     }
     try {
       if (isGlobalAuthoring) {
-        await upsertGlobalMut.mutateAsync({
-          name,
-          portalKey: normalized,
-          payerId: templatePayerId,
-          caseType: templateCaseType,
-          formUrl: formUrl.trim() || null,
-        });
+        await upsertGlobalMut.mutateAsync(plan.input);
       } else {
-        await createOrgMut.mutateAsync({
-          name,
-          portalKey: normalized,
-          payerId: templatePayerId,
-          caseType: templateCaseType,
-          formUrl: formUrl.trim() || null,
-        });
+        await createOrgMut.mutateAsync(plan.input);
       }
-      toast.success(`Portal registered${isGlobalAuthoring ? " globally" : ""}`);
-      onRegistered(normalized);
+      toast.success(
+        plan.mode === "repair"
+          ? `Portal reference repaired${isGlobalAuthoring ? " globally" : ""}`
+          : `Portal registered${isGlobalAuthoring ? " globally" : ""}`,
+      );
+      onRegistered(plan.input.portalKey);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not register the portal");
     }
@@ -602,7 +654,10 @@ function RegisterPortalDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Register {isGlobalAuthoring ? "global " : ""}portal</DialogTitle>
+          <DialogTitle>
+            {mode === "repair" ? "Repair" : "Register"} {isGlobalAuthoring ? "global " : ""}
+            portal {mode === "repair" ? "reference" : "configuration"}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           {isGlobalAuthoring ? (
@@ -611,8 +666,10 @@ function RegisterPortalDialog({
             </p>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            Case type: {templateCaseType ?? "Choose one in Basics"}. This registers an unverified
-            configuration; training and verification remain separate steps.
+            Case type: {templateCaseType ?? "Choose one in Basics"}.{" "}
+            {mode === "repair"
+              ? "This reconnects the existing SOP reference using its current key. Existing key-scoped maps, references, and proof data stay attached; this does not create a new empty configuration."
+              : "This creates a new independent configuration with its own key and no field maps. It starts unverified; training and verification remain separate steps."}
           </p>
           <div>
             <Label className="text-xs">Portal name</Label>
@@ -622,17 +679,20 @@ function RegisterPortalDialog({
               placeholder="BCBS KS enrollment"
             />
           </div>
-          <div>
-            <Label className="text-xs">Portal key</Label>
-            <Input
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder="bcbs_ks_enrollment"
-            />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Lowercased on save; immutable after — it joins SOP steps, field maps, and fill logs.
+          {repairKey ? (
+            <div>
+              <Label className="text-xs">Existing portal key</Label>
+              <Input value={repairKey} readOnly />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Repair keeps this normalized key so existing SOP steps and field maps remain bound.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              A distinct permanent key is generated when you register this configuration and cannot
+              be changed later.
             </p>
-          </div>
+          )}
           <div>
             <Label className="text-xs">Form URL (optional)</Label>
             <Input
@@ -652,7 +712,13 @@ function RegisterPortalDialog({
             style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
-            {busy ? "Registering…" : "Register"}
+            {busy
+              ? mode === "repair"
+                ? "Repairing…"
+                : "Registering…"
+              : mode === "repair"
+                ? "Repair reference"
+                : "Register"}
           </Button>
         </DialogFooter>
       </DialogContent>

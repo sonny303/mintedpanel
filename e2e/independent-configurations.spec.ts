@@ -58,6 +58,38 @@ function portalRow(input: {
   };
 }
 
+function fieldMapRow(id: string, portalKey: string, selector: string): Row {
+  return {
+    id,
+    org_id: ORG_ID,
+    portal_key: portalKey,
+    url_pattern: null,
+    page_step: null,
+    map_type: "web",
+    selector,
+    selector_fallbacks: null,
+    source: "manual",
+    token: null,
+    hardcoded_value: null,
+    transform: null,
+    field_type: "text",
+    notes: "Existing mapping for this fixture portal.",
+    status: "approved",
+    control_options: null,
+    field_label: "Provider NPI",
+    form_section: "Provider details",
+    confidence: null,
+    display_label: "Provider NPI",
+    section: "Provider details",
+    sort_order: 0,
+    learned_via: "manual",
+    mapping_generation: 4,
+    shared_base_generation: null,
+    created_at: "2026-07-12T00:00:00Z",
+    updated_at: "2026-07-12T00:00:00Z",
+  };
+}
+
 function makeScenario(): Scenario {
   return {
     createPayloads: [],
@@ -117,22 +149,8 @@ function makeScenario(): Scenario {
         }),
       ],
       portal_field_maps: [
-        {
-          id: "map-source-1",
-          org_id: ORG_ID,
-          portal_key: SOURCE_KEY,
-          status: "approved",
-          field_key: "provider_npi",
-          selector: "#npi",
-        },
-        {
-          id: "map-legacy-1",
-          org_id: ORG_ID,
-          portal_key: LEGACY_KEY,
-          status: "approved",
-          field_key: "provider_npi",
-          selector: "#legacy-npi",
-        },
+        fieldMapRow("map-source-1", SOURCE_KEY, "#npi"),
+        fieldMapRow("map-legacy-1", LEGACY_KEY, "#legacy-npi"),
       ],
       sop_templates: [
         {
@@ -146,6 +164,7 @@ function makeScenario(): Scenario {
           archived: false,
           current_version: 1,
           required_profile_attributes: [],
+          case_type: "enrollment",
           task_definitions: [
             {
               title: "Enrollment application",
@@ -181,6 +200,27 @@ function rowMatches(row: Row, url: URL): boolean {
   return true;
 }
 
+function projectRows(table: string, rows: Row[], url: URL, scenario: Scenario): Row[] {
+  if (table !== "portals") return rows;
+  const includesPayer = (url.searchParams.get("select") ?? "").includes("payers(");
+  return rows.map((row) => {
+    const { payers: _embeddedPayer, ...portal } = row;
+    if (!includesPayer) return portal;
+    const payer = scenario.db.payers.find((candidate) => candidate.id === portal.payer_id);
+    return {
+      ...portal,
+      payers: payer
+        ? {
+            name: payer.name,
+            status: payer.status,
+            archived_at: payer.archived_at,
+            merged_into_id: payer.merged_into_id,
+          }
+        : null,
+    };
+  });
+}
+
 async function fulfillSupabase(route: Route, scenario: Scenario) {
   const request = route.request();
   const url = new URL(request.url());
@@ -201,10 +241,12 @@ async function fulfillSupabase(route: Route, scenario: Scenario) {
       id: `50000000-0000-4000-8000-${String(rows.length + 1).padStart(12, "0")}`,
       created_at: "2026-09-30T00:00:00Z",
       updated_at: "2026-09-30T00:00:00Z",
+      ...(table === "portals" ? { mapping_generation: 1 } : {}),
       ...body,
     };
     rows.push(nextRow);
-    return json(wantsObject ? nextRow : [nextRow], 201);
+    const [projected] = projectRows(table, [nextRow], url, scenario);
+    return json(wantsObject ? projected : [projected], 201);
   }
 
   if (request.method() === "PATCH") {
@@ -212,7 +254,8 @@ async function fulfillSupabase(route: Route, scenario: Scenario) {
     if (table === "portals") scenario.portalUpdates.push({ url: request.url(), body: { ...body } });
     const matched = rows.filter((row) => rowMatches(row, url));
     for (const row of matched) Object.assign(row, body, { updated_at: "2026-09-30T00:00:00Z" });
-    return json(wantsObject ? (matched[0] ?? {}) : matched);
+    const projected = projectRows(table, matched, url, scenario);
+    return json(wantsObject ? (projected[0] ?? {}) : projected);
   }
 
   if (request.method() === "DELETE") {
@@ -224,9 +267,9 @@ async function fulfillSupabase(route: Route, scenario: Scenario) {
   const matched = rows.filter((row) => rowMatches(row, url));
   if (wantsObject) {
     if (matched.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
-    return json(matched[0]);
+    return json(projectRows(table, matched, url, scenario)[0]);
   }
-  return json(matched);
+  return json(projectRows(table, matched, url, scenario));
 }
 
 async function seed(context: import("@playwright/test").BrowserContext, scenario: Scenario) {
