@@ -72,6 +72,8 @@ const CASES_ROUTE = /^\/api\/cases\/?$/;
 const CASE_TOUCHES_ROUTE = /^\/api\/cases\/([^/]+)\/touches\/?$/;
 // `/api/cases/:id/context` — the Workbench's post-selection case context read.
 const CASE_CONTEXT_ROUTE = /^\/api\/cases\/([^/]+)\/context\/?$/;
+// `/api/contracts/:id/form-context` — the assigned immutable Contract SOP.
+const CONTRACT_FORM_CONTEXT_ROUTE = /^\/api\/contracts\/([^/]+)\/form-context\/?$/;
 // `/api/next-best-action` — the extension's queue-top read (log-and-advance).
 const NEXT_BEST_ACTION_ROUTE = /^\/api\/next-best-action\/?$/;
 // `/api/me/orgs` — the caller's own memberships (user-scoped, no org context).
@@ -428,6 +430,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
   const caseContextMatch = pathname.match(CASE_CONTEXT_ROUTE);
+  const contractFormContextMatch = pathname.match(CONTRACT_FORM_CONTEXT_ROUTE);
   const isNextBestAction = NEXT_BEST_ACTION_ROUTE.test(pathname);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
@@ -465,6 +468,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isCases &&
     !caseTouchesMatch &&
     !caseContextMatch &&
+    !contractFormContextMatch &&
     !isNextBestAction &&
     !isMeOrgs &&
     !isMeViewPrefs &&
@@ -764,6 +768,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleCaseContext(caseContextMatch[1], ctx);
+    }
+    if (contractFormContextMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleContractFormContext(contractFormContextMatch[1], url, ctx);
     }
     if (isNextBestAction) {
       if (method !== "GET") return fail(405, "Method not allowed");

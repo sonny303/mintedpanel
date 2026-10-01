@@ -16,6 +16,10 @@ import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
+import {
+  getContractFormContext,
+  type ExpectedContractSopContext,
+} from "@/services/contractFormContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { getNextBestAction } from "@/services/nextBestAction";
@@ -165,6 +169,56 @@ export async function handleProviderProfile(
 
   const caseIdPresent = hasSnakeCaseId || (hasCamelCaseId && caseId != null);
 
+  const hasContractSnakeCaseId = url.searchParams.has("contract_id");
+  const hasContractCamelCaseId = url.searchParams.has("contractId");
+  const contractIdRaw = hasContractSnakeCaseId
+    ? url.searchParams.get("contract_id")
+    : url.searchParams.get("contractId");
+  let contractId: string | undefined;
+  if (hasContractSnakeCaseId || hasContractCamelCaseId) {
+    if (!contractIdRaw || !UUID_RE.test(contractIdRaw)) {
+      return fail(422, "contract_id must be a UUID");
+    }
+    contractId = contractIdRaw;
+  }
+  if (contractId && caseIdPresent) {
+    return fail(422, "Choose either case_id or contract_id profile context");
+  }
+
+  const contextUuidParam = (camel: string, snake: string): string | undefined | null => {
+    const key = url.searchParams.has(snake) ? snake : camel;
+    if (!url.searchParams.has(key)) return undefined;
+    const value = url.searchParams.get(key);
+    return value && UUID_RE.test(value) ? value : null;
+  };
+  const contextVersionParam = (camel: string, snake: string): number | undefined | null => {
+    const key = url.searchParams.has(snake) ? snake : camel;
+    if (!url.searchParams.has(key)) return undefined;
+    const value = url.searchParams.get(key);
+    if (!value || !/^\d+$/.test(value)) return null;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  };
+  const expectedAssignmentId = contextUuidParam("assignmentId", "assignment_id");
+  const expectedSopTemplateId = contextUuidParam("sopTemplateId", "sop_template_id");
+  const expectedContextVersion = contextVersionParam("contextVersion", "context_version");
+  const expectedSopVersion = contextVersionParam("sopVersion", "sop_version");
+  if (
+    expectedAssignmentId === null ||
+    expectedSopTemplateId === null ||
+    expectedContextVersion === null ||
+    expectedSopVersion === null ||
+    (!contractId &&
+      [
+        expectedAssignmentId,
+        expectedSopTemplateId,
+        expectedContextVersion,
+        expectedSopVersion,
+      ].some((value) => value !== undefined))
+  ) {
+    return fail(422, "Contract assignment selectors require a valid contract_id context");
+  }
+
   // Explicit facility selection for the facility.*/assignment.* tokens. A
   // non-UUID can't be a facility — same early 404 the set-membership check
   // below would produce, without a uuid-cast 500.
@@ -184,11 +238,36 @@ export async function handleProviderProfile(
     groupId = groupIdRaw;
   }
 
+  const expectedStepIdentity = url.searchParams.get("stepIdentity") ?? undefined;
+  if (
+    expectedStepIdentity != null &&
+    (expectedStepIdentity.length === 0 || expectedStepIdentity.length > 512)
+  ) {
+    return fail(422, "stepIdentity is invalid");
+  }
+  if (expectedStepIdentity != null && !contractId) {
+    return fail(422, "stepIdentity requires a contract_id context");
+  }
+
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
     groupId,
     caseId,
+    ...(contractId
+      ? {
+          contractContext: {
+            contractId,
+            expected: {
+              assignmentId: expectedAssignmentId,
+              contextVersion: expectedContextVersion,
+              sopTemplateId: expectedSopTemplateId,
+              sopVersion: expectedSopVersion,
+              stepIdentity: expectedStepIdentity,
+            },
+          },
+        }
+      : {}),
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
   // A facilityId outside the caller's org or this provider's facility set —
@@ -199,6 +278,14 @@ export async function handleProviderProfile(
   if (result.kind === "group_not_found") {
     return fail(404, "Group not found for this provider or case");
   }
+  if (result.kind === "contract_not_found") return fail(404, "Contract not found");
+  if (result.kind === "contract_context_not_configured") {
+    return fail(409, `not_configured: ${result.reason}`);
+  }
+  if (result.kind === "contract_context_mismatch") {
+    return fail(422, `mismatch: ${result.reason}`);
+  }
+  if (result.kind === "contract_context_stale") return fail(409, `stale: ${result.reason}`);
   const { profile, needsFacility } = result;
 
   // {{user.*}} tokens ride along with the catalog tokens (R2 locked decision
@@ -231,6 +318,8 @@ export async function handleProviderProfile(
       state: state ?? null,
       facilityId: profile.selected_facility_id,
       caseId: profile.case_id,
+      contractId: profile.contract_context?.contract_id ?? null,
+      assignmentId: profile.contract_context?.assignment_id ?? null,
     },
     description: "Provider profile read (extension fill payload)",
   });
@@ -669,6 +758,87 @@ export async function handleCaseContext(caseId: string, ctx: AuthContext): Promi
     description: "Case context read (extension workbench)",
   });
   const response = ok(context);
+  response.headers.set("cache-control", "no-store");
+  return response;
+}
+
+// GET /api/contracts/:id/form-context — the assigned Contract SOP plus exact
+// immutable online-form step identities. Optional provider/facility and
+// expected assignment/version selectors are revalidated against org-owned
+// rows. Error prefixes are stable for clients: not_configured, mismatch,
+// forbidden (guard-level), and stale. No Contract row is converted to a case.
+export async function handleContractFormContext(
+  contractId: string,
+  url: URL,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!UUID_RE.test(contractId)) return fail(404, "Contract not found");
+
+  const optionalUuid = (key: string): string | undefined | null => {
+    if (!url.searchParams.has(key)) return undefined;
+    const raw = url.searchParams.get(key);
+    return raw && UUID_RE.test(raw) ? raw : null;
+  };
+  const optionalVersion = (key: string): number | undefined | null => {
+    if (!url.searchParams.has(key)) return undefined;
+    const raw = url.searchParams.get(key);
+    if (!raw || !/^\d+$/.test(raw)) return null;
+    const parsed = Number(raw);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const providerId = optionalUuid("providerId");
+  const facilityId = optionalUuid("facilityId");
+  const assignmentId = optionalUuid("assignmentId");
+  const sopTemplateId = optionalUuid("sopTemplateId");
+  const contextVersion = optionalVersion("contextVersion");
+  const sopVersion = optionalVersion("sopVersion");
+  if (
+    providerId === null ||
+    facilityId === null ||
+    assignmentId === null ||
+    sopTemplateId === null ||
+    contextVersion === null ||
+    sopVersion === null
+  ) {
+    return fail(422, "Contract context selectors must be valid UUIDs or positive versions");
+  }
+  const stepIdentity = url.searchParams.get("stepIdentity") ?? undefined;
+  if (stepIdentity != null && (stepIdentity.length === 0 || stepIdentity.length > 512)) {
+    return fail(422, "stepIdentity is invalid");
+  }
+  const expected: ExpectedContractSopContext = {
+    assignmentId,
+    contextVersion,
+    sopTemplateId,
+    sopVersion,
+    stepIdentity,
+  };
+  const result = await getContractFormContext(
+    { db: ctx.db, orgId: ctx.orgId },
+    contractId,
+    { providerId, facilityId },
+    expected,
+  );
+  if (result.kind === "not_found") return fail(404, "Contract not found");
+  if (result.kind === "not_configured") return fail(409, `not_configured: ${result.reason}`);
+  if (result.kind === "mismatch") return fail(422, `mismatch: ${result.reason}`);
+  if (result.kind === "stale") return fail(409, `stale: ${result.reason}`);
+
+  await ctx.writeAudit({
+    actionType: "READ",
+    entityType: "contract",
+    entityId: contractId,
+    after: {
+      route: "/api/contracts/:id/form-context",
+      assignmentId: result.context.assignment.id,
+      contextVersion: result.context.assignment.contextVersion,
+      providerId: result.context.selectedProviderId,
+      facilityId: result.context.selectedFacilityId,
+    },
+    description: "Contract SOP form context read",
+  });
+  const response = ok(result.context);
   response.headers.set("cache-control", "no-store");
   return response;
 }

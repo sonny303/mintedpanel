@@ -29,6 +29,7 @@ vi.mock("@/services/providerCases", () => ({
   searchOrgCases: vi.fn(),
 }));
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
+vi.mock("@/services/contractFormContext", () => ({ getContractFormContext: vi.fn() }));
 vi.mock("@/services/ssnRelease", () => ({ releaseSsnForFill: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
@@ -52,6 +53,7 @@ import { recordFillEvent, supportsFillEventV2 } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
+import { getContractFormContext } from "@/services/contractFormContext";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
@@ -74,6 +76,7 @@ import {
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
+  handleContractFormContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
   handleNextBestAction,
@@ -95,6 +98,7 @@ const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
 const searchCasesMock = vi.mocked(searchOrgCases);
 const getCaseContextMock = vi.mocked(getCaseContext);
+const getContractFormContextMock = vi.mocked(getContractFormContext);
 const releaseSsnMock = vi.mocked(releaseSsnForFill);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
@@ -297,6 +301,8 @@ describe("provider profile handler", () => {
           state: "KS",
           facilityId: FACILITY_ID,
           caseId: null,
+          contractId: null,
+          assignmentId: null,
         },
       }),
     );
@@ -382,6 +388,94 @@ describe("provider profile handler", () => {
     expect(c.writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({ after: expect.objectContaining({ caseId: CASE_ID }) }),
     );
+  });
+
+  it("forwards a Contract owner and expected SOP tuple without accepting case context", async () => {
+    const contractId = "41414141-4242-4535-8686-797979797979";
+    const assignmentId = "51515151-4242-4535-8686-797979797979";
+    const templateId = "61616161-4242-4535-8686-797979797979";
+    getProfileMock.mockResolvedValue(
+      okResult({
+        contract_context: {
+          contract_id: contractId,
+          assignment_id: assignmentId,
+          context_version: 3,
+          sop_template_id: templateId,
+          sop_version: 2,
+        },
+      }),
+    );
+    const expectedStepIdentity = `${contractId}:org-1:${assignmentId}:3:${templateId}:2:0:1`;
+    const c = ctx();
+    const res = await handleProviderProfile(
+      PROVIDER_ID,
+      url(
+        `?contract_id=${contractId}&assignment_id=${assignmentId}&context_version=3&sop_template_id=${templateId}&sop_version=2&stepIdentity=${encodeURIComponent(expectedStepIdentity)}`,
+      ),
+      c,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(getProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      PROVIDER_ID,
+      {
+        state: undefined,
+        facilityId: undefined,
+        groupId: undefined,
+        caseId: undefined,
+        contractContext: {
+          contractId,
+          expected: {
+            assignmentId,
+            contextVersion: 3,
+            sopTemplateId: templateId,
+            sopVersion: 2,
+            stepIdentity: expectedStepIdentity,
+          },
+        },
+      },
+    );
+    expect(c.writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "provider",
+        entityId: PROVIDER_ID,
+        after: expect.objectContaining({ contractId, assignmentId }),
+      }),
+    );
+  });
+
+  it("rejects malformed or contradictory Contract profile selectors before service access", async () => {
+    for (const query of [
+      "?contract_id=not-a-uuid",
+      "?contract_id=41414141-4242-4535-8686-797979797979&context_version=0",
+      "?assignment_id=51515151-4242-4535-8686-797979797979",
+      `?case_id=${CASE_ID}&contract_id=41414141-4242-4535-8686-797979797979`,
+    ]) {
+      const res = await handleProviderProfile(PROVIDER_ID, url(query), ctx());
+      expect(res.status).toBe(422);
+      expect(getProfileMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("maps Contract owner failures without auditing a profile read", async () => {
+    for (const [result, status] of [
+      [{ kind: "contract_not_found" }, 404],
+      [{ kind: "contract_context_not_configured", reason: "No assignment" }, 409],
+      [{ kind: "contract_context_stale", reason: "Assignment changed" }, 409],
+      [{ kind: "contract_context_mismatch", reason: "Wrong group" }, 422],
+    ] as const) {
+      getProfileMock.mockResolvedValue(result as ProviderProfileResult);
+      const c = ctx();
+      const res = await handleProviderProfile(
+        PROVIDER_ID,
+        url("?contract_id=41414141-4242-4535-8686-797979797979"),
+        c,
+      );
+      expect(res.status).toBe(status);
+      expect(c.writeAudit).not.toHaveBeenCalled();
+    }
   });
 
   it("returns 404 when the facility is outside the org or the provider's set, without auditing", async () => {
@@ -1475,6 +1569,8 @@ describe("case context handler", () => {
 
   it("returns 200 with the context projection, no-store + one READ audit, forwarding the org-scoped ctx (billing may read)", async () => {
     const context = {
+      caseType: null,
+      contextVersion: 1,
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
       // E4.3 TE-2: identity header + open tasks with execution types.
@@ -1524,6 +1620,8 @@ describe("case context handler", () => {
           executionType: "extension_fill",
           sortOrder: 1,
           dueDate: null,
+          sopTemplateId: null,
+          sopVersion: null,
           steps: [],
         },
       ],
@@ -1564,6 +1662,118 @@ describe("case context handler", () => {
     const res = await handleCaseContext(CASE_ID, c);
     expect(res.status).toBe(404);
     expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe("Contract form-context handler", () => {
+  const CONTRACT_ID = "41414141-4242-4535-8686-797979797979";
+  const ASSIGNMENT_ID = "51515151-4242-4535-8686-797979797979";
+  const TEMPLATE_ID = "61616161-4242-4535-8686-797979797979";
+  const PROVIDER_ID = "71717171-4242-4535-8686-797979797979";
+  const FACILITY_ID = "81818181-4242-4535-8686-797979797979";
+  const url = (query = "") =>
+    new URL(`https://x.test/api/contracts/${CONTRACT_ID}/form-context${query}`);
+
+  it("returns 404 for an invalid or cross-org Contract without an audit", async () => {
+    const c = ctx();
+    expect((await handleContractFormContext("bad", url(), c)).status).toBe(404);
+    expect(getContractFormContextMock).not.toHaveBeenCalled();
+
+    getContractFormContextMock.mockResolvedValue({ kind: "not_found" });
+    expect((await handleContractFormContext(CONTRACT_ID, url(), c)).status).toBe(404);
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("validates exact selectors and uses stable prefixed outcomes", async () => {
+    const c = ctx();
+    const invalidQuery = new URL(
+      `http://x/api/contracts/${CONTRACT_ID}/form-context?contextVersion=0`,
+    );
+    expect((await handleContractFormContext(CONTRACT_ID, invalidQuery, c)).status).toBe(422);
+    expect(getContractFormContextMock).not.toHaveBeenCalled();
+
+    for (const [result, status, prefix] of [
+      [{ kind: "not_configured", reason: "assignment missing" }, 409, "not_configured:"],
+      [{ kind: "mismatch", reason: "wrong group" }, 422, "mismatch:"],
+      [{ kind: "stale", reason: "version changed" }, 409, "stale:"],
+    ] as const) {
+      getContractFormContextMock.mockResolvedValue(result as never);
+      const response = await handleContractFormContext(CONTRACT_ID, url(), c);
+      expect(response.status).toBe(status);
+      expect((await body(response)).error).toContain(prefix);
+    }
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("returns the org-derived context with no-store and identifier-only audit", async () => {
+    const c = ctx("billing");
+    const auditMock = vi.fn().mockResolvedValue(undefined);
+    c.writeAudit = auditMock;
+    const context = {
+      contract: {
+        id: CONTRACT_ID,
+        groupId: "91919191-4242-4535-8686-797979797979",
+        payerId: "a1a1a1a1-4242-4535-8686-797979797979",
+        state: "KS",
+        groupName: "Selected group",
+      },
+      assignment: {
+        id: ASSIGNMENT_ID,
+        contextVersion: 7,
+        sopTemplateId: TEMPLATE_ID,
+        sopVersion: 4,
+      },
+      sop: { templateId: TEMPLATE_ID, version: 4, name: "Contract SOP", caseType: "contract" },
+      selectedProviderId: PROVIDER_ID,
+      selectedFacilityId: FACILITY_ID,
+      steps: [
+        {
+          stepIdentity: `${CONTRACT_ID}:org-1:${ASSIGNMENT_ID}:7:${TEMPLATE_ID}:4:0:0`,
+          taskIndex: 0,
+          stepIndex: 0,
+          taskTitle: "Contract packet",
+          stepLabel: "Contract form",
+          portalKey: "payer_contract_key",
+          launch: { readiness: { outcome: "ready_handoff_deferred" } },
+        },
+      ],
+    };
+    getContractFormContextMock.mockResolvedValue({ kind: "ok", context } as never);
+    const requestUrl = new URL(
+      `http://x/api/contracts/${CONTRACT_ID}/form-context?providerId=${PROVIDER_ID}&facilityId=${FACILITY_ID}&assignmentId=${ASSIGNMENT_ID}&contextVersion=7&sopTemplateId=${TEMPLATE_ID}&sopVersion=4&stepIdentity=${encodeURIComponent(context.steps[0].stepIdentity)}`,
+    );
+
+    const response = await handleContractFormContext(CONTRACT_ID, requestUrl, c);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect((await body(response)).data).toEqual(context);
+    expect(getContractFormContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      CONTRACT_ID,
+      { providerId: PROVIDER_ID, facilityId: FACILITY_ID },
+      {
+        assignmentId: ASSIGNMENT_ID,
+        contextVersion: 7,
+        sopTemplateId: TEMPLATE_ID,
+        sopVersion: 4,
+        stepIdentity: context.steps[0].stepIdentity,
+      },
+    );
+    expect(c.writeAudit).toHaveBeenCalledTimes(1);
+    const audited = auditMock.mock.calls[0][0];
+    expect(audited).toMatchObject({
+      actionType: "READ",
+      entityType: "contract",
+      entityId: CONTRACT_ID,
+      after: {
+        assignmentId: ASSIGNMENT_ID,
+        contextVersion: 7,
+        providerId: PROVIDER_ID,
+        facilityId: FACILITY_ID,
+      },
+    });
+    expect(JSON.stringify(audited)).not.toContain("contracting_contact_email");
   });
 });
 

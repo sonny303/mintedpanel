@@ -20,6 +20,7 @@ vi.mock("./extensionRoutes", () => ({
   handleCreateFillEvent: vi.fn(),
   handleListProviderCases: vi.fn(),
   handleCaseContext: vi.fn(),
+  handleContractFormContext: vi.fn(),
   handleCreateCaseTouch: vi.fn(),
   handleListMyOrgs: vi.fn(),
   handleNextBestAction: vi.fn(),
@@ -37,6 +38,7 @@ import {
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
+  handleContractFormContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
   handleNextBestAction,
@@ -57,6 +59,7 @@ const batchLearnFieldMapsMock = vi.mocked(handleBatchLearnPortalFieldMaps);
 const fillEventsMock = vi.mocked(handleCreateFillEvent);
 const casesMock = vi.mocked(handleListProviderCases);
 const caseContextMock = vi.mocked(handleCaseContext);
+const contractFormContextMock = vi.mocked(handleContractFormContext);
 const caseTouchMock = vi.mocked(handleCreateCaseTouch);
 const nbaMock = vi.mocked(handleNextBestAction);
 const getViewPrefsMock = vi.mocked(handleGetViewPrefs);
@@ -125,6 +128,36 @@ describe("handleApiRequest routing", () => {
     const res = await handleApiRequest(GET("/api/providers/p1"));
     expect(res.status).toBe(200);
     expect(getMock).toHaveBeenCalledWith("p1", expect.anything());
+  });
+
+  it("dispatches GET Contract form-context through the guarded extension handler", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "billing" } as never);
+    contractFormContextMock.mockResolvedValue(
+      new Response('{"data":{},"error":null,"meta":null}', { status: 200 }),
+    );
+    const res = await handleApiRequest(
+      GET("/api/contracts/41414141-4242-4535-8686-797979797979/form-context"),
+    );
+    expect(res.status).toBe(200);
+    expect(contractFormContextMock).toHaveBeenCalledWith(
+      "41414141-4242-4535-8686-797979797979",
+      expect.any(URL),
+      expect.objectContaining({ orgId: "org-1" }),
+    );
+  });
+
+  it("rejects non-GET Contract form-context requests without dispatch", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+    const res = await handleApiRequest(
+      new Request(
+        "https://x.test/api/contracts/41414141-4242-4535-8686-797979797979/form-context",
+        {
+          method: "POST",
+        },
+      ),
+    );
+    expect(res.status).toBe(405);
+    expect(contractFormContextMock).not.toHaveBeenCalled();
   });
 
   it("unknown method on a provider collection is 405", async () => {

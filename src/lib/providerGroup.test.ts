@@ -32,6 +32,7 @@ const validForm: GroupFormValue = {
   },
   correspondence: EMPTY_GROUP_BLOCK,
   credentialing: EMPTY_GROUP_BLOCK,
+  contractingContact: { name: "", title: "", email: "" },
 };
 
 describe("TIN / NPI format helpers", () => {
@@ -111,6 +112,11 @@ describe("block mapping", () => {
         fax: "919-555-0101",
         email: "cred@treehill.example.test",
       },
+      contractingContact: {
+        name: "Morgan Contract",
+        title: "Director of Contracting",
+        email: "contracts@treehill.example.test",
+      },
     });
     expect(input.tin).toBe("123456789");
     expect(input.npiType2).toBe("1234567890");
@@ -118,6 +124,9 @@ describe("block mapping", () => {
     expect(input.billingStreet).toBe("500 River Court");
     expect(input.credentialingContactName).toBe("Casey Credential");
     expect(input.credentialingEmail).toBe("cred@treehill.example.test");
+    expect(input.contractingContactName).toBe("Morgan Contract");
+    expect(input.contractingContactTitle).toBe("Director of Contracting");
+    expect(input.contractingContactEmail).toBe("contracts@treehill.example.test");
     expect(input.websiteUrl).toBeNull();
     // Empty correspondence block folds to nulls, not empty strings.
     expect(input.correspondenceStreet).toBeNull();
@@ -148,12 +157,20 @@ describe("block mapping", () => {
       billingState: "TN",
       billingZip: "37160",
       billingContactName: "Bobby Blanton",
+      contractingContactName: "Morgan Contract",
+      contractingContactTitle: "Director of Contracting",
+      contractingContactEmail: "contracts@example.test",
     } as ProviderGroup;
     const v = groupToFormValue(row);
     expect(v.tin).toBe("98-7654321");
     expect(v.states).toEqual(["TN", "AL"]);
     expect(v.billing.street).toBe("1 Main St");
     expect(v.billing.contactName).toBe("Bobby Blanton");
+    expect(v.contractingContact).toEqual({
+      name: "Morgan Contract",
+      title: "Director of Contracting",
+      email: "contracts@example.test",
+    });
     expect(v.websiteUrl).toBe("");
     // Absent columns come back as empty strings for editing.
     expect(v.credentialing.street).toBe("");

@@ -27,6 +27,7 @@
 //   touches     cross-org submission touch accepted and stored       (9, 9b)
 //   tasks       cross-org task_id closed by a submission touch        (13)
 //   casecontext cross-org case context served instead of 404         (14b)
+//   contractcontext cross-org Contract SOP owner/context served instead of 404 (14c, 6c)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
 //   accesscontext another org leaks into the pre-shell access context, or the
 //               stale/forged actor boundary is ignored (30, 30b, 30c, 30d)
@@ -58,6 +59,8 @@ export const FIXTURES = {
   SOUTHPARK_FIELDMAP_ID: "468238fc-ab35-4a4d-9569-bb7960f40328",
   SOUTHPARK_CASE_ID: "d0e40000-0000-4000-a000-000000000065",
   KANSAS_CASE_ID: "b7a90000-0000-4000-a000-0000000000c1",
+  KANSAS_CONTRACT_ID: "b7a90000-0000-4000-a000-0000000000c2",
+  SOUTHPARK_CONTRACT_ID: "d0e40000-0000-4000-a000-000000000066",
   KANSAS_FACILITY_ID: "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
   SOUTHPARK_FACILITY_ID: "d0e40000-0000-4000-a000-000000000011",
   KANSAS_ROSTER_MAPPING_ID: "b7a90000-0000-4000-a000-000000000301",
@@ -98,6 +101,7 @@ export const LEAK_MODES = [
   "touches",
   "tasks",
   "casecontext",
+  "contractcontext",
   "meorgs",
   "accesscontext",
   "facility",
@@ -236,6 +240,70 @@ const CASES = [
     ],
   },
 ];
+
+const CONTRACTS = [
+  {
+    id: FIXTURES.KANSAS_CONTRACT_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    groupId: KANSAS_GROUP.id,
+    groupName: KANSAS_GROUP.name,
+    payerId: "k-payer-contract",
+    state: "KS",
+    assignmentId: "b7a90000-0000-4000-a000-0000000000c3",
+    contextVersion: 2,
+    sopTemplateId: "b7a90000-0000-4000-a000-0000000000c4",
+    sopVersion: 3,
+  },
+  {
+    id: FIXTURES.SOUTHPARK_CONTRACT_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    groupId: SOUTHPARK_GROUP.id,
+    groupName: SOUTHPARK_GROUP.name,
+    payerId: "sp-payer-contract",
+    state: "CO",
+    assignmentId: "d0e40000-0000-4000-a000-000000000067",
+    contextVersion: 1,
+    sopTemplateId: "d0e40000-0000-4000-a000-000000000068",
+    sopVersion: 2,
+  },
+];
+
+function contractContextFor(contract) {
+  return {
+    contract: {
+      id: contract.id,
+      groupId: contract.groupId,
+      payerId: contract.payerId,
+      state: contract.state,
+      groupName: contract.groupName,
+    },
+    assignment: {
+      id: contract.assignmentId,
+      contextVersion: contract.contextVersion,
+      sopTemplateId: contract.sopTemplateId,
+      sopVersion: contract.sopVersion,
+    },
+    sop: {
+      templateId: contract.sopTemplateId,
+      version: contract.sopVersion,
+      name: "Synthetic Contract SOP",
+      caseType: "contract",
+    },
+    selectedProviderId: null,
+    selectedFacilityId: null,
+    steps: [
+      {
+        stepIdentity: `${contract.id}:${contract.orgId}:${contract.assignmentId}:${contract.contextVersion}:${contract.sopTemplateId}:${contract.sopVersion}:0:0`,
+        taskIndex: 0,
+        stepIndex: 0,
+        taskTitle: "Synthetic Contract packet",
+        stepLabel: "Complete form",
+        portalKey: "synthetic_contract_form",
+        launch: { canOpenPortal: false, status: "provider_required" },
+      },
+    ],
+  };
+}
 
 // PR C read fields (Stories 5/10/11) ride on the same dropdown row. The mock
 // serves stable values so the extension contract stays pinned; isolation is
@@ -467,7 +535,7 @@ function readBody(req) {
   });
 }
 
-function profileFor(p, user, { facilities, selectedFacilityId, caseId = null }) {
+function profileFor(p, user, { facilities, selectedFacilityId, caseId = null, contract = null }) {
   const selected = FACILITIES.find((f) => f.id === selectedFacilityId) ?? null;
   return {
     provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
@@ -487,6 +555,17 @@ function profileFor(p, user, { facilities, selectedFacilityId, caseId = null }) 
     ],
     facilities: facilities.map(({ id, name }) => ({ id, name })),
     selected_facility_id: selectedFacilityId,
+    ...(contract
+      ? {
+          contract_context: {
+            contract_id: contract.id,
+            assignment_id: contract.assignmentId,
+            context_version: contract.contextVersion,
+            sop_template_id: contract.sopTemplateId,
+            sop_version: contract.sopVersion,
+          },
+        }
+      : {}),
   };
 }
 
@@ -1005,6 +1084,25 @@ export async function createMockApiServer(options = {}) {
       return;
     }
 
+    // --- /api/contracts/:id/form-context ---
+    const contractContextMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/form-context\/?$/);
+    if (contractContextMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const contract = CONTRACTS.find((row) => row.id === contractContextMatch[1]);
+      const visible = contract && (contract.orgId === orgId || leak === "contractcontext");
+      if (!visible) return envelope(res, 404, null, "Contract not found");
+      const providerId = url.searchParams.get("providerId");
+      const facilityId = url.searchParams.get("facilityId");
+      if (facilityId && !providerId) {
+        return envelope(res, 422, null, "A facility cannot be selected without a provider");
+      }
+      const data = contractContextFor(contract);
+      data.selectedProviderId = providerId || null;
+      data.selectedFacilityId = facilityId || null;
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, data);
+    }
+
     // --- /api/providers/:id/profile ---
     const profileMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/profile\/?$/);
     if (profileMatch) {
@@ -1013,6 +1111,21 @@ export async function createMockApiServer(options = {}) {
       const visible = p && (p.orgId === orgId || leak === "profile");
       if (!visible) return envelope(res, 404, null, "Provider not found");
       const hasCaseIntent = url.searchParams.has("case_id");
+      const contractId = url.searchParams.get("contract_id") ?? url.searchParams.get("contractId");
+      if (contractId && hasCaseIntent) {
+        return envelope(res, 422, null, "Choose either Case or Contract profile context");
+      }
+      const contract = contractId ? CONTRACTS.find((row) => row.id === contractId) : null;
+      const contractVisible =
+        !contractId || (contract && (contract.orgId === orgId || leak === "contractcontext"));
+      if (!contractVisible) return envelope(res, 404, null, "Contract not found");
+      if (
+        contract &&
+        contract.orgId === orgId &&
+        !p.groups.some((group) => group.id === contract.groupId)
+      ) {
+        return envelope(res, 422, null, "Provider is not an active member of the Contract group");
+      }
       const requestedCaseId = hasCaseIntent ? url.searchParams.get("case_id") : null;
       let profileCase = null;
       if (hasCaseIntent) {
@@ -1074,6 +1187,7 @@ export async function createMockApiServer(options = {}) {
           facilities: selectableFacilities,
           selectedFacilityId,
           caseId: profileCase?.id ?? null,
+          contract,
         }),
         null,
         needsFacility ? { needs_facility: true } : null,
