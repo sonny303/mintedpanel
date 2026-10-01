@@ -45,11 +45,18 @@ const idKeys = [
   "portalA",
   "portalB",
   "portalLegacy",
+  "portalGlobalLegacy",
   "globalEvent",
   "orgAEvent",
   "orgBEvent",
   "serviceEvent",
   "idempotency",
+  "providerA",
+  "payerA",
+  "caseEnrollment",
+  "caseLegacy",
+  "templateEnrollment",
+  "templateLegacy",
 ];
 const ids = Object.fromEntries(idKeys.map((key) => [key, randomUUID()]));
 const portalKey = `mint45_${ids.orgA.replaceAll("-", "").slice(0, 16)}`;
@@ -86,6 +93,33 @@ INSERT INTO public.portals (id, org_id, portal_key, name, case_type, requires_ex
   ('${ids.portalB}', '${ids.orgB}', '${portalKey}', 'MINT-45 org B', 'recredentialing', false, 1);
 INSERT INTO public.portals (id, org_id, portal_key, name)
 VALUES ('${ids.portalLegacy}', '${ids.orgA}', '${legacyKey}', 'MINT-45 legacy defaults');
+INSERT INTO public.portals (id, org_id, portal_key, name)
+VALUES ('${ids.portalGlobalLegacy}', NULL, '${legacyKey}', 'MINT-44 legacy global');
+
+INSERT INTO public.payers (id, org_id, name) VALUES
+  ('${ids.payerA}', '${ids.orgA}', 'MINT-44 case-type guard payer');
+INSERT INTO public.providers (id, org_id, first_name, last_name) VALUES
+  ('${ids.providerA}', '${ids.orgA}', 'MINT-44', 'case-type guard');
+
+INSERT INTO public.sop_templates
+  (id, org_id, name, payer_id, state, states, task_definitions, case_type)
+VALUES
+  ('${ids.templateEnrollment}', '${ids.orgA}', 'MINT-44 typed guard template', '${ids.payerA}', 'CA', ARRAY['CA'], '[]'::jsonb, 'enrollment');
+-- Reconstruct pre-MINT-44 legacy rows through the insert-only type guards.
+ALTER TABLE public.sop_templates DISABLE TRIGGER sop_templates_guard_typed_insert;
+INSERT INTO public.sop_templates
+  (id, org_id, name, payer_id, state, states, task_definitions, case_type)
+VALUES
+  ('${ids.templateLegacy}', '${ids.orgA}', 'MINT-44 historical legacy guard template', '${ids.payerA}', 'NV', ARRAY['NV'], '[]'::jsonb, NULL);
+ALTER TABLE public.sop_templates ENABLE TRIGGER sop_templates_guard_typed_insert;
+
+INSERT INTO public.credential_cases (id, org_id, provider_id, payer_id, state, case_type) VALUES
+  ('${ids.caseEnrollment}', '${ids.orgA}', '${ids.providerA}', '${ids.payerA}', 'CA', NULL);
+-- Reconstruct a historical NULL case that predates the insert-only stamper.
+ALTER TABLE public.credential_cases DISABLE TRIGGER credential_cases_stamp_case_type;
+INSERT INTO public.credential_cases (id, org_id, provider_id, payer_id, state, case_type)
+VALUES ('${ids.caseLegacy}', '${ids.orgA}', '${ids.providerA}', '${ids.payerA}', 'NV', NULL);
+ALTER TABLE public.credential_cases ENABLE TRIGGER credential_cases_stamp_case_type;
 
 INSERT INTO public.portal_field_maps (org_id, portal_key, map_type, selector, source, field_type, notes, shared_base_generation) VALUES
   (NULL, '${portalKey}', 'web', '${selector}', 'manual', 'text', 'MINT-45 disposable fixture', NULL),
@@ -110,6 +144,169 @@ SELECT mapping_generation::text || ',' || coalesce(shared_base_generation::text,
 assert(
   defaults.stdout === "true,false,1\n1,null\n1,1",
   `legacy portal/map generation defaults mismatch: ${defaults.stdout}`,
+);
+
+const guardFunctionGrants = await runPsql(`
+SELECT has_function_privilege('anon', 'public.guard_credential_case_type_immutable()', 'EXECUTE')::text || ',' ||
+       has_function_privilege('authenticated', 'public.guard_credential_case_type_immutable()', 'EXECUTE')::text || ',' ||
+       has_function_privilege('service_role', 'public.guard_credential_case_type_immutable()', 'EXECUTE')::text || ',' ||
+       has_function_privilege('anon', 'public.guard_org_portal_case_type_transition()', 'EXECUTE')::text || ',' ||
+       has_function_privilege('authenticated', 'public.guard_org_portal_case_type_transition()', 'EXECUTE')::text || ',' ||
+       has_function_privilege('service_role', 'public.guard_org_portal_case_type_transition()', 'EXECUTE')::text;
+`);
+assert(
+  guardFunctionGrants.stdout === "false,false,false,false,false,false",
+  `case-type trigger helpers must not be directly executable by API roles: ${guardFunctionGrants.stdout}`,
+);
+
+const ordinaryNoops = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+UPDATE public.portals SET name = 'MINT-45 org A edited', case_type = case_type
+ WHERE id = '${ids.portalA}' RETURNING 'org-portal-edit';
+UPDATE public.credential_cases SET specialty = 'Occupational Therapy', case_type = case_type
+ WHERE id = '${ids.caseEnrollment}' RETURNING 'typed-case-edit';
+RESET ROLE;
+`);
+assert(
+  ordinaryNoops.stdout === "org-portal-edit\ntyped-case-edit",
+  `ordinary edits/no-op type writes should work: ${ordinaryNoops.stdout}`,
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.credential_cases SET case_type = NULL WHERE id = '${ids.caseEnrollment}';`,
+  "credential_case_type_immutable",
+  "typed case downgrade to legacy NULL",
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.credential_cases SET case_type = 'recredentialing' WHERE id = '${ids.caseEnrollment}';`,
+  "credential_case_type_immutable",
+  "typed case reclassification",
+);
+await expectSqlFailure(
+  `SET ROLE service_role; UPDATE public.credential_cases SET case_type = NULL WHERE id = '${ids.caseEnrollment}';`,
+  "credential_case_type_immutable",
+  "service-role typed case downgrade",
+);
+const stampedCaseType = await runPsql(
+  `SELECT coalesce(case_type, 'null') FROM public.credential_cases WHERE id = '${ids.caseEnrollment}';`,
+);
+assert(
+  stampedCaseType.stdout === "enrollment",
+  `failed case reclassification attempts must leave Enrollment stamped: ${stampedCaseType.stdout}`,
+);
+
+const typedSopReplacement = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+SELECT public.replace_unstarted_case_sop(
+  '${ids.orgA}', '${ids.caseEnrollment}', '${ids.templateEnrollment}', 1, '[]'::jsonb
+);
+RESET ROLE;
+`);
+assert(
+  typedSopReplacement.stdout === "0",
+  `typed case should still accept a matching typed SOP replacement: ${typedSopReplacement.stdout}`,
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; SELECT public.replace_unstarted_case_sop('${ids.orgA}', '${ids.caseEnrollment}', '${ids.templateLegacy}', 1, '[]'::jsonb);`,
+  "case_sop_template_ineligible",
+  "legacy SOP replacement after denied typed-case downgrade",
+);
+
+await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+UPDATE public.credential_cases SET specialty = 'Family Medicine', case_type = case_type
+ WHERE id = '${ids.caseLegacy}';
+RESET ROLE;
+`);
+const legacyCaseType = await runPsql(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; SELECT coalesce(case_type, 'null') FROM public.credential_cases WHERE id = '${ids.caseLegacy}'; RESET ROLE;`,
+);
+assert(
+  legacyCaseType.stdout === "null",
+  `authenticated users should still read a historical NULL case after a no-op update: ${legacyCaseType.stdout}`,
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.credential_cases SET case_type = 'enrollment' WHERE id = '${ids.caseLegacy}';`,
+  "credential_case_type_immutable",
+  "historical case reclassification",
+);
+const legacySopReplacement = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+SELECT public.replace_unstarted_case_sop(
+  '${ids.orgA}', '${ids.caseLegacy}', '${ids.templateLegacy}', 1, '[]'::jsonb
+);
+RESET ROLE;
+`);
+assert(
+  legacySopReplacement.stdout === "0",
+  `historical NULL case should retain legacy SOP replacement: ${legacySopReplacement.stdout}`,
+);
+
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET case_type = 'contract' WHERE id = '${ids.portalA}';`,
+  "org_portal_case_type_immutable",
+  "typed org portal reclassification",
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET case_type = NULL WHERE id = '${ids.portalA}';`,
+  "org_portal_case_type_immutable",
+  "typed org portal clear",
+);
+await expectSqlFailure(
+  `SET ROLE service_role; UPDATE public.portals SET case_type = NULL WHERE id = '${ids.portalA}';`,
+  "permission denied",
+  "service-role portal updates remain ungranted",
+);
+const legacyPortalClassification = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+UPDATE public.portals SET case_type = case_type, name = 'MINT-45 legacy portal edited'
+ WHERE id = '${ids.portalLegacy}' RETURNING 'legacy-portal-edit';
+UPDATE public.portals SET case_type = 'enrollment'
+ WHERE id = '${ids.portalLegacy}' RETURNING 'legacy-portal-classified';
+RESET ROLE;
+`);
+assert(
+  legacyPortalClassification.stdout === "legacy-portal-edit\nlegacy-portal-classified",
+  `legacy org portal should allow ordinary edits and first classification: ${legacyPortalClassification.stdout}`,
+);
+const classifiedPortalType = await runPsql(
+  `SELECT coalesce(case_type, 'null') FROM public.portals WHERE id = '${ids.portalLegacy}';`,
+);
+assert(
+  classifiedPortalType.stdout === "enrollment",
+  `first legacy portal classification should persist: ${classifiedPortalType.stdout}`,
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET case_type = 'recredentialing' WHERE id = '${ids.portalLegacy}';`,
+  "org_portal_case_type_immutable",
+  "classified org portal reclassification",
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET case_type = NULL WHERE id = '${ids.portalLegacy}';`,
+  "org_portal_case_type_immutable",
+  "classified org portal clear",
+);
+
+const globalPortalUpdate = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+SELECT (public.upsert_global_portal(
+  '${ids.portalGlobal}', 'MINT-45 global edited', '${portalKey}', NULL, NULL, NULL
+)).case_type;
+RESET ROLE;
+`);
+assert(
+  globalPortalUpdate.stdout === "contract",
+  `global portal RPC should preserve the existing typed value when case_type is omitted: ${globalPortalUpdate.stdout}`,
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; SELECT public.upsert_global_portal('${ids.portalGlobalLegacy}', 'MINT-44 legacy global', '${legacyKey}', NULL, NULL, 'enrollment');`,
+  "global_portal_case_type_immutable",
+  "existing global NULL-to-Enrollment upsert behavior",
 );
 
 await expectSqlFailure(
@@ -291,4 +488,4 @@ await expectSqlFailure(
   "append-only delete trigger",
 );
 
-console.log("MINT-45 mapping metadata and receipt security contract verified.");
+console.log("MINT-44/45 case-type and mapping metadata security contracts verified.");

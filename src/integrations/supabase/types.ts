@@ -554,6 +554,7 @@ export type Database = {
           assigned_to: string | null;
           case_email_token: string;
           case_number: number;
+          case_type: string | null;
           case_status: string;
           confirmed_effective_date: string | null;
           contract_executed_date: string | null;
@@ -584,6 +585,7 @@ export type Database = {
           assigned_to?: string | null;
           case_email_token?: string;
           case_number?: number;
+          case_type?: string | null;
           case_status?: string;
           confirmed_effective_date?: string | null;
           contract_executed_date?: string | null;
@@ -614,6 +616,7 @@ export type Database = {
           assigned_to?: string | null;
           case_email_token?: string;
           case_number?: number;
+          case_type?: string | null;
           case_status?: string;
           confirmed_effective_date?: string | null;
           contract_executed_date?: string | null;
@@ -3479,6 +3482,7 @@ export type Database = {
       };
       sop_template_drafts: {
         Row: {
+          case_type: string | null;
           created_at: string;
           id: string;
           org_id: string;
@@ -3488,6 +3492,7 @@ export type Database = {
           updated_by: string | null;
         };
         Insert: {
+          case_type?: string | null;
           created_at?: string;
           id?: string;
           org_id: string;
@@ -3497,6 +3502,7 @@ export type Database = {
           updated_by?: string | null;
         };
         Update: {
+          case_type?: string | null;
           created_at?: string;
           id?: string;
           org_id?: string;
@@ -3524,6 +3530,7 @@ export type Database = {
       };
       sop_template_versions: {
         Row: {
+          case_type: string | null;
           change_note: string | null;
           id: string;
           name: string;
@@ -3535,6 +3542,7 @@ export type Database = {
           version: number;
         };
         Insert: {
+          case_type?: string | null;
           change_note?: string | null;
           id?: string;
           name: string;
@@ -3546,6 +3554,7 @@ export type Database = {
           version: number;
         };
         Update: {
+          case_type?: string | null;
           change_note?: string | null;
           id?: string;
           name?: string;
@@ -3569,6 +3578,7 @@ export type Database = {
       sop_templates: {
         Row: {
           archived: boolean;
+          case_type: string | null;
           created_at: string | null;
           current_version: number;
           group_id: string | null;
@@ -3585,6 +3595,7 @@ export type Database = {
         };
         Insert: {
           archived?: boolean;
+          case_type?: string | null;
           created_at?: string | null;
           current_version?: number;
           group_id?: string | null;
@@ -3601,6 +3612,7 @@ export type Database = {
         };
         Update: {
           archived?: boolean;
+          case_type?: string | null;
           created_at?: string | null;
           current_version?: number;
           group_id?: string | null;
@@ -4398,6 +4410,7 @@ export type Database = {
       author_global_sop: {
         Args: {
           p_archived?: boolean;
+          p_case_type?: string | null;
           p_group_id: string;
           p_id: string;
           p_name: string;
@@ -4815,6 +4828,7 @@ export type Database = {
       };
       publish_sop_template_version: {
         Args: {
+          p_case_type?: string | null;
           p_change_note?: string;
           p_expected_version: number;
           p_name: string;
@@ -5088,6 +5102,7 @@ export type Database = {
       };
       upsert_global_portal: {
         Args: {
+          p_case_type?: string | null;
           p_form_url?: string;
           p_id: string;
           p_name: string;
@@ -5096,6 +5111,7 @@ export type Database = {
         };
         Returns: {
           created_at: string;
+          case_type: string | null;
           form_url: string | null;
           id: string;
           is_verified: boolean;

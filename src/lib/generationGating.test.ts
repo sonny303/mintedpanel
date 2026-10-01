@@ -48,6 +48,7 @@ function tpl(required: string[]): SOPTemplate {
     taskDefinitions: [],
     isArchived: false,
     archived: false,
+    caseType: "enrollment",
     createdAt: "",
     updatedAt: "",
     currentVersion: 1,
@@ -67,6 +68,7 @@ describe("evaluateGeneration (TE-13 gating)", () => {
     expect(res.confirmable).toHaveLength(0);
     expect(res.ambiguous).toHaveLength(1);
     expect(res.gated).toHaveLength(0);
+    expect(res.unmatched).toHaveLength(0);
   });
 
   it("gates a proposed provider missing a required attribute (TS-96)", () => {
@@ -78,6 +80,7 @@ describe("evaluateGeneration (TE-13 gating)", () => {
     expect(res.confirmable).toHaveLength(0);
     expect(res.gated).toHaveLength(1);
     expect(res.gated[0].unmet[0].key).toBe("caqh_id");
+    expect(res.unmatched).toHaveLength(0);
   });
 
   it("passes a provider who satisfies the requirement", () => {
@@ -88,6 +91,18 @@ describe("evaluateGeneration (TE-13 gating)", () => {
     });
     expect(res.confirmable).toHaveLength(1);
     expect(res.gated).toHaveLength(0);
+  });
+
+  it("holds proposed rows when only a different-purpose SOP exists", () => {
+    const contract = { ...tpl([]), caseType: "contract" as const };
+    const res = evaluateGeneration({
+      rows: [row({})],
+      templates: [contract],
+      factsById: new Map([["p1", facts({})]]),
+    });
+    expect(res.confirmable).toHaveLength(0);
+    expect(res.unmatched).toEqual([row({})]);
+    expect(res.ambiguous).toHaveLength(0);
   });
 
   it("no required attributes → always confirmable", () => {
@@ -155,7 +170,7 @@ describe("SOP resolution consistency (gating / task stamp / run-row tier)", () =
     expect(res.gated[0].unmet[0].key).toBe("caqh_id");
 
     // The same selection drives the task-stamp provenance AND the run-row tier.
-    const selected = pickTemplate(templates, "pay1", "NC", "g1");
+    const selected = pickTemplate(templates, "pay1", "NC", "g1", "enrollment");
     expect(selected?.id).toBe("org-g1");
     expect(templateProvenance(selected).sopResolutionTier).toBe("organization");
     expect(templateProvenance(selected).sopResolutionTier).toBe(resolutionTier(selected!));
@@ -171,7 +186,7 @@ describe("SOP resolution consistency (gating / task stamp / run-row tier)", () =
     });
     expect(res.confirmable).toHaveLength(1);
 
-    const selected = pickTemplate(templates, "pay-unknown", "NC", "g1");
+    const selected = pickTemplate(templates, "pay-unknown", "NC", "g1", "enrollment");
     expect(selected?.id).toBe("fb");
     expect(templateProvenance(selected).sopResolutionTier).toBe("generic_fallback");
   });

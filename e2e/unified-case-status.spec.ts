@@ -11,6 +11,7 @@ import { expect, test, type Route } from "./fixtures/legacy-access-context";
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_DILLON = "44444444-4444-4444-8444-444444444444";
+const FALLBACK_SOP_ID = "00000000-0000-4000-a000-00000000e17b";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -248,6 +249,7 @@ function makeFixtures(role: "admin" | "specialist" = "admin") {
     tasks: [] as Record<string, unknown>[],
     touches: [] as Record<string, unknown>[],
     sop_templates: [] as Record<string, unknown>[],
+    sop_template_versions: [] as Record<string, unknown>[],
     org_payer_settings: [] as Record<string, unknown>[],
     contracts: [] as Record<string, unknown>[],
     notes: [] as Record<string, unknown>[],
@@ -875,8 +877,40 @@ test("TS-116: reapply returns the SAME denied case to In Progress with a fresh c
 }) => {
   const fixtures = makeFixtures();
   fixtures.credential_cases.push(
-    caseRow("case-den", { case_status: "denied", payer_pipeline_state: "denied" }),
+    caseRow("case-den", {
+      case_status: "denied",
+      case_type: "enrollment",
+      payer_pipeline_state: "denied",
+    }),
   );
+  fixtures.sop_templates.push({
+    id: FALLBACK_SOP_ID,
+    org_id: null,
+    name: "General enrollment SOP",
+    case_type: "enrollment",
+    payer_id: null,
+    state: null,
+    specialty: null,
+    group_id: null,
+    archived: false,
+    current_version: 1,
+    task_definitions: [
+      { title: "Prepare application packet", steps: [{ label: "Complete the checklist" }] },
+    ],
+    created_at: "2026-07-01T00:00:00Z",
+    updated_at: "2026-07-01T00:00:00Z",
+  });
+  fixtures.sop_template_versions.push({
+    id: "version-fallback-v1",
+    template_id: FALLBACK_SOP_ID,
+    version: 1,
+    name: "General enrollment SOP",
+    case_type: "enrollment",
+    task_definitions: [
+      { title: "Prepare application packet", steps: [{ label: "Complete the checklist" }] },
+    ],
+    published_at: "2026-07-01T00:00:00Z",
+  });
   fixtures.case_status_history.push({
     id: "csh-den",
     org_id: ORG_DILLON,
@@ -918,9 +952,10 @@ test("TS-116: reapply returns the SAME denied case to In Progress with a fresh c
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Denied → In Progress");
   await dialog.getByRole("button", { name: "Reapply" }).click();
-  await expect(page.getByText("Case reopened — In Progress.", { exact: false })).toBeVisible({
-    timeout: 30000,
-  });
+  await expect(
+    page.getByText("Case reopened — In Progress, 1 task regenerated.", { exact: false }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Prepare application packet")).toBeVisible();
 
   // The reapply edge rides the atomic RPC against the expected Denied state.
   const statusRpc = writes.find((w) => w.table === "rpc/set_case_status");

@@ -238,6 +238,14 @@ describe("pickTemplate — generic fallback tier", () => {
   it("returns null when nothing matches and no fallback exists", () => {
     expect(pickTemplate([tmpl({ id: "wp", payerId: "p2" })], "p1", "KS", "g1")).toBeNull();
   });
+
+  it("uses a generic fallback only after it has an exact typed classification", () => {
+    const legacy = fallbackTmpl();
+    const enrollment = fallbackTmpl({ caseType: "enrollment" });
+    expect(pickTemplate([legacy], "p1", "KS", "g1", "enrollment")).toBeNull();
+    expect(pickTemplate([enrollment], "p1", "KS", "g1", "enrollment")?.id).toBe("fb");
+    expect(pickTemplate([enrollment], "p1", "KS", "g1", "contract")).toBeNull();
+  });
 });
 
 describe("pickTemplate — deterministic tiebreak within a tier", () => {
@@ -258,6 +266,21 @@ describe("pickTemplate — deterministic tiebreak within a tier", () => {
       "older",
       "newer",
     ]);
+  });
+
+  it("filters by exact case type before precedence and keeps omitted type on legacy rows", () => {
+    const legacy = tmpl({ id: "legacy", groupId: "g1", caseType: null });
+    const enrollment = tmpl({ id: "enrollment", groupId: null, caseType: "enrollment" });
+    const contract = globalPayerTmpl({ id: "contract", groupId: "g1", caseType: "contract" });
+
+    expect(pickTemplate([contract, legacy, enrollment], "p1", "KS", "g1")?.id).toBe("legacy");
+    expect(pickTemplate([contract, legacy, enrollment], "p1", "KS", "g1", "enrollment")?.id).toBe(
+      "enrollment",
+    );
+    expect(pickTemplate([contract, legacy, enrollment], "p1", "KS", "g1", "contract")?.id).toBe(
+      "contract",
+    );
+    expect(pickTemplate([legacy, contract], "p1", "KS", "g1", "recredentialing")).toBeNull();
   });
 });
 

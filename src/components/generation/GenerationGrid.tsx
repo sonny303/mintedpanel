@@ -119,6 +119,10 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
     () => new Set((preview.ambiguous ?? []).map(previewRowKey)),
     [preview.ambiguous],
   );
+  const unmatchedKeys = useMemo(
+    () => new Set((preview.unmatched ?? []).map(previewRowKey)),
+    [preview.unmatched],
+  );
   const fallbackKeys = useMemo(
     () => preview.fallbackRowKeys ?? new Set<string>(),
     [preview.fallbackRowKeys],
@@ -130,12 +134,23 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
     if (!preview.rows || factsQ.data === undefined) return undefined;
     const bucketed = bucketGridRows(
       preview.rows.filter(
-        (r) => !gatedKeys.has(previewRowKey(r)) && !ambiguousKeys.has(previewRowKey(r)),
+        (r) =>
+          !gatedKeys.has(previewRowKey(r)) &&
+          !ambiguousKeys.has(previewRowKey(r)) &&
+          !unmatchedKeys.has(previewRowKey(r)),
       ),
       factsQ.data,
     );
     return filterGridRows(bucketed, scope, preview.providerFacilities);
-  }, [preview.rows, factsQ.data, gatedKeys, ambiguousKeys, scope, preview.providerFacilities]);
+  }, [
+    preview.rows,
+    factsQ.data,
+    gatedKeys,
+    ambiguousKeys,
+    unmatchedKeys,
+    scope,
+    preview.providerFacilities,
+  ]);
 
   const selectedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -169,6 +184,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   const releasedCount = released.length;
   const releasedFallbackCount = released.filter((r) => fallbackKeys.has(previewRowKey(r))).length;
   const gated = preview.gated ?? [];
+  const unmatched = preview.unmatched ?? [];
   const skips = preview.skips ?? [];
   const groups = groupGridRows(gridRows, pivot);
 
@@ -227,7 +243,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
     });
   };
 
-  if (gridRows.length === 0) {
+  if (gridRows.length === 0 && unmatched.length === 0) {
     return (
       <div className="rounded-md border border-[#E8E5E0] p-4">
         <p className="text-[13px] font-medium">Nothing to review here yet</p>
@@ -332,6 +348,37 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
           {preview.ambiguous?.length} case{preview.ambiguous?.length === 1 ? "" : "s"} blocked
           because multiple SOP templates have equal priority. Create these cases manually and select
           a template, or archive an obsolete template.
+        </div>
+      ) : null}
+
+      {unmatched.length > 0 ? (
+        <div
+          className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]"
+          role="alert"
+          data-testid="generation-unmatched-sop"
+        >
+          <p className="font-medium">
+            {unmatched.length} Enrollment case{unmatched.length === 1 ? " has" : "s have"} no
+            matching SOP. These rows are not selectable and will not generate without an Enrollment
+            SOP for their payer, state, and group.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {unmatched.map((row) => (
+              <li key={previewRowKey(row)} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {row.providerName} · {row.groupName} · {row.payerName} {row.state}
+                </span>
+                <Link
+                  to="/admin/payer-admin/setup/$payerId"
+                  params={{ payerId: row.payerId }}
+                  search={{ tab: "templates" }}
+                  className="font-medium underline underline-offset-2"
+                >
+                  Review payer SOPs
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
 import { useSops } from "@/hooks/useAdmin";
 import { useReplaceCaseSop } from "@/hooks/useCases";
 import { isAllStates, templateStates } from "@/lib/sopMatchKey";
+import { isFallbackTemplate, topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import type { CaseDetail } from "@/types";
 
@@ -31,12 +33,15 @@ export function ChangeCaseSopAction({ c, canEdit }: { c: CaseDetail; canEdit: bo
   const options = useMemo(
     () =>
       (templatesQ.data ?? []).filter((t) => {
-        if (t.archived || !t.currentVersion || t.payerId !== c.payerId) return false;
+        if (t.archived || !t.currentVersion || (t.caseType ?? null) !== (c.caseType ?? null))
+          return false;
+        if (isFallbackTemplate(t)) return true;
+        if (t.payerId !== c.payerId) return false;
         if (t.groupId !== null && t.groupId !== c.groupId) return false;
         const states = templateStates(t);
         return isAllStates(states) || states.includes(c.state);
       }),
-    [templatesQ.data, c.payerId, c.groupId, c.state],
+    [templatesQ.data, c.payerId, c.groupId, c.state, c.caseType],
   );
   const tasks = c.tasks ?? [];
   const currentTemplateId = tasks.find((t) => t.sopTemplateId)?.sopTemplateId ?? null;
@@ -52,8 +57,43 @@ export function ChangeCaseSopAction({ c, canEdit }: { c: CaseDetail; canEdit: bo
     c.provider != null &&
     (c.caseStatus === "not_started" || c.caseStatus === "in_progress") &&
     untouched &&
-    options.some((t) => t.id !== currentTemplateId);
+    c.caseType !== "recredentialing";
+  if (
+    c.caseType === "recredentialing" &&
+    canEdit &&
+    (c.caseStatus === "not_started" || c.caseStatus === "in_progress")
+  ) {
+    return (
+      <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+        Recredentialing execution is not supported. This SOP type is available for authoring only.
+      </p>
+    );
+  }
+  if (
+    c.caseType === "contract" &&
+    canEdit &&
+    (c.caseStatus === "not_started" || c.caseStatus === "in_progress")
+  ) {
+    return (
+      <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+        Contract work belongs in the Group Contracts Matrix and cannot be changed as a provider
+        case.
+        {c.groupId && c.payerId && c.state ? (
+          <Button asChild variant="link" size="sm" className="h-auto px-1 py-0">
+            <Link
+              to="/reporting/contracts-matrix"
+              search={{ groupId: c.groupId, payerId: c.payerId, state: c.state }}
+            >
+              Open matching Matrix cell
+            </Link>
+          </Button>
+        ) : null}
+      </p>
+    );
+  }
   if (!available) return null;
+
+  const alternatives = options.filter((t) => t.id !== currentTemplateId);
 
   const chosen = options.find((t) => t.id === selectedId) ?? null;
   const save = () => {
@@ -81,9 +121,24 @@ export function ChangeCaseSopAction({ c, canEdit }: { c: CaseDetail; canEdit: bo
   return (
     <div className="rounded-md border border-border p-3 flex flex-wrap items-center gap-2 text-[13px]">
       <span className="text-muted-foreground">This case’s checklist has not been started.</span>
-      <Button variant="outline" size="sm" className="ml-auto h-8" onClick={() => setOpen(true)}>
-        Change template
-      </Button>
+      {alternatives.length > 0 ? (
+        <Button variant="outline" size="sm" className="ml-auto h-8" onClick={() => setOpen(true)}>
+          Change template
+        </Button>
+      ) : (
+        <span className="w-full text-[12px] text-amber-800">
+          No other {c.caseType ?? "legacy / unclassified"} SOP matches this payer, state, and group.
+          <Button asChild variant="link" size="sm" className="h-auto px-1 py-0">
+            <Link
+              to="/admin/payer-admin/setup/$payerId"
+              params={{ payerId: c.payerId }}
+              search={{ tab: "templates" }}
+            >
+              Open payer templates
+            </Link>
+          </Button>
+        </span>
+      )}
       {open ? (
         <Dialog open onOpenChange={(next) => !next && setOpen(false)}>
           <DialogContent className="max-w-md">
@@ -101,7 +156,7 @@ export function ChangeCaseSopAction({ c, canEdit }: { c: CaseDetail; canEdit: bo
                   <SelectValue placeholder="Select a template" />
                 </SelectTrigger>
                 <SelectContent>
-                  {options.map((t) => (
+                  {alternatives.map((t) => (
                     <SelectItem key={t.id} value={t.id} disabled={t.id === currentTemplateId}>
                       {t.name}
                       {t.taskDefinitions?.length
@@ -112,6 +167,18 @@ export function ChangeCaseSopAction({ c, canEdit }: { c: CaseDetail; canEdit: bo
                   ))}
                 </SelectContent>
               </Select>
+              {topRankedTemplates(
+                templatesQ.data ?? [],
+                c.payerId,
+                c.state,
+                c.groupId,
+                c.caseType ?? null,
+              ).length > 1 ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Several equally ranked {c.caseType ?? "legacy / unclassified"} SOPs match. The
+                  list includes all eligible same-type SOPs.
+                </p>
+              ) : null}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>

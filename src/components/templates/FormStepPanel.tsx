@@ -58,13 +58,15 @@ import { groupTokens } from "@/lib/tokenGroups";
 import { filterMappingTokens } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { PortalDrawer } from "@/components/PortalDrawer";
-import { portalDisplayName } from "@/lib/portalRetirement";
+import { isPortalHiddenFromPickers, portalDisplayName } from "@/lib/portalRetirement";
+import type { CaseType } from "@/lib/caseTypes";
 import { useLocation } from "@tanstack/react-router";
 
 export interface FormStepPanelProps {
   /** The step's portal key, already normalized (null = no portal linked). */
   portalKey: string | null;
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   canEdit: boolean;
   /** The template is a GLOBAL row — register/train against the global tier. */
   isGlobalAuthoring: boolean;
@@ -83,6 +85,7 @@ export interface FormStepPanelProps {
 export function FormStepPanel({
   portalKey,
   templatePayerId,
+  templateCaseType,
   canEdit,
   isGlobalAuthoring,
   defaultOpen,
@@ -127,13 +130,19 @@ export function FormStepPanel({
   const finishTrainingMut = useFinishTraining();
   const globalFlagsMut = useSetGlobalPortalFlags();
 
-  const portal = useMemo(
-    () =>
-      portalKey
-        ? (portalsQ.data ?? []).find((p) => normalizePortalKey(p.portalKey) === portalKey)
-        : undefined,
-    [portalsQ.data, portalKey],
-  );
+  const portal = useMemo(() => {
+    if (!portalKey) return undefined;
+    const sameKey = (portalsQ.data ?? []).filter((p) => p.portalKey === portalKey);
+    if (sameKey.length !== 1) return undefined;
+    const matching = sameKey.filter(
+      (p) =>
+        !templateCaseType ||
+        (p.payerId === templatePayerId &&
+          p.caseType === templateCaseType &&
+          !isPortalHiddenFromPickers(p)),
+    );
+    return matching.length === 1 ? matching[0] : undefined;
+  }, [portalsQ.data, portalKey, templatePayerId, templateCaseType]);
 
   async function copyReturnLink() {
     try {
@@ -396,6 +405,14 @@ export function FormStepPanel({
                 variant="outline"
                 className="h-7"
                 onClick={() => setRegisterOpen(true)}
+                disabled={!templateCaseType || !templatePayerId}
+                title={
+                  !templateCaseType
+                    ? "Choose a case type in Basics before registering a form configuration."
+                    : !templatePayerId
+                      ? "Choose a payer in Basics before registering a form configuration."
+                      : undefined
+                }
               >
                 Register {isGlobalAuthoring ? "global " : ""}portal
               </Button>
@@ -461,6 +478,7 @@ export function FormStepPanel({
         <RegisterPortalDialog
           isGlobalAuthoring={isGlobalAuthoring}
           templatePayerId={templatePayerId}
+          templateCaseType={templateCaseType}
           initialKey={portalKey ?? ""}
           onClose={() => setRegisterOpen(false)}
           onRegistered={(key) => {
@@ -526,12 +544,14 @@ function WorkbenchHandoffBlock({
 function RegisterPortalDialog({
   isGlobalAuthoring,
   templatePayerId,
+  templateCaseType,
   initialKey,
   onClose,
   onRegistered,
 }: {
   isGlobalAuthoring: boolean;
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   initialKey: string;
   onClose: () => void;
   onRegistered: (portalKey: string) => void;
@@ -549,12 +569,17 @@ function RegisterPortalDialog({
       toast.error("Portal name and key are required");
       return;
     }
+    if (!templatePayerId || !templateCaseType) {
+      toast.error("Choose a payer and case type in Basics before registering a form configuration");
+      return;
+    }
     try {
       if (isGlobalAuthoring) {
         await upsertGlobalMut.mutateAsync({
           name,
           portalKey: normalized,
           payerId: templatePayerId,
+          caseType: templateCaseType,
           formUrl: formUrl.trim() || null,
         });
       } else {
@@ -562,6 +587,7 @@ function RegisterPortalDialog({
           name,
           portalKey: normalized,
           payerId: templatePayerId,
+          caseType: templateCaseType,
           formUrl: formUrl.trim() || null,
         });
       }
@@ -584,6 +610,10 @@ function RegisterPortalDialog({
               Registered once, inherited by every organization.
             </p>
           ) : null}
+          <p className="text-xs text-muted-foreground">
+            Case type: {templateCaseType ?? "Choose one in Basics"}. This registers an unverified
+            configuration; training and verification remain separate steps.
+          </p>
           <div>
             <Label className="text-xs">Portal name</Label>
             <Input

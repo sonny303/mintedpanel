@@ -176,6 +176,7 @@ const FIXTURES: Record<string, Record<string, unknown>[]> = {
       id: TEMPLATE_ID,
       org_id: ORG_ID,
       name: "UnitedHealthCare KS",
+      case_type: "enrollment",
       group_id: null,
       state: "KS",
       specialty: null,
@@ -193,6 +194,7 @@ const FIXTURES: Record<string, Record<string, unknown>[]> = {
       id: "44444444-4444-4444-8444-444444444441",
       template_id: TEMPLATE_ID,
       version: 1,
+      case_type: "enrollment",
       name: "UnitedHealthCare KS",
       task_definitions: HEAD_DEFS,
       change_note: null,
@@ -355,6 +357,7 @@ test.describe("E1.7b draft-email recipients (TS-46)", () => {
       }>;
     }>;
     const emailStep = defs.flatMap((t) => t.steps).find((s) => s.stepType === "draft_email");
+    expect(captured.publish?.p_case_type).toBe("enrollment");
     expect(emailStep?.emailTemplate?.to).toEqual([{ source: "literal", address: OPTUM }]);
     expect(emailStep?.emailTemplate?.cc).toEqual([{ source: "token", token: "provider.email" }]);
     // The cadence versions with the step (subject/body already ride emailTemplate).

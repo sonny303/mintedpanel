@@ -692,10 +692,10 @@ function catalogChecks() {
     .map(normalizeSignature)
     .join("\n");
   const expectedSignatures = new Set([
-    "upsert_global_portal|uuid, text, text, uuid, text|portals",
+    "upsert_global_portal|uuid, text, text, uuid, text, text|portals",
     "set_global_portal_flags|uuid, boolean, boolean|portals",
-    "author_global_sop|uuid, text, uuid, text[], uuid, jsonb, boolean, jsonb|jsonb",
-    "publish_sop_template_version|uuid, integer, text, jsonb, text, jsonb|jsonb",
+    "author_global_sop|uuid, text, uuid, text[], uuid, jsonb, boolean, jsonb, text|jsonb",
+    "publish_sop_template_version|uuid, integer, text, jsonb, text, jsonb, text|jsonb",
     "propose_shared_field_map|text, text, text, text, text, text, integer, text, jsonb, text|portal_field_maps",
     "train_global_field_map|uuid, text, text, text, text, text, text|portal_field_maps",
     "update_shared_field_registry|jsonb|SETOF portal_field_maps",
@@ -1762,14 +1762,14 @@ VALUES
   ('${GLOBAL.fieldMap}', NULL, 'e612-global-portal', '#e612-field', 'web', 'manual', 'text', 'proposed', 'E612 native fixture')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.sop_templates
-  (id, org_id, name, payer_id, state, states, group_id, task_definitions, archived, current_version, required_profile_attributes)
+  (id, org_id, name, payer_id, state, states, group_id, task_definitions, archived, current_version, required_profile_attributes, case_type)
 VALUES
-  ('${GLOBAL.sop}', NULL, 'E612 Global SOP', '${GLOBAL.payer}', 'CO', ARRAY['CO']::text[], NULL, '[]'::jsonb, FALSE, 1, '[]'::jsonb)
+  ('${GLOBAL.sop}', NULL, 'E612 Global SOP', '${GLOBAL.payer}', 'CO', ARRAY['CO']::text[], NULL, '[]'::jsonb, FALSE, 1, '[]'::jsonb, 'enrollment')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.sop_template_versions
-  (template_id, version, name, task_definitions, change_note, published_by, required_profile_attributes)
+  (template_id, version, name, task_definitions, change_note, published_by, required_profile_attributes, case_type)
 VALUES
-  ('${GLOBAL.sop}', 1, 'E612 Global SOP', '[]'::jsonb, 'E612 native fixture', '${E612.trainer}', '[]'::jsonb)
+  ('${GLOBAL.sop}', 1, 'E612 Global SOP', '[]'::jsonb, 'E612 native fixture', '${E612.trainer}', '[]'::jsonb, 'enrollment')
 ON CONFLICT (template_id, version) DO NOTHING;
 INSERT INTO public.payer_forms
   (id, template_id, payer_id, family_id, version, label, file_name, storage_path, mime_type, byte_size, created_by)

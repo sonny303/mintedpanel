@@ -1154,6 +1154,8 @@ export interface CredentialCase {
   // across all orgs), displayed as C-<caseNumber>. Backfilled in created_at
   // order; drawn by a column DEFAULT on every insert path.
   caseNumber: number;
+  /** Nullable for historical rows; new provider work is Enrollment only. */
+  caseType?: CaseType | null;
   orgId: string;
   providerId: string;
   groupId: string | null;
@@ -1633,6 +1635,8 @@ export interface SOPTemplate {
   // TemplateWizard, TemplatesList).
   orgId: string | null;
   name: string;
+  /** Nullable legacy classification; typed resolution never crosses types. */
+  caseType?: CaseType | null;
   groupId: string | null;
   /**
    * FROZEN MIRROR of `states[0]` (multi-state migration `20260812140000`) —
@@ -1675,6 +1679,8 @@ export interface SOPTemplateVersion {
   templateId: string;
   version: number;
   name: string;
+  /** Immutable nullable snapshot; old versions remain unclassified. */
+  caseType?: CaseType | null;
   taskDefinitions: SOPTaskDefinition[];
   changeNote: string | null;
   publishedAt: string;
@@ -1692,6 +1698,7 @@ export interface SopTemplateDraft {
   id: string;
   orgId: string;
   templateId: string | null;
+  caseType?: CaseType | null;
   payload: unknown;
   updatedBy: string | null;
   updatedByName?: string | null;
