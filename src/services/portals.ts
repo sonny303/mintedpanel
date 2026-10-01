@@ -25,6 +25,7 @@ import {
   withHiddenPortalPrefix,
 } from "@/lib/portalRetirement";
 import type { Portal } from "@/types";
+import { listEffectivePortalMapResolutions } from "@/services/portalFieldMaps";
 
 const PORTAL_COLUMNS =
   "id, org_id, portal_key, name, payer_id, form_url, case_type, requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
@@ -109,11 +110,17 @@ export async function listPortalsForApi(
   // D6.4: own-org rows pass through untouched; global rows must point at a
   // live catalog payer, so Work-case recognition can't match a page to a
   // portal whose payer is retired, merged or archived.
-  return rows
-    .map(unpackPortalRow)
+  const unpacked = rows.map(unpackPortalRow);
+  const legacyBlockedKeys = new Set(
+    unpacked
+      .filter(({ portal }) => portal.requiresExplicitSelection)
+      .map(({ portal }) => portal.portalKey),
+  );
+  return unpacked
     .filter(({ portal, payer }) =>
       isListableRegistryPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
     )
+    .filter(({ portal }) => !legacyBlockedKeys.has(portal.portalKey))
     .map(({ portal }) => portal);
 }
 
@@ -179,7 +186,7 @@ export async function listPortals(): Promise<Portal[]> {
     .order("name", { ascending: true });
   if (error) throw error;
   const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
-  return rows
+  const visiblePortals = rows
     .map(unpackPortalRow)
     .filter(({ portal, payer }) =>
       isListableBrowserPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
@@ -189,6 +196,25 @@ export async function listPortals(): Promise<Portal[]> {
       const { payerName: _ignored, ...rest } = portal;
       return rest;
     });
+  const [orgMappings, sharedMappings] = await Promise.all([
+    listEffectivePortalMapResolutions({ db: supabase, orgId }),
+    listEffectivePortalMapResolutions({ db: supabase, orgId: null }),
+  ]);
+  const mappingByPortalId = new Map(
+    [...orgMappings, ...sharedMappings]
+      .filter((resolution) => resolution.portalId !== null)
+      .map((resolution) => [resolution.portalId as string, resolution]),
+  );
+  return visiblePortals.map((portal) => {
+    const resolution = mappingByPortalId.get(portal.id);
+    if (resolution && resolution.activeFieldCount === 0) {
+      // A verified/proven stamp from an older or empty generation is not
+      // current proof. This is a read projection only; the stored history is
+      // left intact for the separate reset/review workflow.
+      return { ...portal, isVerified: false, lastVerifiedAt: null, provenAt: null };
+    }
+    return portal;
+  });
 }
 
 export async function createPortal(input: PortalInput): Promise<Portal> {

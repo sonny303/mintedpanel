@@ -3,13 +3,13 @@
 // authenticated server context into the service layer, never duplicate query
 // logic here.
 import {
-  listPortalFieldMaps,
-  listSharedFieldMaps,
+  listEffectivePortalMapResolutions,
+  listLegacyClientPortalMapResolutions,
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
 import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
-import { listPortalsForApi, listSharedPortals } from "@/services/portals";
+import { listPortalsForApi, listSharedPortals, type PortalApiRow } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
@@ -289,13 +289,14 @@ export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Res
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalsForApi({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
   // Older extensions select a registry entry by URL alone. Hide any
-  // configuration that requires explicit selection before it crosses that
-  // legacy boundary; applying this after the service fetch also covers exact
-  // portal_key lookups made by old clients.
-  const visibleRows = rows.filter((row) => !row.requiresExplicitSelection);
-  return ok(visibleRows, {
-    total: visibleRows.length,
-    registry_empty: visibleRows.length === 0,
+  // key if any same-key configuration requires explicit selection: a legacy
+  // URL match cannot choose safely between a flagged and an unflagged sibling.
+  const visibleRows = filterLegacyPortalRows(rows);
+  const current = await portalRowsWithCurrentMetadata(ctx.db, ctx.orgId, visibleRows);
+  return ok(current.rows, {
+    total: current.rows.length,
+    registry_empty: current.rows.length === 0,
+    ...(current.metadata.length ? { portal_mappings: current.metadata } : {}),
   });
 }
 
@@ -309,17 +310,29 @@ export async function handleListSharedPortals(user: UserContext): Promise<Respon
   // JWT verification IS the gate (D11) — there is no role model for the shared
   // library, and E6.7 explicitly rejected inventing a platform role here.
   const rows = await listSharedPortals(user.db);
-  return ok(rows, { total: rows.length });
+  const visibleRows = filterLegacyPortalRows(rows);
+  const current = await portalRowsWithCurrentMetadata(user.db, null, visibleRows);
+  return ok(current.rows, {
+    total: current.rows.length,
+    ...(current.metadata.length ? { portal_mappings: current.metadata } : {}),
+  });
 }
 
 // GET /api/portal-field-maps[?portal_key=...] — global catalog rows (org NULL)
 // plus the caller's own org overrides.
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
-  const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
+  const resolutions = await listLegacyClientPortalMapResolutions(
+    { db: ctx.db, orgId: ctx.orgId },
+    { portalKey, mapType: "all" },
+  );
+  const visible = resolutions.filter((resolution) => resolution.status !== "configuration_missing");
+  const rows = visible.flatMap((resolution) => resolution.maps);
   const v2Supported = await supportsFillEventV2({ db: ctx.db });
   return ok(rows, {
     total: rows.length,
+    ...(portalKey && visible.length === 0 ? { registry_empty: true } : {}),
+    ...(visible.length ? { portal_mappings: visible.map(portalMappingMetadata) } : {}),
     ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
   });
 }
@@ -353,12 +366,67 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 // guard: a trainer reads what a recognized form already has, then adds to it.
 export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
-  const rows = await listSharedFieldMaps(user.db, portalKey);
+  const resolutions = await listLegacyClientPortalMapResolutions(
+    { db: user.db, orgId: null },
+    { portalKey, mapType: "all" },
+  );
+  const visible = resolutions.filter((resolution) => resolution.status !== "configuration_missing");
+  const rows = visible.flatMap((resolution) => resolution.maps);
   const v2Supported = await supportsFillEventV2({ db: user.db });
   return ok(rows, {
     total: rows.length,
+    ...(portalKey && visible.length === 0 ? { registry_empty: true } : {}),
+    ...(visible.length ? { portal_mappings: visible.map(portalMappingMetadata) } : {}),
     ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
   });
+}
+
+function portalMappingMetadata(
+  resolution: Awaited<ReturnType<typeof listEffectivePortalMapResolutions>>[number],
+) {
+  return {
+    portal_key: resolution.portalKey,
+    portal_id: resolution.portalId,
+    case_type: resolution.caseType,
+    requires_explicit_selection: resolution.requiresExplicitSelection,
+    mapping_generation: resolution.mappingGeneration,
+    active_field_count: resolution.activeFieldCount,
+    mapping_ready: resolution.isReady,
+    is_verified: resolution.isVerified,
+    effective_mapping_fingerprint: resolution.effectiveMappingFingerprint,
+  };
+}
+
+function filterLegacyPortalRows(rows: PortalApiRow[]): PortalApiRow[] {
+  const blockedKeys = new Set(
+    rows.filter((row) => row.requiresExplicitSelection).map((row) => row.portalKey),
+  );
+  return rows.filter((row) => !blockedKeys.has(row.portalKey));
+}
+
+async function portalRowsWithCurrentMetadata(
+  db: AuthContext["db"] | UserContext["db"],
+  orgId: string | null,
+  rows: PortalApiRow[],
+): Promise<{ rows: PortalApiRow[]; metadata: ReturnType<typeof portalMappingMetadata>[] }> {
+  if (rows.length === 0) return { rows: [], metadata: [] };
+  const scopes = new Set(rows.map((row) => (row.orgId === null ? null : orgId)));
+  const resolutions = await Promise.all(
+    [...scopes].map((scope) => listEffectivePortalMapResolutions({ db, orgId: scope })),
+  );
+  const byId = new Map(resolutions.flat().map((resolution) => [resolution.portalId, resolution]));
+  const currentRows = rows.map((row) => {
+    const resolution = byId.get(row.id);
+    if (resolution && resolution.activeFieldCount === 0) {
+      return { ...row, isVerified: false, lastVerifiedAt: null, provenAt: null };
+    }
+    return row;
+  });
+  const metadata = currentRows.flatMap((row) => {
+    const resolution = byId.get(row.id);
+    return resolution ? [portalMappingMetadata(resolution)] : [];
+  });
+  return { rows: currentRows, metadata };
 }
 
 export async function handleProposeSharedFieldMap(
