@@ -155,6 +155,7 @@ export function useStopUsingPortal() {
             next,
             `Unlinked portal ${portal.portalKey} (stop using)`,
             t.requiredProfileAttributes,
+            t.caseType ?? null,
           );
           published += 1;
         }

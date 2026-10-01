@@ -29,6 +29,11 @@ vi.mock("@/hooks/useAdmin", () => ({ useSops: () => ({ data: templates }) }));
 vi.mock("@/hooks/useCases", () => ({
   useReplaceCaseSop: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+}));
 
 import { ChangeCaseSopAction } from "./ChangeCaseSopAction";
 
@@ -68,6 +73,13 @@ describe("ChangeCaseSopAction", () => {
 
   it("does not offer replacement to a read-only viewer", () => {
     const html = renderToStaticMarkup(<ChangeCaseSopAction c={baseCase} canEdit={false} />);
+    expect(html).not.toContain("Change template");
+  });
+
+  it("does not offer a legacy SOP to a typed Enrollment case", () => {
+    const c = { ...baseCase, caseType: "enrollment" } as CaseDetail;
+    const html = renderToStaticMarkup(<ChangeCaseSopAction c={c} canEdit />);
+    expect(html).toContain("No other enrollment SOP matches");
     expect(html).not.toContain("Change template");
   });
 });

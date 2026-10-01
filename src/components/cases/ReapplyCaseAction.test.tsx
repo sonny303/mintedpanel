@@ -65,4 +65,34 @@ describe("ReapplyCaseAction — template selection", () => {
     expect(html).toContain("Reapply");
     expect(html).toContain("This application was denied");
   });
+
+  it("blocks execution for Recredentialing cases", () => {
+    const c = {
+      id: "case-recred",
+      caseStatus: "denied",
+      caseType: "recredentialing",
+      payerId: "pay-1",
+      state: "NC",
+      groupId: null,
+    } as unknown as CaseDetail;
+
+    const html = renderToStaticMarkup(<ReapplyCaseAction c={c} canEdit />);
+    expect(html).toContain("Recredentialing execution is not supported");
+    expect(html).not.toContain("Reapply on this case");
+  });
+
+  it("keeps the no-match reapply guidance reachable when no same-type SOP exists", () => {
+    const c = {
+      id: "case-enrollment",
+      caseStatus: "denied",
+      caseType: "enrollment",
+      payerId: "pay-1",
+      state: "NC",
+      groupId: null,
+    } as unknown as CaseDetail;
+
+    const html = renderToStaticMarkup(<ReapplyCaseAction c={c} canEdit />);
+    expect(html).toContain("Reapply");
+    expect(html).not.toMatch(/<button[^>]*\sdisabled(?:=""|\s|>)[^>]*>[\s\S]*Reapply/);
+  });
 });

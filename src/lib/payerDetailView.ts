@@ -71,6 +71,7 @@ export function templateIntentForFormSuggestion(
 
 export interface PayerTemplateRow {
   id: string;
+  caseType: SOPTemplate["caseType"];
   name: string;
   /** Every state this template targets (multi-state). A lone `'All'` is the
    *  All-states wildcard; empty = a state-less legacy / fallback row. */
@@ -98,6 +99,7 @@ export function payerTemplateRows(
     .filter((t) => t.payerId === payerId && !t.archived)
     .map((t) => ({
       id: t.id,
+      caseType: t.caseType ?? null,
       name: t.name,
       states: templateStates(t),
       groupId: t.groupId,
@@ -108,7 +110,9 @@ export function payerTemplateRows(
       // reads as "this is what runs".
       isActiveMatch:
         templateStates(t).length > 0 &&
-        templateStates(t).every((s) => pickTemplate(all, payerId, s, t.groupId)?.id === t.id),
+        templateStates(t).every((s) =>
+          pickTemplate(all, payerId, s, t.groupId, t.caseType ?? null)?.id === t.id,
+        ),
     }))
     .sort(
       (a, b) =>

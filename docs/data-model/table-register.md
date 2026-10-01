@@ -110,6 +110,17 @@ routes, lib). RPC-mediated tables note the RPC.
 | field_dictionary | extension | support | 1 | |
 | form_mapping_reset_events | extension | support | 0 + future RPC writes | **MINT-45 storage only (`20261002120000`):** append-only reset receipts keyed by exact `portal_id`/`portal_key` and global (`org_id NULL`) or organization scope; records old/new generation, actor/time, affected field count and scoped idempotency key. Authenticated SELECT is own-org plus global receipts only for non-restricted identities via RLS; service_role SELECT/INSERT only. There is no direct authenticated write policy, reset RPC, reader activation or reset UI in this slice. |
 
+**MINT-44 typed SOPs (`20261003120000`, repository migration source):** `case_type`
+is nullable on `credential_cases`, SOP heads, immutable versions, and drafts; its
+closed values are `contract`, `enrollment`, and `recredentialing`. Existing
+NULL rows and the four-part case uniqueness remain unchanged. New provider cases
+are Enrollment-only; the picker filters by exact type before specificity, and
+stamped tasks must match the case, head, and immutable version. A legacy generic
+fallback remains NULL until an author publishes a typed version. Typed form steps
+must resolve one visible portal configuration by exact key, owner scope, payer,
+and case type; duplicate visible keys are rejected because the step stores only
+the key. This migration source is not evidence of hosted application.
+
 ## E6.12 private authorization relations (2026-09-25)
 
 These relations are intentionally outside the public table register's browser

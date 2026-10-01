@@ -69,7 +69,7 @@ export function buildPayerReadiness(input: PayerReadinessInput): PayerReadinessR
     const { payerId, state } = targets[0];
 
     const underlying: UnderlyingTargetReadiness[] = targets.map((t) => {
-      const tpl = pickTemplate(input.templates, t.payerId, t.state, t.groupId);
+      const tpl = pickTemplate(input.templates, t.payerId, t.state, t.groupId, "enrollment");
       const ready = tpl !== null && !isFallbackTemplate(tpl);
       return { groupId: t.groupId, ready, resolvedTemplateId: tpl?.id ?? null };
     });

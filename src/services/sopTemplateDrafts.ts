@@ -6,9 +6,10 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit, currentUserId } from "@/lib/audit";
+import type { CaseType } from "@/lib/caseTypes";
 import type { SopTemplateDraft } from "@/types";
 
-const COLUMNS = "id, org_id, template_id, payload, updated_by, created_at, updated_at";
+const COLUMNS = "id, org_id, template_id, case_type, payload, updated_by, created_at, updated_at";
 
 export async function listSopTemplateDrafts(): Promise<SopTemplateDraft[]> {
   const orgId = requireActiveOrg();
@@ -49,6 +50,7 @@ export async function getSopTemplateDraft(id: string): Promise<SopTemplateDraft 
 export interface SopTemplateDraftInput {
   id?: string;
   templateId?: string | null;
+  caseType?: CaseType | null;
   payload: unknown;
 }
 
@@ -58,10 +60,17 @@ export async function saveSopTemplateDraft(
 ): Promise<SopTemplateDraft> {
   const orgId = requireActiveOrg();
   const now = new Date().toISOString();
+  const payloadRecord =
+    typeof input.payload === "object" && input.payload !== null && !Array.isArray(input.payload)
+      ? (input.payload as Record<string, unknown>)
+      : {};
   const row = {
     org_id: orgId,
     template_id: input.templateId ?? null,
-    payload: input.payload as never,
+    case_type: input.caseType ?? null,
+    payload: (input.caseType === undefined
+      ? input.payload
+      : { ...payloadRecord, caseType: input.caseType }) as never,
     updated_by: currentUserId(),
     updated_at: now,
     ...(input.id ? { id: input.id } : {}),

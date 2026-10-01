@@ -24,9 +24,10 @@ import {
   withHiddenPortalPrefix,
 } from "@/lib/portalRetirement";
 import type { Portal } from "@/types";
+import type { CaseType } from "@/lib/caseTypes";
 
 const PORTAL_COLUMNS =
-  "id, org_id, portal_key, name, payer_id, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
+  "id, org_id, portal_key, name, payer_id, case_type, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
 
 // The /api projection adds the payer's DISPLAY NAME. E6.9's Train-forms module
 // groups portals by payer, and the extension has no payer endpoint of its own —
@@ -37,7 +38,8 @@ const PORTAL_COLUMNS =
 // a global portal is only listable while its payer is live
 // (src/lib/portalVisibility.ts). One embed serves both — no second round trip,
 // and the filter can never read a staler payer than the name it renders.
-const PORTAL_API_COLUMNS = `${PORTAL_COLUMNS}, payers(name, status, archived_at, merged_into_id)`;
+const PORTAL_API_COLUMNS =
+  "id, org_id, portal_key, name, payer_id, case_type, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at, payers(name, status, archived_at, merged_into_id)";
 
 /** The embedded payer as camelizeRow leaves it (the embed is recursed too). */
 type EmbeddedPayer = (PortalPayerFacts & { name?: string | null }) | null;
@@ -145,6 +147,7 @@ export async function listSharedPortals(db: SupabaseClient<Database>): Promise<P
 export interface PortalInput {
   name: string;
   portalKey: string;
+  caseType?: CaseType | null;
   payerId?: string | null;
   formUrl?: string | null;
 }
@@ -193,6 +196,7 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
     // link), so this is the one chance to canonicalize a hand-typed key.
     portal_key: normalizePortalKey(input.portalKey) ?? "",
     payer_id: input.payerId ?? null,
+    case_type: input.caseType ?? null,
     form_url: input.formUrl?.trim() || null,
   };
   const { data, error } = await supabase
@@ -280,6 +284,7 @@ export interface GlobalPortalInput {
   name: string;
   /** Required on create; immutable after (a rename would orphan SOP links). */
   portalKey?: string | null;
+  caseType?: CaseType | null;
   payerId?: string | null;
   formUrl?: string | null;
 }
@@ -293,6 +298,7 @@ export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Port
     p_portal_key: (normalizePortalKey(input.portalKey) ?? "") as string,
     p_payer_id: (input.payerId ?? null) as unknown as string,
     p_form_url: (input.formUrl?.trim() || null) as unknown as string,
+    p_case_type: (input.caseType ?? null) as unknown as string,
   });
   if (error) {
     if (error.message.includes("global_portal_key_exists")) {

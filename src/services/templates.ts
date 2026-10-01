@@ -8,6 +8,7 @@ import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { pgWireText, toError, translateDbError } from "@/lib/dbErrors";
 import { orgSopMatchKeyError, templateStates } from "@/lib/sopMatchKey";
+import { isCaseType, type CaseType } from "@/lib/caseTypes";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { SOPTaskDefinition, SOPTemplate, SOPTemplateVersion } from "@/types";
 
@@ -23,6 +24,8 @@ export interface TemplateInput {
   specialty?: string | null;
   payerId?: string | null;
   taskDefinitions: SOPTaskDefinition[];
+  /** Business purpose; NULL is reserved for legacy/unclassified SOPs. */
+  caseType?: CaseType | null;
   archived?: boolean;
   isArchived?: boolean;
   /** E4.2 TE-13 — governed required-profile-attribute keys (head working copy;
@@ -131,6 +134,7 @@ export async function publishTemplate(
   taskDefinitions: SOPTaskDefinition[],
   changeNote?: string | null,
   requiredProfileAttributes?: string[],
+  caseType?: CaseType | null,
 ): Promise<PublishResult> {
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
@@ -141,6 +145,7 @@ export async function publishTemplate(
     p_task_definitions: taskDefinitions as unknown as Json,
     p_change_note: changeNote ?? undefined,
     p_required_profile_attributes: (requiredProfileAttributes ?? []) as unknown as Json,
+    p_case_type: caseType ?? null,
   });
   if (error) {
     if (error.message.includes("sop_version_conflict")) throw new SopVersionConflictError();
@@ -211,6 +216,8 @@ export interface GlobalSopInput {
   /** Existing global head id to update; null/undefined creates. */
   id?: string | null;
   name: string;
+  /** Business purpose for newly authored global SOPs. */
+  caseType?: CaseType | null;
   payerId: string | null;
   states: string[] | null;
   groupId?: string | null;
@@ -242,6 +249,7 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
     p_task_definitions: (input.taskDefinitions ?? []) as unknown as Json,
     p_archived: (input.archived ?? false) as boolean,
     p_required_profile_attributes: (input.requiredProfileAttributes ?? []) as unknown as Json,
+    p_case_type: input.caseType ?? null,
   };
   const { data, error } = await rpc(
     "author_global_sop",
@@ -285,6 +293,9 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
 
 export async function createTemplate(input: TemplateInput): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
+  if (!isCaseType(input.caseType)) {
+    throw new Error("Choose a case type before creating a SOP template.");
+  }
   const archived = Boolean(input.archived ?? input.isArchived ?? false);
   assertActiveOrgMatchKeyComplete({
     payerId: input.payerId ?? null,
@@ -377,6 +388,9 @@ export async function updateTemplate(
   // value. Archiving a legacy row (destination archived) stays exempt, so
   // read/archive of existing rows is never blocked.
   if (before) {
+    if (patch.caseType !== undefined && patch.caseType !== before.caseType) {
+      throw new Error("Publish a new SOP version to change its case type.");
+    }
     const nextArchived = Boolean(patch.archived ?? patch.isArchived ?? before.archived);
     const destPayerId = patch.payerId !== undefined ? patch.payerId : before.payerId;
     const destStates = patch.states !== undefined ? patch.states : templateStates(before);
@@ -397,7 +411,8 @@ export async function updateTemplate(
       });
     }
   }
-  const payload = templatePayload(patch, orgId) as unknown as SopTemplateUpdate;
+  const { caseType: _publishedOnlyCaseType, ...headPatch } = patch;
+  const payload = templatePayload(headPatch, orgId) as unknown as SopTemplateUpdate;
   const { data, error } = await supabase
     .from("sop_templates")
     .update(payload)
