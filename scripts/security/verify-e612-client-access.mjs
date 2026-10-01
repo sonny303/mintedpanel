@@ -1968,11 +1968,14 @@ function globalChecks() {
   const denied = [E612.clientPending, E612.clientActive, E612.clientNoGrant, E612.clientRevoked];
   for (const userId of denied) {
     for (const [index, statement] of globalRpc.entries()) {
+      const isRegistryUpdate = statement.includes("update_shared_field_registry");
       expectedSqlError(
         `global_rpc.restricted.${userId.slice(-3)}.${index}`,
         asRole("authenticated", userId, statement),
-        ["P0001"],
-        "Restricted client cannot modify global training surfaces",
+        isRegistryUpdate ? ["42501"] : ["P0001"],
+        isRegistryUpdate
+          ? "not_authorized"
+          : "Restricted client cannot modify global training surfaces",
       );
     }
     const list = query(

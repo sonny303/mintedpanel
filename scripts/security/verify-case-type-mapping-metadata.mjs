@@ -35,6 +35,25 @@ async function expectSqlFailure(sql, fragment, label) {
   assert(result.stderr.includes(fragment), `${label}: expected ${fragment}, got ${result.stderr}`);
 }
 
+function withMappingGeneration(
+  sql,
+  generation,
+  { role, userId, reset = false, recaptureMapId } = {},
+) {
+  return [
+    "BEGIN;",
+    role ? `SET ROLE ${role};` : "",
+    userId ? `SET request.jwt.claim.sub = '${userId}';` : "",
+    `SET LOCAL minted.expected_mapping_generation = '${generation}';`,
+    reset ? "SET LOCAL minted.mapping_reset = 'true';" : "",
+    recaptureMapId ? `SET LOCAL minted.mapping_recapture_refresh = '${recaptureMapId}';` : "",
+    sql,
+    "COMMIT;",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 const idKeys = [
   "orgA",
   "orgB",
@@ -57,6 +76,8 @@ const idKeys = [
   "caseLegacy",
   "templateEnrollment",
   "templateLegacy",
+  "globalMap",
+  "orgAMap",
 ];
 const ids = Object.fromEntries(idKeys.map((key) => [key, randomUUID()]));
 const portalKey = `mint45_${ids.orgA.replaceAll("-", "").slice(0, 16)}`;
@@ -126,16 +147,11 @@ INSERT INTO public.credential_cases (id, org_id, provider_id, payer_id, state, c
 VALUES ('${ids.caseLegacy}', '${ids.orgA}', '${ids.providerA}', '${ids.payerA}', 'NV', NULL);
 ALTER TABLE public.credential_cases ENABLE TRIGGER credential_cases_stamp_case_type;
 
-INSERT INTO public.portal_field_maps (org_id, portal_key, map_type, selector, source, field_type, notes, shared_base_generation) VALUES
-  (NULL, '${portalKey}', 'web', '${selector}', 'manual', 'text', 'MINT-45 disposable fixture', NULL),
-  ('${ids.orgA}', '${portalKey}', 'web', '${selector}', 'manual', 'text', 'MINT-45 disposable fixture', 1);
+SET LOCAL minted.expected_mapping_generation = '1';
+INSERT INTO public.portal_field_maps (id, org_id, portal_key, map_type, selector, source, field_type, notes, shared_base_generation) VALUES
+  ('${ids.globalMap}', NULL, '${portalKey}', 'web', '${selector}', 'manual', 'text', 'MINT-45 disposable fixture', NULL),
+  ('${ids.orgAMap}', '${ids.orgA}', '${portalKey}', 'web', '${selector}', 'manual', 'text', 'MINT-45 disposable fixture', 1);
 
-INSERT INTO public.form_mapping_reset_events
-  (id, portal_id, owner_scope, org_id, portal_key, old_mapping_generation, new_mapping_generation, actor_id, affected_field_count, idempotency_key)
-VALUES
-  ('${ids.globalEvent}', '${ids.portalGlobal}', 'global', NULL, '${portalKey}', 1, 2, '${ids.actorA}', 5, '${ids.idempotency}'),
-  ('${ids.orgAEvent}', '${ids.portalA}', 'organization', '${ids.orgA}', '${portalKey}', 1, 2, '${ids.actorA}', 4, '${ids.idempotency}'),
-  ('${ids.orgBEvent}', '${ids.portalB}', 'organization', '${ids.orgB}', '${portalKey}', 1, 2, '${ids.actorB}', 3, '${ids.idempotency}');
 COMMIT;
 `);
 const defaults = await runPsql(`
@@ -151,6 +167,44 @@ assert(
   `legacy portal/map generation defaults mismatch: ${defaults.stdout}`,
 );
 
+// Simulate the guarded 1→2 reset in one transaction. MINT-45 requires the
+// table owner; MINT-57 also checks the observed generation and reset marker.
+// Existing maps are refreshed under their per-row marker and become proposed.
+await runPsql(`
+BEGIN;
+SET LOCAL minted.expected_mapping_generation = '1';
+SET LOCAL minted.mapping_reset = 'true';
+UPDATE public.portals SET mapping_generation = 2
+ WHERE id IN ('${ids.portalGlobal}', '${ids.portalA}', '${ids.portalB}');
+SET LOCAL minted.expected_mapping_generation = '2';
+SET LOCAL minted.mapping_recapture_refresh = '${ids.globalMap}';
+UPDATE public.portal_field_maps SET mapping_generation = 2
+ WHERE id = '${ids.globalMap}';
+SET LOCAL minted.mapping_recapture_refresh = '${ids.orgAMap}';
+UPDATE public.portal_field_maps
+   SET mapping_generation = 2, shared_base_generation = 2
+ WHERE id = '${ids.orgAMap}';
+INSERT INTO public.form_mapping_reset_events
+  (id, portal_id, owner_scope, org_id, portal_key, old_mapping_generation, new_mapping_generation, actor_id, affected_field_count, idempotency_key)
+VALUES
+  ('${ids.globalEvent}', '${ids.portalGlobal}', 'global', NULL, '${portalKey}', 1, 2, '${ids.actorA}', 5, '${ids.idempotency}'),
+  ('${ids.orgAEvent}', '${ids.portalA}', 'organization', '${ids.orgA}', '${portalKey}', 1, 2, '${ids.actorA}', 4, '${ids.idempotency}'),
+  ('${ids.orgBEvent}', '${ids.portalB}', 'organization', '${ids.orgB}', '${portalKey}', 1, 2, '${ids.actorB}', 3, '${ids.idempotency}');
+COMMIT;
+`);
+const resetState = await runPsql(`
+SELECT mapping_generation::text FROM public.portals WHERE id = '${ids.portalGlobal}';
+SELECT mapping_generation::text FROM public.portals WHERE id = '${ids.portalA}';
+SELECT mapping_generation::text FROM public.portals WHERE id = '${ids.portalB}';
+SELECT mapping_generation::text FROM public.portal_field_maps WHERE id = '${ids.globalMap}';
+SELECT mapping_generation::text || ',' || shared_base_generation::text
+  FROM public.portal_field_maps WHERE id = '${ids.orgAMap}';
+`);
+assert(
+  resetState.stdout === "2\n2\n2\n2\n2,2",
+  `guarded 1→2 reset did not advance exact configs and map rows: ${resetState.stdout}`,
+);
+
 const guardFunctionGrants = await runPsql(`
 SELECT has_function_privilege('anon', 'public.guard_credential_case_type_immutable()', 'EXECUTE')::text || ',' ||
        has_function_privilege('authenticated', 'public.guard_credential_case_type_immutable()', 'EXECUTE')::text || ',' ||
@@ -164,15 +218,18 @@ assert(
   `case-type trigger helpers must not be directly executable by API roles: ${guardFunctionGrants.stdout}`,
 );
 
-const ordinaryNoops = await runPsql(`
-SET ROLE authenticated;
-SET request.jwt.claim.sub = '${ids.actorA}';
+const ordinaryNoops = await runPsql(
+  withMappingGeneration(
+    `
 UPDATE public.portals SET name = 'MINT-45 org A edited', case_type = case_type
  WHERE id = '${ids.portalA}' RETURNING 'org-portal-edit';
 UPDATE public.credential_cases SET specialty = 'Occupational Therapy', case_type = case_type
  WHERE id = '${ids.caseEnrollment}' RETURNING 'typed-case-edit';
-RESET ROLE;
-`);
+`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
+);
 assert(
   ordinaryNoops.stdout === "org-portal-edit\ntyped-case-edit",
   `ordinary edits/no-op type writes should work: ${ordinaryNoops.stdout}`,
@@ -251,12 +308,20 @@ assert(
 );
 
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET case_type = 'contract' WHERE id = '${ids.portalA}';`,
+  withMappingGeneration(
+    `UPDATE public.portals SET case_type = 'contract' WHERE id = '${ids.portalA}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
   "org_portal_case_type_immutable",
   "typed org portal reclassification",
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET case_type = NULL WHERE id = '${ids.portalA}';`,
+  withMappingGeneration(
+    `UPDATE public.portals SET case_type = NULL WHERE id = '${ids.portalA}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
   "org_portal_case_type_immutable",
   "typed org portal clear",
 );
@@ -265,15 +330,18 @@ await expectSqlFailure(
   "permission denied",
   "service-role portal updates remain ungranted",
 );
-const legacyPortalClassification = await runPsql(`
-SET ROLE authenticated;
-SET request.jwt.claim.sub = '${ids.actorA}';
+const legacyPortalClassification = await runPsql(
+  withMappingGeneration(
+    `
 UPDATE public.portals SET case_type = case_type, name = 'MINT-45 legacy portal edited'
  WHERE id = '${ids.portalLegacy}' RETURNING 'legacy-portal-edit';
 UPDATE public.portals SET case_type = 'enrollment'
  WHERE id = '${ids.portalLegacy}' RETURNING 'legacy-portal-classified';
-RESET ROLE;
-`);
+`,
+    1,
+    { role: "authenticated", userId: ids.actorA },
+  ),
+);
 assert(
   legacyPortalClassification.stdout === "legacy-portal-edit\nlegacy-portal-classified",
   `legacy org portal should allow ordinary edits and first classification: ${legacyPortalClassification.stdout}`,
@@ -300,7 +368,7 @@ const globalPortalUpdate = await runPsql(`
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '${ids.actorA}';
 SELECT (public.upsert_global_portal(
-  '${ids.portalGlobal}', 'MINT-45 global edited', '${portalKey}', NULL, NULL, NULL
+  '${ids.portalGlobal}', 'MINT-45 global edited', '${portalKey}', NULL, NULL, NULL, 2
 )).case_type;
 RESET ROLE;
 `);
@@ -309,7 +377,7 @@ assert(
   `global portal RPC should preserve the existing typed value when case_type is omitted: ${globalPortalUpdate.stdout}`,
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; SELECT public.upsert_global_portal('${ids.portalGlobalLegacy}', 'MINT-44 legacy global', '${legacyKey}', NULL, NULL, 'enrollment');`,
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; SELECT public.upsert_global_portal('${ids.portalGlobalLegacy}', 'MINT-44 legacy global', '${legacyKey}', NULL, NULL, 'enrollment', 1);`,
   "global_portal_case_type_immutable",
   "existing global NULL-to-Enrollment upsert behavior",
 );
@@ -320,7 +388,10 @@ await expectSqlFailure(
   "closed case_type set",
 );
 await expectSqlFailure(
-  `INSERT INTO public.portal_field_maps (org_id, portal_key, map_type, selector, source, field_type, notes) VALUES ('${ids.orgA}', '${portalKey}', 'web', '${selector}', 'manual', 'text', 'duplicate test');`,
+  withMappingGeneration(
+    `INSERT INTO public.portal_field_maps (org_id, portal_key, map_type, selector, source, field_type, notes) VALUES ('${ids.orgA}', '${portalKey}', 'web', '${selector}', 'manual', 'text', 'duplicate test');`,
+    2,
+  ),
   "duplicate key",
   "same-tier selector uniqueness",
 );
@@ -387,94 +458,137 @@ assert(
 );
 
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET mapping_generation = 2 WHERE id = '${ids.portalA}';`,
-  "mapping_generation_change_requires_definer",
-  "ordinary portal generation bump",
+  withMappingGeneration(
+    `UPDATE public.portals SET mapping_generation = 3 WHERE id = '${ids.portalA}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
+  "mapping_generation_change_requires_reset",
+  "ordinary portal generation bump without reset marker",
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET mapping_generation = 0 WHERE id = '${ids.portalA}';`,
+  withMappingGeneration(
+    `UPDATE public.portals SET mapping_generation = 3 WHERE id = '${ids.portalA}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA, reset: true },
+  ),
+  "mapping_generation_change_requires_definer",
+  "reset marker is not authority for an ordinary portal generation bump",
+);
+await expectSqlFailure(
+  withMappingGeneration(
+    `UPDATE public.portals SET mapping_generation = 1 WHERE id = '${ids.portalA}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA, reset: true },
+  ),
   "mapping_generation_change_requires_definer",
   "ordinary portal generation decrease",
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portal_field_maps SET mapping_generation = 2 WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${selector}';`,
+  withMappingGeneration(
+    `UPDATE public.portal_field_maps SET mapping_generation = 3 WHERE id = '${ids.orgAMap}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA, recaptureMapId: ids.orgAMap },
+  ),
   "mapping_generation_change_requires_definer",
   "ordinary map generation bump",
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portal_field_maps SET mapping_generation = 0 WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${selector}';`,
+  withMappingGeneration(
+    `UPDATE public.portal_field_maps SET mapping_generation = 1 WHERE id = '${ids.orgAMap}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA, recaptureMapId: ids.orgAMap },
+  ),
   "mapping_generation_change_requires_definer",
   "ordinary map generation decrease",
 );
-// Simulate a trusted reset advancing the generation, then prove an ordinary
-// org writer cannot roll either portal or map metadata back to the old value.
-await runPsql(`UPDATE public.portals SET mapping_generation = 2 WHERE id = '${ids.portalA}';`);
-await runPsql(
-  `UPDATE public.portal_field_maps SET mapping_generation = 2 WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${selector}';`,
-);
+// The fixture now represents the post-reset generation 2. Prove an ordinary
+// writer cannot roll either configuration or row metadata back to generation 1.
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portals SET mapping_generation = 1 WHERE id = '${ids.portalA}';`,
+  withMappingGeneration(
+    `UPDATE public.portals SET mapping_generation = 1 WHERE id = '${ids.portalA}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA, reset: true },
+  ),
   "mapping_generation_change_requires_definer",
   "ordinary portal generation rollback after trusted advance",
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portal_field_maps SET mapping_generation = 1 WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${selector}';`,
+  withMappingGeneration(
+    `UPDATE public.portal_field_maps SET mapping_generation = 1 WHERE id = '${ids.orgAMap}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA, recaptureMapId: ids.orgAMap },
+  ),
   "mapping_generation_change_requires_definer",
   "ordinary map generation rollback after trusted advance",
 );
 await expectSqlFailure(
-  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorA}'; UPDATE public.portal_field_maps SET shared_base_generation = 42 WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${selector}';`,
+  withMappingGeneration(
+    `UPDATE public.portal_field_maps SET shared_base_generation = 42 WHERE id = '${ids.orgAMap}';`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
   "shared_base_generation_requires_review",
   "ordinary shared-base self-certification",
 );
 
 const stampedOrgOverride = `${selector}-new-org-override`;
-await runPsql(`
-SET ROLE authenticated;
-SET request.jwt.claim.sub = '${ids.actorA}';
+await runPsql(
+  withMappingGeneration(
+    `
 INSERT INTO public.portal_field_maps
   (org_id, portal_key, map_type, selector, source, field_type, notes, shared_base_generation)
 VALUES
   ('${ids.orgA}', '${portalKey}', 'web', '${stampedOrgOverride}', 'manual', 'text', 'MINT-45 stamped override test', 42);
-RESET ROLE;
-`);
+`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
+);
 const stampedBase = await runPsql(`
 SELECT coalesce(shared_base_generation::text, 'null')
   FROM public.portal_field_maps
  WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${stampedOrgOverride}';
 `);
 assert(
-  stampedBase.stdout === "1",
-  `new org override should inherit shared generation 1 instead of caller value 42; got ${stampedBase.stdout}`,
+  stampedBase.stdout === "2",
+  `new org override should inherit shared generation 2 instead of caller value 42; got ${stampedBase.stdout}`,
 );
 const unstampedOrgOverride = `${selector}-new-org-override-null`;
-await runPsql(`
-SET ROLE authenticated;
-SET request.jwt.claim.sub = '${ids.actorA}';
+await runPsql(
+  withMappingGeneration(
+    `
 INSERT INTO public.portal_field_maps
   (org_id, portal_key, map_type, selector, source, field_type, notes, shared_base_generation)
 VALUES
   ('${ids.orgA}', '${portalKey}', 'web', '${unstampedOrgOverride}', 'manual', 'text', 'MINT-45 explicit NULL stamp test', NULL);
-RESET ROLE;
-`);
+`,
+    2,
+    { role: "authenticated", userId: ids.actorA },
+  ),
+);
 const unstampedBase = await runPsql(`
 SELECT coalesce(shared_base_generation::text, 'null')
   FROM public.portal_field_maps
  WHERE org_id = '${ids.orgA}' AND portal_key = '${portalKey}' AND selector = '${unstampedOrgOverride}';
 `);
 assert(
-  unstampedBase.stdout === "1",
+  unstampedBase.stdout === "2",
   `new org override must not bypass trusted stamping by explicitly supplying NULL; got ${unstampedBase.stdout}`,
 );
 
 // A trusted service_role INSERT succeeds only after the scope trigger verifies
 // the portal identity and key against the persisted portal row.
 await runPsql(`
+BEGIN;
+SET LOCAL minted.expected_mapping_generation = '2';
+SET LOCAL minted.mapping_reset = 'true';
+UPDATE public.portals SET mapping_generation = 3 WHERE id = '${ids.portalGlobal}';
 SET ROLE service_role;
 INSERT INTO public.form_mapping_reset_events
   (id, portal_id, owner_scope, org_id, portal_key, old_mapping_generation, new_mapping_generation, actor_id, affected_field_count, idempotency_key)
 VALUES ('${ids.serviceEvent}', '${ids.portalGlobal}', 'global', NULL, '${portalKey}', 2, 3, '${ids.actorA}', 5, '${randomUUID()}');
-RESET ROLE;
+COMMIT;
 `);
 
 await expectSqlFailure(
