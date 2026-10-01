@@ -110,8 +110,8 @@ export function payerTemplateRows(
       // reads as "this is what runs".
       isActiveMatch:
         templateStates(t).length > 0 &&
-        templateStates(t).every((s) =>
-          pickTemplate(all, payerId, s, t.groupId, t.caseType ?? null)?.id === t.id,
+        templateStates(t).every(
+          (s) => pickTemplate(all, payerId, s, t.groupId, t.caseType ?? null)?.id === t.id,
         ),
     }))
     .sort(

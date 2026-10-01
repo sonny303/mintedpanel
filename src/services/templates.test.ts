@@ -66,9 +66,12 @@ describe("publishTemplate", () => {
   it("passes an explicitly selected case type to the atomic publish RPC", async () => {
     rpcMock.mockResolvedValue({ data: { template_id: "t1", version: 3 }, error: null });
     await publishTemplate("t1", 2, "Contract NC", [], null, [], "contract");
-    expect(rpcMock).toHaveBeenCalledWith("publish_sop_template_version", expect.objectContaining({
-      p_case_type: "contract",
-    }));
+    expect(rpcMock).toHaveBeenCalledWith(
+      "publish_sop_template_version",
+      expect.objectContaining({
+        p_case_type: "contract",
+      }),
+    );
   });
 
   it("surfaces other RPC errors unchanged", async () => {

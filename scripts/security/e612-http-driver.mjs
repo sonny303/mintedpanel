@@ -630,6 +630,7 @@ async function main() {
         p_task_definitions: [],
         p_archived: false,
         p_required_profile_attributes: [],
+        p_case_type: "enrollment",
       },
     ],
     [
@@ -708,6 +709,7 @@ async function main() {
       p_task_definitions: [],
       p_archived: false,
       p_required_profile_attributes: [],
+      p_case_type: "enrollment",
     },
     adminToken,
   );
@@ -816,6 +818,7 @@ async function main() {
       p_task_definitions: [],
       p_archived: false,
       p_required_profile_attributes: [],
+      p_case_type: "enrollment",
     },
     tokens.trainer,
   );
