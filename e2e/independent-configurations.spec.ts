@@ -33,7 +33,7 @@ type Row = Record<string, unknown>;
 interface Scenario {
   db: Record<string, Row[]>;
   createPayloads: Row[];
-  portalUpdates: Array<{ url: string; body: Row }>;
+  portalUpdates: Array<{ functionName: string; body: Row }>;
 }
 
 function portalRow(input: {
@@ -233,6 +233,16 @@ async function fulfillSupabase(route: Route, scenario: Scenario) {
     if (functionName === "list_global_payers") {
       return json(scenario.db.payers.filter((payer) => payer.org_id === null));
     }
+    if (functionName === "update_org_portal_configuration") {
+      const body = (request.postDataJSON() ?? {}) as Row;
+      scenario.portalUpdates.push({ functionName, body: { ...body } });
+      const portal = scenario.db.portals.find(
+        (row) => row.id === body.p_id && row.org_id === body.p_org_id,
+      );
+      if (!portal) return json({ code: "P0002", message: "portal_not_found" }, 404);
+      Object.assign(portal, body.p_patch as Row, { updated_at: "2026-09-30T00:00:00Z" });
+      return json(portal);
+    }
     return json([]);
   }
 
@@ -257,7 +267,8 @@ async function fulfillSupabase(route: Route, scenario: Scenario) {
 
   if (request.method() === "PATCH") {
     const body = (request.postDataJSON() ?? {}) as Row;
-    if (table === "portals") scenario.portalUpdates.push({ url: request.url(), body: { ...body } });
+    if (table === "portals")
+      scenario.portalUpdates.push({ functionName: "PATCH", body: { ...body } });
     const matched = rows.filter((row) => rowMatches(row, url));
     for (const row of matched) Object.assign(row, body, { updated_at: "2026-09-30T00:00:00Z" });
     const projected = projectRows(table, matched, url, scenario);
@@ -445,10 +456,13 @@ test("renaming a typed configuration keeps its permanent key and SOP reference",
 
   expect(scenario.portalUpdates).toHaveLength(1);
   const update = scenario.portalUpdates[0];
-  expect(update.body).toEqual({ name: newName });
-  const updateUrl = new URL(update.url);
-  expect(updateUrl.searchParams.get("id")).toBe(`eq.${SOURCE_ID}`);
-  expect(updateUrl.searchParams.get("org_id")).toBe(`eq.${ORG_ID}`);
+  expect(update.functionName).toBe("update_org_portal_configuration");
+  expect(update.body).toEqual({
+    p_org_id: ORG_ID,
+    p_id: SOURCE_ID,
+    p_expected_mapping_generation: 4,
+    p_patch: { name: newName },
+  });
   expect(scenario.db.portals.find((portal) => portal.id === SOURCE_ID)).toMatchObject({
     ...sourceBefore,
     name: newName,

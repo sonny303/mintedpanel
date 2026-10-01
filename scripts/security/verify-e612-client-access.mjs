@@ -693,11 +693,15 @@ function catalogChecks() {
     .join("\n");
   const expectedSignatures = new Set([
     "upsert_global_portal|uuid, text, text, uuid, text, text|portals",
+    "upsert_global_portal|uuid, text, text, uuid, text, text, integer|portals",
     "set_global_portal_flags|uuid, boolean, boolean|portals",
+    "set_global_portal_flags|uuid, boolean, boolean, integer|portals",
     "author_global_sop|uuid, text, uuid, text[], uuid, jsonb, boolean, jsonb, text|jsonb",
     "publish_sop_template_version|uuid, integer, text, jsonb, text, jsonb, text|jsonb",
     "propose_shared_field_map|text, text, text, text, text, text, integer, text, jsonb, text|portal_field_maps",
+    "propose_shared_field_map|text, text, text, text, text, text, integer, text, jsonb, text, integer|portal_field_maps",
     "train_global_field_map|uuid, text, text, text, text, text, text|portal_field_maps",
+    "train_global_field_map|uuid, text, text, text, text, text, text, integer|portal_field_maps",
     "update_shared_field_registry|jsonb|SETOF portal_field_maps",
     "list_global_payers||SETOF payers",
     "create_organization|text|uuid",
