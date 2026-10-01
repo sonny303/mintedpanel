@@ -193,10 +193,15 @@ describe("PortalStepLink mounted variants", () => {
   it("preserves the old case flow only for legacy portal configurations", () => {
     queryState.value.data = configuration({ requiresExplicitSelection: false });
     const html = renderToStaticMarkup(
-      <PortalStepLink portalKey="regional_enrollment" handoff={handoff()} />,
+      <PortalStepLink
+        portalKey="regional_enrollment"
+        handoff={handoff({ selectedFacilityId: SECONDARY_ID })}
+      />,
     );
     expect(html).toContain("Legacy work in portal");
     expect(html).toContain("Open portal directly");
+    expect(html).toContain('aria-label="Location for this work"');
+    expect(html).toContain(`data-facility-id="${SECONDARY_ID}"`);
   });
 
   it("does not guess when the resolver is loading, failed, missing, or has no safe URL", () => {

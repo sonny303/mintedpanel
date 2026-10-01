@@ -184,30 +184,26 @@ export function PortalStepLink({
         {configuration.isVerified ? "Verified" : "Unverified"}
       </span>
 
+      {portalUrl && handoff && showFacilityPicker ? (
+        <div className="basis-full space-y-1">
+          <label className="text-[11px] font-medium text-foreground">Location for this work</label>
+          <Select value={currentFacilityId} onValueChange={handoff.onSelectFacility}>
+            <SelectTrigger className="h-8 w-full shadow-none" aria-label="Location for this work">
+              <SelectValue placeholder="Choose a location" />
+            </SelectTrigger>
+            <SelectContent>
+              {handoff.facilities.map((facility) => (
+                <SelectItem key={facility.id} value={facility.id}>
+                  {facility.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
       {portalUrl && handoff && configuration.requiresExplicitSelection ? (
         <>
-          {showFacilityPicker ? (
-            <div className="basis-full space-y-1">
-              <label className="text-[11px] font-medium text-foreground">
-                Location for this work
-              </label>
-              <Select value={currentFacilityId} onValueChange={handoff.onSelectFacility}>
-                <SelectTrigger
-                  className="h-8 w-full shadow-none"
-                  aria-label="Location for this work"
-                >
-                  <SelectValue placeholder="Choose a location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {handoff.facilities.map((facility) => (
-                    <SelectItem key={facility.id} value={facility.id}>
-                      {facility.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
           {workTuple ? (
             <WorkInPortalV2Button
               tuple={workTuple}
