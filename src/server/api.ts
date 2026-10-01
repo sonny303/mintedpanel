@@ -597,7 +597,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     try {
       const user = await authenticateGlobalTrainer(request);
       const routes = await loadExtensionRoutes();
-      return await routes.handleListSharedPortals(user);
+      return await routes.handleListSharedPortals(user, url);
     } catch (error) {
       return toErrorResponse(error);
     }

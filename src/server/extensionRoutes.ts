@@ -5,6 +5,7 @@
 import {
   listEffectivePortalMapResolutions,
   listLegacyClientPortalMapResolutions,
+  resolveEffectivePortalMaps,
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
@@ -25,6 +26,7 @@ import {
   putExtensionViewPrefs,
 } from "@/services/extensionViewPrefs";
 import { validateQuickCardFields } from "@/lib/quickCardCatalog";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
@@ -300,18 +302,46 @@ export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Res
   });
 }
 
-// GET /api/shared-portals — the GLOBAL registry only, for E6.9 Train forms.
+// GET /api/shared-portals — the GLOBAL registry only, for Train/Test. The
+// legacy no-query form hides explicit configurations; selection=explicit is
+// the opt-in candidate and exact-key surface for capable clients.
 //
 // Training carries no org, so this runs on the user-scoped guard. It is the
 // read half of the same tier the shared propose path writes: a trainer sees
 // the shared library and adds to it, and never sees another org's private
 // registry rows (there is no org in scope to widen it to).
-export async function handleListSharedPortals(user: UserContext): Promise<Response> {
+export async function handleListSharedPortals(user: UserContext, url?: URL): Promise<Response> {
   // JWT verification IS the gate (D11) — there is no role model for the shared
   // library, and E6.7 explicitly rejected inventing a platform role here.
-  const rows = await listSharedPortals(user.db);
-  const visibleRows = filterLegacyPortalRows(rows);
-  const current = await portalRowsWithCurrentMetadata(user.db, null, visibleRows);
+  const selection = url?.searchParams.get("selection") ?? null;
+  if (selection !== null && selection !== "explicit") {
+    return fail(422, "selection must be explicit when provided");
+  }
+  const explicitSelection = selection === "explicit";
+  const requestedKey = url?.searchParams.get("portal_key") ?? null;
+  if (explicitSelection && requestedKey !== null && !normalizePortalKey(requestedKey)) {
+    return fail(422, "portal_key must be a non-empty configuration key");
+  }
+
+  const rows = await listSharedPortals(
+    user.db,
+    explicitSelection && requestedKey !== null
+      ? { portalKey: normalizePortalKey(requestedKey) ?? "" }
+      : {},
+  );
+  if (explicitSelection && requestedKey !== null && rows.length === 0) {
+    return fail(404, "Form configuration not found");
+  }
+  if (explicitSelection && requestedKey !== null && rows.length > 1) {
+    return fail(409, "Form configuration key is ambiguous");
+  }
+  const visibleRows = explicitSelection ? rows : filterLegacyPortalRows(rows);
+  const current = await portalRowsWithCurrentMetadata(
+    user.db,
+    null,
+    visibleRows,
+    explicitSelection,
+  );
   return ok(current.rows, {
     total: current.rows.length,
     ...(current.metadata.length ? { portal_mappings: current.metadata } : {}),
@@ -362,9 +392,34 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 // contract, so a value cannot ride in. No audit row (audit_log.org_id is NOT
 // NULL and there is no org); the row's updated_at is the trail (D14).
 // GET /api/shared-field-maps?portal_key= — the SHARED tier's own rows, for
-// E6.9 Train forms. Pairs with the propose POST below on the same user-scoped
-// guard: a trainer reads what a recognized form already has, then adds to it.
+// Train/Test. selection=explicit opts into exact-key maps for capable clients;
+// legacy requests retain the old URL-selection safety filter.
 export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
+  const selection = url.searchParams.get("selection");
+  if (selection !== null && selection !== "explicit") {
+    return fail(422, "selection must be explicit when provided");
+  }
+  if (selection === "explicit") {
+    const requestedKey = url.searchParams.get("portal_key");
+    const portalKey = requestedKey === null ? null : normalizePortalKey(requestedKey);
+    if (!portalKey) return fail(422, "portal_key is required for explicit selection");
+
+    const resolution = await resolveEffectivePortalMaps(
+      { db: user.db, orgId: null },
+      { portalKey, mapType: "all" },
+    );
+    if (resolution.status === "configuration_missing") {
+      return fail(404, "Form configuration not found");
+    }
+    const rows = resolution.maps;
+    const v2Supported = await supportsFillEventV2({ db: user.db });
+    return ok(rows, {
+      total: rows.length,
+      portal_mappings: [portalMappingMetadata(resolution)],
+      ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
+    });
+  }
+
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const resolutions = await listLegacyClientPortalMapResolutions(
     { db: user.db, orgId: null },
@@ -408,6 +463,7 @@ async function portalRowsWithCurrentMetadata(
   db: AuthContext["db"] | UserContext["db"],
   orgId: string | null,
   rows: PortalApiRow[],
+  includeCurrentGeneration = false,
 ): Promise<{ rows: PortalApiRow[]; metadata: ReturnType<typeof portalMappingMetadata>[] }> {
   if (rows.length === 0) return { rows: [], metadata: [] };
   const scopes = new Set(rows.map((row) => (row.orgId === null ? null : orgId)));
@@ -417,10 +473,19 @@ async function portalRowsWithCurrentMetadata(
   const byId = new Map(resolutions.flat().map((resolution) => [resolution.portalId, resolution]));
   const currentRows = rows.map((row) => {
     const resolution = byId.get(row.id);
+    const currentGeneration = includeCurrentGeneration
+      ? { mappingGeneration: resolution?.mappingGeneration ?? row.mappingGeneration ?? 1 }
+      : {};
     if (resolution && resolution.activeFieldCount === 0) {
-      return { ...row, isVerified: false, lastVerifiedAt: null, provenAt: null };
+      return {
+        ...row,
+        ...currentGeneration,
+        isVerified: false,
+        lastVerifiedAt: null,
+        provenAt: null,
+      };
     }
-    return row;
+    return { ...row, ...currentGeneration };
   });
   const metadata = currentRows.flatMap((row) => {
     const resolution = byId.get(row.id);

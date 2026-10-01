@@ -139,13 +139,20 @@ export async function listPortalsForApi(
  *
  * Not PHI (portal names, URLs, verification state) — no audit row, no role
  * gate, matching the org-scoped route it mirrors. */
-export async function listSharedPortals(db: SupabaseClient<Database>): Promise<PortalApiRow[]> {
-  const { data, error } = await db
+export async function listSharedPortals(
+  db: SupabaseClient<Database>,
+  filters: { portalKey?: string } = {},
+): Promise<PortalApiRow[]> {
+  let query = db
     .from("portals")
     .select(PORTAL_API_COLUMNS)
     .is("org_id", null)
     .order("name", { ascending: true })
     .order("id", { ascending: true });
+  if (filters.portalKey !== undefined) {
+    query = query.eq("portal_key", normalizePortalKey(filters.portalKey) ?? "");
+  }
+  const { data, error } = await query;
   if (error) throw error;
   const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
   // D6.4 (F24): every row here is global, so the shared-tier predicate applies
