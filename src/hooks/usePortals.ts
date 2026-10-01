@@ -9,6 +9,7 @@ import {
   hidePortalFromPickers,
   listPortals,
   savePortalFormUrl,
+  updatePortalName,
   updatePortalPayer,
   updatePortalUrl,
   type PortalInput,
@@ -85,6 +86,17 @@ export function useUpdatePortalUrl() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: ({ id, formUrl }: { id: string; formUrl: string }) => updatePortalUrl(id, formUrl),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
+  });
+}
+
+/** Rename an explicit configuration's display label without changing its key. */
+export function useUpdatePortalName() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ portal, name }: { portal: Portal; name: string }) =>
+      updatePortalName(portal, name),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
   });
 }

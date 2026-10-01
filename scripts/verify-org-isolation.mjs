@@ -100,6 +100,7 @@ if (missing.length) {
 
 const API_BASE = env.API_BASE.replace(/\/+$/, "");
 const BYPASS = env.VERCEL_BYPASS_SECRET || "";
+const IS_LOCAL_MOCK_API = env.SUPABASE_ANON_KEY === "mock-anon-key";
 
 async function signIn(email, password) {
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -1019,6 +1020,37 @@ function looksLikeVercelGate(r) {
   } else {
     console.log(
       "SKIP  18b. cross-org portal isolation — South Park holds no org-scoped portal fixture",
+    );
+  }
+
+  // The local contract harness includes a flagged same-URL sibling so this
+  // non-hosted check proves the legacy URL registry preserves the historical
+  // entry while withholding configurations that require explicit selection.
+  if (IS_LOCAL_MOCK_API) {
+    const legacySameUrl = portalRows.find((row) => row.portalKey === "bcbs_ks_enrollment");
+    const sameUrlRows = legacySameUrl
+      ? portalRows.filter((row) => row.formUrl === legacySameUrl.formUrl)
+      : [];
+    check(
+      "18c. Legacy URL registry keeps the historical row and omits its explicit-selection sibling",
+      legacySameUrl?.requiresExplicitSelection === false &&
+        sameUrlRows.length === 1 &&
+        sameUrlRows[0]?.portalKey === "bcbs_ks_enrollment",
+      `legacyVisible=${legacySameUrl != null} sameUrlRows=${sameUrlRows.length}`,
+    );
+
+    const explicitLookup = await apiGet("/api/portals?portal_key=bcbs_ks_enrollment_explicit", {
+      token: kansasTok,
+    });
+    check(
+      "18d. Exact-key legacy lookup cannot expose an explicit-selection configuration",
+      explicitLookup.status === 200 &&
+        Array.isArray(explicitLookup.body?.data) &&
+        explicitLookup.body.data.length === 0 &&
+        explicitLookup.body?.meta?.total === 0 &&
+        explicitLookup.body?.meta?.registry_empty === true,
+      `status=${explicitLookup.status} rows=${explicitLookup.body?.data?.length ?? "?"} ` +
+        `registryEmpty=${String(explicitLookup.body?.meta?.registry_empty)}`,
     );
   }
 

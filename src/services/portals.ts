@@ -12,6 +12,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import type { CaseType } from "@/lib/caseTypes";
 import {
   isListableRegistryPortal,
   isListableBrowserPortal,
@@ -24,10 +25,9 @@ import {
   withHiddenPortalPrefix,
 } from "@/lib/portalRetirement";
 import type { Portal } from "@/types";
-import type { CaseType } from "@/lib/caseTypes";
 
 const PORTAL_COLUMNS =
-  "id, org_id, portal_key, name, payer_id, case_type, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
+  "id, org_id, portal_key, name, payer_id, form_url, case_type, requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
 
 // The /api projection adds the payer's DISPLAY NAME. E6.9's Train-forms module
 // groups portals by payer, and the extension has no payer endpoint of its own —
@@ -38,8 +38,7 @@ const PORTAL_COLUMNS =
 // a global portal is only listable while its payer is live
 // (src/lib/portalVisibility.ts). One embed serves both — no second round trip,
 // and the filter can never read a staler payer than the name it renders.
-const PORTAL_API_COLUMNS =
-  "id, org_id, portal_key, name, payer_id, case_type, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at, payers(name, status, archived_at, merged_into_id)";
+const PORTAL_API_COLUMNS = `${PORTAL_COLUMNS}, payers(name, status, archived_at, merged_into_id)`;
 
 /** The embedded payer as camelizeRow leaves it (the embed is recursed too). */
 type EmbeddedPayer = (PortalPayerFacts & { name?: string | null }) | null;
@@ -53,7 +52,11 @@ function unpackPortalRow(row: EmbeddedPortalRow): {
 } {
   const { payers, ...portal } = row;
   return {
-    portal: { ...portal, payerName: payers?.name ?? null },
+    portal: {
+      ...portal,
+      requiresExplicitSelection: portal.requiresExplicitSelection ?? false,
+      payerName: payers?.name ?? null,
+    },
     payer: payers ?? null,
   };
 }
@@ -80,7 +83,10 @@ export interface PortalServiceCtx {
  * role gate: billing may read, matching the field-maps route. */
 /** A registry row as the extension sees it: the portal plus its payer's
  * display name (see PORTAL_API_COLUMNS). */
-export type PortalApiRow = Portal & { payerName: string | null };
+export type PortalApiRow = Portal & {
+  payerName: string | null;
+  requiresExplicitSelection: boolean;
+};
 
 export async function listPortalsForApi(
   ctx: PortalServiceCtx,
@@ -147,6 +153,7 @@ export async function listSharedPortals(db: SupabaseClient<Database>): Promise<P
 export interface PortalInput {
   name: string;
   portalKey: string;
+  /** NULL is reserved for legacy registry rows; new configurations set a type. */
   caseType?: CaseType | null;
   payerId?: string | null;
   formUrl?: string | null;
@@ -198,6 +205,13 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
     payer_id: input.payerId ?? null,
     case_type: input.caseType ?? null,
     form_url: input.formUrl?.trim() || null,
+    requires_explicit_selection: input.caseType != null,
+    // Independent configurations start empty and untrusted. Their distinct
+    // key ensures no field maps or proof stamps are inherited from a URL twin.
+    is_verified: false,
+    last_verified_at: null,
+    proven_at: null,
+    url_changed_at: null,
   };
   const { data, error } = await supabase
     .from("portals")
@@ -243,6 +257,41 @@ export async function updatePortalUrl(id: string, formUrl: string): Promise<Port
     entityId: id,
     after: { formUrl: after.formUrl, isVerified: after.isVerified },
     description: `Updated portal URL for ${after.name}`,
+  });
+  return after;
+}
+
+/** Rename the display label while preserving the immutable configuration key. */
+export async function updatePortalName(portal: Portal, name: string): Promise<Portal> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Portal name is required");
+  if (portal.orgId === null) {
+    return upsertGlobalPortal({
+      id: portal.id,
+      name: trimmed,
+      portalKey: portal.portalKey,
+      payerId: portal.payerId,
+      formUrl: portal.formUrl,
+      caseType: portal.caseType ?? null,
+    });
+  }
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("portals")
+    .update({ name: trimmed } as never)
+    .eq("id", portal.id)
+    .eq("org_id", orgId)
+    .select(PORTAL_COLUMNS)
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<Portal>(data);
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal",
+    entityId: portal.id,
+    before: { name: portal.name },
+    after: { name: after.name, portalKey: after.portalKey },
+    description: `Renamed portal ${portal.name}`,
   });
   return after;
 }
@@ -359,6 +408,7 @@ export async function savePortalFormUrl(portal: Portal, formUrl: string): Promis
       portalKey: portal.portalKey,
       payerId: portal.payerId,
       formUrl,
+      caseType: portal.caseType ?? null,
     });
   }
   return updatePortalUrl(portal.id, formUrl);
@@ -377,6 +427,7 @@ export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
       portalKey: portal.portalKey,
       payerId: portal.payerId,
       formUrl: portal.formUrl,
+      caseType: portal.caseType ?? null,
     });
   }
   const orgId = requireActiveOrg();
@@ -402,6 +453,10 @@ export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
 
 /** Update or set the payer attached to a portal (org or global). */
 export async function updatePortalPayer(portal: Portal, payerId: string | null): Promise<Portal> {
+  if (portal.requiresExplicitSelection === true) {
+    if (payerId === portal.payerId) return portal;
+    throw new Error("The payer is fixed for this independent form configuration.");
+  }
   let after: Portal;
   if (portal.orgId === null) {
     if (payerId === null) throw new Error("Global portals must have an attached payer");
@@ -411,6 +466,7 @@ export async function updatePortalPayer(portal: Portal, payerId: string | null):
       portalKey: portal.portalKey,
       payerId,
       formUrl: portal.formUrl,
+      caseType: portal.caseType ?? null,
     });
   } else {
     const orgId = requireActiveOrg();

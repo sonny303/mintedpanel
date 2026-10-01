@@ -753,6 +753,46 @@ describe("portals registry handler", () => {
     expect(b.meta).toEqual({ total: 2, registry_empty: false });
   });
 
+  it("keeps a historical same-URL row and hides its explicit-selection sibling", async () => {
+    const formUrl = "https://portal.example/aetna/enrollment";
+    const legacy = {
+      id: "legacy",
+      portalKey: "aetna_legacy",
+      formUrl,
+      requiresExplicitSelection: false,
+    };
+    const explicit = {
+      id: "explicit",
+      portalKey: "aetna_contract",
+      formUrl,
+      requiresExplicitSelection: true,
+    };
+    listPortalsMock.mockResolvedValue([legacy, explicit] as never);
+
+    const res = await handleListPortals(url(), ctx());
+    const b = await body(res);
+    expect(b.data).toEqual([legacy]);
+    expect(b.meta).toEqual({ total: 1, registry_empty: false });
+  });
+
+  it("does not expose an explicit-selection row through an exact-key lookup", async () => {
+    const explicit = {
+      id: "explicit",
+      portalKey: "aetna_contract",
+      formUrl: "https://portal.example/aetna/enrollment",
+      requiresExplicitSelection: true,
+    };
+    listPortalsMock.mockResolvedValue([explicit] as never);
+
+    const res = await handleListPortals(url("?portal_key=aetna_contract"), ctx());
+    const b = await body(res);
+    expect(b.data).toEqual([]);
+    expect(b.meta).toEqual({ total: 0, registry_empty: true });
+    expect(listPortalsMock).toHaveBeenCalledWith(expect.anything(), {
+      portalKey: "aetna_contract",
+    });
+  });
+
   it("marks meta.registry_empty when the registry has no rows", async () => {
     listPortalsMock.mockResolvedValue([] as never);
     const res = await handleListPortals(url(), ctx());

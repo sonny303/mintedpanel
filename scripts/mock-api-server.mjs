@@ -80,6 +80,7 @@ export const FIXTURES = {
   PAYER_FORM_ID: "b7a90000-0000-4000-a000-0000000000f2",
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
+  EXPLICIT_SELECTION_PORTAL_KEY: "bcbs_ks_enrollment_explicit",
 };
 
 export const LEAK_MODES = [
@@ -323,6 +324,7 @@ const PORTALS = [
     formUrl: "https://example.test/bcbs/enroll",
     isVerified: true,
     provenAt: null,
+    requiresExplicitSelection: false,
   },
   {
     id: "portal-global-2",
@@ -333,6 +335,18 @@ const PORTALS = [
     formUrl: "https://example.test/availity",
     isVerified: false,
     provenAt: null,
+    requiresExplicitSelection: false,
+  },
+  {
+    id: "portal-global-explicit-selection",
+    orgId: null,
+    portalKey: FIXTURES.EXPLICIT_SELECTION_PORTAL_KEY,
+    name: "BCBS Kansas Contract Configuration",
+    payerId: null,
+    formUrl: "https://example.test/bcbs/enroll",
+    isVerified: false,
+    provenAt: null,
+    requiresExplicitSelection: true,
   },
   {
     id: "portal-sp-1",
@@ -343,6 +357,7 @@ const PORTALS = [
     formUrl: "https://example.test/sp",
     isVerified: false,
     provenAt: null,
+    requiresExplicitSelection: false,
   },
 ];
 
@@ -1605,7 +1620,13 @@ export async function createMockApiServer(options = {}) {
       const portalKey = url.searchParams.get("portal_key");
       let rows = PORTALS.filter((r) => r.orgId === null || r.orgId === orgId || leak === "portals");
       if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
-      return envelope(res, 200, rows, null, { total: rows.length });
+      // Older extensions match registry rows by URL alone, so configurations
+      // that require an explicit selection stay invisible on this legacy API.
+      rows = rows.filter((r) => r.requiresExplicitSelection !== true);
+      return envelope(res, 200, rows, null, {
+        total: rows.length,
+        registry_empty: rows.length === 0,
+      });
     }
 
     // --- /api/portal-field-maps/batch-learn ---
