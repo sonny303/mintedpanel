@@ -232,6 +232,7 @@ describe("computePayerScorecard", () => {
           fill({ id: "f1", caseId: "c1" }), // one fill -> first-pass
           fill({ id: "f2", caseId: "c2" }), // two fills -> re-fill
           fill({ id: "f3", caseId: "c2" }),
+          fill({ id: "contract-fill", caseId: null }), // Contract receipts have no case owner.
           // c3 never filled -> not counted either way
         ],
       });

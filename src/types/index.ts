@@ -1304,6 +1304,30 @@ export interface Contract {
   updatedAt: string;
 }
 
+/** Current immutable SOP pin for one group/payer/state Contract Matrix row. */
+export interface ContractSopAssignment {
+  id: string;
+  orgId: string;
+  contractId: string;
+  sopTemplateId: string;
+  sopVersion: number;
+  contextVersion: number;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Immutable SOP version rendered by the Contract Matrix assignment drawer. */
+export interface ContractSopVersion {
+  templateId: string;
+  version: number;
+  name: string;
+  caseType: CaseType | null;
+  taskDefinitions: SOPTaskDefinition[];
+  requiredProfileAttributes: string[];
+}
+
 export interface Touch {
   id: string;
   orgId: string;
@@ -1823,7 +1847,21 @@ export type FillSessionSkippedField = FillSkippedField | SafeFillSkippedMetadata
 export interface FillSession {
   id: string;
   orgId: string;
-  caseId: string;
+  caseId: string | null;
+  /** Matrix-owned fill receipt; NULL for existing case/test rows. */
+  contractId?: string | null;
+  contractSopAssignmentId?: string | null;
+  sopTemplateId?: string | null;
+  sopVersion?: number | null;
+  taskIndex?: number | null;
+  stepIndex?: number | null;
+  facilityId?: string | null;
+  /** Exact portal config identity for a Contract receipt; NULL historically. */
+  portalId?: string | null;
+  contextVersion?: number | null;
+  launchReceiptId?: string | null;
+  mappingGeneration?: number | null;
+  effectiveMappingFingerprint?: string | null;
   providerId: string | null;
   portalKey: string;
   fillMode: FillMode;

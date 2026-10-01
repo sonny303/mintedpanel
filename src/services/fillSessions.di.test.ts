@@ -53,6 +53,14 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
           cap.filters.push([col, val]);
           return builder;
         },
+        is(col: string, val: unknown) {
+          cap.filters.push([col, val]);
+          return builder;
+        },
+        ilike(col: string, val: unknown) {
+          cap.filters.push([col, val]);
+          return builder;
+        },
         maybeSingle: () => Promise.resolve(take()),
         single: () => Promise.resolve(take()),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
@@ -73,6 +81,12 @@ const FILL_ID = "11111111-2222-4333-8444-555555555555";
 const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const PROVIDER_ID = "99999999-8888-4777-8666-121212121212";
 const TASK_ID = "31313131-4242-4535-8686-797979797979";
+const CONTRACT_ID = "41414141-4242-4535-8686-797979797979";
+const ASSIGNMENT_ID = "51515151-4242-4535-8686-797979797979";
+const SOP_TEMPLATE_ID = "61616161-4242-4535-8686-797979797979";
+const LAUNCH_RECEIPT_ID = "71717171-4242-4535-8686-797979797979";
+const FACILITY_ID = "81818181-4242-4535-8686-797979797979";
+const PORTAL_ID = "91919191-4242-4535-8686-797979797979";
 
 const baseInput: FillEventInput = { id: FILL_ID, caseId: CASE_ID, portalKey: "availity" };
 const V2_FIELD = {
@@ -92,6 +106,26 @@ const V2_INPUT: FillEventInput = {
   fieldsRejected: 0,
   fieldOutcomes: [V2_FIELD],
   fieldsFilled: 1,
+};
+const CONTRACT_V2_INPUT: FillEventInput = {
+  ...V2_INPUT,
+  caseId: null,
+  contractId: CONTRACT_ID,
+  contractSopAssignmentId: ASSIGNMENT_ID,
+  sopTemplateId: SOP_TEMPLATE_ID,
+  sopVersion: 3,
+  taskIndex: 0,
+  stepIndex: 1,
+  facilityId: FACILITY_ID,
+  portalId: PORTAL_ID,
+  contextVersion: 2,
+  launchReceiptId: LAUNCH_RECEIPT_ID,
+  mappingGeneration: 4,
+  effectiveMappingFingerprint: "opaque-canonical-fingerprint",
+  providerId: PROVIDER_ID,
+  portalKey: "aetna_contract_form",
+  fillMode: "web",
+  isTest: false,
 };
 
 // The row the DB hands back from insert()/the idempotency lookup.
@@ -661,5 +695,224 @@ describe("recordFillEvent — task completion", () => {
     expect(writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: "CREATE", entityType: "fill_session" }),
     );
+  });
+});
+
+describe("recordFillEvent — Contract owner receipts", () => {
+  it("records exact Contract SOP context without a credential case or task side effect", async () => {
+    const row = {
+      ...storedRow,
+      case_id: null,
+      contract_id: CONTRACT_ID,
+      contract_sop_assignment_id: ASSIGNMENT_ID,
+      sop_template_id: SOP_TEMPLATE_ID,
+      sop_version: 3,
+      task_index: 0,
+      step_index: 1,
+      facility_id: FACILITY_ID,
+      portal_id: PORTAL_ID,
+      context_version: 2,
+      launch_receipt_id: LAUNCH_RECEIPT_ID,
+      mapping_generation: 4,
+      effective_mapping_fingerprint: "opaque-canonical-fingerprint",
+      provider_id: PROVIDER_ID,
+      portal_key: "aetna_contract_form",
+      is_test: false,
+      event_schema_version: 2,
+      fields_attempted: 1,
+      fields_verified: 1,
+      fields_rejected: 0,
+      fields_filled: 1,
+      fields_skipped: [],
+      docs_attached: null,
+      performed_by: "user-1",
+      field_outcomes: [V2_FIELD],
+    };
+    const { db, captures } = makeFakeDb([
+      { data: { id: CONTRACT_ID } }, // contract org backstop
+      { data: { id: PROVIDER_ID } }, // provider org backstop
+      { data: { id: CONTRACT_ID, group_id: "group-1", payer_id: "payer-1", state: "NY" } },
+      {
+        data: {
+          id: ASSIGNMENT_ID,
+          sop_template_id: SOP_TEMPLATE_ID,
+          sop_version: 3,
+          context_version: 2,
+        },
+      },
+      { data: { id: PROVIDER_ID, status: "active" } },
+      { data: { id: "provider-group-assignment", start_date: null, end_date: null } },
+      { data: { id: FACILITY_ID } }, // optional location membership
+      {
+        data: {
+          id: PORTAL_ID,
+          org_id: "org-1",
+          portal_key: "aetna_contract_form",
+          payer_id: "payer-1",
+          case_type: "contract",
+          requires_explicit_selection: true,
+          mapping_generation: 4,
+        },
+      },
+      { data: null }, // idempotency lookup
+      { data: row }, // insert
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, CONTRACT_V2_INPUT);
+
+    expect(result.kind).toBe("created");
+    if (result.kind !== "created") throw new Error("expected a created Contract receipt");
+    expect(result.session).toMatchObject({
+      caseId: null,
+      contractId: CONTRACT_ID,
+      contractSopAssignmentId: ASSIGNMENT_ID,
+      sopTemplateId: SOP_TEMPLATE_ID,
+      sopVersion: 3,
+      taskIndex: 0,
+      stepIndex: 1,
+      facilityId: FACILITY_ID,
+      portalId: PORTAL_ID,
+      contextVersion: 2,
+      launchReceiptId: LAUNCH_RECEIPT_ID,
+      mappingGeneration: 4,
+      effectiveMappingFingerprint: "opaque-canonical-fingerprint",
+    });
+    const inserted = captures.find(
+      (capture) => capture.table === "fill_sessions" && capture.op === "insert",
+    );
+    expect(inserted?.payload).toMatchObject({
+      case_id: null,
+      contract_id: CONTRACT_ID,
+      contract_sop_assignment_id: ASSIGNMENT_ID,
+      sop_template_id: SOP_TEMPLATE_ID,
+      sop_version: 3,
+      task_index: 0,
+      step_index: 1,
+      portal_id: PORTAL_ID,
+      context_version: 2,
+      launch_receipt_id: LAUNCH_RECEIPT_ID,
+      mapping_generation: 4,
+      effective_mapping_fingerprint: "opaque-canonical-fingerprint",
+    });
+    expect(captures.some((capture) => capture.table === "credential_cases")).toBe(false);
+    expect(captures.some((capture) => capture.table === "tasks")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("rejects incomplete or case-owned Contract context before querying", async () => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+
+    const missingPin = await recordFillEvent(ctx, {
+      ...CONTRACT_V2_INPUT,
+      contractSopAssignmentId: null,
+    });
+    const dualOwner = await recordFillEvent(ctx, {
+      ...CONTRACT_V2_INPUT,
+      caseId: CASE_ID,
+    });
+
+    expectRejected(missingPin, 422);
+    expectRejected(dualOwner, 422);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("rejects a Contract assignment outside the caller's organization before insert", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CONTRACT_ID } },
+      { data: { id: PROVIDER_ID } },
+      { data: null },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, CONTRACT_V2_INPUT);
+
+    expectRejected(result, 404);
+    expect(captures.map((capture) => capture.table)).toEqual([
+      "contracts",
+      "providers",
+      "contracts",
+    ]);
+    expect(captures.some((capture) => capture.op === "insert")).toBe(false);
+  });
+
+  it.each([
+    [
+      "future group membership",
+      { id: "provider-group-assignment", start_date: "2999-01-01", end_date: null },
+      { id: PROVIDER_ID, status: "active" },
+    ],
+    [
+      "terminated provider",
+      { id: "provider-group-assignment", start_date: null, end_date: null },
+      { id: PROVIDER_ID, status: "terminated" },
+    ],
+  ])(
+    "rejects a Contract receipt for a %s before inserting",
+    async (_label, membership, provider) => {
+      const { db, captures } = makeFakeDb([
+        { data: { id: CONTRACT_ID } },
+        { data: { id: PROVIDER_ID } },
+        { data: { id: CONTRACT_ID, group_id: "group-1", payer_id: "payer-1", state: "NY" } },
+        {
+          data: {
+            id: ASSIGNMENT_ID,
+            sop_template_id: SOP_TEMPLATE_ID,
+            sop_version: 3,
+            context_version: 2,
+          },
+        },
+        { data: provider },
+        { data: membership },
+      ]);
+      const { ctx } = ctxWith(db);
+
+      const result = await recordFillEvent(ctx, CONTRACT_V2_INPUT);
+
+      expectRejected(result, 404);
+      expect(
+        captures.some((capture) => capture.table === "fill_sessions" && capture.op === "insert"),
+      ).toBe(false);
+    },
+  );
+
+  it("rejects a global config when an org config owns the same normalized key", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CONTRACT_ID } },
+      { data: { id: PROVIDER_ID } },
+      { data: { id: CONTRACT_ID, group_id: "group-1", payer_id: "payer-1", state: "NY" } },
+      {
+        data: {
+          id: ASSIGNMENT_ID,
+          sop_template_id: SOP_TEMPLATE_ID,
+          sop_version: 3,
+          context_version: 2,
+        },
+      },
+      { data: { id: PROVIDER_ID, status: "active" } },
+      { data: { id: "provider-group-assignment", start_date: null, end_date: null } },
+      { data: { id: FACILITY_ID } },
+      {
+        data: {
+          id: PORTAL_ID,
+          org_id: null,
+          portal_key: "aetna_contract_form",
+          payer_id: "payer-1",
+          case_type: "contract",
+          requires_explicit_selection: true,
+          mapping_generation: 4,
+        },
+      },
+      { data: [{ id: "org-portal-config", portal_key: "Aetna_Contract_Form" }] },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    const result = await recordFillEvent(ctx, CONTRACT_V2_INPUT);
+
+    expectRejected(result, 404);
+    expect(
+      captures.some((capture) => capture.table === "fill_sessions" && capture.op === "insert"),
+    ).toBe(false);
   });
 });
