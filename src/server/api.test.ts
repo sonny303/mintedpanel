@@ -21,6 +21,7 @@ vi.mock("./extensionRoutes", () => ({
   handleListProviderCases: vi.fn(),
   handleCaseContext: vi.fn(),
   handleContractFormContext: vi.fn(),
+  handleValidateWorkContext: vi.fn(),
   handleCreateCaseTouch: vi.fn(),
   handleListMyOrgs: vi.fn(),
   handleNextBestAction: vi.fn(),
@@ -39,6 +40,7 @@ import {
   handleListProviderCases,
   handleCaseContext,
   handleContractFormContext,
+  handleValidateWorkContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
   handleNextBestAction,
@@ -60,6 +62,7 @@ const fillEventsMock = vi.mocked(handleCreateFillEvent);
 const casesMock = vi.mocked(handleListProviderCases);
 const caseContextMock = vi.mocked(handleCaseContext);
 const contractFormContextMock = vi.mocked(handleContractFormContext);
+const validateWorkContextMock = vi.mocked(handleValidateWorkContext);
 const caseTouchMock = vi.mocked(handleCreateCaseTouch);
 const nbaMock = vi.mocked(handleNextBestAction);
 const getViewPrefsMock = vi.mocked(handleGetViewPrefs);
@@ -158,6 +161,33 @@ describe("handleApiRequest routing", () => {
     );
     expect(res.status).toBe(405);
     expect(contractFormContextMock).not.toHaveBeenCalled();
+  });
+
+  it("dispatches POST work-context validation through the org guard and forces no-store", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "billing" } as never);
+    validateWorkContextMock.mockResolvedValue(
+      new Response('{"data":{"tuple":{}},"error":null,"meta":null}', { status: 200 }),
+    );
+    const request = new Request("https://x.test/api/work-context/validate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ protocolVersion: 2 }),
+    });
+    const res = await handleApiRequest(request);
+    expect(res.status).toBe(200);
+    expect(validateWorkContextMock).toHaveBeenCalledWith(
+      { protocolVersion: 2 },
+      expect.objectContaining({ orgId: "org-1" }),
+    );
+    expect(res.headers.get("cache-control")).toBe("no-store, max-age=0");
+  });
+
+  it("returns no-store 405 for non-POST work-context requests", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+    const res = await handleApiRequest(GET("/api/work-context/validate"));
+    expect(res.status).toBe(405);
+    expect(res.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(validateWorkContextMock).not.toHaveBeenCalled();
   });
 
   it("unknown method on a provider collection is 405", async () => {

@@ -66,6 +66,7 @@ function caseRow(over: Record<string, unknown> = {}) {
   return {
     id: CASE_ID,
     case_type: null,
+    case_status: "in_progress",
     context_version: 1,
     state: "KS",
     payer_reference_id: null,
@@ -226,6 +227,7 @@ describe("getCaseContext — projection", () => {
 
     expect(result).toEqual({
       caseType: null,
+      caseStatus: "in_progress",
       contextVersion: 1,
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",

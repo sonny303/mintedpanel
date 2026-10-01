@@ -13,6 +13,12 @@ import {
   HANDOFF_PORTAL_URL_FIXTURE,
   HANDOFF_PROVIDER_ID_FIXTURE,
 } from "@/testFixtures/extensionHandoff";
+import {
+  WORK_HANDOFF_RECEIPT_TIMEOUT_MS,
+  buildSetActiveWorkMessage,
+  sendSetActiveWork,
+  type SetActiveWorkInput,
+} from "./extensionHandoff";
 
 const EXTENSION_ID = HANDOFF_EXTENSION_ID_FIXTURE;
 const CASE_ID = HANDOFF_CASE_ID_FIXTURE;
@@ -26,6 +32,41 @@ const INPUT = {
   orgId: ORG_ID,
   portalUrl: HANDOFF_PORTAL_URL_FIXTURE,
 };
+
+const WORK_INPUT: SetActiveWorkInput = {
+  launchReceiptId: "b7a90000-0000-4000-a000-0000000000c1",
+  orgId: ORG_ID,
+  ownerKind: "case",
+  ownerId: "b7a90000-0000-4000-a000-0000000000c2",
+  contextVersion: 4,
+  sopTemplateId: "b7a90000-0000-4000-a000-0000000000c3",
+  sopVersion: 3,
+  portalId: "b7a90000-0000-4000-a000-0000000000c4",
+  portalKey: "regional_enrollment",
+  mappingGeneration: 9,
+  effectiveMappingFingerprint: "fingerprint-v2",
+  providerId: PROVIDER_ID,
+  facilityId: FACILITY_ID,
+  stepIdentity:
+    "b7a90000-0000-4000-a000-0000000000c2:b7a90000-0000-4000-a000-0000000000c5:b7a90000-0000-4000-a000-0000000000c3:3:step-one",
+  taskId: "b7a90000-0000-4000-a000-0000000000c5",
+  stepId: "b7a90000-0000-4000-a000-0000000000c6",
+  portalUrl: HANDOFF_PORTAL_URL_FIXTURE,
+};
+
+function exactWorkAck(message: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+  const { type: _type, protocolVersion: _protocol, portalUrl, ...tuple } = message;
+  return {
+    ok: true,
+    protocolVersion: 2,
+    capability: "exact-work-tab-v2",
+    launchReceiptId: WORK_INPUT.launchReceiptId,
+    tuple,
+    portalUrl,
+    tabId: 42,
+    ...overrides,
+  };
+}
 
 function installSendMessage(sendMessage: (...args: unknown[]) => unknown) {
   const runtime = {
@@ -260,5 +301,81 @@ describe("sendSetActiveCase", () => {
     const result = sendSetActiveCase(INPUT);
     await expect(result).resolves.toEqual({ status: "received" });
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("SET_ACTIVE_WORK exact tab bridge", () => {
+  it("builds a strict v2 message with the URL as a hint and tuple-bound owner identity", () => {
+    expect(buildSetActiveWorkMessage(WORK_INPUT)).toEqual({
+      type: "SET_ACTIVE_WORK",
+      protocolVersion: 2,
+      ...(({ portalUrl: _portalUrl, ...tuple }) => tuple)(WORK_INPUT),
+      portalUrl: "https://portal.example/enroll",
+    });
+    expect(
+      buildSetActiveWorkMessage({ ...WORK_INPUT, portalUrl: "http://portal.example" }),
+    ).toBeNull();
+  });
+
+  it("accepts only a capability acknowledgement for the exact tuple, receipt, URL and bound tab", async () => {
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", EXTENSION_ID);
+    const sendMessage = vi.fn((_extensionId, message, callback) => {
+      (callback as (response: unknown) => void)(exactWorkAck(message as Record<string, unknown>));
+    });
+    installSendMessage(sendMessage);
+
+    await expect(sendSetActiveWork(WORK_INPUT)).resolves.toEqual({ status: "ready", tabId: 42 });
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatchObject({
+      type: "SET_ACTIVE_WORK",
+      protocolVersion: 2,
+    });
+  });
+
+  it.each([
+    ["wrong receipt", { launchReceiptId: "b7a90000-0000-4000-a000-0000000000c9" }],
+    ["wrong tab binding", { tabId: 0 }],
+    ["wrong capability", { capability: "case-context-v1" }],
+    ["wrong tuple", { tuple: {} }],
+    ["different server URL", { portalUrl: "https://other.example/form" }],
+  ])("rejects ACKs with %s", async (_label, override) => {
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", EXTENSION_ID);
+    installSendMessage((_extensionId, message, callback) => {
+      (callback as (response: unknown) => void)(
+        exactWorkAck(message as Record<string, unknown>, override),
+      );
+    });
+    await expect(sendSetActiveWork(WORK_INPUT)).resolves.toMatchObject({ status: "invalid" });
+  });
+
+  it("rejects a generic {ok:true} receipt because it proves no exact tab binding", async () => {
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", EXTENSION_ID);
+    installSendMessage((_extensionId, _message, callback) => {
+      (callback as (response: unknown) => void)({ ok: true });
+    });
+    await expect(sendSetActiveWork(WORK_INPUT)).resolves.toEqual({
+      status: "invalid",
+      reason: "malformed_response",
+    });
+  });
+
+  it("reports an explicit extension update requirement and has no legacy fallback", async () => {
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", EXTENSION_ID);
+    const sendMessage = vi.fn((_extensionId, _message, callback) => {
+      (callback as (response: unknown) => void)({ ok: false, code: "UPDATE_REQUIRED" });
+    });
+    installSendMessage(sendMessage);
+    await expect(sendSetActiveWork(WORK_INPUT)).resolves.toEqual({ status: "update_required" });
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatchObject({ type: "SET_ACTIVE_WORK" });
+  });
+
+  it("times out when the extension does not bind an exact tab", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("VITE_MINTED_EXTENSION_ID", EXTENSION_ID);
+    installSendMessage(() => {});
+    const result = sendSetActiveWork(WORK_INPUT);
+    await vi.advanceTimersByTimeAsync(WORK_HANDOFF_RECEIPT_TIMEOUT_MS);
+    await expect(result).resolves.toEqual({ status: "timeout" });
   });
 });

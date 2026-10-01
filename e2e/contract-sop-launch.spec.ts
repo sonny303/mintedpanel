@@ -382,7 +382,7 @@ test("mounted Contract Matrix prepares exact ready tuples and selected launch in
 
   const tuples = page.getByTestId("contract-launch-tuple");
   await expect(tuples).toHaveCount(2);
-  await expect(tuples.first()).toHaveAttribute("data-readiness-outcome", "ready_handoff_deferred");
+  await expect(tuples.first()).toHaveAttribute("data-readiness-outcome", "ready");
   for (const tuple of await tuples.all()) {
     await expect(tuple).toHaveAttribute("data-org-id", ORG_ID);
     await expect(tuple).toHaveAttribute("data-portal-id", PORTAL_ID);
@@ -394,7 +394,7 @@ test("mounted Contract Matrix prepares exact ready tuples and selected launch in
     );
     await expect(tuple).toHaveAttribute("data-provider-id", PROVIDER_ID);
     await expect(tuple).toHaveAttribute("data-facility-id", FACILITY_ID);
-    await expect(tuple).toHaveAttribute("data-readiness-outcome", "ready_handoff_deferred");
+    await expect(tuple).toHaveAttribute("data-readiness-outcome", "ready");
   }
   const identities = await tuples.evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("data-step-identity")),
@@ -416,7 +416,10 @@ test("mounted Contract Matrix prepares exact ready tuples and selected launch in
     );
   });
   expect(queryKeys).toContainEqual(["contract-sop-portal-resolutions", ORG_ID, "web"]);
-  await expect(page.getByRole("button", { name: "Work in portal" }).first()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Work in portal" })).toHaveCount(2);
+  for (const button of await page.getByRole("button", { name: "Work in portal" }).all()) {
+    await expect(button).toBeEnabled();
+  }
 });
 
 test("mounted Matrix gates a configuration owned by another org as missing", async ({

@@ -45,6 +45,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { isPayerFormRemoved } from "@/lib/payerForms";
 import { resolveExecutionType } from "@/lib/executionTypes";
+import { isCaseStatus, type CaseStatus } from "@/lib/caseStatus";
 
 export interface CaseContextServiceCtx {
   db: SupabaseClient<Database>;
@@ -157,6 +158,8 @@ function projectTaskSteps(
 export interface CaseContext {
   /** Nullable only for historical cases created before typed SOPs. */
   caseType: string | null;
+  /** Canonical status used to prevent stale work launches after case closure. */
+  caseStatus: CaseStatus | null;
   /** Monotonic stamp for owner-defining credential_cases fields. */
   contextVersion: number;
   referenceNumbers: string[];
@@ -212,7 +215,7 @@ export async function getCaseContext(
   const { data: caseRow, error: caseErr } = await db
     .from("credential_cases")
     .select(
-      "id, case_type, context_version, state, payer_reference_id, payer_pipeline_state, facility_id, " +
+      "id, case_type, case_status, context_version, state, payer_reference_id, payer_pipeline_state, facility_id, " +
         "providers(id, first_name, last_name), payers(id, name)",
     )
     .eq("id", caseId)
@@ -223,6 +226,7 @@ export async function getCaseContext(
 
   const typedCase = caseRow as unknown as {
     case_type: string | null;
+    case_status: string | null;
     context_version: number | null;
     state: string;
     payer_reference_id: string | null;
@@ -413,6 +417,7 @@ export async function getCaseContext(
 
   return {
     caseType: typedCase.case_type ?? null,
+    caseStatus: isCaseStatus(typedCase.case_status) ? typedCase.case_status : null,
     contextVersion:
       Number.isInteger(typedCase.context_version) && (typedCase.context_version ?? 0) > 0
         ? (typedCase.context_version as number)

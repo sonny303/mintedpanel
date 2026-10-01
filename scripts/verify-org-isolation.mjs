@@ -167,7 +167,7 @@ async function apiPost(path, payload, { token, orgId, extraHeaders = {} } = {}) 
   } catch {
     /* non-JSON → body stays null; raw holds the page */
   }
-  return { status: res.status, body, raw };
+  return { status: res.status, body, raw, cacheControl: res.headers.get("cache-control") };
 }
 
 // One PATCH against the deploy. Same header handling as apiPost.
@@ -960,6 +960,145 @@ function looksLikeVercelGate(r) {
     );
   } else {
     console.log("SKIP  14c/14d/6c/6d. Contract context — Contract fixture IDs not set");
+  }
+
+  // MINT-56 exact Work validation contract. The positive case and Contract
+  // fixtures are synthetic and run only against the local mock.
+  const workCaseRequest = {
+    protocolVersion: 2,
+    launchReceiptId: "b7a90000-0000-4000-a000-0000000000e2",
+    orgId: env.KANSAS_ORG,
+    ownerKind: "case",
+    ownerId: env.KANSAS_CASE_ID,
+    contextVersion: 4,
+    sopTemplateId: env.KANSAS_WORK_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000d3",
+    sopVersion: 3,
+    portalId: env.KANSAS_WORK_PORTAL_ID ?? "b7a90000-0000-4000-a000-0000000000d4",
+    portalKey: env.KANSAS_WORK_PORTAL_KEY ?? "bcbs_ks_enrollment_explicit",
+    mappingGeneration: 2,
+    effectiveMappingFingerprint: env.KANSAS_WORK_FINGERPRINT ?? "sha256:kansas-explicit-v1",
+    providerId: env.KANSAS_PROVIDER_ID,
+    facilityId: env.KANSAS_FACILITY_ID ?? "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
+    stepIdentity: [
+      env.KANSAS_CASE_ID,
+      env.KANSAS_WORK_TASK_ID ?? "b7a90000-0000-4000-a000-0000000000d1",
+      env.KANSAS_WORK_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000d3",
+      3,
+      env.KANSAS_WORK_STEP_ID ?? "b7a90000-0000-4000-a000-0000000000d2",
+    ].join(":"),
+    taskId: env.KANSAS_WORK_TASK_ID ?? "b7a90000-0000-4000-a000-0000000000d1",
+    stepId: env.KANSAS_WORK_STEP_ID ?? "b7a90000-0000-4000-a000-0000000000d2",
+  };
+  const workContractRequest = {
+    protocolVersion: 2,
+    launchReceiptId: "b7a90000-0000-4000-a000-0000000000e3",
+    orgId: env.KANSAS_ORG,
+    ownerKind: "contract",
+    ownerId: env.KANSAS_CONTRACT_ID,
+    contextVersion: 2,
+    sopTemplateId: env.KANSAS_CONTRACT_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000c4",
+    sopVersion: 3,
+    portalId: env.KANSAS_CONTRACT_PORTAL_ID ?? "b7a90000-0000-4000-a000-0000000000d7",
+    portalKey: env.KANSAS_CONTRACT_PORTAL_KEY ?? "kansas_contract_application",
+    mappingGeneration: 1,
+    effectiveMappingFingerprint: env.KANSAS_CONTRACT_FINGERPRINT ?? "sha256:kansas-contract-v1",
+    providerId: env.KANSAS_PROVIDER_ID,
+    facilityId: null,
+    stepIdentity: [
+      env.KANSAS_CONTRACT_ID,
+      env.KANSAS_ORG,
+      env.KANSAS_CONTRACT_ASSIGNMENT_ID ?? "b7a90000-0000-4000-a000-0000000000c3",
+      2,
+      env.KANSAS_CONTRACT_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000c4",
+      3,
+      0,
+      0,
+    ].join(":"),
+    assignmentId: env.KANSAS_CONTRACT_ASSIGNMENT_ID ?? "b7a90000-0000-4000-a000-0000000000c3",
+    taskIndex: 0,
+    stepIndex: 0,
+  };
+  if (IS_LOCAL_MOCK_API) {
+    const exactCase = await apiPost("/api/work-context/validate", workCaseRequest, {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+    });
+    const expectedCaseTuple = { ...workCaseRequest };
+    delete expectedCaseTuple.protocolVersion;
+    const caseTuple = exactCase.body?.data?.tuple;
+    const caseTupleMatches =
+      caseTuple &&
+      Object.keys(expectedCaseTuple).length === Object.keys(caseTuple).length &&
+      Object.entries(expectedCaseTuple).every(([key, value]) => caseTuple[key] === value);
+    check(
+      "14e. Exact case Work validation returns the canonical tuple and safe config",
+      exactCase.status === 200 &&
+        exactCase.cacheControl?.includes("no-store") &&
+        caseTupleMatches &&
+        exactCase.body?.data?.caseType === "enrollment" &&
+        exactCase.body?.data?.formUrl === "https://example.test/bcbs/enroll" &&
+        exactCase.body?.data?.requiresExplicitSelection === true &&
+        exactCase.body?.data?.effectiveWebMaps?.length > 0,
+      `status=${exactCase.status} tupleMatches=${Boolean(caseTupleMatches)} noStore=${exactCase.cacheControl?.includes("no-store")}`,
+    );
+
+    const exactContract = await apiPost("/api/work-context/validate", workContractRequest, {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+    });
+    const expectedContractTuple = { ...workContractRequest };
+    delete expectedContractTuple.protocolVersion;
+    const contractTuple = exactContract.body?.data?.tuple;
+    const contractTupleMatches =
+      contractTuple &&
+      Object.keys(expectedContractTuple).length === Object.keys(contractTuple).length &&
+      Object.entries(expectedContractTuple).every(([key, value]) => contractTuple[key] === value);
+    check(
+      "14f. Exact Contract Work validation returns the canonical tuple and safe config",
+      exactContract.status === 200 &&
+        exactContract.cacheControl?.includes("no-store") &&
+        contractTupleMatches &&
+        exactContract.body?.data?.caseType === "contract" &&
+        exactContract.body?.data?.formUrl === "https://example.test/bcbs/enroll" &&
+        exactContract.body?.data?.requiresExplicitSelection === true &&
+        exactContract.body?.data?.effectiveWebMaps?.length > 0,
+      `status=${exactContract.status} tupleMatches=${Boolean(contractTupleMatches)} noStore=${exactContract.cacheControl?.includes("no-store")}`,
+    );
+  }
+
+  if (IS_LOCAL_MOCK_API) {
+    const foreignWorkOwner = await apiPost(
+      "/api/work-context/validate",
+      {
+        ...workCaseRequest,
+        ownerId: env.SOUTHPARK_CASE_ID,
+        providerId: env.SOUTHPARK_PROVIDER_ID,
+        facilityId: env.SOUTHPARK_FACILITY_ID,
+        stepIdentity: "foreign-owner-probe",
+      },
+      { token: kansasTok, orgId: env.KANSAS_ORG },
+    );
+    check(
+      "14g. Kansas cannot validate a South Park Work owner",
+      foreignWorkOwner.status === 404 &&
+        foreignWorkOwner.body?.data == null &&
+        foreignWorkOwner.cacheControl?.includes("no-store"),
+      `status=${foreignWorkOwner.status} dataPresent=${foreignWorkOwner.body?.data != null} noStore=${foreignWorkOwner.cacheControl?.includes("no-store")}`,
+      { leak: true },
+    );
+
+    const workUrlSpoof = await apiPost(
+      "/api/work-context/validate",
+      { ...workCaseRequest, portalUrl: "https://example.test/bcbs/enroll" },
+      { token: kansasTok, orgId: env.KANSAS_ORG },
+    );
+    check(
+      "14h. Work validator rejects a caller-supplied portal URL",
+      workUrlSpoof.status === 422 &&
+        workUrlSpoof.body?.data == null &&
+        workUrlSpoof.cacheControl?.includes("no-store"),
+      `status=${workUrlSpoof.status} dataPresent=${workUrlSpoof.body?.data != null} noStore=${workUrlSpoof.cacheControl?.includes("no-store")}`,
+    );
   }
 
   // 15. Case search (E4.3 TE-11): the extension's standalone case half. Kansas

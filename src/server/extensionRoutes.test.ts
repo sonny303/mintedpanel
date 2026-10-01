@@ -30,6 +30,7 @@ vi.mock("@/services/providerCases", () => ({
 }));
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
 vi.mock("@/services/contractFormContext", () => ({ getContractFormContext: vi.fn() }));
+vi.mock("@/services/workContext", () => ({ validateWorkContext: vi.fn() }));
 vi.mock("@/services/ssnRelease", () => ({ releaseSsnForFill: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
@@ -54,6 +55,7 @@ import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
 import { getContractFormContext } from "@/services/contractFormContext";
+import { validateWorkContext } from "@/services/workContext";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
@@ -77,6 +79,7 @@ import {
   handleListProviderCases,
   handleCaseContext,
   handleContractFormContext,
+  handleValidateWorkContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
   handleNextBestAction,
@@ -99,6 +102,7 @@ const listCasesMock = vi.mocked(listOpenProviderCases);
 const searchCasesMock = vi.mocked(searchOrgCases);
 const getCaseContextMock = vi.mocked(getCaseContext);
 const getContractFormContextMock = vi.mocked(getContractFormContext);
+const validateWorkContextMock = vi.mocked(validateWorkContext);
 const releaseSsnMock = vi.mocked(releaseSsnForFill);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
@@ -1570,6 +1574,7 @@ describe("case context handler", () => {
   it("returns 200 with the context projection, no-store + one READ audit, forwarding the org-scoped ctx (billing may read)", async () => {
     const context = {
       caseType: null,
+      caseStatus: "in_progress" as const,
       contextVersion: 1,
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
@@ -1734,7 +1739,7 @@ describe("Contract form-context handler", () => {
           taskTitle: "Contract packet",
           stepLabel: "Contract form",
           portalKey: "payer_contract_key",
-          launch: { readiness: { outcome: "ready_handoff_deferred" } },
+          launch: { readiness: { outcome: "ready" } },
         },
       ],
     };
@@ -1774,6 +1779,81 @@ describe("Contract form-context handler", () => {
       },
     });
     expect(JSON.stringify(audited)).not.toContain("contracting_contact_email");
+  });
+});
+
+describe("POST work-context validation handler", () => {
+  const request = {
+    protocolVersion: 2,
+    launchReceiptId: "b7a90000-0000-4000-a000-0000000000c1",
+    orgId: "20563fd6-8e95-46a0-8e1c-cb3b968b3c3d",
+    ownerKind: "case",
+    ownerId: "b7a90000-0000-4000-a000-0000000000c2",
+    contextVersion: 4,
+    sopTemplateId: "b7a90000-0000-4000-a000-0000000000c3",
+    sopVersion: 3,
+    portalId: "b7a90000-0000-4000-a000-0000000000c4",
+    portalKey: "regional_enrollment",
+    mappingGeneration: 9,
+    effectiveMappingFingerprint: "fingerprint-v2",
+    providerId: "49ad83a8-d8b6-419d-8dcc-88c04a54c4da",
+    facilityId: null,
+    stepIdentity: "case:task:sop:3:step",
+    taskId: "b7a90000-0000-4000-a000-0000000000c5",
+    stepId: "b7a90000-0000-4000-a000-0000000000c6",
+  };
+
+  it("rejects a URL hint or extra field before calling the validator", async () => {
+    const c = ctx();
+    const response = await handleValidateWorkContext(
+      { ...request, portalUrl: "https://portal.example/form" },
+      c,
+    );
+    expect(response.status).toBe(422);
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect((await body(response)).meta).toEqual({ work_context_error: "malformed_request" });
+    expect(validateWorkContextMock).not.toHaveBeenCalled();
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("passes only a parsed URL-free tuple to org-derived validation and returns no-store canonical data", async () => {
+    const { protocolVersion: _protocolVersion, ...tuple } = request;
+    const data = {
+      tuple,
+      caseType: "enrollment",
+      formUrl: "https://portal.example/form",
+      requiresExplicitSelection: true,
+      mappingGeneration: 9,
+      effectiveMappingFingerprint: "fingerprint-v2",
+      effectiveWebMaps: [{ portalKey: "regional_enrollment", mapType: "web", status: "approved" }],
+    };
+    validateWorkContextMock.mockResolvedValue({ kind: "ok", data } as never);
+    const c = ctx();
+
+    const response = await handleValidateWorkContext(request, c);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(response.headers.get("pragma")).toBe("no-cache");
+    expect((await body(response)).data).toEqual(data);
+    expect(validateWorkContextMock).toHaveBeenCalledWith(
+      { db: c.db, orgId: c.orgId },
+      { ...request },
+    );
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not_found", 404],
+    ["mismatch", 422],
+    ["stale", 409],
+    ["not_ready", 409],
+  ] as const)("maps %s to the frozen HTTP status", async (kind, status) => {
+    validateWorkContextMock.mockResolvedValue({ kind, message: "Safe typed failure." } as never);
+    const response = await handleValidateWorkContext(request, ctx());
+    expect(response.status).toBe(status);
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect((await body(response)).meta).toEqual({ work_context_error: kind });
   });
 });
 

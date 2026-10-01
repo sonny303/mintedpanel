@@ -1,8 +1,10 @@
 import {
   isValidHandoffUrl,
   sendSetActiveCase,
+  sendSetActiveWork,
   type ExtensionHandoffResult,
   type SetActiveCaseInput,
+  type SetActiveWorkInput,
 } from "@/lib/extensionHandoff";
 
 export interface PortalLaunchDependencies {
@@ -13,6 +15,12 @@ export interface PortalLaunchDependencies {
 export interface PortalLaunchStart {
   // A request is truthful even when the browser returns null for an isolated
   // noopener tab. The UI retains a direct link for blocking/recovery.
+  portalStatus: "requested" | "failed";
+  receipt: Promise<ExtensionHandoffResult>;
+}
+
+export interface WorkPortalLaunchStart {
+  /** Extension validates first and creates the portal tab itself. */
   portalStatus: "requested" | "failed";
   receipt: Promise<ExtensionHandoffResult>;
 }
@@ -41,6 +49,22 @@ export function beginPortalLaunch(
   } catch {
     return { portalStatus: "failed", receipt };
   }
+}
+
+/** Start an exact v2 handoff from the initiating click. Navigation belongs to
+ * Extension after its online server validation, so Panel never opens a tab on
+ * this path and never falls back to SET_ACTIVE_CASE. */
+export function beginWorkPortalLaunch(
+  input: SetActiveWorkInput,
+  send: (input: SetActiveWorkInput) => Promise<ExtensionHandoffResult> = sendSetActiveWork,
+): WorkPortalLaunchStart {
+  if (!isValidHandoffUrl(input.portalUrl)) {
+    return {
+      portalStatus: "failed",
+      receipt: Promise.resolve({ status: "invalid", reason: "invalid_context" }),
+    };
+  }
+  return { portalStatus: "requested", receipt: send({ ...input }) };
 }
 
 export interface PortalLaunchGuard {
