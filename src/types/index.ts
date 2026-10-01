@@ -1160,6 +1160,8 @@ export interface CredentialCase {
   caseNumber: number;
   /** Nullable for historical rows; new provider work is Enrollment only. */
   caseType?: CaseType | null;
+  /** Monotonic owner-context version stamped for exact Extension work. */
+  contextVersion?: number;
   orgId: string;
   providerId: string;
   groupId: string | null;

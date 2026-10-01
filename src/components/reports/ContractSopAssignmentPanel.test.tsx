@@ -21,6 +21,9 @@ vi.mock("@/hooks/useContractSopAssignments", () => ({
   useAssignContractSop: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useContractProviderIds: () => ({ data: [] }),
 }));
+vi.mock("@/components/cases/WorkInPortalV2Button", () => ({
+  WorkInPortalV2Button: () => <button type="button">Exact work in portal</button>,
+}));
 
 import { ContractSopAssignmentPanel } from "./ContractSopAssignmentPanel";
 

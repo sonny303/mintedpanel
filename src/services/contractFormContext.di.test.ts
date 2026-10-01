@@ -381,7 +381,7 @@ describe("Contract form context service", () => {
         `${CONTRACT_ID}:org-1:${ASSIGNMENT_ID}:7:${TEMPLATE_ID}:4:0:0`,
         `${CONTRACT_ID}:org-1:${ASSIGNMENT_ID}:7:${TEMPLATE_ID}:4:0:1`,
       ]);
-      expect(ready.context.steps[0].launch.readiness.outcome).toBe("ready_handoff_deferred");
+      expect(ready.context.steps[0].launch.readiness.outcome).toBe("ready");
       expect(JSON.stringify(ready)).not.toContain("#name");
     }
     expect(resolveEffectivePortalMaps).toHaveBeenCalledTimes(1);

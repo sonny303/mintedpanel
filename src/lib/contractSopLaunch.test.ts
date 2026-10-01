@@ -26,6 +26,7 @@ const base: BuildContractSopLaunchTupleInput = {
     ownerOrgId: "org-1",
     caseType: "contract",
     payerId: "payer-1",
+    formUrl: "https://portal.example/contract",
     mappingGeneration: 4,
     effectiveMappingFingerprint: "opaque-canonical-fingerprint",
     isReady: true,
@@ -58,9 +59,9 @@ describe("Contract SOP launch tuple", () => {
       mappingGeneration: 4,
       effectiveMappingFingerprint: "opaque-canonical-fingerprint",
       readiness: {
-        outcome: "ready_handoff_deferred",
+        outcome: "ready",
         mapReady: true,
-        canOpenPortal: false,
+        canOpenPortal: true,
       },
     });
     expect(repeated.portalKey).toBe(first.portalKey);

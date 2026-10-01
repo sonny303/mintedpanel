@@ -1,4 +1,5 @@
 import type { ContractSopAssignment } from "@/types";
+import { isValidHandoffUrl } from "@/lib/extensionHandoff";
 
 /** Narrow structural input implemented by MINT-52's canonical map resolver. */
 export interface ContractPortalConfiguration {
@@ -8,6 +9,7 @@ export interface ContractPortalConfiguration {
   ownerOrgId: string | null;
   caseType: string | null;
   payerId: string | null;
+  formUrl: string | null;
   mappingGeneration: number | null;
   effectiveMappingFingerprint: string | null;
   isReady: boolean;
@@ -23,7 +25,7 @@ export type ContractLaunchReadinessOutcome =
   | "legacy_configuration"
   | "mapping_not_ready"
   | "provider_required"
-  | "ready_handoff_deferred";
+  | "ready";
 
 export interface ContractSopLaunchTuple {
   /** Distinguishes repeated steps that intentionally reuse the same portal key. */
@@ -44,10 +46,11 @@ export interface ContractSopLaunchTuple {
   facilityId: string | null;
   mappingGeneration: number | null;
   effectiveMappingFingerprint: string | null;
+  formUrl: string | null;
   readiness: {
     outcome: ContractLaunchReadinessOutcome;
     mapReady: boolean;
-    canOpenPortal: false;
+    canOpenPortal: boolean;
     reason: string;
   };
 }
@@ -72,8 +75,8 @@ function normalizePortalKey(value: string | null | undefined): string | null {
 }
 
 /**
- * Build one immutable SOP-step launch identity and its explicit readiness gate.
- * This prepares context only; M56 owns live handoff and human acknowledgement.
+ * Build one immutable SOP-step launch identity and explicit readiness gate.
+ * M56 sends ready tuples through the versioned Extension tab bridge.
  */
 export function buildContractSopLaunchTuple(
   input: BuildContractSopLaunchTupleInput,
@@ -107,6 +110,7 @@ export function buildContractSopLaunchTuple(
     facilityId: input.facilityId,
     mappingGeneration: input.configuration?.mappingGeneration ?? null,
     effectiveMappingFingerprint: input.configuration?.effectiveMappingFingerprint ?? null,
+    formUrl: input.configuration?.formUrl ?? null,
   };
 
   let outcome: ContractLaunchReadinessOutcome;
@@ -130,6 +134,8 @@ export function buildContractSopLaunchTuple(
     reason = "No visible portal configuration matches this exact SOP key.";
   } else if (
     !input.configuration.portalId ||
+    !input.configuration.formUrl ||
+    !isValidHandoffUrl(input.configuration.formUrl) ||
     configurationKey !== portalKey ||
     input.configuration.caseType !== "contract" ||
     input.configuration.payerId !== input.payerId ||
@@ -158,8 +164,8 @@ export function buildContractSopLaunchTuple(
       outcome = "provider_required";
       reason = "Select an active provider before this form can be prepared.";
     } else {
-      outcome = "ready_handoff_deferred";
-      reason = "The exact launch context is ready; live portal handoff is deferred.";
+      outcome = "ready";
+      reason = "The exact Contract step and current form configuration are ready.";
     }
   }
 
@@ -168,7 +174,7 @@ export function buildContractSopLaunchTuple(
     readiness: {
       outcome,
       mapReady,
-      canOpenPortal: false,
+      canOpenPortal: outcome === "ready",
       reason,
     },
   };

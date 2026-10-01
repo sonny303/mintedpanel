@@ -23,6 +23,7 @@ import {
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { getNextBestAction } from "@/services/nextBestAction";
+import { validateWorkContext } from "@/services/workContext";
 import { completeTaskStep } from "@/services/taskSteps";
 import {
   getExtensionViewPrefs,
@@ -31,6 +32,10 @@ import {
 } from "@/services/extensionViewPrefs";
 import { validateQuickCardFields } from "@/lib/quickCardCatalog";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import {
+  parseWorkContextValidationRequest,
+  type WorkContextValidationErrorCode,
+} from "@/lib/workContext";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
@@ -769,6 +774,44 @@ export async function handleCaseContext(caseId: string, ctx: AuthContext): Promi
 // expected assignment/version selectors are revalidated against org-owned
 // rows. Error prefixes are stable for clients: not_configured, mismatch,
 // forbidden (guard-level), and stale. No Contract row is converted to a case.
+function workContextFailure(
+  status: number,
+  code: WorkContextValidationErrorCode,
+  message: string,
+): Response {
+  return new Response(
+    JSON.stringify({ data: null, error: message, meta: { work_context_error: code } }),
+    {
+      status,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store, max-age=0",
+        pragma: "no-cache",
+      },
+    },
+  );
+}
+
+/** POST /api/work-context/validate — online validation for typed exact-tab
+ * Work. The body is a strict tuple; `orgId` must equal the org selected by
+ * the authenticated guard. Portal URL is intentionally not accepted here. */
+export async function handleValidateWorkContext(
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  const parsed = parseWorkContextValidationRequest(body);
+  if (!parsed.ok) return workContextFailure(422, "malformed_request", parsed.message);
+  const result = await validateWorkContext({ db: ctx.db, orgId: ctx.orgId }, parsed.request);
+  if (result.kind !== "ok") {
+    const status = result.kind === "not_found" ? 404 : result.kind === "mismatch" ? 422 : 409;
+    return workContextFailure(status, result.kind, result.message);
+  }
+  const response = ok(result.data);
+  response.headers.set("cache-control", "no-store, max-age=0");
+  response.headers.set("pragma", "no-cache");
+  return response;
+}
+
 export async function handleContractFormContext(
   contractId: string,
   url: URL,

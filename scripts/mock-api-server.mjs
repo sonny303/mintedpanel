@@ -84,6 +84,14 @@ export const FIXTURES = {
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
   EXPLICIT_SELECTION_PORTAL_KEY: "bcbs_ks_enrollment_explicit",
+  KANSAS_WORK_STEP_ID: "b7a90000-0000-4000-a000-0000000000d2",
+  KANSAS_WORK_TEMPLATE_ID: "b7a90000-0000-4000-a000-0000000000d3",
+  KANSAS_WORK_PORTAL_ID: "b7a90000-0000-4000-a000-0000000000d4",
+  KANSAS_WORK_PAYER_ID: "b7a90000-0000-4000-a000-0000000000d5",
+  KANSAS_WORK_FINGERPRINT: "sha256:kansas-explicit-v1",
+  KANSAS_CONTRACT_WORK_PORTAL_ID: "b7a90000-0000-4000-a000-0000000000d7",
+  KANSAS_CONTRACT_WORK_FINGERPRINT: "sha256:kansas-contract-v1",
+  KANSAS_CONTRACT_WORK_PORTAL_KEY: "kansas_contract_application",
 };
 
 export const LEAK_MODES = [
@@ -223,6 +231,10 @@ const CASES = [
     id: FIXTURES.KANSAS_CASE_ID,
     orgId: FIXTURES.KANSAS_ORG,
     providerId: FIXTURES.KANSAS_PROVIDER_ID,
+    payerId: FIXTURES.KANSAS_WORK_PAYER_ID,
+    caseType: "enrollment",
+    caseStatus: "submitted",
+    contextVersion: 4,
     facilityId: FIXTURES.KANSAS_FACILITY_ID,
     facilities: [{ facilityId: FIXTURES.KANSAS_FACILITY_ID, isPrimary: true }],
     payerName: "BCBS of Kansas",
@@ -238,6 +250,25 @@ const CASES = [
         status: "in_progress",
       },
     ],
+    workStep: {
+      taskId: FIXTURES.KANSAS_TASK_ID,
+      taskExecutionType: "extension_fill",
+      stepId: FIXTURES.KANSAS_WORK_STEP_ID,
+      sopTemplateId: FIXTURES.KANSAS_WORK_TEMPLATE_ID,
+      sopVersion: 3,
+      stepIdentity: [
+        FIXTURES.KANSAS_CASE_ID,
+        FIXTURES.KANSAS_TASK_ID,
+        FIXTURES.KANSAS_WORK_TEMPLATE_ID,
+        3,
+        FIXTURES.KANSAS_WORK_STEP_ID,
+      ].join(":"),
+      portalId: FIXTURES.KANSAS_WORK_PORTAL_ID,
+      portalKey: FIXTURES.EXPLICIT_SELECTION_PORTAL_KEY,
+      mappingGeneration: 2,
+      effectiveMappingFingerprint: FIXTURES.KANSAS_WORK_FINGERPRINT,
+      isCompleted: false,
+    },
   },
 ];
 
@@ -253,6 +284,24 @@ const CONTRACTS = [
     contextVersion: 2,
     sopTemplateId: "b7a90000-0000-4000-a000-0000000000c4",
     sopVersion: 3,
+    workStep: {
+      taskIndex: 0,
+      stepIndex: 0,
+      stepIdentity: [
+        FIXTURES.KANSAS_CONTRACT_ID,
+        FIXTURES.KANSAS_ORG,
+        "b7a90000-0000-4000-a000-0000000000c3",
+        2,
+        "b7a90000-0000-4000-a000-0000000000c4",
+        3,
+        0,
+        0,
+      ].join(":"),
+      portalId: FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_ID,
+      portalKey: FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_KEY,
+      mappingGeneration: 1,
+      effectiveMappingFingerprint: FIXTURES.KANSAS_CONTRACT_WORK_FINGERPRINT,
+    },
   },
   {
     id: FIXTURES.SOUTHPARK_CONTRACT_ID,
@@ -378,6 +427,18 @@ const FIELD_MAPS = [
     "sp_test_portal",
     "#sp-test-field",
   ),
+  fieldMapRow(
+    "b7a90000-0000-4000-a000-0000000000d6",
+    null,
+    FIXTURES.EXPLICIT_SELECTION_PORTAL_KEY,
+    "#work-first-name",
+  ),
+  fieldMapRow(
+    "b7a90000-0000-4000-a000-0000000000d8",
+    null,
+    FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_KEY,
+    "#contract-name",
+  ),
 ];
 
 // Portals registry fixture: global (org NULL) rows every org sees, plus one
@@ -406,12 +467,29 @@ const PORTALS = [
     requiresExplicitSelection: false,
   },
   {
-    id: "portal-global-explicit-selection",
+    id: FIXTURES.KANSAS_WORK_PORTAL_ID,
     orgId: null,
     portalKey: FIXTURES.EXPLICIT_SELECTION_PORTAL_KEY,
     name: "BCBS Kansas Contract Configuration",
-    payerId: null,
+    payerId: FIXTURES.KANSAS_WORK_PAYER_ID,
     formUrl: "https://example.test/bcbs/enroll",
+    caseType: "enrollment",
+    mappingGeneration: 2,
+    effectiveMappingFingerprint: FIXTURES.KANSAS_WORK_FINGERPRINT,
+    isVerified: false,
+    provenAt: null,
+    requiresExplicitSelection: true,
+  },
+  {
+    id: FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_ID,
+    orgId: null,
+    portalKey: FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_KEY,
+    name: "Kansas Contract Work",
+    payerId: "k-payer-contract",
+    formUrl: "https://example.test/bcbs/enroll",
+    caseType: "contract",
+    mappingGeneration: 1,
+    effectiveMappingFingerprint: FIXTURES.KANSAS_CONTRACT_WORK_FINGERPRINT,
     isVerified: false,
     provenAt: null,
     requiresExplicitSelection: true,
@@ -1082,6 +1160,180 @@ export async function createMockApiServer(options = {}) {
       });
       res.end("NPI\r\n1234567890\r\n");
       return;
+    }
+
+    // --- /api/work-context/validate (typed v2, exact org/owner/step/config) ---
+    if (/^\/api\/work-context\/validate\/?$/.test(url.pathname)) {
+      res.setHeader("cache-control", "no-store, max-age=0");
+      res.setHeader("pragma", "no-cache");
+      const workFailure = (status, code, message) =>
+        envelope(res, status, null, message, { work_context_error: code });
+      if (method !== "POST") return workFailure(405, "malformed_request", "Method not allowed");
+      const body = (await readBody(req)) ?? {};
+      const commonKeys = [
+        "protocolVersion",
+        "launchReceiptId",
+        "orgId",
+        "ownerKind",
+        "ownerId",
+        "contextVersion",
+        "sopTemplateId",
+        "sopVersion",
+        "portalId",
+        "portalKey",
+        "mappingGeneration",
+        "effectiveMappingFingerprint",
+        "providerId",
+        "facilityId",
+        "stepIdentity",
+      ];
+      const ownerKeys =
+        body.ownerKind === "case"
+          ? ["taskId", "stepId"]
+          : body.ownerKind === "contract"
+            ? ["assignmentId", "taskIndex", "stepIndex"]
+            : [];
+      const expectedKeys = [...commonKeys, ...ownerKeys].sort();
+      const actualKeys = Object.keys(body).sort();
+      const uuid = (value) =>
+        typeof value === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+      if (
+        body.protocolVersion !== 2 ||
+        !ownerKeys.length ||
+        expectedKeys.length !== actualKeys.length ||
+        expectedKeys.some((key, index) => key !== actualKeys[index]) ||
+        ["launchReceiptId", "orgId", "ownerId", "sopTemplateId", "portalId", "providerId"].some(
+          (key) => !uuid(body[key]),
+        ) ||
+        (body.facilityId !== null && !uuid(body.facilityId)) ||
+        !Number.isSafeInteger(body.contextVersion) ||
+        body.contextVersion < 1 ||
+        !Number.isSafeInteger(body.sopVersion) ||
+        body.sopVersion < 1 ||
+        !Number.isSafeInteger(body.mappingGeneration) ||
+        body.mappingGeneration < 1 ||
+        typeof body.portalKey !== "string" ||
+        body.portalKey !== body.portalKey.trim().toLowerCase() ||
+        typeof body.stepIdentity !== "string" ||
+        body.stepIdentity.length < 1 ||
+        body.stepIdentity.length > 512
+      ) {
+        return workFailure(422, "malformed_request", "Work context request is malformed");
+      }
+      if (body.orgId !== orgId) return workFailure(404, "not_found", "Work context not found");
+
+      let owner;
+      let caseType;
+      let payerId;
+      if (body.ownerKind === "case") {
+        owner = CASES.find((row) => row.id === body.ownerId && row.orgId === orgId);
+        if (!owner) return workFailure(404, "not_found", "Work context not found");
+        const step = owner.workStep;
+        if (body.contextVersion !== owner.contextVersion) {
+          return workFailure(409, "stale", "Case context changed");
+        }
+        if (
+          !step ||
+          !["enrollment", "recredentialing"].includes(owner.caseType) ||
+          !["not_started", "in_progress", "submitted", "in_review", "action_required"].includes(
+            String(owner.caseStatus).toLowerCase(),
+          )
+        ) {
+          return workFailure(409, "stale", "Case is not open for this work step");
+        }
+        const allowedFacilities = owner.facilities ?? [];
+        const facilityMatches =
+          body.facilityId === null
+            ? allowedFacilities.length === 0
+            : allowedFacilities.some((facility) => facility.facilityId === body.facilityId);
+        if (
+          body.providerId !== owner.providerId ||
+          !facilityMatches ||
+          body.taskId !== step.taskId ||
+          body.stepId !== step.stepId ||
+          body.sopTemplateId !== step.sopTemplateId ||
+          body.sopVersion !== step.sopVersion ||
+          body.stepIdentity !== step.stepIdentity ||
+          step.isCompleted ||
+          step.taskExecutionType !== "extension_fill"
+        ) {
+          return workFailure(422, "mismatch", "Case work step identity does not match");
+        }
+        caseType = owner.caseType;
+        payerId = owner.payerId;
+      } else {
+        owner = CONTRACTS.find((row) => row.id === body.ownerId && row.orgId === orgId);
+        if (!owner) return workFailure(404, "not_found", "Work context not found");
+        const step = owner.workStep;
+        if (body.contextVersion !== owner.contextVersion) {
+          return workFailure(409, "stale", "Contract context changed");
+        }
+        if (
+          !step ||
+          body.providerId !== FIXTURES.KANSAS_PROVIDER_ID ||
+          body.facilityId !== null ||
+          body.assignmentId !== owner.assignmentId ||
+          body.taskIndex !== step.taskIndex ||
+          body.stepIndex !== step.stepIndex ||
+          body.sopTemplateId !== owner.sopTemplateId ||
+          body.sopVersion !== owner.sopVersion ||
+          body.stepIdentity !== step.stepIdentity
+        ) {
+          return workFailure(422, "mismatch", "Contract work step identity does not match");
+        }
+        caseType = "contract";
+        payerId = owner.payerId;
+      }
+
+      const workStep = owner.workStep;
+      if (body.portalKey !== workStep.portalKey || body.portalId !== workStep.portalId) {
+        return workFailure(409, "stale", "Exact portal configuration changed");
+      }
+      const portal = PORTALS.find(
+        (row) =>
+          row.id === body.portalId &&
+          row.portalKey === body.portalKey &&
+          (row.orgId === null || row.orgId === orgId),
+      );
+      if (!portal || portal.requiresExplicitSelection !== true) {
+        return workFailure(409, "not_ready", "Explicit portal configuration is unavailable");
+      }
+      if (portal.caseType !== caseType || portal.payerId !== payerId) {
+        return workFailure(422, "mismatch", "Portal type or payer does not match this work owner");
+      }
+      if (
+        body.mappingGeneration !== portal.mappingGeneration ||
+        body.effectiveMappingFingerprint !== portal.effectiveMappingFingerprint
+      ) {
+        return workFailure(409, "stale", "Portal maps changed");
+      }
+      let canonicalUrl;
+      try {
+        canonicalUrl = new URL(portal.formUrl);
+      } catch {
+        return workFailure(409, "not_ready", "Portal URL is unavailable");
+      }
+      if (canonicalUrl.protocol !== "https:" || !canonicalUrl.hostname) {
+        return workFailure(409, "not_ready", "Portal URL is unavailable");
+      }
+      const effectiveWebMaps = FIELD_MAPS.filter(
+        (row) =>
+          row.portalKey === body.portalKey && row.mapType === "web" && row.status === "approved",
+      );
+      if (effectiveWebMaps.length === 0) {
+        return workFailure(409, "not_ready", "Approved web maps are unavailable");
+      }
+      const { protocolVersion: _protocolVersion, ...tuple } = body;
+      return envelope(res, 200, {
+        tuple,
+        caseType,
+        formUrl: canonicalUrl.href,
+        requiresExplicitSelection: true,
+        mappingGeneration: portal.mappingGeneration,
+        effectiveMappingFingerprint: portal.effectiveMappingFingerprint,
+        effectiveWebMaps,
+      });
     }
 
     // --- /api/contracts/:id/form-context ---

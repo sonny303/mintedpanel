@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { WorkInPortalV2Button } from "@/components/cases/WorkInPortalV2Button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,6 +15,7 @@ import { useFacilities } from "@/hooks/useLookups";
 import { useProviders } from "@/hooks/useProviders";
 import {
   buildContractSopLaunchTuple,
+  type ContractSopLaunchTuple,
   type ContractPortalConfiguration,
 } from "@/lib/contractSopLaunch";
 import {
@@ -59,6 +61,29 @@ function compatibleContractSops<
       (isAllStates(states) || states.includes(state.toUpperCase()))
     );
   });
+}
+
+type LaunchableContractSopTuple = ContractSopLaunchTuple & {
+  portalId: string;
+  portalKey: string;
+  providerId: string;
+  mappingGeneration: number;
+  effectiveMappingFingerprint: string;
+  formUrl: string;
+};
+
+function isLaunchableContractTuple(
+  tuple: ContractSopLaunchTuple | null,
+): tuple is LaunchableContractSopTuple {
+  return Boolean(
+    tuple?.readiness.canOpenPortal &&
+    tuple.portalId &&
+    tuple.portalKey &&
+    tuple.providerId &&
+    tuple.mappingGeneration &&
+    tuple.effectiveMappingFingerprint &&
+    tuple.formUrl,
+  );
 }
 
 export function ContractSopAssignmentPanel({
@@ -219,6 +244,9 @@ export function ContractSopAssignmentPanel({
                                 : null,
                             })
                           : null;
+                      const launchableTuple = isLaunchableContractTuple(launchTuple)
+                        ? launchTuple
+                        : null;
                       return (
                         <li key={`${taskIndex}-${stepIndex}`}>
                           <span>{step.label}</span>
@@ -277,16 +305,54 @@ export function ContractSopAssignmentPanel({
                                   Active organization unavailable; launch remains gated.
                                 </div>
                               ) : null}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled
-                                className="mt-2"
-                                title="Live portal handoff is deferred; this tuple prepares context only."
-                              >
-                                Work in portal
-                              </Button>
+                              {launchableTuple ? (
+                                <WorkInPortalV2Button
+                                  tuple={{
+                                    ownerKind: "contract",
+                                    ownerId: launchableTuple.contractId,
+                                    orgId: launchableTuple.orgId,
+                                    contextVersion: launchableTuple.contextVersion,
+                                    sopTemplateId: launchableTuple.sopTemplateId,
+                                    sopVersion: launchableTuple.sopVersion,
+                                    portalId: launchableTuple.portalId,
+                                    portalKey: launchableTuple.portalKey,
+                                    mappingGeneration: launchableTuple.mappingGeneration,
+                                    effectiveMappingFingerprint:
+                                      launchableTuple.effectiveMappingFingerprint,
+                                    providerId: launchableTuple.providerId,
+                                    facilityId: launchableTuple.facilityId,
+                                    stepIdentity: launchableTuple.stepIdentity,
+                                    assignmentId: launchableTuple.assignmentId,
+                                    taskIndex: launchableTuple.taskIndex,
+                                    stepIndex: launchableTuple.stepIndex,
+                                  }}
+                                  portalUrl={launchableTuple.formUrl}
+                                  portalName={launchableTuple.portalKey}
+                                  disabled={!orgId || portalResolverState !== "ready"}
+                                  disabledReason={
+                                    !orgId
+                                      ? "Active organization unavailable; work launch is gated."
+                                      : portalResolverState !== "ready"
+                                        ? "Exact portal configuration is still resolving."
+                                        : undefined
+                                  }
+                                />
+                              ) : null}
+                              {!launchableTuple ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled
+                                  className="mt-2"
+                                  title={
+                                    launchTuple?.readiness.reason ??
+                                    "Resolve the exact Contract step first."
+                                  }
+                                >
+                                  Work in portal
+                                </Button>
+                              ) : null}
                             </div>
                           ) : null}
                         </li>
