@@ -98,6 +98,8 @@ export interface CaseContextParty {
 // profile endpoint's job.
 export interface CaseContextTaskStep {
   id: string;
+  /** Stable within the owning case and immutable SOP version when stamped. */
+  stepIdentity?: string;
   label: string;
   order: number;
   isCompleted: boolean;
@@ -114,6 +116,8 @@ export interface CaseContextTask {
   executionType: string;
   sortOrder: number;
   dueDate: string | null;
+  sopTemplateId: string | null;
+  sopVersion: number | null;
   // S4.3: the task's steps, ordered. Empty for a task with no SOP content.
   steps: CaseContextTaskStep[];
 }
@@ -121,26 +125,40 @@ export interface CaseContextTask {
 // Reduce a task's sop_content jsonb to the Progress tab's step projection.
 // Defensive: malformed/absent content yields [], never a throw — a broken SOP
 // row must not take out the whole case context.
-function projectTaskSteps(raw: unknown): CaseContextTaskStep[] {
+function projectTaskSteps(
+  raw: unknown,
+  caseId: string,
+  taskId: string,
+  sopTemplateId: string | null,
+  sopVersion: number | null,
+): CaseContextTaskStep[] {
   if (!Array.isArray(raw)) return [];
   const steps: CaseContextTaskStep[] = [];
   for (const item of raw) {
     if (item == null || typeof item !== "object") continue;
     const step = item as Record<string, unknown>;
     if (typeof step.id !== "string" || typeof step.label !== "string") continue;
-    steps.push({
+    const projectedStep: CaseContextTaskStep = {
       id: step.id,
       label: step.label,
       order: typeof step.order === "number" ? step.order : steps.length,
       isCompleted: step.isCompleted === true,
       stepType: typeof step.stepType === "string" ? step.stepType : null,
       portalKey: typeof step.portalKey === "string" ? step.portalKey : null,
-    });
+    };
+    if (sopTemplateId && sopVersion != null) {
+      projectedStep.stepIdentity = [caseId, taskId, sopTemplateId, sopVersion, step.id].join(":");
+    }
+    steps.push(projectedStep);
   }
   return steps.sort((a, b) => a.order - b.order);
 }
 
 export interface CaseContext {
+  /** Nullable only for historical cases created before typed SOPs. */
+  caseType: string | null;
+  /** Monotonic stamp for owner-defining credential_cases fields. */
+  contextVersion: number;
   referenceNumbers: string[];
   // E4.0 TE-7 — the external payer-pipeline state (read-only; the extension
   // shows where the payer is without leaving the portal tab). The tracking ID
@@ -194,7 +212,7 @@ export async function getCaseContext(
   const { data: caseRow, error: caseErr } = await db
     .from("credential_cases")
     .select(
-      "id, state, payer_reference_id, payer_pipeline_state, facility_id, " +
+      "id, case_type, context_version, state, payer_reference_id, payer_pipeline_state, facility_id, " +
         "providers(id, first_name, last_name), payers(id, name)",
     )
     .eq("id", caseId)
@@ -204,6 +222,8 @@ export async function getCaseContext(
   if (!caseRow) return null;
 
   const typedCase = caseRow as unknown as {
+    case_type: string | null;
+    context_version: number | null;
     state: string;
     payer_reference_id: string | null;
     payer_pipeline_state: string | null;
@@ -229,7 +249,9 @@ export async function getCaseContext(
   // other status counts as open (the providerCases.ts idiom).
   const { data: taskRows, error: taskErr } = await db
     .from("tasks")
-    .select("id, title, status, execution_type, sort_order, due_date, sop_content")
+    .select(
+      "id, title, status, execution_type, sort_order, due_date, sop_template_id, sop_version, sop_content",
+    )
     .eq("org_id", orgId)
     .eq("case_id", caseId)
     .neq("status", "completed")
@@ -243,6 +265,8 @@ export async function getCaseContext(
       execution_type: string | null;
       sort_order: number;
       due_date: string | null;
+      sop_template_id: string | null;
+      sop_version: number | null;
       sop_content: unknown;
     }>
   )
@@ -260,7 +284,15 @@ export async function getCaseContext(
       executionType: resolveExecutionType(t.execution_type),
       sortOrder: t.sort_order,
       dueDate: t.due_date,
-      steps: projectTaskSteps(t.sop_content),
+      sopTemplateId: t.sop_template_id ?? null,
+      sopVersion: t.sop_version ?? null,
+      steps: projectTaskSteps(
+        t.sop_content,
+        caseId,
+        t.id,
+        t.sop_template_id ?? null,
+        t.sop_version ?? null,
+      ),
     }));
 
   // E1.4 — the case's FULL location set, `case_facilities` joined to
@@ -380,6 +412,11 @@ export async function getCaseContext(
   }
 
   return {
+    caseType: typedCase.case_type ?? null,
+    contextVersion:
+      Number.isInteger(typedCase.context_version) && (typedCase.context_version ?? 0) > 0
+        ? (typedCase.context_version as number)
+        : 1,
     referenceNumbers,
     payerPipelineState,
     provider,

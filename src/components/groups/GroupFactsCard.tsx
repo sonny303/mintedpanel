@@ -57,6 +57,9 @@ export function GroupFactsCard({ group }: { group: ProviderGroup }) {
     },
     { label: "Website URL", value: group.websiteUrl || "—" },
     { label: "Address", value: contactSummary(group) },
+    { label: "Contracting contact name", value: group.contractingContactName || "—" },
+    { label: "Contracting contact title", value: group.contractingContactTitle || "—" },
+    { label: "Contracting contact email", value: group.contractingContactEmail || "—" },
   ];
 
   return (

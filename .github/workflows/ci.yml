@@ -388,6 +388,9 @@ jobs:
       - name: Verify MINT-19 atomic SOP step completion on disposable PostgreSQL
         run: node scripts/security/verify-mint19-atomic-sop.mjs
 
+      - name: Verify MINT-51 credential case context version on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint51-case-context-version.sql
+
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
   # Two specs run (login render, dashboard redirect); three write scenarios are

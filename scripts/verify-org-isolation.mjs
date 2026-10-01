@@ -905,6 +905,63 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 14c/14d — Contract owner context is an independent org-scoped read. The
+  // direct form-context route returns exact SOP/step identifiers only; the
+  // provider profile accepts the same owner binding but must not let a Kansas
+  // provider name a South Park Contract. Optional for hosted runs until the
+  // operator seeds and pins both Contract fixtures; always set by the mock.
+  if (env.KANSAS_CONTRACT_ID && env.SOUTHPARK_CONTRACT_ID) {
+    const ownContractContext = await apiGet(
+      `/api/contracts/${env.KANSAS_CONTRACT_ID}/form-context`,
+      { token: kansasTok },
+    );
+    check(
+      "14c. Kansas reads its own assigned Contract SOP context",
+      ownContractContext.status === 200 &&
+        ownContractContext.cacheControl?.includes("no-store") &&
+        ownContractContext.body?.data?.contract?.id === env.KANSAS_CONTRACT_ID &&
+        ownContractContext.body?.data?.sop?.caseType === "contract" &&
+        ownContractContext.body?.data?.steps?.length === 1 &&
+        typeof ownContractContext.body.data.steps[0]?.stepIdentity === "string",
+      `status=${ownContractContext.status} contractId=${ownContractContext.body?.data?.contract?.id ?? "missing"}`,
+    );
+
+    const foreignContractContext = await apiGet(
+      `/api/contracts/${env.SOUTHPARK_CONTRACT_ID}/form-context`,
+      { token: kansasTok },
+    );
+    check(
+      "14d. Kansas cannot read a South Park Contract SOP context",
+      foreignContractContext.status === 404 && foreignContractContext.body?.data == null,
+      `status=${foreignContractContext.status} dataPresent=${foreignContractContext.body?.data != null}`,
+      { leak: true },
+    );
+
+    const ownContractProfile = await apiGet(
+      `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?contract_id=${encodeURIComponent(env.KANSAS_CONTRACT_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "6c. Kansas Contract profile echoes only its own Contract owner binding",
+      ownContractProfile.status === 200 &&
+        ownContractProfile.body?.data?.contract_context?.contract_id === env.KANSAS_CONTRACT_ID,
+      `status=${ownContractProfile.status} contractId=${ownContractProfile.body?.data?.contract_context?.contract_id ?? "missing"}`,
+    );
+
+    const foreignContractProfile = await apiGet(
+      `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?contract_id=${encodeURIComponent(env.SOUTHPARK_CONTRACT_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "6d. Kansas profile cannot pair an own provider with a South Park Contract",
+      foreignContractProfile.status === 404 && foreignContractProfile.body?.data == null,
+      `status=${foreignContractProfile.status} dataPresent=${foreignContractProfile.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  14c/14d/6c/6d. Contract context — Contract fixture IDs not set");
+  }
+
   // 15. Case search (E4.3 TE-11): the extension's standalone case half. Kansas
   //     searching its own cases works (proves 15b isn't vacuous against a dead
   //     route)...

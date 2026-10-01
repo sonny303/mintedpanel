@@ -609,6 +609,7 @@ export type Database = {
           case_email_token: string;
           case_number: number;
           case_type: string | null;
+          context_version: number;
           case_status: string;
           confirmed_effective_date: string | null;
           contract_executed_date: string | null;
@@ -640,6 +641,7 @@ export type Database = {
           case_email_token?: string;
           case_number?: number;
           case_type?: string | null;
+          context_version?: number;
           case_status?: string;
           confirmed_effective_date?: string | null;
           contract_executed_date?: string | null;
@@ -671,6 +673,7 @@ export type Database = {
           case_email_token?: string;
           case_number?: number;
           case_type?: string | null;
+          context_version?: number;
           case_status?: string;
           confirmed_effective_date?: string | null;
           contract_executed_date?: string | null;

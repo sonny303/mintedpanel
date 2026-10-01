@@ -395,6 +395,10 @@ export interface ProviderGroup {
   credentialingPhone?: string | null;
   credentialingFax?: string | null;
   credentialingEmail?: string | null;
+  /** Contract-specific group contact; never inferred from signer/submitter. */
+  contractingContactName?: string | null;
+  contractingContactTitle?: string | null;
+  contractingContactEmail?: string | null;
   /** Group website — fill token `group.websiteUrl` (baseline column). */
   websiteUrl?: string | null;
 }

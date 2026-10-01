@@ -42,6 +42,8 @@ function runGate(baseUrl) {
         // Assertion 13 (task-ownership isolation) fixtures — always set here so
         // the mock run exercises it; optional in the real gate.
         KANSAS_CASE_ID: FIXTURES.KANSAS_CASE_ID,
+        KANSAS_CONTRACT_ID: FIXTURES.KANSAS_CONTRACT_ID,
+        SOUTHPARK_CONTRACT_ID: FIXTURES.SOUTHPARK_CONTRACT_ID,
         SOUTHPARK_TASK_ID: FIXTURES.SOUTHPARK_TASK_ID,
         // Assertions 17/17b (E4.5 signed document download) — always set here;
         // optional in the real gate until the operator seeds fixture documents.
@@ -102,6 +104,7 @@ const EXPECTED_FAILS = {
   touches: ["9", "9b"],
   tasks: ["13"],
   casecontext: ["14b"],
+  contractcontext: ["14d", "6d"],
   // The leaked extra membership row breaks both the exact-count shape check
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],
