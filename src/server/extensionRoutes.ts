@@ -721,13 +721,11 @@ export async function handleCreateCaseTouch(
 // PATCH /api/tasks/:id/steps — tick one SOP step complete (S4.3, the
 // extension's Progress tab). The ONE /api write that touches task state.
 //
-// Body: { stepId }. Writer roles only. The ordering rule ("finish the earlier
-// step first") and the all-done -> task completed rollup come from the pure
-// module shared with the webapp path, so the two surfaces can never disagree
-// about which step may be ticked. A blocked step is a 409 naming the blocker,
-// which the panel renders verbatim rather than inventing its own rule; a
-// re-tick of an already-complete step is an idempotent success so a retry
-// converges. Cross-org task id -> 404 before any write.
+// Body: { stepId }. Writer roles only. The service calls the same row-locking
+// SQL transaction as the Panel, which applies the ordering rule, status rollup,
+// optional termination-case update, and audit event atomically. A blocked step
+// is a 409 naming the blocker; a re-tick is an idempotent success. Cross-org
+// task ids remain a 404, and the RPC rechecks the verified actor's membership.
 export async function handleCompleteTaskStep(
   taskId: string,
   body: unknown,
@@ -743,10 +741,9 @@ export async function handleCompleteTaskStep(
     return fail(422, "stepId is required");
   }
   const result = await completeTaskStep(
-    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, writeAudit: ctx.writeAudit },
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, source: "extension" },
     taskId,
     stepId,
-    new Date().toISOString(),
   );
   if (result.kind === "rejected") return fail(result.status, result.message);
   return ok({ task: result.task, allDone: result.allDone });

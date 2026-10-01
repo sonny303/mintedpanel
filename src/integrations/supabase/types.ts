@@ -3963,6 +3963,7 @@ export type Database = {
           org_id: string;
           provider_id: string | null;
           sop_content: Json | null;
+          sop_content_revision: number;
           sop_resolution_tier: string | null;
           sop_template_id: string | null;
           sop_version: number | null;
@@ -3983,6 +3984,7 @@ export type Database = {
           org_id: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_content_revision?: number;
           sop_resolution_tier?: string | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
@@ -4003,6 +4005,7 @@ export type Database = {
           org_id?: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_content_revision?: number;
           sop_resolution_tier?: string | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
@@ -4456,6 +4459,16 @@ export type Database = {
         Returns: Json;
       };
       _party_first_name: { Args: { p_name: string }; Returns: string };
+      complete_sop_task_step: {
+        Args: {
+          p_actor_id: string;
+          p_org_id: string;
+          p_source: string;
+          p_step_id: string;
+          p_task_id: string;
+        };
+        Returns: Json;
+      };
       _party_last_name: { Args: { p_name: string }; Returns: string };
       _payer_assert_name_available: {
         Args: { p_exclude_id: string; p_keys: string[] };

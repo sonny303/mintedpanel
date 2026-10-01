@@ -1026,10 +1026,9 @@ describe("task step handler (S4.3 — the one /api task-state write)", () => {
     completeStepMock.mockResolvedValue({ kind: "ok", task: {} as never, allDone: false });
     await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx());
     expect(completeStepMock).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      expect.objectContaining({ orgId: "org-1", userId: "u1", source: "extension" }),
       TASK,
       "s1",
-      expect.any(String),
     );
   });
 
