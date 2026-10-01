@@ -7,8 +7,10 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import {
   createPortal,
+  countCurrentPortalMappingRows,
   hidePortalFromPickers,
   listPortals,
+  resetPortalMapping,
   savePortalFormUrl,
   updatePortalName,
   updatePortalPayer,
@@ -42,6 +44,38 @@ export function usePortalFieldMaps(portalKey?: string) {
     queryFn: () => listPortalFieldMapsFromApp(portalKey),
     enabled: orgId !== "no-org",
     staleTime: FIVE_MINUTES,
+  });
+}
+
+/** Narrow count-only read used by the reset confirmation; it never downloads
+ * selectors, tokens, hardcoded values or other map content. */
+export function usePortalMappingResetPreview(portal?: Portal | null) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  const generation = portal?.mappingGeneration ?? 1;
+  return useQuery({
+    queryKey: queryKeys.portalMappingResetPreview(orgId, portal?.id ?? "none", generation),
+    queryFn: () => countCurrentPortalMappingRows(portal as Portal),
+    enabled: orgId !== "no-org" && Boolean(portal),
+    staleTime: 0,
+  });
+}
+
+/** Reset mutations invalidate every org-scoped cache for the exact key. A
+ * shared reset affects current-generation resolution in every organization;
+ * invalidating by prefix also clears any other org already cached in this tab. */
+export function useResetPortalMapping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: resetPortalMapping,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["portals"] });
+      void qc.invalidateQueries({ queryKey: ["portal-field-maps"] });
+      void qc.invalidateQueries({ queryKey: ["portal-field-map-base-review"] });
+      void qc.invalidateQueries({ queryKey: ["effective-portal-map-resolution"] });
+      void qc.invalidateQueries({ queryKey: ["portal-mapping-reset-preview"] });
+      void qc.invalidateQueries({ queryKey: ["test-fills"] });
+      void qc.invalidateQueries({ queryKey: ["last-fills"] });
+    },
   });
 }
 

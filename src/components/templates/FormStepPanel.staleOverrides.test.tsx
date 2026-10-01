@@ -21,6 +21,8 @@ vi.mock("@/hooks/usePortals", () => {
   return {
     usePortals: () => ({ data: state.portals }),
     usePortalFieldMaps: () => ({ data: [] }),
+    usePortalMappingResetPreview: () => ({ data: 0, isLoading: false, isError: false }),
+    useResetPortalMapping: mutation,
     useStaleOrgOverridesForReview: () => ({ data: state.staleOverrides }),
     useReviewOrgPortalFieldMapBase: () => ({
       isPending: false,
@@ -29,6 +31,9 @@ vi.mock("@/hooks/usePortals", () => {
     useCreatePortal: mutation,
   };
 });
+vi.mock("@/hooks/useAdmin", () => ({
+  useSops: () => ({ data: [], isLoading: false, isError: false }),
+}));
 vi.mock("@/hooks/useMappingReview", () => {
   const mutation = () => ({ isPending: false, mutateAsync: vi.fn().mockResolvedValue(undefined) });
   return {
