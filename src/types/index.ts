@@ -3,6 +3,7 @@
 import type { FacilityHours } from "@/lib/facilityHours";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
 import type { CaseStatus } from "@/lib/caseStatus";
+import type { CaseType } from "@/lib/caseTypes";
 import type { ExecutionType } from "@/lib/executionTypes";
 import type { ReleaseScopeRecord } from "@/lib/releaseScope";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
@@ -1763,6 +1764,10 @@ export interface PortalFieldMap {
   controlOptions?: { value: string; label: string }[] | null;
   /** Flywheel provenance is additive so pre-migration readers remain compatible. */
   learnedVia?: "manual" | "nano" | null;
+  /** MINT-45 generation metadata; optional while existing fill projections omit it. */
+  mappingGeneration?: number;
+  /** Shared generation an org override was stamped against; NULL means no base generation is recorded (legacy/unreviewed or no parent). */
+  sharedBaseGeneration?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1847,9 +1852,28 @@ export interface Portal {
   // E6.5 dry-run proof stamp: set when a mock dry run fills every mapped
   // field; cleared with verification on a form-URL change.
   provenAt?: string | null;
+  /** MINT-45 fields are optional until existing registry projections select them. */
+  caseType?: CaseType | null;
+  requiresExplicitSelection?: boolean;
+  mappingGeneration?: number;
   urlChangedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Immutable MINT-45 reset receipt; no reset writer is shipped in this slice. */
+export interface FormMappingResetEvent {
+  id: string;
+  portalId: string;
+  ownerScope: "global" | "organization";
+  orgId: string | null;
+  portalKey: string;
+  oldMappingGeneration: number;
+  newMappingGeneration: number;
+  actorId: string;
+  createdAt: string;
+  affectedFieldCount: number;
+  idempotencyKey: string;
 }
 
 export type FieldDictionaryStatus = "suggested" | "confirmed" | "rejected";

@@ -1071,6 +1071,63 @@ export type Database = {
           },
         ];
       };
+      form_mapping_reset_events: {
+        Row: {
+          actor_id: string;
+          affected_field_count: number;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          new_mapping_generation: number;
+          old_mapping_generation: number;
+          org_id: string | null;
+          owner_scope: string;
+          portal_id: string;
+          portal_key: string;
+        };
+        Insert: {
+          actor_id: string;
+          affected_field_count: number;
+          created_at?: string;
+          id?: string;
+          idempotency_key: string;
+          new_mapping_generation: number;
+          old_mapping_generation: number;
+          org_id?: string | null;
+          owner_scope: string;
+          portal_id: string;
+          portal_key: string;
+        };
+        Update: {
+          actor_id?: string;
+          affected_field_count?: number;
+          created_at?: string;
+          id?: string;
+          idempotency_key?: string;
+          new_mapping_generation?: number;
+          old_mapping_generation?: number;
+          org_id?: string | null;
+          owner_scope?: string;
+          portal_id?: string;
+          portal_key?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_mapping_reset_events_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "form_mapping_reset_events_portal_id_fkey";
+            columns: ["portal_id"];
+            isOneToOne: false;
+            referencedRelation: "portals";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       group_insurance_policies: {
         Row: {
           coverage_level: string;
@@ -2387,6 +2444,7 @@ export type Database = {
           hardcoded_value: string | null;
           id: string;
           learned_via: string;
+          mapping_generation: number;
           map_type: string;
           notes: string | null;
           org_id: string | null;
@@ -2395,6 +2453,7 @@ export type Database = {
           section: string | null;
           selector: string;
           selector_fallbacks: Json | null;
+          shared_base_generation: number | null;
           sort_order: number | null;
           source: string;
           status: string;
@@ -2416,6 +2475,7 @@ export type Database = {
           hardcoded_value?: string | null;
           id?: string;
           learned_via?: string;
+          mapping_generation?: number;
           map_type: string;
           notes?: string | null;
           org_id?: string | null;
@@ -2424,6 +2484,7 @@ export type Database = {
           section?: string | null;
           selector: string;
           selector_fallbacks?: Json | null;
+          shared_base_generation?: number | null;
           sort_order?: number | null;
           source: string;
           status?: string;
@@ -2445,6 +2506,7 @@ export type Database = {
           hardcoded_value?: string | null;
           id?: string;
           learned_via?: string;
+          mapping_generation?: number;
           map_type?: string;
           notes?: string | null;
           org_id?: string | null;
@@ -2453,6 +2515,7 @@ export type Database = {
           section?: string | null;
           selector?: string;
           selector_fallbacks?: Json | null;
+          shared_base_generation?: number | null;
           sort_order?: number | null;
           source?: string;
           status?: string;
@@ -2551,44 +2614,53 @@ export type Database = {
       };
       portals: {
         Row: {
+          case_type: string | null;
           created_at: string;
           form_url: string | null;
           id: string;
           is_verified: boolean;
           last_verified_at: string | null;
+          mapping_generation: number;
           name: string;
           org_id: string | null;
           payer_id: string | null;
           portal_key: string;
           proven_at: string | null;
+          requires_explicit_selection: boolean;
           updated_at: string;
           url_changed_at: string | null;
         };
         Insert: {
+          case_type?: string | null;
           created_at?: string;
           form_url?: string | null;
           id?: string;
           is_verified?: boolean;
           last_verified_at?: string | null;
+          mapping_generation?: number;
           name: string;
           org_id?: string | null;
           payer_id?: string | null;
           portal_key: string;
           proven_at?: string | null;
+          requires_explicit_selection?: boolean;
           updated_at?: string;
           url_changed_at?: string | null;
         };
         Update: {
+          case_type?: string | null;
           created_at?: string;
           form_url?: string | null;
           id?: string;
           is_verified?: boolean;
           last_verified_at?: string | null;
+          mapping_generation?: number;
           name?: string;
           org_id?: string | null;
           payer_id?: string | null;
           portal_key?: string;
           proven_at?: string | null;
+          requires_explicit_selection?: boolean;
           updated_at?: string;
           url_changed_at?: string | null;
         };
