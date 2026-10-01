@@ -1504,6 +1504,8 @@ export interface Task {
   title: string;
   description: string | null;
   sopContent: SOPStep[];
+  /** Monotonic task-row version used by full-array SOP-content compare-and-set writes. */
+  sopContentRevision?: number;
   status: TaskStatus;
   sortOrder: number;
   dueDate: string | null;

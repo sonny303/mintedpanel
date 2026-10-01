@@ -355,6 +355,10 @@ jobs:
           CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
             SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
           $$;
+          -- Supabase grants authenticated access to its auth helpers. Mirror
+          -- that prerequisite in this plain-Postgres harness so invoker RPCs
+          -- can call auth.uid() under SET ROLE authenticated.
+          GRANT USAGE ON SCHEMA auth TO authenticated;
           CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
           CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
           SQL
@@ -380,6 +384,9 @@ jobs:
 
       - name: Verify MINT-49 Contract SOP assignments and receipts on disposable PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint49-contract-sop-assignment.sql
+
+      - name: Verify MINT-19 atomic SOP step completion on disposable PostgreSQL
+        run: node scripts/security/verify-mint19-atomic-sop.mjs
 
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).

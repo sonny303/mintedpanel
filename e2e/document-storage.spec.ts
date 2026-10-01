@@ -1013,6 +1013,9 @@ test("TS-90: case detail has no document card; active TaskDrawer downloads use s
             ],
           },
         ],
+        // The persisted row has the database default introduced by MINT-19;
+        // task artifact attachment uses this token for its compare-and-swap.
+        sop_content_revision: 1,
         status: "pending",
         sort_order: 1,
         due_date: null,
