@@ -228,7 +228,13 @@ async function fulfillSupabase(route: Route, scenario: Scenario) {
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
   if (url.pathname.includes("/auth/v1/")) return json(SESSION);
-  if (url.pathname.includes("/rest/v1/rpc/")) return json([]);
+  if (url.pathname.includes("/rest/v1/rpc/")) {
+    const functionName = url.pathname.split("/rpc/")[1] ?? "";
+    if (functionName === "list_global_payers") {
+      return json(scenario.db.payers.filter((payer) => payer.org_id === null));
+    }
+    return json([]);
+  }
 
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
   const rows = (scenario.db[table] ??= []);
@@ -346,13 +352,13 @@ test("Add portal creates separate empty typed configurations and leaves hidden l
   const firstDrawer = page.getByRole("dialog");
   await expect(firstDrawer.getByText("Never proven")).toBeVisible();
   await expect(firstDrawer.getByText("No template steps reference this portal.")).toBeVisible();
-  await firstDrawer.getByRole("button", { name: "Close" }).click();
+  await firstDrawer.getByRole("button", { name: "Close" }).first().click();
 
   await fillAndSubmitNewPortal(page, false);
   const secondDrawer = page.getByRole("dialog");
   await expect(secondDrawer.getByText("Never proven")).toBeVisible();
   await expect(secondDrawer.getByText("No template steps reference this portal.")).toBeVisible();
-  await secondDrawer.getByRole("button", { name: "Close" }).click();
+  await secondDrawer.getByRole("button", { name: "Close" }).first().click();
 
   const created = scenario.db.portals.filter(
     (portal) => ![SOURCE_ID, LEGACY_ID].includes(String(portal.id)),
@@ -447,6 +453,7 @@ test("renaming a typed configuration keeps its permanent key and SOP reference",
     ...sourceBefore,
     name: newName,
     portal_key: SOURCE_KEY,
+    updated_at: "2026-09-30T00:00:00Z",
   });
   expect(scenario.db.sop_templates[0]).toEqual(templateBefore);
   expect(scenario.db.portals.find((portal) => portal.id === LEGACY_ID)).toEqual(legacyBefore);
