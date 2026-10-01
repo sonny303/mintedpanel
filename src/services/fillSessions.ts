@@ -2,7 +2,7 @@
 // keyed by a CLIENT-generated idempotency id that becomes the row's primary
 // key — a duplicate POST returns the existing row instead of inserting twice.
 //
-// Isolation contract: case/provider/task ownership is validated against the
+// Isolation contract: case/contract/provider/task ownership is validated against the
 // caller's resolved org BEFORE anything is written; org_id and performed_by
 // come from the authenticated context only, never the request body.
 //
@@ -31,6 +31,20 @@ export interface FillEventInput {
   // Client-generated idempotency id (UUID); becomes fill_sessions.id.
   id: string;
   caseId?: string | null;
+  /** Matrix owner for a real Contract form receipt. */
+  contractId?: string | null;
+  contractSopAssignmentId?: string | null;
+  sopTemplateId?: string | null;
+  sopVersion?: number | null;
+  taskIndex?: number | null;
+  stepIndex?: number | null;
+  facilityId?: string | null;
+  /** Exact org-over-global form configuration selected by MINT-52. */
+  portalId?: string | null;
+  contextVersion?: number | null;
+  launchReceiptId?: string | null;
+  mappingGeneration?: number | null;
+  effectiveMappingFingerprint?: string | null;
   providerId?: string | null;
   portalKey: string;
   fillMode?: FillMode;
@@ -56,7 +70,7 @@ export type RecordFillEventResult =
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
 
 const FILL_SESSION_COLUMNS =
-  "id, org_id, case_id, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
+  "id, org_id, case_id, contract_id, contract_sop_assignment_id, sop_template_id, sop_version, task_index, step_index, facility_id, portal_id, context_version, launch_receipt_id, mapping_generation, effective_mapping_fingerprint, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 const FILL_EVENT_V2_COLUMNS =
   "event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 
@@ -120,7 +134,19 @@ function sameStoredFill(
     : sanitizeLegacyFieldsSkipped(input.fieldsSkipped);
   const commonMatches =
     row.org_id === ctx.orgId &&
-    row.case_id === input.caseId &&
+    (row.case_id ?? null) === (input.caseId ?? null) &&
+    (row.contract_id ?? null) === (input.contractId ?? null) &&
+    (row.contract_sop_assignment_id ?? null) === (input.contractSopAssignmentId ?? null) &&
+    (row.sop_template_id ?? null) === (input.sopTemplateId ?? null) &&
+    (row.sop_version ?? null) === (input.sopVersion ?? null) &&
+    (row.task_index ?? null) === (input.taskIndex ?? null) &&
+    (row.step_index ?? null) === (input.stepIndex ?? null) &&
+    (row.facility_id ?? null) === (input.facilityId ?? null) &&
+    (row.portal_id ?? null) === (input.portalId ?? null) &&
+    (row.context_version ?? null) === (input.contextVersion ?? null) &&
+    (row.launch_receipt_id ?? null) === (input.launchReceiptId ?? null) &&
+    (row.mapping_generation ?? null) === (input.mappingGeneration ?? null) &&
+    (row.effective_mapping_fingerprint ?? null) === (input.effectiveMappingFingerprint ?? null) &&
     (row.provider_id ?? null) === (input.providerId ?? null) &&
     row.portal_key === input.portalKey &&
     row.fill_mode === (input.fillMode ?? "web") &&
@@ -170,7 +196,7 @@ function getV2Metadata(input: FillEventInput): FillEventV2Metadata | null {
 // from a row that doesn't exist.
 async function belongsToOrg(
   ctx: FillSessionServiceCtx,
-  table: "credential_cases" | "providers" | "tasks",
+  table: "credential_cases" | "providers" | "tasks" | "contracts",
   id: string,
 ): Promise<boolean> {
   const { data, error } = await ctx.db
@@ -181,6 +207,113 @@ async function belongsToOrg(
     .maybeSingle();
   if (error) throw error;
   return data != null;
+}
+
+async function belongsToContractAssignment(
+  ctx: FillSessionServiceCtx,
+  input: FillEventInput,
+): Promise<boolean> {
+  if (!input.contractId || !input.contractSopAssignmentId) return false;
+  const { data: contract, error: contractError } = await ctx.db
+    .from("contracts")
+    .select("id, group_id, payer_id, state")
+    .eq("id", input.contractId)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (contractError) throw contractError;
+  if (!contract?.group_id || !contract.payer_id) return false;
+
+  const { data: assignment, error: assignmentError } = await ctx.db
+    .from("contract_sop_assignments")
+    .select("id, sop_template_id, sop_version, context_version")
+    .eq("id", input.contractSopAssignmentId)
+    .eq("contract_id", contract.id)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (
+    !assignment ||
+    assignment.sop_template_id !== input.sopTemplateId ||
+    assignment.sop_version !== input.sopVersion ||
+    assignment.context_version !== input.contextVersion
+  ) {
+    return false;
+  }
+
+  const { data: provider, error: providerError } = await ctx.db
+    .from("providers")
+    .select("id, status")
+    .eq("id", input.providerId as string)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (providerError) throw providerError;
+  if (!provider || provider.status === "terminated") return false;
+
+  const { data: providerGroup, error: providerGroupError } = await ctx.db
+    .from("provider_group_assignments")
+    .select("id, start_date, end_date")
+    .eq("org_id", ctx.orgId)
+    .eq("group_id", contract.group_id)
+    .eq("provider_id", input.providerId as string)
+    .maybeSingle();
+  if (providerGroupError) throw providerGroupError;
+  const today = new Date().toISOString().slice(0, 10);
+  if (
+    !providerGroup ||
+    (providerGroup.start_date != null && providerGroup.start_date > today) ||
+    (providerGroup.end_date != null && providerGroup.end_date < today)
+  ) {
+    return false;
+  }
+
+  if (input.facilityId) {
+    const { data: facility, error: facilityError } = await ctx.db
+      .from("facilities")
+      .select("id")
+      .eq("id", input.facilityId)
+      .eq("org_id", ctx.orgId)
+      .eq("group_id", contract.group_id)
+      .ilike("state", contract.state)
+      .maybeSingle();
+    if (facilityError) throw facilityError;
+    if (!facility) return false;
+  }
+
+  const portalKey = input.portalKey.trim().toLowerCase();
+  const { data: portal, error: portalError } = await ctx.db
+    .from("portals")
+    .select(
+      "id, org_id, portal_key, payer_id, case_type, requires_explicit_selection, mapping_generation",
+    )
+    .eq("id", input.portalId as string)
+    .maybeSingle();
+  if (portalError) throw portalError;
+  if (
+    !portal ||
+    (portal.org_id !== ctx.orgId && portal.org_id !== null) ||
+    portal.portal_key.trim().toLowerCase() !== portalKey ||
+    portal.payer_id !== contract.payer_id ||
+    portal.case_type !== "contract" ||
+    !portal.requires_explicit_selection ||
+    portal.mapping_generation !== input.mappingGeneration
+  ) {
+    return false;
+  }
+  if (portal.org_id === null) {
+    const { data: orgConfigs, error: orgOverrideError } = await ctx.db
+      .from("portals")
+      .select("id, portal_key")
+      .eq("org_id", ctx.orgId);
+    if (orgOverrideError) throw orgOverrideError;
+    if (
+      (orgConfigs ?? []).some(
+        (orgConfig) => orgConfig.portal_key.trim().toLowerCase() === portalKey,
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function completeTaskForFill(ctx: FillSessionServiceCtx, taskId: string): Promise<void> {
@@ -223,10 +356,64 @@ export async function recordFillEvent(
   if (input.caseId != null && !UUID_RE.test(input.caseId)) {
     return reject(422, "caseId must be a UUID");
   }
+  const contractContextIds = [
+    input.contractId,
+    input.contractSopAssignmentId,
+    input.sopTemplateId,
+    input.portalId,
+    input.facilityId,
+    input.launchReceiptId,
+  ];
+  if (contractContextIds.some((value) => value != null && !UUID_RE.test(value))) {
+    return reject(422, "Contract owner context IDs must be UUIDs");
+  }
+  const isContractReceipt = input.contractId != null;
+  const hasContractContext =
+    contractContextIds.some((value) => value != null) ||
+    input.sopVersion != null ||
+    input.taskIndex != null ||
+    input.stepIndex != null ||
+    input.contextVersion != null ||
+    input.mappingGeneration != null ||
+    input.effectiveMappingFingerprint != null;
+  if (hasContractContext && !isContractReceipt) {
+    return reject(422, "Contract context requires contractId");
+  }
+  if (isContractReceipt) {
+    if (
+      input.caseId != null ||
+      !input.providerId ||
+      !input.contractSopAssignmentId ||
+      !input.sopTemplateId ||
+      !input.portalId ||
+      !Number.isInteger(input.sopVersion) ||
+      (input.sopVersion ?? 0) < 1 ||
+      !Number.isInteger(input.taskIndex) ||
+      (input.taskIndex ?? -1) < 0 ||
+      !Number.isInteger(input.stepIndex) ||
+      (input.stepIndex ?? -1) < 0 ||
+      !Number.isInteger(input.contextVersion) ||
+      (input.contextVersion ?? 0) < 1 ||
+      !input.launchReceiptId ||
+      !Number.isInteger(input.mappingGeneration) ||
+      (input.mappingGeneration ?? 0) < 1 ||
+      typeof input.effectiveMappingFingerprint !== "string" ||
+      input.effectiveMappingFingerprint.trim() === "" ||
+      (input.fillMode !== undefined && input.fillMode !== "web") ||
+      input.isTest === true ||
+      input.taskId != null ||
+      input.schemaVersion !== 2
+    ) {
+      return reject(
+        422,
+        "Contract fills require a real V2 receipt with exact SOP step and portal configuration context",
+      );
+    }
+  }
   if (input.providerId != null && !UUID_RE.test(input.providerId)) {
     return reject(422, "providerId must be a UUID");
   }
-  if (!input.caseId && !input.providerId) {
+  if (!input.caseId && !input.providerId && !isContractReceipt) {
     return reject(422, "At least one of caseId or providerId is required");
   }
   if (input.taskId != null && !UUID_RE.test(input.taskId)) {
@@ -283,8 +470,14 @@ export async function recordFillEvent(
   if (input.caseId != null && !(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
     return reject(404, "Case not found");
   }
+  if (isContractReceipt && !(await belongsToOrg(ctx, "contracts", input.contractId as string))) {
+    return reject(404, "Contract not found");
+  }
   if (input.providerId != null && !(await belongsToOrg(ctx, "providers", input.providerId))) {
     return reject(404, "Provider not found");
+  }
+  if (isContractReceipt && !(await belongsToContractAssignment(ctx, input))) {
+    return reject(404, "Contract assignment or launch context not found");
   }
   if (input.taskId != null && !(await belongsToOrg(ctx, "tasks", input.taskId))) {
     return reject(404, "Task not found");
@@ -320,6 +513,18 @@ export async function recordFillEvent(
     id: input.id,
     org_id: ctx.orgId,
     case_id: input.caseId ?? null,
+    contract_id: input.contractId ?? null,
+    contract_sop_assignment_id: input.contractSopAssignmentId ?? null,
+    sop_template_id: input.sopTemplateId ?? null,
+    sop_version: input.sopVersion ?? null,
+    task_index: input.taskIndex ?? null,
+    step_index: input.stepIndex ?? null,
+    facility_id: input.facilityId ?? null,
+    portal_id: input.portalId ?? null,
+    context_version: input.contextVersion ?? null,
+    launch_receipt_id: input.launchReceiptId ?? null,
+    mapping_generation: input.mappingGeneration ?? null,
+    effective_mapping_fingerprint: input.effectiveMappingFingerprint ?? null,
     provider_id: input.providerId ?? null,
     portal_key: input.portalKey,
     fill_mode: fillMode,

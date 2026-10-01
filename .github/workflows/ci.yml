@@ -349,6 +349,12 @@ jobs:
           CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
             SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''), current_user::text);
           $$;
+          -- Supabase's auth.jwt() is part of the hosted auth schema; this
+          -- disposable PostgreSQL harness supplies the equivalent claim reader
+          -- used by SECURITY DEFINER RPC authorization checks.
+          CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+            SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
+          $$;
           CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
           CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
           SQL
@@ -371,6 +377,9 @@ jobs:
 
       - name: Verify MINT-48 independent portal configurations on disposable PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint48-independent-portal-configurations.sql
+
+      - name: Verify MINT-49 Contract SOP assignments and receipts on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint49-contract-sop-assignment.sql
 
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).

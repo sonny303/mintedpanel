@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useUpsertContract } from "@/hooks/useContracts";
 import { useStatusConfigs } from "@/hooks/useAdmin";
+import { ContractSopAssignmentPanel } from "@/components/reports/ContractSopAssignmentPanel";
 import type { Contract, ContractingStatusLabel } from "@/types";
 
 export const CANONICAL_CONTRACTING_STATUSES: ContractingStatusLabel[] = [
@@ -64,7 +65,6 @@ export function ContractDetailDrawer({
   const [effectiveDate, setEffectiveDate] = useState<string>("");
   const [expirationDate, setExpirationDate] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-
   useEffect(() => {
     if (contract) {
       setStatusId(contract.contractingStatusId ?? "");
@@ -125,6 +125,13 @@ export function ContractDetailDrawer({
         </DialogHeader>
 
         <div className="space-y-4 py-2 text-sm">
+          <ContractSopAssignmentPanel
+            contract={contract}
+            groupId={groupId}
+            payerId={payerId}
+            state={state}
+          />
+
           {/* Status Field */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Contracting Status</Label>
