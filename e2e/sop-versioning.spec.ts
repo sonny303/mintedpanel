@@ -117,6 +117,7 @@ const FIXTURES: Record<string, unknown[]> = {
       portal_key: "humana_portal",
       name: "Humana provider portal",
       payer_id: null,
+      case_type: "enrollment",
       form_url: "https://portal.example/humana",
       is_verified: false,
       last_verified_at: null,
@@ -294,7 +295,8 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
     // The match key stays locked: the fixed "Applies to" line renders instead
     // of payer/state/group pickers, and Archive/Duplicate are gone.
     await expect(page.getByText("Every payer, state, and group")).toBeVisible();
-    await expect(page.locator("section").first().getByRole("combobox")).toHaveCount(0);
+    await expect(page.locator("section").first().getByRole("combobox")).toHaveCount(1);
+    await expect(page.locator("#sop-case-type")).toBeVisible();
     await expect(page.getByRole("button", { name: "Archive" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Duplicate" })).toHaveCount(0);
 
@@ -313,6 +315,11 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
     await expect(page.getByRole("heading", { name: "Edit default template" })).toBeVisible({
       timeout: 30000,
     });
+
+    // This fixture is a legacy NULL-case-type head. Publishing a new version
+    // classifies that new snapshot explicitly; historical rows stay NULL.
+    await page.locator("#sop-case-type").click();
+    await page.getByRole("option", { name: "Enrollment", exact: true }).click();
 
     await page.getByRole("button", { name: "Actions" }).click();
     await page.getByRole("button", { name: "Add action" }).click();
@@ -346,6 +353,7 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
       p_template_id: FALLBACK_ID,
       p_expected_version: 1,
       p_change_note: "Tighten the generic checklist",
+      p_case_type: "enrollment",
     });
     expect(captured.headPatches).toBe(0);
   });
@@ -385,6 +393,8 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
 
     // Content edit → Publish (not a plain save).
     await page.getByRole("button", { name: "Basics" }).click();
+    await page.locator("#sop-case-type").click();
+    await page.getByRole("option", { name: "Enrollment", exact: true }).click();
     await nameInput.fill("Humana KS (in-network)");
     await page.getByRole("button", { name: "Review" }).click();
     await page.getByRole("button", { name: "Publish" }).click();
@@ -399,6 +409,7 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
       p_expected_version: 2,
       p_name: "Humana KS (in-network)",
       p_change_note: "Renamed after go-live",
+      p_case_type: "enrollment",
     });
     // The content publish never rides the plain head PATCH (TE-5: that path is
     // match-key-only).
@@ -415,7 +426,11 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
 
     await page.getByRole("button", { name: "History" }).click();
     const v1Row = page.getByRole("dialog").locator("tr", { hasText: "v1" });
-    await v1Row.getByRole("button", { name: "Restore as v3" }).click();
+    await v1Row.getByRole("button", { name: "Classify & restore" }).click();
+    const legacyType = page.locator("#legacy-restore-case-type");
+    await legacyType.click();
+    await page.getByRole("option", { name: "Enrollment", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Restore as v3" }).click();
 
     await expect(page.getByText("Restored v1 as v3")).toBeVisible({ timeout: 15000 });
     // Restore = republish the OLD content as version N+1: the v1 task
@@ -426,6 +441,7 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
       p_expected_version: 2,
       p_name: "Humana KS",
       p_change_note: "Restored from v1",
+      p_case_type: "enrollment",
     });
     const defs = (captured.body?.p_task_definitions ?? null) as Array<{ title?: string }> | null;
     expect(defs?.[0]?.title).toBe("Facility roster update (out-of-network)");
@@ -436,6 +452,13 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
     page,
   }) => {
     await page.goto(`/admin/templates/${TEMPLATE_ID}?intent=register`);
+
+    // The legacy head stays unclassified until this editor change. The portal
+    // action is type-scoped, so choose Enrollment before linking it.
+    await page.getByRole("button", { name: "Basics" }).click();
+    await page.locator("#sop-case-type").click();
+    await page.getByRole("option", { name: "Enrollment", exact: true }).click();
+    await page.getByRole("button", { name: "Actions" }).click();
 
     // Lands directly on the merged step with the register-mode banner.
     await expect(page.getByText("Register the portal this step fills")).toBeVisible({

@@ -16,6 +16,7 @@ const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_SHELBY = "33333333-3333-4333-8333-333333333333";
 const ORG_OTHER = "44444444-4444-4444-8444-444444444444";
+const FALLBACK_SOP_ID = "00000000-0000-4000-a000-00000000e17b";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -265,6 +266,7 @@ function makeFixtures() {
         id: "tpl-bcbsnc",
         org_id: ORG_SHELBY,
         name: "BCBS-NC enrollment",
+        case_type: "enrollment",
         payer_id: "pay-bcbsnc",
         state: "NC",
         specialty: null,
@@ -281,6 +283,52 @@ function makeFixtures() {
         ],
         created_at: "2026-07-10T00:00:00Z",
         updated_at: "2026-07-10T00:00:00Z",
+      },
+      {
+        id: FALLBACK_SOP_ID,
+        org_id: null,
+        name: "General enrollment SOP",
+        case_type: "enrollment",
+        payer_id: null,
+        state: null,
+        specialty: null,
+        group_id: null,
+        archived: false,
+        current_version: 1,
+        task_definitions: [
+          { title: "Standard enrollment checklist", steps: [{ label: "Collect the application" }] },
+        ],
+        created_at: "2026-07-10T00:00:00Z",
+        updated_at: "2026-07-10T00:00:00Z",
+      },
+    ],
+    sop_template_versions: [
+      {
+        id: "ver-tpl-bcbsnc-1",
+        template_id: "tpl-bcbsnc",
+        version: 1,
+        case_type: "enrollment",
+        name: "BCBS-NC enrollment",
+        task_definitions: [
+          {
+            title: "Submit {{provider.firstName}} application",
+            sortOrder: 0,
+            dueOffsetDays: 3,
+            steps: [{ label: "Submit the online form", stepType: "online_form" }],
+          },
+        ],
+        published_at: "2026-07-10T00:00:00Z",
+      },
+      {
+        id: "ver-fallback-1",
+        template_id: FALLBACK_SOP_ID,
+        version: 1,
+        case_type: "enrollment",
+        name: "General enrollment SOP",
+        task_definitions: [
+          { title: "Standard enrollment checklist", steps: [{ label: "Collect the application" }] },
+        ],
+        published_at: "2026-07-10T00:00:00Z",
       },
     ],
     credential_cases: [] as Record<string, unknown>[],
@@ -356,6 +404,7 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
         org_id: input.org_id,
         provider_id: input.provider_id,
         payer_id: input.payer_id,
+        case_type: input.case_type ?? "enrollment",
         state: input.state,
         group_id: input.group_id ?? null,
         facility_id: input.facility_id ?? null,
