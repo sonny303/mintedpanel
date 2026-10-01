@@ -355,6 +355,10 @@ jobs:
           CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
             SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
           $$;
+          -- Supabase grants authenticated access to its auth helpers. Mirror
+          -- that prerequisite in this plain-Postgres harness so invoker RPCs
+          -- can call auth.uid() under SET ROLE authenticated.
+          GRANT USAGE ON SCHEMA auth TO authenticated;
           CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
           CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
           SQL
