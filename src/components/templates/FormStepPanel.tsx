@@ -26,7 +26,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
-import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
+import {
+  usePortals,
+  usePortalFieldMaps,
+  useReviewOrgPortalFieldMapBase,
+  useStaleOrgOverridesForReview,
+} from "@/hooks/usePortals";
 import {
   useApproveField,
   useFinishTraining,
@@ -61,7 +66,59 @@ import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { PortalDrawer } from "@/components/PortalDrawer";
 import { isPortalHiddenFromPickers, portalDisplayName } from "@/lib/portalRetirement";
 import type { CaseType } from "@/lib/caseTypes";
+import type { Portal, PortalFieldMap } from "@/types";
 import { useLocation } from "@tanstack/react-router";
+
+function describeMappingDecision(map: PortalFieldMap | null): string {
+  if (!map) return "No matching shared selector";
+  if (map.status !== "approved") return map.status === "retired" ? "Retired" : "Needs a decision";
+  if (map.source === "token" || map.source === "manual_partial") {
+    return map.token ? `Maps to ${map.token}` : "Approved token mapping without a token";
+  }
+  if (map.source === "hardcoded") return "Approved fixed value";
+  if (map.source === "manual") return "A person fills this field";
+  return "Needs review";
+}
+
+function selectPortalForFormStep(input: {
+  portals: readonly Portal[];
+  portalKey: string | null;
+  orgId: string;
+  templatePayerId: string | null;
+  templateCaseType: CaseType | null;
+  isGlobalAuthoring: boolean;
+}): Portal | undefined {
+  const key = normalizePortalKey(input.portalKey ?? "");
+  if (!key) return undefined;
+  const sameKey = input.portals.filter((portal) => portal.portalKey === key);
+  if (sameKey.length === 1) {
+    const portal = sameKey[0];
+    if (!input.templateCaseType) return portal;
+    return portal.payerId === input.templatePayerId &&
+      portal.caseType === input.templateCaseType &&
+      !isPortalHiddenFromPickers(portal)
+      ? portal
+      : undefined;
+  }
+
+  // Same-key org and shared configurations are distinct MINT-48 scenarios.
+  // Resolve the exact owning tier only when both rows confirm the template's
+  // payer/type and both require explicit selection; otherwise leave ambiguous
+  // references untouched instead of training or reviewing a sibling config.
+  if (!input.templatePayerId || !input.templateCaseType) return undefined;
+  const selectedScope = input.isGlobalAuthoring ? null : input.orgId;
+  const matching = sameKey.filter(
+    (portal) =>
+      portal.payerId === input.templatePayerId &&
+      portal.caseType === input.templateCaseType &&
+      portal.requiresExplicitSelection === true &&
+      !isPortalHiddenFromPickers(portal),
+  );
+  const selected = matching.find((portal) => portal.orgId === selectedScope);
+  const counterpart = sameKey.find((portal) => portal.orgId !== selectedScope);
+  if (!selected || (counterpart && !matching.includes(counterpart))) return undefined;
+  return selected;
+}
 
 export interface FormStepPanelProps {
   /** The step's portal key, already normalized (null = no portal linked). */
@@ -116,6 +173,8 @@ export function FormStepPanel({
   const qc = useQueryClient();
   const portalsQ = usePortals();
   const mapsQ = usePortalFieldMaps(portalKey ?? undefined);
+  const staleOverridesQ = useStaleOrgOverridesForReview(portalKey ?? undefined);
+  const reviewBaseMut = useReviewOrgPortalFieldMapBase();
   const tokensQ = useTokenCatalog();
   const drift = useFormDrift();
 
@@ -132,18 +191,15 @@ export function FormStepPanel({
   const globalFlagsMut = useSetGlobalPortalFlags();
 
   const portal = useMemo(() => {
-    if (!portalKey) return undefined;
-    const sameKey = (portalsQ.data ?? []).filter((p) => p.portalKey === portalKey);
-    if (sameKey.length !== 1) return undefined;
-    const matching = sameKey.filter(
-      (p) =>
-        !templateCaseType ||
-        (p.payerId === templatePayerId &&
-          p.caseType === templateCaseType &&
-          !isPortalHiddenFromPickers(p)),
-    );
-    return matching.length === 1 ? matching[0] : undefined;
-  }, [portalsQ.data, portalKey, templatePayerId, templateCaseType]);
+    return selectPortalForFormStep({
+      portals: portalsQ.data ?? [],
+      portalKey,
+      orgId,
+      templatePayerId,
+      templateCaseType,
+      isGlobalAuthoring,
+    });
+  }, [portalsQ.data, portalKey, orgId, templatePayerId, templateCaseType, isGlobalAuthoring]);
 
   async function copyReturnLink() {
     try {
@@ -158,6 +214,7 @@ export function FormStepPanel({
     () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey && m.status !== "retired"),
     [mapsQ.data, portalKey],
   );
+  const staleOverrides = staleOverridesQ.data ?? [];
   const brokenIds = useMemo(() => {
     const rows = portalKey ? (drift.driftByPortal.get(portalKey) ?? []) : [];
     return new Set(rows.map((m) => m.id));
@@ -203,9 +260,16 @@ export function FormStepPanel({
     if (remainingAfter > 0 || !portal) return;
     try {
       if (portal.orgId === null) {
-        await globalFlagsMut.mutateAsync({ id: portal.id, verified: true });
+        await globalFlagsMut.mutateAsync({
+          id: portal.id,
+          verified: true,
+          expectedMappingGeneration: portal.mappingGeneration,
+        });
       } else {
-        await finishTrainingMut.mutateAsync(portal.id);
+        await finishTrainingMut.mutateAsync({
+          portalId: portal.id,
+          expectedMappingGeneration: portal.mappingGeneration,
+        });
       }
       void qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) });
     } catch {
@@ -242,28 +306,42 @@ export function FormStepPanel({
                       transform: decision.transform,
                     }
                   : { status: "proposed", source: "manual" };
-        await trainGlobalMut.mutateAsync({ id: map.id, patch });
+        await trainGlobalMut.mutateAsync({
+          id: map.id,
+          patch: { ...patch, expectedMappingGeneration: map.mappingGeneration },
+        });
       } else if (decision.kind === "token") {
         await approveMut.mutateAsync({
           id: map.id,
           token: decision.token,
           fieldLabel: map.fieldLabel,
+          expectedMappingGeneration: map.mappingGeneration,
         });
       } else if (decision.kind === "human") {
-        await manualMut.mutateAsync({ id: map.id, fieldLabel: map.fieldLabel });
+        await manualMut.mutateAsync({
+          id: map.id,
+          fieldLabel: map.fieldLabel,
+          expectedMappingGeneration: map.mappingGeneration,
+        });
       } else if (decision.kind === "unmap") {
         await reproposeMut.mutateAsync({
           id: map.id,
           previous: { token: map.token, source: map.source },
+          expectedMappingGeneration: map.mappingGeneration,
         });
       } else if (decision.kind === "fixed") {
         await hardcodedMut.mutateAsync({
           id: map.id,
           value: decision.value,
           fieldLabel: map.fieldLabel,
+          expectedMappingGeneration: map.mappingGeneration,
         });
       } else {
-        await transformMut.mutateAsync({ id: map.id, transform: decision.transform });
+        await transformMut.mutateAsync({
+          id: map.id,
+          transform: decision.transform,
+          expectedMappingGeneration: map.mappingGeneration,
+        });
       }
       invalidateMaps();
       // Keep the E6.5 verification stamp working: a decision that empties the
@@ -288,7 +366,9 @@ export function FormStepPanel({
       return;
     }
     try {
-      await renameMut.mutateAsync([{ id: map.id, displayLabel }]);
+      await renameMut.mutateAsync([
+        { id: map.id, displayLabel, expectedMappingGeneration: map.mappingGeneration },
+      ]);
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the field");
@@ -309,7 +389,12 @@ export function FormStepPanel({
       return;
     }
     try {
-      await renameMut.mutateAsync(sectionRenamePatches(shared, section));
+      await renameMut.mutateAsync(
+        sectionRenamePatches(shared, section).map((patch) => ({
+          ...patch,
+          expectedMappingGeneration: shared.find((map) => map.id === patch.id)?.mappingGeneration,
+        })),
+      );
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the section");
@@ -323,7 +408,11 @@ export function FormStepPanel({
     const label = addFieldLabel.trim();
     if (!label || !portalKey) return;
     try {
-      await addFieldMut.mutateAsync({ portalKey, label });
+      await addFieldMut.mutateAsync({
+        portalKey,
+        label,
+        expectedMappingGeneration: portal?.mappingGeneration,
+      });
       setAddFieldLabel("");
       invalidateMaps();
     } catch (err) {
@@ -456,6 +545,65 @@ export function FormStepPanel({
                 onRename={renameRegistryRow}
                 onRenameSection={renameRegistrySection}
               />
+            ) : null}
+            {portal && staleOverrides.length > 0 ? (
+              <section
+                aria-label="Shared mapping changes need review"
+                className="space-y-2 rounded-md border border-amber-300 bg-amber-50/40 p-3"
+              >
+                <div>
+                  <h3 className="text-[13px] font-semibold">Shared mapping changes need review</h3>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    These organization overrides are paused because the shared form mapping changed.
+                    Compare each saved decision with the current shared decision before retaining
+                    the override.
+                  </p>
+                </div>
+                <ul className="space-y-2">
+                  {staleOverrides.map((review) => (
+                    <li
+                      key={review.map.id}
+                      className="rounded-md border border-[#E8E5E0] bg-white p-3 text-[12px]"
+                    >
+                      <p className="font-medium">
+                        Selector <code>{review.map.selector}</code>
+                      </p>
+                      <p className="mt-1">
+                        Organization decision: {describeMappingDecision(review.map)}
+                      </p>
+                      <p>
+                        Current shared decision: {describeMappingDecision(review.currentSharedMap)}
+                      </p>
+                      {canEdit ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 h-7 text-[12px]"
+                          disabled={reviewBaseMut.isPending}
+                          onClick={() => {
+                            void reviewBaseMut
+                              .mutateAsync({
+                                id: review.map.id,
+                                expectedMappingGeneration: review.map.mappingGeneration ?? 1,
+                                expectedSharedBaseGeneration: review.currentSharedBaseGeneration,
+                              })
+                              .then(() => toast.success("Organization override reviewed."))
+                              .catch((error: unknown) =>
+                                toast.error(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Could not review the organization override.",
+                                ),
+                              );
+                          }}
+                        >
+                          {reviewBaseMut.isPending ? "Reviewing…" : "Review and retain override"}
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ) : null}
             {portal && maps.length > 0 && coverage.needsDecision === 0 ? (
               <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">

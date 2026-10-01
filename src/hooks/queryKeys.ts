@@ -96,6 +96,8 @@ export const queryKeys = {
   portals: (orgId: string) => ["portals", orgId] as const,
   portalFieldMaps: (orgId: string, portalKey?: string) =>
     ["portal-field-maps", orgId, portalKey ?? "all"] as const,
+  stalePortalFieldMaps: (orgId: string, portalKey: string) =>
+    ["portal-field-map-base-review", orgId, portalKey] as const,
   lastFills: (orgId: string) => ["last-fills", orgId] as const,
   fieldDictionary: (orgId: string) => ["field-dictionary", orgId] as const,
   tokenCatalog: (orgId: string) => ["token-catalog", orgId] as const,

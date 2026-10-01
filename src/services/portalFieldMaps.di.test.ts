@@ -9,6 +9,7 @@ vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
 
 import {
   listPortalFieldMaps,
+  listStaleOrgOverridesForReview,
   proposeFieldMap,
   PROPOSED_BY_EXTENSION_NOTE,
   type PortalFieldMapServiceCtx,
@@ -211,6 +212,48 @@ describe("portal field map service — injected server context", () => {
     expect(rows[0]).not.toHaveProperty("portal_key");
   });
 
+  it("returns stale org overrides only in the review projection with the current shared map", async () => {
+    const orgConfig = {
+      ...portalDbRow,
+      id: "org-config",
+      org_id: "org-1",
+      mapping_generation: 1,
+    };
+    const sharedConfig = {
+      ...portalDbRow,
+      id: "shared-config",
+      mapping_generation: 2,
+    };
+    const staleOverride = {
+      ...dbRow,
+      id: "old-org-override",
+      org_id: "org-1",
+      mapping_generation: 1,
+      shared_base_generation: 1,
+      status: "approved",
+    };
+    const currentSharedMap = {
+      ...dbRow,
+      id: "current-shared-map",
+      mapping_generation: 2,
+      shared_base_generation: null,
+      status: "approved",
+    };
+    const { db } = makeFakeDb([
+      { data: [orgConfig, sharedConfig] },
+      { data: [staleOverride, currentSharedMap] },
+    ]);
+
+    const result = await listStaleOrgOverridesForReview(ctxWith(db), "Availity");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      map: { id: "old-org-override", sharedBaseGeneration: 1 },
+      currentSharedBaseGeneration: 2,
+      currentSharedMap: { id: "current-shared-map", mappingGeneration: 2 },
+    });
+  });
+
   it("retries the legacy projection only when the additive provenance column is absent", async () => {
     const missingColumn = {
       code: "42703",
@@ -336,6 +379,77 @@ describe("proposeFieldMap — propose-only write", () => {
     expect((payload?.notes as string).trim()).not.toBe("");
     // The note explains the row; it never carries scraped page content.
     expect(payload?.notes).toBe(PROPOSED_BY_EXTENSION_NOTE);
+  });
+
+  it("uses the generation-guarded capture RPC and surfaces a selector collision", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: "portal_selector_collision: review the existing selector" },
+    });
+    const db = { rpc } as unknown as SupabaseClient<Database>;
+    const result = await proposeFieldMap(proposeCtx(db), {
+      ...input,
+      expected_mapping_generation: 3,
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "capture_org_portal_field_map",
+      expect.objectContaining({
+        p_org_id: "org-1",
+        p_expected_mapping_generation: 3,
+        p_capture: expect.objectContaining({ portal_key: "availity", selector: "#npi" }),
+      }),
+    );
+    expect(result).toMatchObject({ kind: "rejected", status: 409 });
+    if (result.kind !== "rejected") throw new Error("expected a rejected result");
+    expect(result.message).toContain("portal_selector_collision");
+  });
+
+  it("returns a current shared selector unchanged instead of auditing an org proposal", async () => {
+    const sharedRow = {
+      ...dbRow,
+      id: "shared-current-generation-map",
+      org_id: null,
+      mapping_generation: 2,
+      status: "approved",
+      token: "provider.npi",
+    };
+    const rpc = vi.fn().mockResolvedValue({
+      data: { kind: "existing", map: sharedRow },
+      error: null,
+    });
+    const db = { rpc } as unknown as SupabaseClient<Database>;
+    const writeAudit = vi.fn().mockResolvedValue(undefined);
+    const result = await proposeFieldMap(proposeCtx(db, writeAudit), {
+      ...input,
+      field_label: "",
+      expected_mapping_generation: 2,
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "capture_org_portal_field_map",
+      expect.objectContaining({ p_expected_mapping_generation: 2 }),
+    );
+    expect(result).toMatchObject({
+      kind: "existing",
+      map: { id: "shared-current-generation-map", orgId: null, status: "approved" },
+    });
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale capture generation with a reload message", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: "mapping_generation_stale" },
+    });
+    const result = await proposeFieldMap(
+      proposeCtx({ rpc } as unknown as SupabaseClient<Database>),
+      { ...input, expected_mapping_generation: 1 },
+    );
+
+    expect(result).toMatchObject({ kind: "rejected", status: 409 });
+    if (result.kind !== "rejected") throw new Error("expected a rejected result");
+    expect(result.message).toContain("Reload the configuration");
   });
 
   it("always writes the caller's org, never a global row or a body-supplied org", async () => {

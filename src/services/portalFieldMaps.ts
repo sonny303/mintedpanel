@@ -488,6 +488,7 @@ export async function listSharedFieldMaps(
 // Deliberately NO token/source/status: see proposeFieldMap.
 export interface ProposeFieldMapInput {
   portal_key: string;
+  expected_mapping_generation?: number | null;
   selector: string;
   field_label?: string | null;
   form_section?: string | null;
@@ -502,7 +503,7 @@ export interface ProposeFieldMapInput {
 export type ProposeFieldMapResult =
   | { kind: "created"; map: PortalFieldMap; suggestion: LabelSuggestion | null }
   | { kind: "existing"; map: PortalFieldMap; suggestion: LabelSuggestion | null }
-  | { kind: "rejected"; status: 422; message: string };
+  | { kind: "rejected"; status: 409 | 422; message: string };
 
 /** S5.3 — what this org has already learned about a field label, from its
  * dictionary and from approved mappings on OTHER portals. Read alongside the
@@ -602,6 +603,16 @@ export async function proposeFieldMap(
 ): Promise<ProposeFieldMapResult> {
   const portalKey = normalizePortalKey(input?.portal_key ?? "");
   if (!portalKey) return { kind: "rejected", status: 422, message: "portal_key is required" };
+  if (
+    input.expected_mapping_generation != null &&
+    (!Number.isInteger(input.expected_mapping_generation) || input.expected_mapping_generation < 1)
+  ) {
+    return {
+      kind: "rejected",
+      status: 422,
+      message: "expected_mapping_generation must be a positive integer",
+    };
+  }
   const selector = typeof input.selector === "string" ? input.selector.trim() : "";
   if (!selector) return { kind: "rejected", status: 422, message: "selector is required" };
   const fieldType = input.field_type ?? "text";
@@ -631,6 +642,66 @@ export async function proposeFieldMap(
   const controlOptions =
     optionsCheck.options && optionsCheck.options.length > 0 ? optionsCheck.options : null;
 
+  if (input.expected_mapping_generation != null) {
+    const { data, error } = await ctx.db.rpc(
+      "capture_org_portal_field_map" as never,
+      {
+        p_org_id: ctx.orgId,
+        p_expected_mapping_generation: input.expected_mapping_generation,
+        p_capture: {
+          portal_key: portalKey,
+          selector,
+          field_label: normalizeFieldLabel(input.field_label ?? "") || null,
+          form_section: input.form_section?.trim() || null,
+          page_step: input.page_step?.trim() || null,
+          url_pattern: input.url_pattern?.trim() || null,
+          field_type: fieldType,
+          control_options: controlOptions,
+        } as never,
+      } as never,
+    );
+    if (error) {
+      const message = error.message ?? "Field capture failed";
+      if (message.includes("mapping_generation_token_required")) {
+        return {
+          kind: "rejected",
+          status: 409,
+          message: "This form configuration requires expected_mapping_generation.",
+        };
+      }
+      if (message.includes("mapping_generation_stale")) {
+        return {
+          kind: "rejected",
+          status: 409,
+          message:
+            "The form mapping changed. Reload the configuration before capturing fields again.",
+        };
+      }
+      if (message.includes("portal_selector_collision")) {
+        return { kind: "rejected", status: 409, message };
+      }
+      throw error;
+    }
+    const result = data as { kind?: string; map?: unknown } | null;
+    if (!result?.map) throw new Error("Field capture returned no mapping");
+    const map = camelizeRow<PortalFieldMap>(result.map);
+    const fieldLabel = normalizeFieldLabel(input.field_label ?? "") || null;
+    if (result.kind === "created") {
+      await ctx.writeAudit({
+        actionType: "CREATE",
+        entityType: "portal_field_map",
+        entityId: map.id,
+        after: { portalKey, selector, fieldLabel: map.fieldLabel, status: "proposed" },
+        description: `Field proposed by extension on ${portalKey}`,
+      });
+    }
+    return {
+      kind: result.kind === "created" ? "created" : "existing",
+      map: { ...map, token: normalizeTokenKey(map.token) },
+      suggestion: fieldLabel ? await learnedSuggestion(ctx, fieldLabel, portalKey) : null,
+    };
+  }
+
   // Already known? Global rows count: the shared catalog is authoritative for
   // portal truths, so a selector it already covers needs no org proposal.
   const { data: existing, error: lookupError } = await ctx.db
@@ -654,7 +725,25 @@ export async function proposeFieldMap(
         .eq("org_id", ctx.orgId)
         .select(PORTAL_FIELD_MAP_COLUMNS)
         .maybeSingle();
-      if (refreshErr) throw refreshErr;
+      if (refreshErr) {
+        const message = refreshErr.message ?? "Field capture failed";
+        if (message.includes("mapping_generation_token_required")) {
+          return {
+            kind: "rejected",
+            status: 409,
+            message: "This form configuration requires expected_mapping_generation.",
+          };
+        }
+        if (message.includes("mapping_generation_stale")) {
+          return {
+            kind: "rejected",
+            status: 409,
+            message:
+              "The form mapping changed. Reload the configuration before capturing fields again.",
+          };
+        }
+        throw refreshErr;
+      }
       if (refreshed) {
         const row = camelizeRow<PortalFieldMap>(refreshed);
         return {
@@ -699,7 +788,28 @@ export async function proposeFieldMap(
     } as never)
     .select(PORTAL_FIELD_MAP_COLUMNS)
     .single();
-  if (error) throw error;
+  if (error) {
+    const message = error.message ?? "Field capture failed";
+    if (message.includes("mapping_generation_token_required")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "This form configuration requires expected_mapping_generation.",
+      };
+    }
+    if (message.includes("mapping_generation_stale")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message:
+          "The form mapping changed. Reload the configuration before capturing fields again.",
+      };
+    }
+    if (message.includes("portal_selector_collision")) {
+      return { kind: "rejected", status: 409, message };
+    }
+    throw error;
+  }
   const map = camelizeRow<PortalFieldMap>(data);
 
   await ctx.writeAudit({
@@ -742,23 +852,100 @@ export async function listPortalFieldMapsFromApp(portalKey?: string): Promise<Po
   );
 }
 
+export interface StaleOrgOverrideReview {
+  map: PortalFieldMap;
+  currentSharedBaseGeneration: number | null;
+  currentSharedMap: PortalFieldMap | null;
+}
+
+/** Read retained org overrides whose shared base changed. This review-only
+ * projection never enters the effective fill-map resolver. */
+export async function listStaleOrgOverridesForReview(
+  ctx: EffectivePortalMapContext,
+  portalKey: string,
+): Promise<StaleOrgOverrideReview[]> {
+  const key = normalizePortalKey(portalKey) ?? "";
+  if (!ctx.orgId || !key) return [];
+  const snapshot = await loadEffectivePortalMapSnapshot(ctx, key, APP_PORTAL_FIELD_MAP_COLUMNS);
+  const globalConfig = snapshot.configs.find(
+    (config) => config.portalKey === key && config.orgId === null,
+  );
+  const orgConfig = snapshot.configs.find(
+    (config) => config.portalKey === key && config.orgId === ctx.orgId,
+  );
+  const selectedConfig = orgConfig ?? globalConfig;
+  if (!selectedConfig) return [];
+
+  const currentMappingGeneration = mapGeneration(selectedConfig);
+  const currentSharedBaseGeneration = globalConfig ? mapGeneration(globalConfig) : null;
+  return snapshot.maps
+    .filter(
+      (map) =>
+        map.orgId === ctx.orgId &&
+        map.portalKey === key &&
+        (map.mappingGeneration ?? 1) === currentMappingGeneration &&
+        map.sharedBaseGeneration !== currentSharedBaseGeneration,
+    )
+    .map((map) => ({
+      map,
+      currentSharedBaseGeneration,
+      currentSharedMap:
+        snapshot.maps.find(
+          (candidate) =>
+            candidate.orgId === null &&
+            candidate.portalKey === key &&
+            candidate.mapType === map.mapType &&
+            candidate.selector === map.selector &&
+            (candidate.mappingGeneration ?? 1) === currentSharedBaseGeneration,
+        ) ?? null,
+    }));
+}
+
+export async function reviewOrgPortalFieldMapBase(input: {
+  id: string;
+  expectedMappingGeneration: number;
+  expectedSharedBaseGeneration: number | null;
+}): Promise<PortalFieldMap> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase.rpc("review_org_portal_field_map_base", {
+    p_org_id: orgId,
+    p_id: input.id,
+    p_expected_mapping_generation: input.expectedMappingGeneration,
+    p_expected_shared_base_generation: input.expectedSharedBaseGeneration,
+  });
+  if (error) {
+    if (error.message.includes("mapping_shared_base_stale")) {
+      throw new Error("The shared mapping changed. Reload before reviewing this override.");
+    }
+    if (error.message.includes("mapping_generation_stale")) {
+      throw new Error("This organization mapping changed. Reload before reviewing this override.");
+    }
+    throw error;
+  }
+  return camelizeRow<PortalFieldMap>(data);
+}
+
 // --- Mapping review training mutations (Surface 2), org rows only. RLS blocks
 // writes to global rows; captured proposed rows are always org-scoped. ---
 
 async function updateFieldMapRow(
   orgId: string,
   id: string,
+  expectedMappingGeneration: number | null | undefined,
   patch: Record<string, unknown>,
 ): Promise<PortalFieldMap> {
-  const { data, error } = await supabase
-    .from("portal_field_maps")
-    .update(patch as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(APP_PORTAL_FIELD_MAP_COLUMNS)
-    .single();
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc(
+    "update_org_portal_field_map" as never,
+    {
+      p_org_id: orgId,
+      p_id: id,
+      p_expected_mapping_generation: expectedMappingGeneration ?? null,
+      p_patch: patch as never,
+    } as never,
+  );
   if (error) throw error;
-  const row = camelizeRow<PortalFieldMap>(data);
+  const row = camelizeRow<PortalFieldMap>(data as unknown);
   return { ...row, token: normalizeTokenKey(row.token) };
 }
 
@@ -767,11 +954,12 @@ async function updateFieldMapRow(
 export async function approveFieldMap(
   id: string,
   token: string,
+  expectedMappingGeneration: number | null | undefined,
   fieldLabel?: string | null,
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
   const bare = normalizeTokenKey(token);
-  const row = await updateFieldMapRow(orgId, id, {
+  const row = await updateFieldMapRow(orgId, id, expectedMappingGeneration, {
     status: "approved",
     source: "token",
     token: bare,
@@ -797,6 +985,7 @@ export async function approveFieldMap(
 // none. An existing note is a human's and is never overwritten.
 export async function markFieldMapManual(
   id: string,
+  expectedMappingGeneration: number | null | undefined,
   fieldLabel?: string | null,
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
@@ -808,7 +997,7 @@ export async function markFieldMapManual(
     .maybeSingle();
   if (readError) throw readError;
   const existingNote = (current?.notes ?? "").trim();
-  const row = await updateFieldMapRow(orgId, id, {
+  const row = await updateFieldMapRow(orgId, id, expectedMappingGeneration, {
     status: "approved",
     source: "manual",
     token: null,
@@ -829,12 +1018,13 @@ export async function markFieldMapManual(
 export async function setFieldMapHardcoded(
   id: string,
   value: string,
+  expectedMappingGeneration: number | null | undefined,
   fieldLabel?: string | null,
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
   const literal = value.trim();
   if (!literal) throw new Error("A fixed value cannot be empty");
-  const row = await updateFieldMapRow(orgId, id, {
+  const row = await updateFieldMapRow(orgId, id, expectedMappingGeneration, {
     status: "approved",
     source: "hardcoded",
     token: null,
@@ -855,11 +1045,12 @@ export async function setFieldMapHardcoded(
 export async function setFieldMapTransform(
   id: string,
   transform: string | null,
+  expectedMappingGeneration: number | null | undefined,
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
   const next = transform?.trim() || null;
   if (next && !isAuthorableTransform(next)) throw new Error("Invalid transform");
-  const row = await updateFieldMapRow(orgId, id, { transform: next });
+  const row = await updateFieldMapRow(orgId, id, expectedMappingGeneration, { transform: next });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal_field_map",
@@ -874,9 +1065,10 @@ export async function setFieldMapTransform(
 export async function reproposeFieldMap(
   id: string,
   previous: { token: string | null; source: PortalFieldMap["source"] },
+  expectedMappingGeneration: number | null | undefined,
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
-  const row = await updateFieldMapRow(orgId, id, {
+  const row = await updateFieldMapRow(orgId, id, expectedMappingGeneration, {
     status: "proposed",
     source: previous.source,
     token: previous.token,
@@ -909,6 +1101,7 @@ export interface GlobalTrainPatch {
   hardcodedValue?: string | null;
   /** A value-shaping transform supported by both web and PDF fill paths. */
   transform?: string | null;
+  expectedMappingGeneration?: number | null;
 }
 
 export async function trainGlobalFieldMap(
@@ -925,6 +1118,7 @@ export async function trainGlobalFieldMap(
     p_field_label: (patch.fieldLabel ?? null) as unknown as string,
     p_hardcoded_value: (patch.hardcodedValue ?? null) as unknown as string,
     p_transform: (patch.transform ?? null) as unknown as string,
+    p_expected_mapping_generation: (patch.expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) throw error;
   const row = camelizeRow<PortalFieldMap>(data);
@@ -942,6 +1136,7 @@ export async function trainGlobalFieldMap(
 
 export interface SharedProposeInput {
   portalKey: string;
+  expectedMappingGeneration?: number | null;
   selector: string;
   fieldLabel?: string | null;
   formSection?: string | null;
@@ -977,6 +1172,7 @@ export async function proposeSharedFieldMap(input: SharedProposeInput): Promise<
     p_control_options: (input.controlOptions && input.controlOptions.length > 0
       ? input.controlOptions
       : null) as unknown as string,
+    p_expected_mapping_generation: (input.expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) throw error;
   const row = camelizeRow<PortalFieldMap>(data);
@@ -988,6 +1184,7 @@ export async function proposeSharedFieldMap(input: SharedProposeInput): Promise<
  * jsonb `?`, which `->>` alone cannot. */
 export interface SharedRegistryPatch {
   id: string;
+  expectedMappingGeneration?: number | null;
   displayLabel?: string | null;
   section?: string | null;
   sortOrder?: number | null;
@@ -1001,7 +1198,10 @@ export async function updateSharedFieldRegistry(
 ): Promise<PortalFieldMap[]> {
   if (patches.length === 0) return [];
   const entries = patches.map((patch) => {
-    const entry: Record<string, unknown> = { id: patch.id };
+    const entry: Record<string, unknown> = {
+      id: patch.id,
+      expected_mapping_generation: patch.expectedMappingGeneration ?? null,
+    };
     if ("displayLabel" in patch) entry.display_label = patch.displayLabel ?? null;
     if ("section" in patch) entry.section = patch.section ?? null;
     if ("sortOrder" in patch) entry.sort_order = patch.sortOrder ?? null;
@@ -1030,17 +1230,25 @@ export interface BatchApproveItem {
 export async function batchApproveFieldMaps(
   items: BatchApproveItem[],
   portalKey: string,
+  expectedMappingGeneration: number | null | undefined,
 ): Promise<number> {
   const orgId = requireActiveOrg();
-  let n = 0;
-  for (const item of items) {
-    await updateFieldMapRow(orgId, item.id, {
-      status: "approved",
-      source: "token",
-      token: normalizeTokenKey(item.token),
-    });
-    n += 1;
-  }
+  const entries = items.map((item) => ({
+    id: item.id,
+    patch: { status: "approved", source: "token", token: normalizeTokenKey(item.token) },
+  }));
+  const { data, error } = await supabase.rpc(
+    "update_org_portal_field_maps_batch" as never,
+    {
+      p_org_id: orgId,
+      p_portal_key: portalKey,
+      p_expected_mapping_generation: expectedMappingGeneration ?? null,
+      p_entries: entries as never,
+    } as never,
+  );
+  if (error) throw error;
+  const rows = data as unknown;
+  const n = Array.isArray(rows) ? rows.length : 0;
   if (n > 0) {
     await writeAudit({
       actionType: "UPDATE",

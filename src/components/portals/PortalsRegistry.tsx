@@ -396,7 +396,11 @@ function EditUrlEditor({
 
   async function save() {
     try {
-      await updateMut.mutateAsync({ id: portal.id, formUrl: url });
+      await updateMut.mutateAsync({
+        id: portal.id,
+        formUrl: url,
+        expectedMappingGeneration: portal.mappingGeneration,
+      });
       toast.success("Portal URL updated");
       onDone();
     } catch (e) {

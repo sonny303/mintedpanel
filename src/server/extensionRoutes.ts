@@ -663,6 +663,8 @@ export async function handleProveSharedPortal(body: unknown, user: UserContext):
   const input: ProveSharedPortalInput = {
     portalKey: (raw.portalKey ?? raw.portal_key ?? null) as string | null,
     id: (raw.id ?? null) as string | null,
+    expectedMappingGeneration:
+      typeof raw.expected_mapping_generation === "number" ? raw.expected_mapping_generation : null,
   };
   const result = await proveSharedPortal({ db: user.db, userId: user.userId }, input);
   if (result.kind === "rejected") return fail(result.status, result.message);
