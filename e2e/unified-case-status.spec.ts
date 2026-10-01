@@ -952,9 +952,10 @@ test("TS-116: reapply returns the SAME denied case to In Progress with a fresh c
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Denied → In Progress");
   await dialog.getByRole("button", { name: "Reapply" }).click();
-  await expect(page.getByText("Case reopened — In Progress.", { exact: false })).toBeVisible({
-    timeout: 30000,
-  });
+  await expect(
+    page.getByText("Case reopened — In Progress, 1 task regenerated.", { exact: false }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Prepare application packet")).toBeVisible();
 
   // The reapply edge rides the atomic RPC against the expected Denied state.
   const statusRpc = writes.find((w) => w.table === "rpc/set_case_status");

@@ -413,6 +413,7 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
         org_id: input.org_id,
         provider_id: input.provider_id,
         payer_id: input.payer_id,
+        case_type: input.case_type ?? "enrollment",
         state: input.state,
         group_id: input.group_id ?? null,
         facility_id: input.facility_id ?? null,

@@ -652,6 +652,7 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
     org_id: ORG_SHELBY,
     provider_id: "pr-jane",
     payer_id: "pay-bcbsnc",
+    case_type: "enrollment",
     state: "NC",
     group_id: "g-1",
     facility_id: null,
