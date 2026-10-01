@@ -288,7 +288,15 @@ export async function handleSsnRelease(id: string, url: URL, ctx: AuthContext): 
 export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalsForApi({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
-  return ok(rows, { total: rows.length, registry_empty: rows.length === 0 });
+  // Older extensions select a registry entry by URL alone. Hide any
+  // configuration that requires explicit selection before it crosses that
+  // legacy boundary; applying this after the service fetch also covers exact
+  // portal_key lookups made by old clients.
+  const visibleRows = rows.filter((row) => !row.requiresExplicitSelection);
+  return ok(visibleRows, {
+    total: visibleRows.length,
+    registry_empty: visibleRows.length === 0,
+  });
 }
 
 // GET /api/shared-portals — the GLOBAL registry only, for E6.9 Train forms.

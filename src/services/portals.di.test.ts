@@ -134,6 +134,27 @@ describe("listSharedPortals — GET /api/shared-portals (Train)", () => {
 });
 
 describe("listPortalsForApi — GET /api/portals (Work recognition)", () => {
+  it("projects the explicit-selection capability without migrating legacy typed rows", async () => {
+    const { db, captured } = fakeDb([
+      portalRow({
+        id: "historical-typed",
+        case_type: "enrollment",
+        requires_explicit_selection: false,
+      }),
+      portalRow({ id: "new-explicit", case_type: "contract", requires_explicit_selection: true }),
+    ]);
+
+    const rows = await listPortalsForApi({ db, orgId: "org-1" });
+
+    expect(captured.selected).toContain("requires_explicit_selection");
+    expect(
+      rows.map(({ id, requiresExplicitSelection }) => [id, requiresExplicitSelection]),
+    ).toEqual([
+      ["historical-typed", false],
+      ["new-explicit", true],
+    ]);
+  });
+
   it("drops GLOBAL ghosts so a page can't match a dead payer's portal", async () => {
     const { db } = fakeDb([portalRow(), ...GHOSTS]);
     const rows = await listPortalsForApi({ db, orgId: "org-1" });

@@ -20,9 +20,9 @@ import {
 } from "@/components/ui/select";
 import { useCreatePortal, usePortals, useUpdatePortalPayer } from "@/hooks/usePortals";
 import { useUpsertGlobalPortal } from "@/hooks/useGlobalAuthoring";
-import { slugifyPortalKey } from "@/lib/portalKey";
-import { normalizePortalKey } from "@/lib/tokenFormat";
+import { createIndependentPortalInput } from "@/lib/portalKey";
 import { portalDisplayName } from "@/lib/portalRetirement";
+import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
 import type { Payer, Portal } from "@/types";
 
 export interface AddPayerPortalDialogProps {
@@ -36,8 +36,7 @@ export function AddPayerPortalDialog({ payer, onClose, onSuccess }: AddPayerPort
 
   // "Register new" form state
   const [name, setName] = useState("");
-  const [portalKey, setPortalKey] = useState("");
-  const [keyEdited, setKeyEdited] = useState(false);
+  const [caseType, setCaseType] = useState<CaseType | "">("");
   const [formUrl, setFormUrl] = useState("");
   const [tier, setTier] = useState<"org" | "global">("org");
   const [error, setError] = useState<string | null>(null);
@@ -55,16 +54,8 @@ export function AddPayerPortalDialog({ payer, onClose, onSuccess }: AddPayerPort
   // Portals available to attach (not already attached to this payer)
   const attachablePortals = useMemo(() => {
     const all = portalsQ.data ?? [];
-    return all.filter((p) => p.payerId !== payer.id);
+    return all.filter((p) => p.payerId !== payer.id && p.requiresExplicitSelection !== true);
   }, [portalsQ.data, payer.id]);
-
-  function handleNameChange(val: string) {
-    setName(val);
-    setError(null);
-    if (!keyEdited) {
-      setPortalKey(slugifyPortalKey(val));
-    }
-  }
 
   async function handleRegisterNew() {
     setError(null);
@@ -72,27 +63,26 @@ export function AddPayerPortalDialog({ payer, onClose, onSuccess }: AddPayerPort
       setError("Portal name is required.");
       return;
     }
-    const normalizedKey = normalizePortalKey(portalKey) || slugifyPortalKey(name);
-    if (!normalizedKey) {
-      setError("A valid portal key is required.");
+    if (!caseType) {
+      setError("Case type is required.");
       return;
     }
+    const input = createIndependentPortalInput({
+      name,
+      payerId: payer.id,
+      caseType,
+      formUrl,
+    });
 
     try {
       let created: Portal;
       if (tier === "global") {
         created = await upsertGlobalMut.mutateAsync({
-          name: name.trim(),
-          portalKey: normalizedKey,
-          payerId: payer.id,
-          formUrl: formUrl.trim() || null,
+          ...input,
         });
       } else {
         created = await createOrgMut.mutateAsync({
-          name: name.trim(),
-          portalKey: normalizedKey,
-          payerId: payer.id,
-          formUrl: formUrl.trim() || null,
+          ...input,
         });
       }
       toast.success(`Portal ${created.name} added to ${payer.name}`);
@@ -152,28 +142,41 @@ export function AddPayerPortalDialog({ payer, onClose, onSuccess }: AddPayerPort
               <Label className="text-xs">Portal name</Label>
               <Input
                 value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setError(null);
+                }}
                 placeholder="e.g. Aetna Provider Portal"
                 className="mt-1 h-9"
               />
             </div>
 
             <div>
-              <Label className="text-xs">Portal key</Label>
-              <Input
-                value={portalKey}
-                onChange={(e) => {
-                  setPortalKey(e.target.value);
-                  setKeyEdited(true);
-                  setError(null);
-                }}
-                placeholder="e.g. aetna_provider_portal"
-                className="mt-1 h-9 font-mono text-[12px]"
-              />
+              <Label className="text-xs">Case type</Label>
+              <Select value={caseType} onValueChange={(value) => setCaseType(value as CaseType)}>
+                <SelectTrigger className="mt-1 h-9 text-[12.5px]" aria-label="Case type">
+                  <SelectValue placeholder="Select a case type…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CASE_TYPES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value === "contract"
+                        ? "Contract"
+                        : value === "enrollment"
+                          ? "Enrollment"
+                          : "Recredentialing"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Permanent identifier used by the extension to match forms.
+                This creates an independent, initially empty form configuration.
               </p>
             </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              A distinct permanent key is generated for this configuration and cannot be renamed.
+            </p>
 
             <div>
               <Label className="text-xs">Form URL</Label>
