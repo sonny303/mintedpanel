@@ -21,6 +21,8 @@ const PORTAL_HOST = "payer.m64.test";
 const ORG_ID = "18000000-0000-4000-a000-000000000064";
 const ORG_NAME_RE = /^E612 M64 [a-f0-9]{16} Organization$/;
 const CONTRACT_ID = "29000000-0000-4000-a000-000000000064";
+const CONTRACT_TEMPLATE_ID = "69000000-0000-4000-a000-000000000064";
+const CONTRACT_ASSIGNMENT_ID = "79000000-0000-4000-a000-000000000064";
 const PAYER_ID = "28000000-0000-4000-a000-000000000064";
 const GROUP_ID = "49000000-0000-4000-a000-000000000064";
 const PROVIDER_ID = "39000000-0000-4000-a000-000000000065";
@@ -52,6 +54,7 @@ const TABLE_PREFLIGHT_HEADERS = new Set([
   "authorization",
   "x-client-info",
 ]);
+const FILL_SESSION_COUNT_PREFLIGHT_HEADERS = new Set([...TABLE_PREFLIGHT_HEADERS, "prefer"]);
 const RPC_PREFLIGHT_HEADERS = new Set([
   "content-profile",
   "content-type",
@@ -92,6 +95,40 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
     org_id: `eq.${ORG_ID}`,
     order: "created_at.asc",
   }),
+  contract_sop_assignments: Object.freeze({
+    select: "*",
+    org_id: `eq.${ORG_ID}`,
+    contract_id: `eq.${CONTRACT_ID}`,
+  }),
+  sop_template_versions: Object.freeze({
+    select: "template_id,version,name,case_type,task_definitions,required_profile_attributes",
+    template_id: `eq.${CONTRACT_TEMPLATE_ID}`,
+    version: "eq.1",
+  }),
+  provider_group_assignments: Object.freeze({
+    select: "provider_id,start_date,end_date",
+    org_id: `eq.${ORG_ID}`,
+    group_id: `eq.${GROUP_ID}`,
+  }),
+  providers: Object.freeze([
+    Object.freeze({
+      select:
+        "id,first_name,last_name,credentials,npi,home_state,caqh_id,caqh_last_attested_date,taxonomy_code,status,group_id,specialty,email,reference_only,verification_state,is_test_provider,updated_at",
+      org_id: `eq.${ORG_ID}`,
+      order: "last_name.asc",
+    }),
+    Object.freeze({
+      select: "id,status",
+      id: `in.(${PROVIDER_ID})`,
+      org_id: `eq.${ORG_ID}`,
+    }),
+  ]),
+});
+const FILL_SESSION_COUNT_QUERY = Object.freeze({
+  select: "id",
+  org_id: `eq.${ORG_ID}`,
+  contract_sop_assignment_id: `eq.${CONTRACT_ASSIGNMENT_ID}`,
+  is_test: "eq.false",
 });
 const SUPABASE_REST_READ_TABLES = new Set([
   "profiles",
@@ -716,11 +753,18 @@ function requestedAuthPreflightHeaders(value) {
 
 function inspectRequestedDataPreflightHeaders(value, method) {
   if (typeof value !== "string" || value.trim().length === 0) return false;
-  const allowed = method === "GET" ? TABLE_PREFLIGHT_HEADERS : RPC_PREFLIGHT_HEADERS;
+  const allowed =
+    method === "GET"
+      ? TABLE_PREFLIGHT_HEADERS
+      : method === "HEAD"
+        ? FILL_SESSION_COUNT_PREFLIGHT_HEADERS
+        : RPC_PREFLIGHT_HEADERS;
   const required =
     method === "GET"
       ? ["accept-profile", "apikey", "authorization", "x-client-info"]
-      : ["apikey", "authorization", "content-profile", "content-type", "x-client-info"];
+      : method === "HEAD"
+        ? ["accept-profile", "apikey", "authorization", "prefer", "x-client-info"]
+        : ["apikey", "authorization", "content-profile", "content-type", "x-client-info"];
   const requested = value.split(",").map((name) => name.trim().toLowerCase());
   return (
     requested.every((name) => name && allowed.has(name)) &&
@@ -729,7 +773,7 @@ function inspectRequestedDataPreflightHeaders(value, method) {
   );
 }
 
-function hasExactSyntheticTableQuery(requestTarget, pathname, table) {
+function hasExactSyntheticQuery(requestTarget, pathname, expectedQuery) {
   let parsed;
   try {
     parsed = new URL(requestTarget, SUPABASE_ORIGIN);
@@ -745,8 +789,6 @@ function hasExactSyntheticTableQuery(requestTarget, pathname, table) {
   ) {
     return false;
   }
-  const expectedQuery = DATA_PREFLIGHT_TABLE_QUERIES[table];
-  if (!expectedQuery) return false;
   const entries = [...parsed.searchParams.entries()];
   if (
     entries.length !== Object.keys(expectedQuery).length ||
@@ -759,6 +801,15 @@ function hasExactSyntheticTableQuery(requestTarget, pathname, table) {
     const actual = parsed.searchParams.get(key) ?? "";
     return expected instanceof RegExp ? expected.test(actual) : actual === expected;
   });
+}
+
+function hasExactSyntheticTableQuery(requestTarget, pathname, table) {
+  const configured = DATA_PREFLIGHT_TABLE_QUERIES[table];
+  if (!configured) return false;
+  const expectedQueries = Array.isArray(configured) ? configured : [configured];
+  return expectedQueries.some((expectedQuery) =>
+    hasExactSyntheticQuery(requestTarget, pathname, expectedQuery),
+  );
 }
 
 function isAllowedDataPreflight(host, method, pathname, requestTarget, headers) {
@@ -785,6 +836,19 @@ function isAllowedDataPreflight(host, method, pathname, requestTarget, headers) 
         allowedHeaders: TABLE_PREFLIGHT_HEADERS,
       };
     }
+  }
+  if (
+    pathname === "/rest/v1/fill_sessions" &&
+    requestedMethod === "HEAD" &&
+    hasExactSyntheticQuery(requestTarget, pathname, FILL_SESSION_COUNT_QUERY) &&
+    inspectRequestedDataPreflightHeaders(headers["access-control-request-headers"], "HEAD")
+  ) {
+    return {
+      kind: "preflight",
+      name: "supabase.rest.fill_sessions_count_preflight",
+      allowedMethod: "HEAD",
+      allowedHeaders: FILL_SESSION_COUNT_PREFLIGHT_HEADERS,
+    };
   }
   if (
     pathname === "/rest/v1/rpc/claim_invites" &&
@@ -819,6 +883,60 @@ function assertDataPreflightPolicy() {
   const membershipsTarget =
     "/rest/v1/memberships?select=org_id%2Crole%2Corganizations%28name%2Clifecycle_state%2Ccreated_at%29&user_id=eq.30000000-0000-4000-8000-000000000002";
   const queryTarget = (path, query) => `${path}?${new URLSearchParams(query).toString()}`;
+  const contractProviderTargets = [
+    [
+      "contract_sop_assignments",
+      queryTarget("/rest/v1/contract_sop_assignments", {
+        select: "*",
+        org_id: `eq.${ORG_ID}`,
+        contract_id: `eq.${CONTRACT_ID}`,
+      }),
+    ],
+    [
+      "sop_template_versions",
+      queryTarget("/rest/v1/sop_template_versions", {
+        select: "template_id,version,name,case_type,task_definitions,required_profile_attributes",
+        template_id: `eq.${CONTRACT_TEMPLATE_ID}`,
+        version: "eq.1",
+      }),
+    ],
+    [
+      "provider_group_assignments",
+      queryTarget("/rest/v1/provider_group_assignments", {
+        select: "provider_id,start_date,end_date",
+        org_id: `eq.${ORG_ID}`,
+        group_id: `eq.${GROUP_ID}`,
+      }),
+    ],
+    [
+      "providers",
+      queryTarget("/rest/v1/providers", {
+        select:
+          "id,first_name,last_name,credentials,npi,home_state,caqh_id,caqh_last_attested_date,taxonomy_code,status,group_id,specialty,email,reference_only,verification_state,is_test_provider,updated_at",
+        org_id: `eq.${ORG_ID}`,
+        order: "last_name.asc",
+      }),
+    ],
+    [
+      "providers",
+      queryTarget("/rest/v1/providers", {
+        select: "id,status",
+        id: `in.(${PROVIDER_ID})`,
+        org_id: `eq.${ORG_ID}`,
+      }),
+    ],
+  ];
+  const fillSessionCountTarget = queryTarget("/rest/v1/fill_sessions", FILL_SESSION_COUNT_QUERY);
+  const headHeaders = {
+    origin: PANEL_ORIGIN,
+    "access-control-request-method": "HEAD",
+    "access-control-request-headers":
+      "accept-profile, apikey, authorization, prefer, x-client-info",
+  };
+  const fillSessionHeadRoute = (
+    target,
+    headers = { origin: PANEL_ORIGIN, prefer: "count=exact" },
+  ) => routeFor(SUPABASE_HOST, "HEAD", "/rest/v1/fill_sessions", target, headers);
   const matrixTargets = [
     [
       "contracts",
@@ -878,13 +996,21 @@ function assertDataPreflightPolicy() {
       "supabase.rest.profiles_preflight" &&
       route("/rest/v1/memberships", membershipsTarget, getHeaders)?.name ===
         "supabase.rest.memberships_preflight" &&
+      contractProviderTargets.every(
+        ([table, target]) =>
+          route(`/rest/v1/${table}`, target, getHeaders)?.name ===
+          `supabase.rest.${table}_preflight`,
+      ) &&
       matrixTargets.every(
         ([table, target]) =>
           route(`/rest/v1/${table}`, target, getHeaders)?.name ===
           `supabase.rest.${table}_preflight`,
       ) &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites", postHeaders)?.name ===
-        "supabase.rpc.claim_invites_preflight",
+        "supabase.rpc.claim_invites_preflight" &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, headHeaders)?.name ===
+        "supabase.rest.fill_sessions_count_preflight" &&
+      fillSessionHeadRoute(fillSessionCountTarget)?.name === "supabase.rest.fill_sessions_count",
     "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
   );
   assert(
@@ -941,8 +1067,115 @@ function assertDataPreflightPolicy() {
         ...getHeaders,
         "access-control-request-headers": undefined,
       }) === null &&
-      route("/rest/v1/providers", "/rest/v1/providers?select=*&org_id=eq.test", getHeaders) ===
-        null,
+      route(
+        "/rest/v1/contract_sop_assignments",
+        contractProviderTargets[0][1].replace(CONTRACT_ID, "29000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/sop_template_versions",
+        contractProviderTargets[1][1].replace(
+          CONTRACT_TEMPLATE_ID,
+          "69000000-0000-4000-a000-000000000099",
+        ),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/provider_group_assignments",
+        contractProviderTargets[2][1].replace(GROUP_ID, "49000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/providers",
+        contractProviderTargets[3][1].replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/providers",
+        contractProviderTargets[4][1].replace(PROVIDER_ID, "39000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/providers",
+        queryTarget("/rest/v1/providers", {
+          select: "id,status",
+          id: `in.(${PROVIDER_ID},39000000-0000-4000-a000-000000000099)`,
+          org_id: `eq.${ORG_ID}`,
+        }),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/contract_sop_assignments", contractProviderTargets[0][1], {
+        ...getHeaders,
+        origin: "https://untrusted.invalid",
+      }) === null &&
+      route("/rest/v1/sop_template_versions", contractProviderTargets[1][1], {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/provider_group_assignments", contractProviderTargets[2][1], {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
+      }) === null &&
+      route("/rest/v1/providers", `${contractProviderTargets[3][1]}&extra=eq.x`, getHeaders) ===
+        null &&
+      route(
+        "/rest/v1/providers/39000000-0000-4000-a000-000000000065",
+        contractProviderTargets[4][1],
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        origin: "https://untrusted.invalid",
+      }) === null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        "access-control-request-method": "GET",
+      }) === null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        "access-control-request-private-network": "true",
+      }) === null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        "access-control-request-headers": "accept-profile, apikey, authorization, x-client-info",
+      }) === null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        "access-control-request-headers": `${headHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        "access-control-request-headers": `${headHeaders["access-control-request-headers"]}, prefer`,
+      }) === null &&
+      route(
+        "/rest/v1/fill_sessions",
+        fillSessionCountTarget.replace(
+          CONTRACT_ASSIGNMENT_ID,
+          "79000000-0000-4000-a000-000000000099",
+        ),
+        headHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/fill_sessions",
+        fillSessionCountTarget.replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+        headHeaders,
+      ) === null &&
+      route("/rest/v1/fill_sessions", `${fillSessionCountTarget}&unexpected=eq.x`, headHeaders) ===
+        null &&
+      route("/rest/v1/fill_sessions", fillSessionCountTarget, {
+        ...headHeaders,
+        "access-control-request-method": "GET",
+      }) === null &&
+      fillSessionHeadRoute(fillSessionCountTarget, {}) === null &&
+      fillSessionHeadRoute(fillSessionCountTarget, {
+        origin: PANEL_ORIGIN,
+        prefer: "count=exact,return=representation",
+      }) === null &&
+      fillSessionHeadRoute(fillSessionCountTarget, {
+        origin: "https://untrusted.invalid",
+        prefer: "count=exact",
+      }) === null &&
+      routeFor(SUPABASE_HOST, "GET", "/rest/v1/fill_sessions", fillSessionCountTarget, {}) === null,
     "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
   );
 }
@@ -1112,6 +1345,15 @@ function routeFor(host, method, pathname, requestTarget, headers = {}) {
     }
     const dataPreflight = isAllowedDataPreflight(host, method, pathname, requestTarget, headers);
     if (dataPreflight) return dataPreflight;
+    if (
+      method === "HEAD" &&
+      pathname === "/rest/v1/fill_sessions" &&
+      hasExactSyntheticQuery(requestTarget, pathname, FILL_SESSION_COUNT_QUERY) &&
+      headers.origin === PANEL_ORIGIN &&
+      headers.prefer === "count=exact"
+    ) {
+      return { kind: "gateway", name: "supabase.rest.fill_sessions_count" };
+    }
     const authMethods = new Map([
       ["/auth/v1/token", new Set(["POST"])],
       ["/auth/v1/user", new Set(["GET"])],
