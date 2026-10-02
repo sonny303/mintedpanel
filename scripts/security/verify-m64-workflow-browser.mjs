@@ -53,6 +53,12 @@ const ENROLLMENT_PROFILE_TARGET = (() => {
   query.set("caseId", ENROLLMENT_CASE_ID);
   return `/api/providers/${PROVIDER_ID}/profile?${query.toString()}`;
 })();
+const ENROLLMENT_FILL_PROFILE_TARGET = (() => {
+  const query = new URLSearchParams();
+  query.set("facilityId", FACILITY_ID);
+  query.set("caseId", ENROLLMENT_CASE_ID);
+  return `/api/providers/${PROVIDER_ID}/profile?${query.toString()}`;
+})();
 const ENROLLMENT_TASK_ID = "99000000-0000-4000-a000-000000000064";
 const ENROLLMENT_STEP1_ID = "89000000-0000-4000-a000-000000000064";
 const ENROLLMENT_STEP2_ID = "89000000-0000-4000-a000-000000000065";
@@ -799,17 +805,19 @@ function assertM64ProviderReadPolicy() {
       "M64_BROWSER_ENROLLMENT_PROFILE_TARGET_SERIALIZATION_INVALID",
     );
     assert(
-      route("GET", ENROLLMENT_PROFILE_TARGET, getHeaders)?.name === "panel.provider_profile" &&
-        route("GET", ENROLLMENT_PROFILE_TARGET, originlessGetHeaders)?.name ===
-          "panel.provider_profile" &&
-        route("OPTIONS", ENROLLMENT_PROFILE_TARGET, preflightHeaders)?.name ===
-          "panel.provider_profile_preflight",
-      "M64_BROWSER_ENROLLMENT_PROFILE_POLICY_INVALID",
+      ENROLLMENT_FILL_PROFILE_TARGET ===
+        `/api/providers/${PROVIDER_ID}/profile?facilityId=${FACILITY_ID}&caseId=${ENROLLMENT_CASE_ID}`,
+      "M64_BROWSER_ENROLLMENT_FILL_PROFILE_TARGET_SERIALIZATION_INVALID",
     );
     for (const [target, getName, preflightName] of [
       [PROVIDER_ROSTER_TARGET, "panel.providers", "panel.providers_preflight"],
       [CONTRACT_PROFILE_TARGET, "panel.provider_profile", "panel.provider_profile_preflight"],
       [ENROLLMENT_PROFILE_TARGET, "panel.provider_profile", "panel.provider_profile_preflight"],
+      [
+        ENROLLMENT_FILL_PROFILE_TARGET,
+        "panel.provider_profile",
+        "panel.provider_profile_preflight",
+      ],
     ]) {
       assert(
         route("GET", target, getHeaders)?.name === getName,
@@ -909,6 +917,15 @@ function assertM64ProviderReadPolicy() {
         `state=NY&facilityId=${FACILITY_ID}&caseId=${ENROLLMENT_CASE_ID}`,
         `caseId=${ENROLLMENT_CASE_ID}&facilityId=${FACILITY_ID}&state=NY`,
       ),
+      ENROLLMENT_FILL_PROFILE_TARGET.replace(
+        `facilityId=${FACILITY_ID}&caseId=${ENROLLMENT_CASE_ID}`,
+        `caseId=${ENROLLMENT_CASE_ID}&facilityId=${FACILITY_ID}`,
+      ),
+      ENROLLMENT_FILL_PROFILE_TARGET.replace(
+        `caseId=${ENROLLMENT_CASE_ID}`,
+        `caseId=${ENROLLMENT_CASE_ID}&caseId=${ENROLLMENT_CASE_ID}`,
+      ),
+      `${ENROLLMENT_FILL_PROFILE_TARGET}&state=NY`,
     ];
     assert(
       wrongEnrollmentTargets.every(
@@ -1296,6 +1313,12 @@ function panelProviderReadKind(pathname, requestTarget) {
   if (
     pathname === `/api/providers/${PROVIDER_ID}/profile` &&
     requestTarget === ENROLLMENT_PROFILE_TARGET
+  ) {
+    return "provider_profile";
+  }
+  if (
+    pathname === `/api/providers/${PROVIDER_ID}/profile` &&
+    requestTarget === ENROLLMENT_FILL_PROFILE_TARGET
   ) {
     return "provider_profile";
   }
