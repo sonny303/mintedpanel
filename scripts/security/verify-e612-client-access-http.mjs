@@ -147,6 +147,11 @@ function safeM64DriverFailureMarker(error) {
     const match = /^(?:Error: )?(M64_BROWSER_[A-Za-z0-9_]+)$/.exec(line.trimEnd());
     if (match && m64DriverFailureMarkers.has(match[1])) return match[1];
   }
+  const boundedStdout = `${stdout.slice(0, 8192)}\n${stdout.slice(-8192)}`;
+  for (const line of boundedStdout.split(/\r?\n/).reverse()) {
+    const match = /^(?:Error: )?(M64_BROWSER_[A-Za-z0-9_]+)$/.exec(line.trimEnd());
+    if (match && m64DriverFailureMarkers.has(match[1])) return match[1];
+  }
   return stdout.slice(0, 8192).split(/\r?\n/).includes("M64_BROWSER_DRIVER_STARTED")
     ? "M64_BROWSER_SMOKE_FAILED"
     : "M64_BROWSER_DRIVER_NOT_STARTED";
