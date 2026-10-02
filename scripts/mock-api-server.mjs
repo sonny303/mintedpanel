@@ -1845,6 +1845,18 @@ export async function createMockApiServer(options = {}) {
       if (body.bump_status && body.kind !== "portal_submission") {
         return envelope(res, 422, null, "bump_status is only accepted on kind 'portal_submission'");
       }
+      if (body.work_context != null && leak !== "touches") {
+        const workContext = body.work_context;
+        if (
+          !workContext ||
+          typeof workContext !== "object" ||
+          workContext.ownerKind !== "case" ||
+          workContext.orgId !== orgId ||
+          workContext.ownerId !== touchesMatch[1]
+        ) {
+          return envelope(res, 404, null, "Case not found");
+        }
+      }
       const key = `${orgId}:${body.idempotency_id}`;
       // A replay returns the stored row and re-runs nothing — including the
       // bump, so a retry can never double-apply it (hence no meta here).
@@ -2074,7 +2086,21 @@ export async function createMockApiServer(options = {}) {
         return envelope(res, 422, null, "Request body must be a JSON object");
       }
       const key = `${orgId}:${body.id}`;
-      if (leak !== "fillevents") {
+      const workContext = body.workContext;
+      if (workContext != null && leak !== "fillevents") {
+        if (
+          typeof workContext !== "object" ||
+          workContext.ownerKind !== "case" ||
+          workContext.orgId !== orgId
+        ) {
+          return envelope(res, 404, null, "Work context not found");
+        }
+        const owner = CASES.find((c) => c.id === workContext.ownerId && c.orgId === orgId);
+        if (!owner) return envelope(res, 404, null, "Work context not found");
+        if (workContext.providerId !== owner.providerId) {
+          return envelope(res, 404, null, "Work context not found");
+        }
+      } else if (leak !== "fillevents") {
         // Real contract: validate ownership BEFORE the idempotency lookup or
         // any write. A cross-org case/provider is a 404, nothing stored.
         if (body.caseId != null) {
@@ -2093,8 +2119,8 @@ export async function createMockApiServer(options = {}) {
       const session = {
         id: body.id,
         orgId,
-        caseId: body.caseId ?? null,
-        providerId: body.providerId ?? null,
+        caseId: body.caseId ?? workContext?.ownerId ?? null,
+        providerId: body.providerId ?? workContext?.providerId ?? null,
         portalKey: body.portalKey,
         fillMode: body.fillMode ?? "web",
         startedAt: body.startedAt ?? new Date().toISOString(),

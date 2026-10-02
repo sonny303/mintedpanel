@@ -17,7 +17,7 @@ const caseRequest: WorkContextValidationRequest = {
   portalId: "b7a90000-0000-4000-a000-0000000000c4",
   portalKey: "regional_enrollment",
   mappingGeneration: 9,
-  effectiveMappingFingerprint: "fingerprint-v2",
+  effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
   providerId: "49ad83a8-d8b6-419d-8dcc-88c04a54c4da",
   facilityId: null,
   stepIdentity:
@@ -53,6 +53,10 @@ describe("work context v2 request parser", () => {
     ["unknown field", { ...caseRequest, caseType: "enrollment" }],
     ["missing case step", (({ stepId: _stepId, ...row }) => row)(caseRequest)],
     ["non-normalized portal key", { ...caseRequest, portalKey: "Regional_Enrollment" }],
+    [
+      "non-SHA mapping fingerprint",
+      { ...caseRequest, effectiveMappingFingerprint: "fingerprint-v2" },
+    ],
   ])("rejects %s", (_label, request) => {
     expect(parseWorkContextValidationRequest(request).ok).toBe(false);
   });

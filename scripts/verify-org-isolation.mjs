@@ -507,6 +507,63 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // MINT-58 extends this endpoint with an exact Work v2 tuple. The local
+  // contract mock proves both tuple organization and owner are checked before
+  // the fill idempotency lookup. These requests carry no PHI or valid fill
+  // receipt and are only sent to the in-process mock.
+  if (IS_LOCAL_MOCK_API) {
+    const typedCaseContext = (orgId, ownerId) => ({
+      launchReceiptId: crypto.randomUUID(),
+      orgId,
+      ownerKind: "case",
+      ownerId,
+      contextVersion: 1,
+      sopTemplateId: env.KANSAS_WORK_TEMPLATE_ID,
+      sopVersion: 3,
+      portalId: env.KANSAS_WORK_PORTAL_ID,
+      portalKey: env.KANSAS_WORK_PORTAL_KEY,
+      mappingGeneration: 2,
+      effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+      providerId: env.SOUTHPARK_PROVIDER_ID,
+      facilityId: null,
+      stepIdentity: `${ownerId}:${env.SOUTHPARK_TASK_ID}:${env.KANSAS_WORK_TEMPLATE_ID}:3:${env.KANSAS_WORK_STEP_ID}`,
+      taskId: env.SOUTHPARK_TASK_ID,
+      stepId: env.KANSAS_WORK_STEP_ID,
+    });
+    const typedWrongOrgFill = await apiPost(
+      "/api/fill-events",
+      {
+        id: crypto.randomUUID(),
+        workContext: typedCaseContext(env.SOUTHPARK_ORG, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "7c. Typed Work fill with a foreign org selector is rejected before idempotency",
+      typedWrongOrgFill.status === 404 && typedWrongOrgFill.body?.data == null,
+      `status=${typedWrongOrgFill.status} dataPresent=${typedWrongOrgFill.body?.data != null}`,
+      { leak: true },
+    );
+    const kansasOrgForWork =
+      env.KANSAS_ORG ?? (await apiGet("/api/me/orgs", { token: kansasTok })).body?.data?.[0]?.orgId;
+    const typedWrongOwnerFill = await apiPost(
+      "/api/fill-events",
+      {
+        id: crypto.randomUUID(),
+        workContext: typedCaseContext(kansasOrgForWork, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "7d. Typed Work fill with an own-org selector and foreign owner is rejected",
+      Boolean(kansasOrgForWork) &&
+        typedWrongOwnerFill.status === 404 &&
+        typedWrongOwnerFill.body?.data == null,
+      `status=${typedWrongOwnerFill.status} orgResolved=${Boolean(kansasOrgForWork)} dataPresent=${typedWrongOwnerFill.body?.data != null}`,
+      { leak: true },
+    );
+  }
+
   // 8. Cases dropdown endpoint: Kansas listing its own provider's open cases
   //    works (proves 8b isn't vacuous against a dead route)...
   const ownCases = await apiGet(`/api/cases?providerId=${env.KANSAS_PROVIDER_ID}`, {
@@ -586,6 +643,65 @@ function looksLikeVercelGate(r) {
     `status=${touchReplay.status} dataPresent=${touchReplay.body?.data != null}`,
     { leak: true },
   );
+
+  if (IS_LOCAL_MOCK_API) {
+    const kansasOrgForWork =
+      env.KANSAS_ORG ?? (await apiGet("/api/me/orgs", { token: kansasTok })).body?.data?.[0]?.orgId;
+    const typedTouchContext = (orgId, ownerId) => ({
+      launchReceiptId: crypto.randomUUID(),
+      orgId,
+      ownerKind: "case",
+      ownerId,
+      contextVersion: 1,
+      sopTemplateId: env.KANSAS_WORK_TEMPLATE_ID,
+      sopVersion: 3,
+      portalId: env.KANSAS_WORK_PORTAL_ID,
+      portalKey: env.KANSAS_WORK_PORTAL_KEY,
+      mappingGeneration: 2,
+      effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+      providerId: env.SOUTHPARK_PROVIDER_ID,
+      facilityId: null,
+      stepIdentity: `${ownerId}:${env.SOUTHPARK_TASK_ID}:${env.KANSAS_WORK_TEMPLATE_ID}:3:${env.KANSAS_WORK_STEP_ID}`,
+      taskId: env.SOUTHPARK_TASK_ID,
+      stepId: env.KANSAS_WORK_STEP_ID,
+    });
+    const typedTouchWrongOrg = await apiPost(
+      `/api/cases/${env.KANSAS_CASE_ID}/touches`,
+      {
+        kind: "portal_submission",
+        portal_key: env.KANSAS_WORK_PORTAL_KEY,
+        fill_session_id: crypto.randomUUID(),
+        idempotency_id: crypto.randomUUID(),
+        work_context: typedTouchContext(env.SOUTHPARK_ORG, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "9c. Typed submission with a foreign org selector is rejected before idempotency",
+      typedTouchWrongOrg.status === 404 && typedTouchWrongOrg.body?.data == null,
+      `status=${typedTouchWrongOrg.status} dataPresent=${typedTouchWrongOrg.body?.data != null}`,
+      { leak: true },
+    );
+    const typedTouchWrongOwner = await apiPost(
+      `/api/cases/${env.KANSAS_CASE_ID}/touches`,
+      {
+        kind: "portal_submission",
+        portal_key: env.KANSAS_WORK_PORTAL_KEY,
+        fill_session_id: crypto.randomUUID(),
+        idempotency_id: crypto.randomUUID(),
+        work_context: typedTouchContext(kansasOrgForWork, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "9d. Typed submission with an own-org selector and foreign owner is rejected",
+      Boolean(kansasOrgForWork) &&
+        typedTouchWrongOwner.status === 404 &&
+        typedTouchWrongOwner.body?.data == null,
+      `status=${typedTouchWrongOwner.status} orgResolved=${Boolean(kansasOrgForWork)} dataPresent=${typedTouchWrongOwner.body?.data != null}`,
+      { leak: true },
+    );
+  }
 
   // 10. Org discovery (GET /api/me/orgs): the caller's OWN memberships only,
   //     derived from the JWT user id — no org header involved. testkansas is

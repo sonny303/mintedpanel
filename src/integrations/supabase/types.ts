@@ -1049,11 +1049,14 @@ export type Database = {
       fill_sessions: {
         Row: {
           case_id: string | null;
+          case_step_id: string | null;
+          case_task_id: string | null;
           completed_at: string | null;
           context_version: number | null;
           contract_id: string | null;
           contract_sop_assignment_id: string | null;
           docs_attached: Json | null;
+          did_auto_start_case: boolean;
           effective_mapping_fingerprint: string | null;
           event_schema_version: number | null;
           facility_id: string | null;
@@ -1077,15 +1080,19 @@ export type Database = {
           sop_version: number | null;
           started_at: string;
           step_index: number | null;
+          step_identity: string | null;
           task_index: number | null;
         };
         Insert: {
           case_id?: string | null;
+          case_step_id?: string | null;
+          case_task_id?: string | null;
           completed_at?: string | null;
           context_version?: number | null;
           contract_id?: string | null;
           contract_sop_assignment_id?: string | null;
           docs_attached?: Json | null;
+          did_auto_start_case?: boolean;
           effective_mapping_fingerprint?: string | null;
           event_schema_version?: number | null;
           facility_id?: string | null;
@@ -1109,15 +1116,19 @@ export type Database = {
           sop_version?: number | null;
           started_at?: string;
           step_index?: number | null;
+          step_identity?: string | null;
           task_index?: number | null;
         };
         Update: {
           case_id?: string | null;
+          case_step_id?: string | null;
+          case_task_id?: string | null;
           completed_at?: string | null;
           context_version?: number | null;
           contract_id?: string | null;
           contract_sop_assignment_id?: string | null;
           docs_attached?: Json | null;
+          did_auto_start_case?: boolean;
           effective_mapping_fingerprint?: string | null;
           event_schema_version?: number | null;
           facility_id?: string | null;
@@ -1141,6 +1152,7 @@ export type Database = {
           sop_version?: number | null;
           started_at?: string;
           step_index?: number | null;
+          step_identity?: string | null;
           task_index?: number | null;
         };
         Relationships: [
@@ -4057,6 +4069,7 @@ export type Database = {
           corrects_touch_id: string | null;
           created_at: string | null;
           entry_type: string;
+          fill_session_id: string | null;
           id: string;
           next_follow_up_date: string | null;
           notes: string | null;
@@ -4065,6 +4078,7 @@ export type Database = {
           recipient_contact: string | null;
           recipient_name: string | null;
           source: string | null;
+          submission_request_fingerprint: string | null;
           task_id: string | null;
           touch_date: string;
           touch_type: string | null;
@@ -4077,6 +4091,7 @@ export type Database = {
           corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
+          fill_session_id?: string | null;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
@@ -4085,6 +4100,7 @@ export type Database = {
           recipient_contact?: string | null;
           recipient_name?: string | null;
           source?: string | null;
+          submission_request_fingerprint?: string | null;
           task_id?: string | null;
           touch_date: string;
           touch_type?: string | null;
@@ -4097,6 +4113,7 @@ export type Database = {
           corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
+          fill_session_id?: string | null;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
@@ -4105,11 +4122,19 @@ export type Database = {
           recipient_contact?: string | null;
           recipient_name?: string | null;
           source?: string | null;
+          submission_request_fingerprint?: string | null;
           task_id?: string | null;
           touch_date?: string;
           touch_type?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "touches_fill_session_id_fkey";
+            columns: ["fill_session_id"];
+            isOneToOne: false;
+            referencedRelation: "fill_sessions";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "touches_case_id_fkey";
             columns: ["case_id"];
@@ -4718,6 +4743,18 @@ export type Database = {
           p_org_id: string;
           p_publication_id: string;
           p_sha256: string;
+        };
+        Returns: Json;
+      };
+      record_typed_enrollment_submission: {
+        Args: {
+          p_actor_id: string;
+          p_case_id: string;
+          p_fill_session_id: string;
+          p_org_id: string;
+          p_payload: Json;
+          p_touch_id: string;
+          p_work_context: Json;
         };
         Returns: Json;
       };

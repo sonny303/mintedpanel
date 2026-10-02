@@ -1795,7 +1795,7 @@ describe("POST work-context validation handler", () => {
     portalId: "b7a90000-0000-4000-a000-0000000000c4",
     portalKey: "regional_enrollment",
     mappingGeneration: 9,
-    effectiveMappingFingerprint: "fingerprint-v2",
+    effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
     providerId: "49ad83a8-d8b6-419d-8dcc-88c04a54c4da",
     facilityId: null,
     stepIdentity: "case:task:sop:3:step",
@@ -1824,7 +1824,7 @@ describe("POST work-context validation handler", () => {
       formUrl: "https://portal.example/form",
       requiresExplicitSelection: true,
       mappingGeneration: 9,
-      effectiveMappingFingerprint: "fingerprint-v2",
+      effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
       effectiveWebMaps: [{ portalKey: "regional_enrollment", mapType: "web", status: "approved" }],
     };
     validateWorkContextMock.mockResolvedValue({ kind: "ok", data } as never);
@@ -1957,16 +1957,19 @@ describe("case touches handler", () => {
     expect(recordTouchMock).not.toHaveBeenCalled();
   });
 
-  it.each([[404], [409], [422]])("maps a rejected result to a %i failure", async (status) => {
-    recordTouchMock.mockResolvedValue({
-      kind: "rejected",
-      status: status as 404 | 409 | 422,
-      message: "nope",
-    });
-    const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
-    expect(res.status).toBe(status);
-    expect((await body(res)).error).toBe("nope");
-  });
+  it.each([[403], [404], [409], [422]])(
+    "maps a rejected result to a %i failure",
+    async (status) => {
+      recordTouchMock.mockResolvedValue({
+        kind: "rejected",
+        status: status as 403 | 404 | 409 | 422,
+        message: "nope",
+      });
+      const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
+      expect(res.status).toBe(status);
+      expect((await body(res)).error).toBe("nope");
+    },
+  );
 
   it("returns 201 for a created touch, forwarding the writer ctx and case id", async () => {
     recordTouchMock.mockResolvedValue({ kind: "created", touch: { id: "t1" } as never });
@@ -1986,6 +1989,30 @@ describe("case touches handler", () => {
     const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
     expect(res.status).toBe(200);
     expect((await body(res)).data).toEqual({ id: "t1" });
+  });
+
+  it("passes the nested v2 Work receipt through to the service unchanged", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: { id: "t-v2" } as never });
+    const payload = {
+      kind: "portal_submission",
+      idempotency_id: "11111111-2222-4333-8444-555555555555",
+      portal_key: "aetna_enrollment_form",
+      fill_session_id: "99999999-8888-4777-8666-121212121212",
+      work_context: {
+        launchReceiptId: "71717171-4242-4535-8686-797979797979",
+        ownerKind: "case",
+        ownerId: CASE_ID,
+        taskId: "31313131-4242-4535-8686-797979797979",
+        stepId: "a1a1a1a1-1111-4111-8111-111111111111",
+      },
+    };
+    const res = await handleCreateCaseTouch(CASE_ID, payload, ctx());
+    expect(res.status).toBe(201);
+    expect(recordTouchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      CASE_ID,
+      payload,
+    );
   });
 });
 
@@ -2033,5 +2060,25 @@ describe("fill events handler", () => {
     const res = await handleCreateFillEvent({ id: "fs1" }, ctx());
     expect(res.status).toBe(200);
     expect((await body(res)).data).toEqual({ id: "fs1" });
+  });
+
+  it("passes the nested camel-case v2 Work receipt through to the service unchanged", async () => {
+    recordFillEventMock.mockResolvedValue({ kind: "created", session: { id: "fs-v2" } as never });
+    const payload = {
+      id: "11111111-2222-4333-8444-555555555555",
+      workContext: {
+        launchReceiptId: "71717171-4242-4535-8686-797979797979",
+        ownerKind: "case",
+        ownerId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        taskId: "31313131-4242-4535-8686-797979797979",
+        stepId: "a1a1a1a1-1111-4111-8111-111111111111",
+      },
+    };
+    const res = await handleCreateFillEvent(payload, ctx());
+    expect(res.status).toBe(201);
+    expect(recordFillEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      payload,
+    );
   });
 });

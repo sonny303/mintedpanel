@@ -45,9 +45,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
+import {
+  parseWorkContextTuple,
+  type WorkContextTuple,
+  type WorkContextValidationRequest,
+} from "@/lib/workContext";
 import { CANONICAL_TOUCH_TYPES } from "@/lib/touchTypes";
 import { dispositionRequiresContext, isDisposition } from "@/lib/touchDispositions";
 import type { Touch, TouchOutcome, TouchType } from "@/types";
+import { validateWorkContextForFillReceipt } from "@/services/workContext";
 
 export interface SubmissionTouchServiceCtx {
   db: SupabaseClient<Database>;
@@ -61,6 +67,8 @@ export interface SubmissionTouchServiceCtx {
 // (the latter added by E4.3 TE-5); anything else is a 422.
 export interface SubmissionTouchInput {
   kind: string;
+  /** Strict M56 v2 tuple for an atomic typed Enrollment submission. */
+  work_context?: unknown;
   // Required for portal_submission; not accepted on structured_touch.
   portal_key?: string;
   // The fill session this submission followed, when there was one.
@@ -113,7 +121,7 @@ export interface StatusBumpOutcome {
 export type RecordSubmissionTouchResult =
   | { kind: "created"; touch: Touch; bump?: StatusBumpOutcome }
   | { kind: "duplicate"; touch: Touch }
-  | { kind: "rejected"; status: 404 | 409 | 422; message: string };
+  | { kind: "rejected"; status: 403 | 404 | 409 | 422; message: string };
 
 /** The one status a portal submission may bump a case to. Not caller-supplied:
  * "the human submitted the form" has exactly one meaning, and letting the
@@ -175,7 +183,7 @@ async function reportCaseStatusAfterTouch(
 }
 
 const TOUCH_COLUMNS =
-  "id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, notes, coordinator_id, task_id, communication_event_id, source, created_at, clears_follow_up, recipient_name, recipient_contact";
+  "id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, notes, coordinator_id, task_id, communication_event_id, source, created_at, clears_follow_up, recipient_name, recipient_contact, fill_session_id, submission_request_fingerprint";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -183,6 +191,219 @@ type Rejected = Extract<RecordSubmissionTouchResult, { kind: "rejected" }>;
 
 function reject(status: Rejected["status"], message: string): Rejected {
   return { kind: "rejected", status, message };
+}
+
+function workContextRequest(tuple: WorkContextTuple): WorkContextValidationRequest {
+  return { protocolVersion: 2, ...tuple } as WorkContextValidationRequest;
+}
+
+function sameReceiptTuple(
+  row: Record<string, unknown>,
+  tuple: Extract<WorkContextTuple, { ownerKind: "case" }>,
+): boolean {
+  return (
+    row.org_id === tuple.orgId &&
+    row.case_id === tuple.ownerId &&
+    row.contract_id == null &&
+    row.contract_sop_assignment_id == null &&
+    row.task_index == null &&
+    row.step_index == null &&
+    row.case_task_id === tuple.taskId &&
+    row.case_step_id === tuple.stepId &&
+    row.step_identity === tuple.stepIdentity &&
+    row.context_version === tuple.contextVersion &&
+    row.sop_template_id === tuple.sopTemplateId &&
+    row.sop_version === tuple.sopVersion &&
+    row.portal_id === tuple.portalId &&
+    row.portal_key === tuple.portalKey &&
+    row.launch_receipt_id === tuple.launchReceiptId &&
+    row.mapping_generation === tuple.mappingGeneration &&
+    row.effective_mapping_fingerprint === tuple.effectiveMappingFingerprint &&
+    row.provider_id === tuple.providerId &&
+    (row.facility_id ?? null) === tuple.facilityId &&
+    row.fill_mode === "web" &&
+    row.is_test === false &&
+    row.event_schema_version === 2
+  );
+}
+
+function hasConflictingWorkAliases(
+  input: SubmissionTouchInput,
+  caseId: string,
+  ctx: SubmissionTouchServiceCtx,
+  tuple: Extract<WorkContextTuple, { ownerKind: "case" }>,
+): boolean {
+  const body = input as unknown as Record<string, unknown>;
+  const aliases: Array<[string, unknown]> = [
+    ["orgId", ctx.orgId],
+    ["org_id", ctx.orgId],
+    ["userId", ctx.userId],
+    ["user_id", ctx.userId],
+    ["ownerKind", "case"],
+    ["owner_kind", "case"],
+    ["ownerId", caseId],
+    ["owner_id", caseId],
+    ["case_id", caseId],
+    ["caseId", caseId],
+    ["provider_id", tuple.providerId],
+    ["providerId", tuple.providerId],
+    ["facility_id", tuple.facilityId],
+    ["facilityId", tuple.facilityId],
+    ["context_version", tuple.contextVersion],
+    ["contextVersion", tuple.contextVersion],
+    ["sop_template_id", tuple.sopTemplateId],
+    ["sopTemplateId", tuple.sopTemplateId],
+    ["sop_version", tuple.sopVersion],
+    ["sopVersion", tuple.sopVersion],
+    ["portal_id", tuple.portalId],
+    ["portalId", tuple.portalId],
+    ["launch_receipt_id", tuple.launchReceiptId],
+    ["launchReceiptId", tuple.launchReceiptId],
+    ["mapping_generation", tuple.mappingGeneration],
+    ["mappingGeneration", tuple.mappingGeneration],
+    ["effective_mapping_fingerprint", tuple.effectiveMappingFingerprint],
+    ["effectiveMappingFingerprint", tuple.effectiveMappingFingerprint],
+    ["step_identity", tuple.stepIdentity],
+    ["stepIdentity", tuple.stepIdentity],
+    ["step_id", tuple.stepId],
+    ["stepId", tuple.stepId],
+    ["task_id", tuple.taskId],
+    ["taskId", tuple.taskId],
+    ["portal_key", tuple.portalKey],
+    ["portalKey", tuple.portalKey],
+    ["fillSessionId", input.fill_session_id],
+    ["idempotencyId", input.idempotency_id],
+    ["payerReferenceId", cleanText(input.payer_reference_id)],
+    ["wipNote", cleanText(input.wip_note)],
+    ["pdfFilename", cleanText(input.pdf_filename)],
+  ];
+  return aliases.some(([key, expected]) => {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) return false;
+    const actual = body[key];
+    if (actual === expected) return false;
+    if (typeof actual === "string" && typeof expected === "string" && UUID_RE.test(expected)) {
+      return actual.toLowerCase() !== expected.toLowerCase();
+    }
+    return true;
+  });
+}
+
+async function recordTypedEnrollmentSubmission(
+  ctx: SubmissionTouchServiceCtx,
+  caseId: string,
+  input: SubmissionTouchInput,
+  tuple: Extract<WorkContextTuple, { ownerKind: "case" }>,
+): Promise<RecordSubmissionTouchResult> {
+  if (tuple.orgId !== ctx.orgId || tuple.ownerId !== caseId) {
+    return reject(404, "Case not found");
+  }
+  if (
+    input.kind !== "portal_submission" ||
+    !UUID_RE.test(input.fill_session_id ?? "") ||
+    input.portal_key !== tuple.portalKey ||
+    hasConflictingWorkAliases(input, caseId, ctx, tuple)
+  ) {
+    return reject(422, "Typed submission aliases must match the exact Work context");
+  }
+  const body = input as unknown as Record<string, unknown>;
+  if (
+    ["contract_id", "contract_sop_assignment_id", "assignment_id", "task_index", "step_index"].some(
+      (key) => Object.prototype.hasOwnProperty.call(body, key),
+    )
+  ) {
+    return reject(422, "Case submission cannot include Contract context");
+  }
+  for (const [field, value] of [
+    ["note", input.note],
+    ["payer_reference_id", input.payer_reference_id],
+    ["wip_note", input.wip_note],
+    ["pdf_filename", input.pdf_filename],
+  ] as const) {
+    if (value != null && typeof value !== "string") return reject(422, `${field} must be a string`);
+  }
+
+  // Skip mutable current-step validation for a known anchor. The SQL RPC still
+  // checks membership, fill link, exact tuple, and payload digest before an
+  // exact historical retry can return after completion or mapping reset.
+  const { data: existing, error: existingError } = await ctx.db
+    .from("touches")
+    .select("id")
+    .eq("id", input.idempotency_id)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (!existing) {
+    const { data: receipt, error: receiptError } = await ctx.db
+      .from("fill_sessions")
+      .select(
+        "id, org_id, case_id, contract_id, contract_sop_assignment_id, task_index, step_index, case_task_id, case_step_id, step_identity, context_version, sop_template_id, sop_version, portal_id, portal_key, launch_receipt_id, mapping_generation, effective_mapping_fingerprint, provider_id, facility_id, fill_mode, is_test, event_schema_version, did_auto_start_case",
+      )
+      .eq("id", input.fill_session_id as string)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle();
+    if (receiptError) throw receiptError;
+    if (!receipt) return reject(404, "Fill receipt not found");
+    if (!sameReceiptTuple(receipt as Record<string, unknown>, tuple)) {
+      return reject(409, "The fill receipt does not match this Enrollment Work step");
+    }
+
+    const validation = await validateWorkContextForFillReceipt(
+      { db: ctx.db, orgId: ctx.orgId },
+      workContextRequest(tuple),
+      (receipt as Record<string, unknown>).did_auto_start_case === true,
+    );
+    if (validation.kind !== "ok") {
+      if (validation.kind === "not_found") return reject(404, validation.message);
+      if (validation.kind === "malformed_request") return reject(422, validation.message);
+      return reject(409, validation.message);
+    }
+    if (validation.data.caseType !== "enrollment") {
+      return reject(409, "Only Enrollment Work can be marked submitted through this action");
+    }
+  }
+
+  const payload = {
+    note: cleanText(input.note),
+    payerReferenceId: cleanText(input.payer_reference_id),
+    wipNote: cleanText(input.wip_note),
+    pdfFilename: cleanText(input.pdf_filename),
+  };
+  const { data, error } = await ctx.db.rpc("record_typed_enrollment_submission", {
+    p_org_id: ctx.orgId,
+    p_actor_id: ctx.userId,
+    p_case_id: caseId,
+    p_touch_id: input.idempotency_id,
+    p_fill_session_id: input.fill_session_id as string,
+    p_work_context: tuple as never,
+    p_payload: payload as never,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid typed submission result");
+  }
+  const result = data as Record<string, unknown>;
+  if (result.kind === "rejected") {
+    const status = Number(result.status);
+    if (status !== 403 && status !== 404 && status !== 409 && status !== 422) {
+      throw new Error("Invalid typed submission rejection status");
+    }
+    return reject(
+      status,
+      typeof result.message === "string" ? result.message : "Typed submission rejected",
+    );
+  }
+  if (
+    (result.kind !== "created" && result.kind !== "duplicate") ||
+    !result.touch ||
+    typeof result.touch !== "object"
+  ) {
+    throw new Error("Invalid typed submission result");
+  }
+  return {
+    kind: result.kind,
+    touch: camelizeRow<Touch>(result.touch as Record<string, unknown>),
+  };
 }
 
 // Human label for a portal_key. There is no server-side portal catalog yet
@@ -258,6 +479,18 @@ export async function recordSubmissionTouch(
   if (!UUID_RE.test(input.idempotency_id ?? "")) {
     return reject(422, "idempotency_id must be a client-generated UUID");
   }
+  const hasWorkContext = Object.prototype.hasOwnProperty.call(input, "work_context");
+  if (hasWorkContext && input.kind !== "portal_submission") {
+    return reject(422, "work_context is only valid on kind 'portal_submission'");
+  }
+  if (hasWorkContext) {
+    const parsed = parseWorkContextTuple(input.work_context);
+    if (!parsed.ok) return reject(422, parsed.message);
+    if (parsed.tuple.ownerKind !== "case") {
+      return reject(422, "Contract Work cannot be submitted through a case touch");
+    }
+    return recordTypedEnrollmentSubmission(ctx, caseId, input, parsed.tuple);
+  }
   if (input.kind === "structured_touch") return recordStructuredTouch(ctx, caseId, input);
   if (typeof input.portal_key !== "string" || input.portal_key.trim() === "") {
     return reject(422, "portal_key is required");
@@ -286,23 +519,46 @@ export async function recordSubmissionTouch(
   // system_event can read "Form submitted to {payer}" without a second query.
   const { data: caseRow, error: caseErr } = await ctx.db
     .from("credential_cases")
-    .select("id, payers(name)")
+    .select("id, case_type, payers(name)")
     .eq("id", caseId)
     .eq("org_id", ctx.orgId)
     .maybeSingle();
   if (caseErr) throw caseErr;
   if (!caseRow) return reject(404, "Case not found");
-  const payerName = (caseRow as { payers?: { name?: string | null } | null }).payers?.name ?? null;
+  const ownedCase = caseRow as {
+    case_type?: string | null;
+    payers?: { name?: string | null } | null;
+  };
+  // Typed cases may only record a portal submission against the exact selected
+  // Work receipt. Without this guard, omitting both work_context and
+  // fill_session_id would fall through to the legacy whole-task/status path.
+  // Null case_type remains the explicitly supported legacy workflow.
+  if (ownedCase.case_type != null) {
+    return reject(422, "Exact Work context and fill receipt are required for typed cases");
+  }
+  const payerName = ownedCase.payers?.name ?? null;
 
   if (input.fill_session_id != null) {
     const { data: session, error: sessionErr } = await ctx.db
       .from("fill_sessions")
-      .select("id")
+      .select(
+        "id, contract_id, contract_sop_assignment_id, case_task_id, case_step_id, step_identity",
+      )
       .eq("id", input.fill_session_id)
       .eq("org_id", ctx.orgId)
       .maybeSingle();
     if (sessionErr) throw sessionErr;
     if (!session) return reject(404, "Fill session not found");
+    const receipt = session as Record<string, unknown>;
+    if (
+      receipt.contract_id != null ||
+      receipt.contract_sop_assignment_id != null ||
+      receipt.case_task_id != null ||
+      receipt.case_step_id != null ||
+      receipt.step_identity != null
+    ) {
+      return reject(422, "An exact Work context is required for this fill receipt");
+    }
   }
 
   // Story 7: fetch the task's ownership AND status in one org-scoped read. A

@@ -3,7 +3,7 @@ import { getCaseContext } from "@/services/caseContext";
 import { getContractFormContext } from "@/services/contractFormContext";
 import { resolveEffectivePortalMaps } from "@/services/portalFieldMaps";
 import type { WorkContextValidationRequest } from "@/lib/workContext";
-import { validateWorkContext } from "./workContext";
+import { validateWorkContext, validateWorkContextForFillReceipt } from "./workContext";
 
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
 vi.mock("@/services/contractFormContext", () => ({ getContractFormContext: vi.fn() }));
@@ -242,6 +242,32 @@ describe("validateWorkContext", () => {
         { ...CASE_REQUEST, providerId: "b7a90000-0000-4000-a000-0000000000cd" },
       ),
     ).resolves.toMatchObject({ kind: "mismatch" });
+  });
+
+  it("allows only the receipt-stamped not_started-to-in_progress version bump for submission", async () => {
+    caseContextMock.mockResolvedValue(caseContext({ contextVersion: 5 }) as never);
+
+    await expect(
+      validateWorkContext({ db: {} as never, orgId: ORG }, CASE_REQUEST),
+    ).resolves.toMatchObject({ kind: "stale" });
+    await expect(
+      validateWorkContextForFillReceipt({ db: {} as never, orgId: ORG }, CASE_REQUEST, false),
+    ).resolves.toMatchObject({ kind: "stale" });
+    await expect(
+      validateWorkContextForFillReceipt({ db: {} as never, orgId: ORG }, CASE_REQUEST, true),
+    ).resolves.toMatchObject({ kind: "ok" });
+
+    caseContextMock.mockResolvedValue(caseContext({ contextVersion: 6 }) as never);
+    await expect(
+      validateWorkContextForFillReceipt({ db: {} as never, orgId: ORG }, CASE_REQUEST, true),
+    ).resolves.toMatchObject({ kind: "stale" });
+
+    caseContextMock.mockResolvedValue(
+      caseContext({ contextVersion: 5, caseStatus: "submitted" }) as never,
+    );
+    await expect(
+      validateWorkContextForFillReceipt({ db: {} as never, orgId: ORG }, CASE_REQUEST, true),
+    ).resolves.toMatchObject({ kind: "stale" });
   });
 
   it("revalidates Contract assignment and exact zero-based step position", async () => {

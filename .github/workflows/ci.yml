@@ -397,6 +397,12 @@ jobs:
       - name: Verify MINT-57 reset/write serialization on disposable PostgreSQL
         run: node scripts/security/verify-mint57-mapping-generation-race.mjs
 
+      - name: Verify MINT-58 exact fill and human submission transaction boundaries
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint58-exact-fill-submission.sql
+
+      - name: Verify MINT-58 concurrent independent Work step submissions
+        run: node scripts/security/verify-mint58-exact-fill-submission-race.mjs
+
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
   # Two specs run (login render, dashboard redirect); three write scenarios are

@@ -109,11 +109,11 @@ const EXPECTED_FAILS = {
   learning: ["20b", "20c"],
   profile: ["6"],
   caseprofile: ["6b"],
-  fillevents: ["7", "7b"],
+  fillevents: ["7", "7b", "7c", "7d"],
   cases: ["8b", "8d"],
   // The case-search leak surfaces a cross-org case row in ?q= results (15b).
   casesearch: ["15b"],
-  touches: ["9", "9b"],
+  touches: ["9", "9b", "9c", "9d"],
   tasks: ["13"],
   casecontext: ["14b"],
   contractcontext: ["14d", "6d"],
