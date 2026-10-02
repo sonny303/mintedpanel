@@ -753,13 +753,17 @@ function assertM64ProviderReadPolicy() {
       "M64_BROWSER_ENROLLMENT_PROFILE_TARGET_SERIALIZATION_INVALID",
     );
     assert(
-      route("GET", ENROLLMENT_PROFILE_TARGET, getHeaders) === null &&
-        route("OPTIONS", ENROLLMENT_PROFILE_TARGET, preflightHeaders) === null,
-      "M64_BROWSER_ENROLLMENT_PROFILE_POLICY_TOO_BROAD",
+      route("GET", ENROLLMENT_PROFILE_TARGET, getHeaders)?.name === "panel.provider_profile" &&
+        route("GET", ENROLLMENT_PROFILE_TARGET, originlessGetHeaders)?.name ===
+          "panel.provider_profile" &&
+        route("OPTIONS", ENROLLMENT_PROFILE_TARGET, preflightHeaders)?.name ===
+          "panel.provider_profile_preflight",
+      "M64_BROWSER_ENROLLMENT_PROFILE_POLICY_INVALID",
     );
     for (const [target, getName, preflightName] of [
       [PROVIDER_ROSTER_TARGET, "panel.providers", "panel.providers_preflight"],
       [CONTRACT_PROFILE_TARGET, "panel.provider_profile", "panel.provider_profile_preflight"],
+      [ENROLLMENT_PROFILE_TARGET, "panel.provider_profile", "panel.provider_profile_preflight"],
     ]) {
       assert(
         route("GET", target, getHeaders)?.name === getName,
@@ -847,6 +851,26 @@ function assertM64ProviderReadPolicy() {
           getHeaders,
         ) === null,
       "M64_BROWSER_PROVIDER_PROFILE_POLICY_TOO_BROAD",
+    );
+    const wrongEnrollmentTargets = [
+      ENROLLMENT_PROFILE_TARGET.replace(PROVIDER_ID, "39000000-0000-4000-a000-000000000066"),
+      ENROLLMENT_PROFILE_TARGET.replace(ENROLLMENT_CASE_ID, "49000000-0000-4000-a000-000000000099"),
+      ENROLLMENT_PROFILE_TARGET.replace(FACILITY_ID, "78000000-0000-4000-a000-000000000099"),
+      ENROLLMENT_PROFILE_TARGET.replace("state=NY", "state=CA"),
+      `${ENROLLMENT_PROFILE_TARGET}&extra=1`,
+      `${ENROLLMENT_PROFILE_TARGET}&state=NY`,
+      ENROLLMENT_PROFILE_TARGET.replace(
+        `state=NY&facilityId=${FACILITY_ID}&caseId=${ENROLLMENT_CASE_ID}`,
+        `caseId=${ENROLLMENT_CASE_ID}&facilityId=${FACILITY_ID}&state=NY`,
+      ),
+    ];
+    assert(
+      wrongEnrollmentTargets.every(
+        (target) =>
+          route("GET", target, getHeaders) === null &&
+          route("OPTIONS", target, preflightHeaders) === null,
+      ),
+      "M64_BROWSER_ENROLLMENT_PROFILE_POLICY_TOO_BROAD",
     );
   } finally {
     extensionIdObserved = previousExtensionId;
@@ -1161,6 +1185,12 @@ function extensionOriginForM64() {
 
 function panelProviderReadKind(pathname, requestTarget) {
   if (pathname === "/api/providers" && requestTarget === PROVIDER_ROSTER_TARGET) return "providers";
+  if (
+    pathname === `/api/providers/${PROVIDER_ID}/profile` &&
+    requestTarget === ENROLLMENT_PROFILE_TARGET
+  ) {
+    return "provider_profile";
+  }
   if (
     pathname === `/api/providers/${PROVIDER_ID}/profile` &&
     requestTarget === CONTRACT_PROFILE_TARGET
