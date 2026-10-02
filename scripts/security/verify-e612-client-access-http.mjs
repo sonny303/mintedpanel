@@ -80,12 +80,56 @@ const m64BrowserPhases = new Set([
   "browser_node_version",
   "browser_driver",
 ]);
+const m64DriverFailureMarkers = new Set([
+  "M64_BROWSER_API_NOT_EXACT_CASE_NOT_FOUND",
+  "M64_BROWSER_BACKGROUND_HASH_MISMATCH",
+  "M64_BROWSER_BUILT_ANON_KEY_NOT_UNIQUE",
+  "M64_BROWSER_CHROMIUM_BINARY_MISSING",
+  "M64_BROWSER_EXPECTED_ASSET_HASH_MISSING",
+  "M64_BROWSER_EXTENSION_DIST_MISSING",
+  "M64_BROWSER_EXTENSION_ORG_LOOKUP_FAILED",
+  "M64_BROWSER_EXTENSION_ORG_SELECTION_FAILED",
+  "M64_BROWSER_EXTENSION_SIGN_IN_FAILED",
+  "M64_BROWSER_FAILED_HANDOFF_CREATED_TAB",
+  "M64_BROWSER_FAILED_HANDOFF_OPENED_PORTAL",
+  "M64_BROWSER_FAILED_HANDOFF_PERSISTED_ACTIVE_WORK",
+  "M64_BROWSER_GOTRUE_SIGN_IN_NOT_OBSERVED",
+  "M64_BROWSER_HANDOFF_ACK_UNEXPECTED",
+  "M64_BROWSER_HANDOFF_ORIGIN_MISMATCH",
+  "M64_BROWSER_HANDOFF_ORIGIN_NOT_ALLOWLISTED",
+  "M64_BROWSER_LOCAL_ANON_KEY_MISSING",
+  "M64_BROWSER_NOT_MV3",
+  "M64_BROWSER_PANEL_AUTH_LOOKUP_NOT_OBSERVED",
+  "M64_BROWSER_PANEL_HOST_PERMISSION_MISSING",
+  "M64_BROWSER_PANEL_ORIGIN_DRIFT",
+  "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH",
+  "M64_BROWSER_PROXY_DENIED_UNEXPECTED_ROUTE",
+  "M64_BROWSER_RUNTIME_ASSET_HASH_MISMATCH",
+  "M64_BROWSER_SMOKE_FAILED",
+  "M64_BROWSER_SUPABASE_HOST_PERMISSION_MISSING",
+  "M64_BROWSER_SUPABASE_ORIGIN_DRIFT",
+  "M64_BROWSER_TLS_SAN_INCOMPLETE",
+  "M64_BROWSER_UNKNOWN_FAILURE",
+]);
 const fail = (code) => {
   throw new Error(code);
 };
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = (args, input) =>
   execFileSync("docker", ["--context", context, ...args], { ...options, input });
+function safeM64DriverFailureMarker(error) {
+  const stderr = Buffer.isBuffer(error?.stderr)
+    ? error.stderr.toString("utf8")
+    : typeof error?.stderr === "string"
+      ? error.stderr
+      : "";
+  const boundedStderr = `${stderr.slice(0, 8192)}\n${stderr.slice(-8192)}`;
+  for (const line of boundedStderr.split(/\r?\n/).reverse()) {
+    const match = /^(?:Error: )?(M64_BROWSER_[A-Za-z0-9_]+)$/.exec(line.trimEnd());
+    if (match && m64DriverFailureMarkers.has(match[1])) return match[1];
+  }
+  return "M64_BROWSER_SMOKE_FAILED";
+}
 function runM64BrowserPhase(phase, operation) {
   if (!m64BrowserPhases.has(phase)) fail("E612_M64_BROWSER_PHASE_NOT_ALLOWLISTED");
   emit(`E612|M64|BROWSER|PHASE_START|${phase}`);
@@ -100,6 +144,9 @@ function runM64BrowserPhase(phase, operation) {
       typeof error?.signal === "string" && /^SIG[A-Z0-9]+$/.test(error.signal)
         ? error.signal
         : "none";
+    if (phase === "browser_driver") {
+      emit(`E612|M64|BROWSER|DRIVER_MARKER|${safeM64DriverFailureMarker(error)}`);
+    }
     emit(`E612|M64|BROWSER|PHASE_FAILED|${phase}|exit=${exit}|signal=${signal}`);
     throw new Error(`E612_M64_BROWSER_PHASE_FAILED_${phase}`);
   }
