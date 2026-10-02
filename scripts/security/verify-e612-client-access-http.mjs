@@ -311,6 +311,22 @@ const m64OrgWaitDiagnosticUiStates = new Set([
   "sidebar",
   "other",
 ]);
+const m64NativeTargetStates = new Set(["observed", "missing", "ambiguous", "cdp_unavailable"]);
+const m64NativeTargetCounts = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64NativeTargetTypes = new Set([
+  "ambiguous",
+  "background_page",
+  "browser",
+  "devtools",
+  "iframe",
+  "none",
+  "other",
+  "page",
+  "service_worker",
+  "tab",
+  "unknown",
+  "worker",
+]);
 const fail = (code) => {
   throw new Error(code);
 };
@@ -435,6 +451,38 @@ function reportM64BrowserContractUiRouteDiagnostic(driver, checkpoint) {
   }
   const routesDiagnostic = safeM64ContractUiRoutesDiagnostic(driver.lines);
   if (routesDiagnostic) emit(`E612|M64|BROWSER|CONTRACT_UI_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
+}
+function safeM64NativeTargetDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|NATIVE_TARGET|"));
+  if (markers.length !== 1) return null;
+  const match =
+    /^M64\|BROWSER\|NATIVE_TARGET\|state=([a-z_]+)\|count=([A-Za-z0-9_]+)\|type=([a-z_]+)$/.exec(
+      markers[0],
+    );
+  if (!match) return null;
+  const [, state, count, type] = match;
+  if (
+    !m64NativeTargetStates.has(state) ||
+    !m64NativeTargetCounts.has(count) ||
+    !m64NativeTargetTypes.has(type)
+  ) {
+    return null;
+  }
+  const consistent =
+    (state === "observed" &&
+      count === "1" &&
+      type !== "none" &&
+      type !== "ambiguous" &&
+      type !== "unknown") ||
+    (state === "missing" && count === "0" && type === "none") ||
+    (state === "ambiguous" && count === "2_PLUS" && type === "ambiguous") ||
+    (state === "cdp_unavailable" && count === "unknown" && type === "unknown");
+  return consistent ? `state=${state}|count=${count}|type=${type}` : null;
+}
+function reportM64BrowserNativeTargetDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "permission_probe") return;
+  const diagnostic = safeM64NativeTargetDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|NATIVE_TARGET_DIAGNOSTIC|${diagnostic}`);
 }
 function waitForM64BrowserCompletion(driver, timeoutMs) {
   let timer;
@@ -988,6 +1036,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserNativeTargetDiagnostic(browserSession.browserDriver, checkpoint);
     if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
       emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=5");
       fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
@@ -997,6 +1046,10 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     });
     fail(`E612_M64_BROWSER_DRIVER_FAILED_${knownFailure.replaceAll(/[^A-Z0-9_]/g, "_")}`);
   }
+  reportM64BrowserNativeTargetDiagnostic(
+    browserSession.browserDriver,
+    safeM64DriverCheckpoint(browserSession.browserDriver.lines),
+  );
   const success = result.lines.find(
     (line) =>
       line ===
