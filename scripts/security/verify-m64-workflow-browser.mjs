@@ -103,6 +103,20 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
     org_id: `eq.${ORG_ID}`,
     order: "created_at.asc",
   }),
+  // Contract Matrix loads the active-org/global snapshot; key and mapType are
+  // resolved locally after these exact scoped reads.
+  portals: Object.freeze({
+    select:
+      "id,org_id,portal_key,name,payer_id,form_url,case_type,requires_explicit_selection,mapping_generation,is_verified,proven_at",
+    order: "portal_key.asc,id.asc",
+    or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+  }),
+  portal_field_maps: Object.freeze({
+    select:
+      "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
+    order: "portal_key.asc,selector.asc",
+    or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+  }),
   contract_sop_assignments: Object.freeze({
     select: "*",
     org_id: `eq.${ORG_ID}`,
@@ -934,6 +948,26 @@ function assertDataPreflightPolicy() {
       }),
     ],
   ];
+  const portalResolverTargets = [
+    [
+      "portals",
+      queryTarget("/rest/v1/portals", {
+        select:
+          "id,org_id,portal_key,name,payer_id,form_url,case_type,requires_explicit_selection,mapping_generation,is_verified,proven_at",
+        order: "portal_key.asc,id.asc",
+        or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+      }),
+    ],
+    [
+      "portal_field_maps",
+      queryTarget("/rest/v1/portal_field_maps", {
+        select:
+          "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
+        order: "portal_key.asc,selector.asc",
+        or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+      }),
+    ],
+  ];
   const fillSessionCountTarget = queryTarget("/rest/v1/fill_sessions", FILL_SESSION_COUNT_QUERY);
   const headHeaders = {
     origin: PANEL_ORIGIN,
@@ -1011,6 +1045,11 @@ function assertDataPreflightPolicy() {
       route("/rest/v1/memberships", membershipsTarget, getHeaders)?.name ===
         "supabase.rest.memberships_preflight" &&
       contractProviderTargets.every(
+        ([table, target]) =>
+          route(`/rest/v1/${table}`, target, getHeaders)?.name ===
+          `supabase.rest.${table}_preflight`,
+      ) &&
+      portalResolverTargets.every(
         ([table, target]) =>
           route(`/rest/v1/${table}`, target, getHeaders)?.name ===
           `supabase.rest.${table}_preflight`,
@@ -1095,6 +1134,49 @@ function assertDataPreflightPolicy() {
         "access-control-request-method": "POST",
       }) === null &&
       route("/rest/v1/facilities", groupedFacilityTarget, {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
+      }) === null &&
+      route(
+        "/rest/v1/portals",
+        portalResolverTargets[0][1].replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/portals", `${portalResolverTargets[0][1]}&unexpected=eq.x`, getHeaders) ===
+        null &&
+      route(
+        "/rest/v1/portals",
+        queryTarget("/rest/v1/portals", {
+          select: "id,portal_key",
+          order: "portal_key.asc,id.asc",
+          or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+        }),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/portal_field_maps",
+        queryTarget("/rest/v1/portal_field_maps", {
+          select:
+            "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
+          order: "selector.asc,portal_key.asc",
+          or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+        }),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/portal_field_maps/extra", portalResolverTargets[1][1], getHeaders) === null &&
+      route("/rest/v1/portals", portalResolverTargets[0][1], {
+        ...getHeaders,
+        origin: "https://untrusted.invalid",
+      }) === null &&
+      route("/rest/v1/portal_field_maps", portalResolverTargets[1][1], {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/portal_field_maps", portalResolverTargets[1][1], {
+        ...getHeaders,
+        "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/portals", portalResolverTargets[0][1], {
         ...getHeaders,
         "access-control-request-private-network": "true",
       }) === null &&
