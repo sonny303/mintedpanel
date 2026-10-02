@@ -38,6 +38,13 @@ const PORTAL_URL = `https://${PORTAL_HOST}/application`;
 const SPECIALIST_EMAIL = "specialist@e612.test";
 const ADMIN_PASSWORD = "E612-Local-Password-!234";
 const BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
+const AUTH_PREFLIGHT_TARGET = "/auth/v1/token?grant_type=password";
+const AUTH_PREFLIGHT_HEADERS = new Set([
+  "apikey",
+  "authorization",
+  "content-type",
+  "x-client-info",
+]);
 const ACTIVE_WORK_KEY = "minted.activeWork.v2";
 const EXPECTED_BACKGROUND_MARKERS = [
   "/api/work-context/validate",
@@ -280,6 +287,7 @@ const certHosts = [PANEL_HOST, SUPABASE_HOST, PORTAL_HOST];
 const metrics = new Map();
 let unexpectedRoutes = 0;
 let firstDeniedCategory = null;
+let lastDeniedCategory = null;
 let exactValidationNotFound = false;
 const workValidationAttempts = [];
 const workValidationSuccesses = [];
@@ -287,6 +295,7 @@ let extensionIdObserved;
 let server;
 let context;
 let proxyClosed = false;
+let driverFailed = false;
 
 async function preflight() {
   localAnonKey = process.env.M64_LOCAL_ANON_KEY;
@@ -357,6 +366,7 @@ async function preflight() {
   }
   assert(allJavascript.includes(`https://${PANEL_HOST}`), "M64_BROWSER_PANEL_ORIGIN_DRIFT");
   assert(allJavascript.includes(`https://${SUPABASE_HOST}`), "M64_BROWSER_SUPABASE_ORIGIN_DRIFT");
+  assertAuthPreflightPolicy();
 }
 
 function count(route, status) {
@@ -380,6 +390,7 @@ function unexpected(response, category = "UNKNOWN_HOST") {
   response.statusCode = 404;
   unexpectedRoutes += 1;
   firstDeniedCategory ??= category;
+  lastDeniedCategory = category;
   count(`denied.${category}`, response.statusCode);
   response.setHeader("content-type", "text/plain; charset=utf-8");
   response.end("local verification route unavailable");
@@ -408,7 +419,60 @@ function classifyDenied(host, method, pathname) {
   return "UNKNOWN_HOST";
 }
 
-function routeFor(host, method, pathname, requestTarget) {
+function requestedAuthPreflightHeaders(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const requested = value.split(",").map((name) => name.trim().toLowerCase());
+  if (
+    requested.some((name) => !name || !AUTH_PREFLIGHT_HEADERS.has(name)) ||
+    new Set(requested).size !== requested.length ||
+    !["apikey", "authorization", "content-type"].every((name) => requested.includes(name))
+  ) {
+    return null;
+  }
+  return requested;
+}
+
+function isAllowedAuthPreflight(host, method, pathname, requestTarget, headers) {
+  return (
+    host === SUPABASE_HOST &&
+    method === "OPTIONS" &&
+    pathname === "/auth/v1/token" &&
+    requestTarget === AUTH_PREFLIGHT_TARGET &&
+    headers.origin === PANEL_ORIGIN &&
+    headers["access-control-request-method"] === "POST" &&
+    requestedAuthPreflightHeaders(headers["access-control-request-headers"]) !== null
+  );
+}
+
+function assertAuthPreflightPolicy() {
+  const headers = {
+    origin: PANEL_ORIGIN,
+    "access-control-request-method": "POST",
+    "access-control-request-headers": "apikey, authorization, content-type, x-client-info",
+  };
+  const route = (candidateHeaders = headers, target = AUTH_PREFLIGHT_TARGET) =>
+    routeFor(SUPABASE_HOST, "OPTIONS", "/auth/v1/token", target, candidateHeaders);
+  assert(route()?.kind === "preflight", "M64_BROWSER_PREFLIGHT_POLICY_INVALID");
+  assert(
+    route({ ...headers, origin: "https://untrusted.invalid" }) === null,
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route({ ...headers, "access-control-request-method": "PUT" }) === null,
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route({ ...headers, "access-control-request-headers": "apikey, content-type, x-evil" }) ===
+      null,
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route(headers, "/auth/v1/token?grant_type=refresh_token") === null,
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+}
+
+function routeFor(host, method, pathname, requestTarget, headers = {}) {
   if (host === PANEL_HOST) {
     if (method === "GET" && requestTarget === "/favicon.ico") {
       return { kind: "empty", name: "panel.favicon" };
@@ -466,8 +530,11 @@ function routeFor(host, method, pathname, requestTarget) {
     return null;
   }
   if (host === SUPABASE_HOST) {
+    if (isAllowedAuthPreflight(host, method, pathname, requestTarget, headers)) {
+      return { kind: "preflight", name: "supabase.auth_token_preflight" };
+    }
     const authMethods = new Map([
-      ["/auth/v1/token", new Set(["POST", "OPTIONS"])],
+      ["/auth/v1/token", new Set(["POST"])],
       ["/auth/v1/user", new Set(["GET", "OPTIONS"])],
       ["/auth/v1/logout", new Set(["POST", "OPTIONS"])],
     ]);
@@ -530,6 +597,18 @@ function serveStatic(response, route) {
   response.end(
     `<!doctype html><html><head><title>M64 synthetic payer fixture</title></head><body><main aria-label="Synthetic payer application"><label for="contract-npi">Contract NPI</label><input id="contract-npi" name="contract-npi" type="text"><label for="enrollment-npi">Enrollment NPI</label><input id="enrollment-npi" name="enrollment-npi" type="text"></main></body></html>`,
   );
+}
+
+function serveAuthPreflight(response, route) {
+  response.statusCode = 204;
+  response.setHeader("access-control-allow-origin", PANEL_ORIGIN);
+  response.setHeader("access-control-allow-methods", "POST");
+  response.setHeader("access-control-allow-headers", [...AUTH_PREFLIGHT_HEADERS].join(", "));
+  response.setHeader("access-control-max-age", "0");
+  response.setHeader("cache-control", "no-store");
+  response.setHeader("vary", "Origin");
+  count(route.name, response.statusCode);
+  response.end();
 }
 
 function proxyToLocal(request, response, route, requestUrl, method) {
@@ -710,6 +789,7 @@ async function panelContractPermissionProbe(extensionPage) {
   );
   const authRequestsBefore = routeTotal("supabase.auth_token");
   const authSuccessesBefore = routeCount("supabase.auth_token", 200);
+  const authPreflightsBefore = routeCount("supabase.auth_token_preflight", 204);
   const accessRequestsBefore = routeTotal("panel.access_context");
   const accessSuccessesBefore = routeCount("panel.access_context", 200);
   const deniedBefore = unexpectedRoutes;
@@ -739,6 +819,10 @@ async function panelContractPermissionProbe(extensionPage) {
     checkpoint("panel_login_auth_non_200");
     throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
   }
+  assert(
+    routeCount("supabase.auth_token_preflight", 204) > authPreflightsBefore,
+    "M64_BROWSER_AUTH_PREFLIGHT_NOT_OBSERVED",
+  );
   checkpoint("panel_login_access_context");
   try {
     await poll(
@@ -1014,7 +1098,7 @@ async function run() {
           .pathname;
         const method = String(request.method ?? "GET").toUpperCase();
         const requestTarget = request.url ?? "/";
-        const route = routeFor(hostHeader, method, pathname, requestTarget);
+        const route = routeFor(hostHeader, method, pathname, requestTarget, request.headers);
         if (!route) {
           unexpected(response, classifyDenied(hostHeader, method, pathname));
           return;
@@ -1029,6 +1113,10 @@ async function run() {
           response.setHeader("cache-control", "no-store");
           count(route.name, response.statusCode);
           response.end();
+          return;
+        }
+        if (route.kind === "preflight") {
+          serveAuthPreflight(response, route);
           return;
         }
         proxyToLocal(request, response, route, requestTarget, method);
@@ -1187,13 +1275,20 @@ async function run() {
 try {
   await run();
 } catch (error) {
-  const code = error instanceof BrowserFailure ? error.message : STAGES[currentStage];
-  process.stderr.write(`${code ?? STAGES.preflight}\n`);
+  driverFailed = true;
+  const code =
+    currentStage === "panel_login_route_denied" && lastDeniedCategory
+      ? `M64_BROWSER_DENIED_${lastDeniedCategory}`
+      : error instanceof BrowserFailure
+        ? error.message
+        : STAGES[currentStage];
+  await new Promise((resolve) => process.stderr.write(`${code ?? STAGES.preflight}\n`, resolve));
   process.exitCode = 1;
 } finally {
   let cleanupTimedOut = false;
+  safeLog("M64_BROWSER_CLEANUP_START");
   if (context) {
-    if (!(await settleWithin(() => context.close(), 5_000))) {
+    if (!(await settleWithin(() => context.close(), 4_000))) {
       safeLog("M64_BROWSER_CLEANUP_TIMEOUT_CONTEXT");
       cleanupTimedOut = true;
     }
@@ -1206,7 +1301,7 @@ try {
           server.close(resolve);
           server.closeAllConnections?.();
         }),
-      5_000,
+      4_000,
     );
     if (!proxyClosedInTime) {
       safeLog("M64_BROWSER_CLEANUP_TIMEOUT_PROXY");
@@ -1221,10 +1316,10 @@ try {
     }
   }
   if (cleanupTimedOut) {
-    await Promise.all([
-      new Promise((resolve) => process.stdout.write("M64_BROWSER_CLEANUP_ABORT\n", resolve)),
-      new Promise((resolve) => process.stderr.write("", resolve)),
-    ]);
+    safeLog("M64_BROWSER_CLEANUP_ABORT");
+  }
+  await new Promise((resolve) => process.stdout.write("M64_BROWSER_CLEANUP_DONE\n", resolve));
+  if (driverFailed || cleanupTimedOut) {
     process.exit(1);
   }
 }
