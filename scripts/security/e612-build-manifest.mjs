@@ -21,6 +21,7 @@ const roots = [
   "scripts/security/e614-report-fixtures.mjs",
   "scripts/security/verify-e612-client-access.mjs",
   "scripts/security/verify-e612-client-access-http.mjs",
+  "scripts/security/verify-m64-workflow-browser.mjs",
   "scripts/security/e612-build-manifest.mjs",
   "supabase/migrations",
   "package.json",
