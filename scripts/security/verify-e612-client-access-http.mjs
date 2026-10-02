@@ -30,7 +30,7 @@ const M64_EXTENSION_SHA = "72843b665957249591975a1ce0f3b1bdce79e140";
 const M64_PANEL_BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
 const M64_PANEL_HOST = "mintedpanel.vercel.app";
 const M64_SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
-const M64_BROWSER_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
+const M64_BROWSER_COMPLETION_TIMEOUT_MS = 10 * 60 * 1000;
 const M64_BROWSER_STOP_GRACE_MS = 5_000;
 const M64_BROWSER_CLEANUP_TIMEOUT_MS = 10_000;
 const images = {
@@ -128,6 +128,28 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_PERMISSION_PREGRANTED",
   "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE",
   "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE",
+  "M64_BROWSER_DB_ACK_EOF",
+  "M64_BROWSER_DB_ACK_INVALID",
+  "M64_BROWSER_DB_ACK_TIMEOUT",
+  "M64_BROWSER_STATIC_FORM_URL_INVALID",
+  "M64_BROWSER_STATIC_FORM_ROUTE_INVALID",
+  "M64_BROWSER_STATIC_FORM_ROUTE_TOO_BROAD",
+  "M64_BROWSER_STATIC_FORM_SHAPE_INVALID",
+  "M64_BROWSER_PANEL_REQUIRED_PERMISSION_MISSING",
+  "M64_BROWSER_SYNTHETIC_FORM_FILL_MISMATCH",
+  "M64_BROWSER_CONTRACT_FILL_FAILED",
+  "M64_BROWSER_ENROLLMENT_FILL_FAILED",
+  "M64_BROWSER_STALE_FILL_FAILED",
+  "M64_BROWSER_CONTRACT_FILL_CHANGED_ENROLLMENT_CONTROL",
+  "M64_BROWSER_CONTRACT_SUBMISSION_CONTROL_VISIBLE",
+  "M64_BROWSER_STALE_FILL_API_REQUESTED",
+  "M64_BROWSER_STALE_FILL_MUTATED_FORM",
+  "M64_BROWSER_ENROLLMENT_TASK_TITLE_INVALID",
+  "M64_BROWSER_ENROLLMENT_STEP_NOT_SELECTED",
+  "M64_BROWSER_ENROLLMENT_WORK_BINDING_MISMATCH",
+  "M64_BROWSER_SYNTHETIC_FORM_HAS_SUBMIT_CONTROL",
+  "M64_BROWSER_TYPED_KEY_FILL_ISOLATION_FAILED",
+  "M64_BROWSER_ENROLLMENT_HUMAN_SUBMISSION_CONTROL_INVALID",
   "M64_BROWSER_PERMISSION_CONTAINS_FAILED",
   "M64_BROWSER_WORK_BINDING_MISMATCH",
   "M64_BROWSER_SYNTHETIC_FORM_SHAPE_INVALID",
@@ -245,6 +267,11 @@ const m64DriverCheckpoints = new Set([
   "contract_ui_work_binding",
   "contract_ui_active_tab_check",
   "contract_ui_form_shape",
+  "contract_fill",
+  "stale_fill",
+  "enrollment_ui",
+  "enrollment_fill",
+  "submission",
   "permission_probe",
   "permission_cta_click",
   "permission_cta_clicked",
@@ -1015,6 +1042,254 @@ function buildM64Panel(extensionId) {
   return { manifest, clientAssets, extensionId };
 }
 
+function assertM64ContractIsolationAndReset(idempotencyKey) {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      idempotencyKey,
+    )
+  ) {
+    fail("E612_M64_CONTRACT_RESET_KEY_INVALID");
+  }
+  const sql = `
+BEGIN;
+SET LOCAL client_min_messages = warning;
+DO $m64$
+BEGIN
+  IF (SELECT count(*) FROM public.fill_sessions WHERE org_id = '${M64.org}') <> 1
+     OR (SELECT count(*) FROM public.fill_sessions
+          WHERE org_id = '${M64.org}' AND contract_id = '${M64.contract}'
+            AND case_id IS NULL AND contract_sop_assignment_id = '${M64.contractAssignment}'
+            AND portal_id = '${M64.contractPortal}' AND portal_key = 'm64_contract'
+            AND provider_id = '${M64.provider}' AND facility_id = '${M64.facility}'
+            AND sop_template_id = '${M64.contractTemplate}' AND sop_version = 1
+            AND context_version = 1 AND task_index = 0 AND step_index = 0
+            AND case_task_id IS NULL AND case_step_id IS NULL
+            AND launch_receipt_id IS NOT NULL AND mapping_generation = 1
+            AND effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND step_identity IS NOT NULL AND btrim(step_identity) <> ''
+            AND fill_mode = 'web' AND is_test = false AND event_schema_version = 2) <> 1
+     OR EXISTS (SELECT 1 FROM public.fill_sessions
+                 WHERE org_id = '${M64.org}' AND portal_id = '${M64.enrollmentPortal}') THEN
+    RAISE EXCEPTION 'M64 Contract receipt or pre-reset isolation failed';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.touches WHERE org_id = '${M64.org}')
+     OR NOT EXISTS (
+       SELECT 1 FROM public.credential_cases
+        WHERE id = '${M64.enrollmentCase}' AND org_id = '${M64.org}'
+          AND case_status = 'in_progress' AND context_version = 1
+     ) THEN
+    RAISE EXCEPTION 'M64 Contract fill changed the Enrollment case before submission';
+  END IF;
+  IF (SELECT count(*) FROM public.portals
+       WHERE org_id = '${M64.org}' AND form_url = '${M64.formUrl}'
+         AND requires_explicit_selection AND mapping_generation = 1) <> 2
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.contractPortal}' AND portal_key = 'm64_contract'
+          AND case_type = 'contract' AND is_verified
+          AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.enrollmentPortal}' AND portal_key = 'm64_enrollment'
+          AND case_type = 'enrollment' AND is_verified
+          AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     ) THEN
+    RAISE EXCEPTION 'M64 same-URL typed portal identities or proof state are not independent';
+  END IF;
+  IF NOT EXISTS (
+       SELECT 1 FROM public.portal_field_maps
+        WHERE org_id = '${M64.org}' AND portal_key = 'm64_contract'
+          AND map_type = 'web' AND selector = '#contract-npi'
+          AND token = 'provider.npi' AND status = 'approved' AND mapping_generation = 1
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portal_field_maps
+        WHERE org_id = '${M64.org}' AND portal_key = 'm64_enrollment'
+          AND map_type = 'web' AND selector = '#enrollment-npi'
+          AND token = 'provider.npi' AND status = 'approved' AND mapping_generation = 1
+     ) THEN
+    RAISE EXCEPTION 'M64 same-URL effective maps are not independently keyed';
+  END IF;
+  IF (SELECT count(*)
+      FROM public.tasks AS task
+        CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+       WHERE task.id = '${M64.enrollmentTask}'
+         AND item.step->>'id' IN ('${M64.enrollmentStep1}', '${M64.enrollmentStep2}')
+         AND item.step->'isCompleted' = 'false'::jsonb) <> 2
+     OR (SELECT count(*)
+           FROM public.tasks AS task
+           CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+          WHERE task.id = '${M64.enrollmentSiblingTask}'
+            AND item.step->>'id' = '${M64.enrollmentSiblingStep}'
+            AND item.step->'isCompleted' = 'false'::jsonb) <> 1 THEN
+    RAISE EXCEPTION 'M64 Contract fill changed an Enrollment SOP step';
+  END IF;
+END
+$m64$;
+SET LOCAL request.jwt.claim.sub = '${E612.specialist}';
+SET LOCAL request.jwt.claim.role = 'authenticated';
+SET LOCAL request.jwt.claims = '{"sub":"${E612.specialist}","role":"authenticated"}';
+SET LOCAL ROLE authenticated;
+DO $m64$
+DECLARE
+  first_receipt public.form_mapping_reset_events%ROWTYPE;
+  replay_receipt public.form_mapping_reset_events%ROWTYPE;
+BEGIN
+  first_receipt := public.reset_portal_mapping(
+    '${M64.contractPortal}', 1, '${idempotencyKey}'
+  );
+  replay_receipt := public.reset_portal_mapping(
+    '${M64.contractPortal}', 1, '${idempotencyKey}'
+  );
+  IF first_receipt.id IS NULL
+     OR first_receipt.id IS DISTINCT FROM replay_receipt.id
+     OR first_receipt.actor_id IS DISTINCT FROM '${E612.specialist}'::uuid
+     OR first_receipt.portal_id IS DISTINCT FROM '${M64.contractPortal}'::uuid
+     OR first_receipt.org_id IS DISTINCT FROM '${M64.org}'::uuid
+     OR first_receipt.owner_scope IS DISTINCT FROM 'organization'
+     OR first_receipt.portal_key IS DISTINCT FROM 'm64_contract'
+     OR first_receipt.old_mapping_generation IS DISTINCT FROM 1
+     OR first_receipt.new_mapping_generation IS DISTINCT FROM 2
+     OR first_receipt.affected_field_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'M64 exact-key reset or idempotent replay failed';
+  END IF;
+END
+$m64$;
+RESET ROLE;
+DO $m64$
+BEGIN
+  IF NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.contractPortal}' AND org_id = '${M64.org}'
+          AND portal_key = 'm64_contract' AND mapping_generation = 2
+          AND NOT is_verified AND last_verified_at IS NULL AND proven_at IS NULL
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.enrollmentPortal}' AND org_id = '${M64.org}'
+          AND portal_key = 'm64_enrollment' AND mapping_generation = 1
+          AND is_verified AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     )
+     OR (SELECT count(*) FROM public.portal_field_maps
+          WHERE org_id = '${M64.org}' AND portal_key = 'm64_contract'
+            AND mapping_generation = 1) <> 1
+     OR EXISTS (SELECT 1 FROM public.portal_field_maps
+                 WHERE org_id = '${M64.org}' AND portal_key = 'm64_contract'
+                   AND mapping_generation = 2)
+     OR (SELECT count(*) FROM public.form_mapping_reset_events
+          WHERE portal_id = '${M64.contractPortal}'
+            AND idempotency_key = '${idempotencyKey}'
+            AND owner_scope = 'organization' AND org_id = '${M64.org}'
+            AND old_mapping_generation = 1 AND new_mapping_generation = 2
+            AND affected_field_count = 1) <> 1 THEN
+    RAISE EXCEPTION 'M64 selected-key reset changed a sibling or lost history';
+  END IF;
+END
+$m64$;
+COMMIT;
+SELECT 'M64_CONTRACT_RESET_OK';
+`;
+  const result = dbExec(sql).trim();
+  if (result !== "M64_CONTRACT_RESET_OK") fail("E612_M64_CONTRACT_RESET_ASSERTION_FAILED");
+  emit(
+    "E612|M64|BROWSER|CONTRACT_ISOLATION_RESET|receipt=true|enrollment_untouched=true|idempotent=true",
+  );
+}
+
+function assertM64FinalDatabaseState() {
+  const sql = `
+DO $m64$
+BEGIN
+  IF (SELECT count(*) FROM public.fill_sessions WHERE org_id = '${M64.org}') <> 2
+     OR (SELECT count(*) FROM public.fill_sessions
+          WHERE org_id = '${M64.org}' AND contract_id = '${M64.contract}'
+            AND case_id IS NULL AND portal_id = '${M64.contractPortal}'
+            AND portal_key = 'm64_contract' AND mapping_generation = 1
+            AND contract_sop_assignment_id = '${M64.contractAssignment}'
+            AND launch_receipt_id IS NOT NULL
+            AND effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND is_test = false AND event_schema_version = 2) <> 1
+     OR (SELECT count(*) FROM public.fill_sessions
+          WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+            AND contract_id IS NULL AND portal_id = '${M64.enrollmentPortal}'
+            AND portal_key = 'm64_enrollment' AND mapping_generation = 1
+            AND case_task_id = '${M64.enrollmentTask}'
+            AND case_step_id = '${M64.enrollmentStep1}'
+            AND context_version = 1 AND launch_receipt_id IS NOT NULL
+            AND effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND is_test = false AND event_schema_version = 2) <> 1 THEN
+    RAISE EXCEPTION 'M64 Contract/Enrollment fill receipts are not exact and distinct';
+  END IF;
+  IF (SELECT count(*) FROM public.touches
+       WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+         AND task_id = '${M64.enrollmentTask}'
+         AND fill_session_id IN (
+           SELECT id FROM public.fill_sessions
+            WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+              AND case_step_id = '${M64.enrollmentStep1}'
+         )
+         AND entry_type = 'touchpoint' AND touch_type = 'portal'
+         AND outcome = 'submitted' AND source = 'extension'
+         AND coordinator_id = '${E612.specialist}') <> 1
+     OR EXISTS (SELECT 1 FROM public.touches
+                 WHERE org_id = '${M64.org}' AND task_id = '${M64.enrollmentSiblingTask}')
+     OR EXISTS (SELECT 1 FROM public.touches
+                 WHERE org_id = '${M64.org}' AND fill_session_id IS NOT NULL
+                   AND fill_session_id NOT IN (
+                     SELECT id FROM public.fill_sessions
+                      WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+                        AND case_step_id = '${M64.enrollmentStep1}'
+                   )) THEN
+    RAISE EXCEPTION 'M64 human submission touch escaped its exact Enrollment step';
+  END IF;
+  IF (SELECT count(*)
+      FROM public.tasks AS task
+        CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+       WHERE task.id = '${M64.enrollmentTask}'
+         AND item.step->>'id' = '${M64.enrollmentStep1}'
+         AND item.step->'isCompleted' = 'true'::jsonb) <> 1
+     OR (SELECT count(*)
+           FROM public.tasks AS task
+           CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+          WHERE task.id = '${M64.enrollmentTask}'
+            AND item.step->>'id' = '${M64.enrollmentStep2}'
+            AND item.step->'isCompleted' = 'false'::jsonb) <> 1
+     OR (SELECT count(*)
+           FROM public.tasks AS task
+           CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+          WHERE task.id = '${M64.enrollmentSiblingTask}'
+            AND item.step->>'id' = '${M64.enrollmentSiblingStep}'
+            AND item.step->'isCompleted' = 'false'::jsonb) <> 1 THEN
+    RAISE EXCEPTION 'M64 selected-step or sibling-step completion state is incorrect';
+  END IF;
+  IF NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.contractPortal}' AND mapping_generation = 2
+          AND NOT is_verified AND last_verified_at IS NULL AND proven_at IS NULL
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.enrollmentPortal}' AND mapping_generation = 1
+          AND is_verified AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     )
+     OR (SELECT count(*) FROM public.form_mapping_reset_events
+          WHERE portal_id = '${M64.contractPortal}' AND old_mapping_generation = 1
+            AND new_mapping_generation = 2 AND owner_scope = 'organization'
+            AND org_id = '${M64.org}') <> 1 THEN
+    RAISE EXCEPTION 'M64 reset history or sibling generation was not preserved';
+  END IF;
+END
+$m64$;
+SELECT 'M64_FINAL_STATE_OK';
+`;
+  const result = dbExec(sql).trim();
+  if (result !== "M64_FINAL_STATE_OK") fail("E612_M64_FINAL_DATABASE_ASSERTION_FAILED");
+  emit(
+    "E612|M64|BROWSER|FINAL_DB_ASSERTIONS|contract_history=true|enrollment_receipt=true|selected_step_only=true",
+  );
+}
+
 async function finishM64BrowserSmoke(browserSession, panelBuild) {
   const ready = Buffer.from(
     JSON.stringify({
@@ -1027,6 +1302,20 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
   browserSession.browserDriver.child.stdin.write(`M64_PANEL_READY|${ready}\n`);
   let result;
   try {
+    const contractCheckpoint = await browserSession.browserDriver.waitFor(
+      /^M64\|BROWSER\|DB_CHECKPOINT\|CONTRACT_FILL_COMPLETE$/,
+      180_000,
+    );
+    if (
+      contractCheckpoint !== "M64|BROWSER|DB_CHECKPOINT|CONTRACT_FILL_COMPLETE" ||
+      browserSession.browserDriver.lines.filter(
+        (line) => line === "M64|BROWSER|DB_CHECKPOINT|CONTRACT_FILL_COMPLETE",
+      ).length !== 1
+    ) {
+      fail("E612_M64_CONTRACT_CHECKPOINT_INVALID");
+    }
+    assertM64ContractIsolationAndReset(randomUUID());
+    browserSession.browserDriver.child.stdin.write("M64_DB_ACK|CONTRACT_RESET_COMPLETE\n");
     result = await waitForM64BrowserCompletion(
       browserSession.browserDriver,
       M64_BROWSER_COMPLETION_TIMEOUT_MS,
@@ -1037,8 +1326,16 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
+    if (
+      error instanceof Error &&
+      /^E612_M64_(?:CONTRACT_CHECKPOINT_INVALID|CONTRACT_RESET_KEY_INVALID|CONTRACT_RESET_ASSERTION_FAILED)$/.test(
+        error.message,
+      )
+    ) {
+      fail(error.message);
+    }
     if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
-      emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=5");
+      emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=10");
       fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
     }
     const knownFailure = safeM64DriverFailureMarker({
@@ -1046,12 +1343,16 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     });
     fail(`E612_M64_BROWSER_DRIVER_FAILED_${knownFailure.replaceAll(/[^A-Z0-9_]/g, "_")}`);
   }
-  const success = result.lines.find(
-    (line) =>
-      line ===
-      "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|native_sidepanel_open=true|active_payer_tab=true|grant_surface=built_extension_helper|permission_contains=true|fill_not_run=true",
-  );
-  if (!success) fail("E612_M64_BROWSER_PROBE_PASS_MARKER_MISSING");
+  const expectedVertical =
+    "M64|BROWSER|VERTICAL|PASS|static_host=true|optional_host_consent=unverified|contract_fill_receipt=true|enrollment_fill_receipt=true|selected_step_submission=true|selected_key_reset=true|stale_fill_rejected=true";
+  const expectedConsentHold =
+    "M64|BROWSER|OPTIONAL_HOST_CONSENT|HOLD|reason=manual_only_not_tested";
+  if (
+    result.lines.filter((line) => line === expectedVertical).length !== 1 ||
+    result.lines.filter((line) => line === expectedConsentHold).length !== 1
+  ) {
+    fail("E612_M64_VERTICAL_MARKER_OR_CONSENT_HOLD_MISSING");
+  }
   const resultLine = result.lines.find((line) => line.startsWith("M64_RESULT|"));
   if (!resultLine) fail("E612_M64_BROWSER_RESULT_MARKER_MISSING");
   let browserResult;
@@ -1066,29 +1367,64 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     browserResult?.extensionId !== panelBuild.extensionId ||
     browserResult?.panelClientSha256 !== panelBuild.manifest.clientSha256 ||
     !Array.isArray(browserResult?.contractValidations) ||
-    browserResult.contractValidations.length !== 1
+    browserResult.contractValidations.length !== 1 ||
+    !Array.isArray(browserResult?.enrollmentValidations) ||
+    browserResult.enrollmentValidations.length !== 1
   ) {
     fail("E612_M64_BROWSER_RESULT_INVALID");
   }
-  const validation = browserResult.contractValidations[0];
-  const tuple = validation?.tuple;
+  const contractValidation = browserResult.contractValidations[0];
+  const contractTuple = contractValidation?.tuple;
   if (
-    tuple?.ownerKind !== "contract" ||
-    tuple.ownerId !== M64.contract ||
-    tuple.orgId !== M64.org ||
-    tuple.portalId !== M64.contractPortal ||
-    tuple.portalKey !== "m64_contract" ||
-    tuple.mappingGeneration !== 1 ||
-    tuple.providerId !== M64.provider ||
-    tuple.facilityId !== M64.facility ||
-    typeof tuple.stepIdentity !== "string" ||
-    tuple.stepIdentity.length === 0 ||
-    !/^sha256:[a-f0-9]{64}$/.test(validation?.effectiveMappingFingerprint ?? "")
+    contractValidation?.protocolVersion !== 2 ||
+    contractTuple?.ownerKind !== "contract" ||
+    contractTuple.ownerId !== M64.contract ||
+    contractTuple.orgId !== M64.org ||
+    contractTuple.portalId !== M64.contractPortal ||
+    contractTuple.portalKey !== "m64_contract" ||
+    contractTuple.assignmentId !== M64.contractAssignment ||
+    contractTuple.mappingGeneration !== 1 ||
+    contractTuple.contextVersion !== 1 ||
+    contractTuple.providerId !== M64.provider ||
+    contractTuple.facilityId !== M64.facility ||
+    contractTuple.taskId !== null ||
+    contractTuple.stepId !== null ||
+    contractTuple.taskIndex !== 0 ||
+    contractTuple.stepIndex !== 0 ||
+    typeof contractTuple.launchReceiptId !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(contractValidation?.effectiveMappingFingerprint ?? "") ||
+    typeof contractTuple.stepIdentity !== "string" ||
+    contractTuple.stepIdentity.length === 0
   ) {
     fail("E612_M64_BROWSER_RESULT_INVALID");
   }
+  const enrollmentValidation = browserResult.enrollmentValidations[0];
+  const enrollmentTuple = enrollmentValidation?.tuple;
+  if (
+    enrollmentValidation?.protocolVersion !== 2 ||
+    enrollmentTuple?.ownerKind !== "case" ||
+    enrollmentTuple.ownerId !== M64.enrollmentCase ||
+    enrollmentTuple.orgId !== M64.org ||
+    enrollmentTuple.portalId !== M64.enrollmentPortal ||
+    enrollmentTuple.portalKey !== "m64_enrollment" ||
+    enrollmentTuple.mappingGeneration !== 1 ||
+    enrollmentTuple.contextVersion !== 1 ||
+    enrollmentTuple.providerId !== M64.provider ||
+    enrollmentTuple.facilityId !== M64.facility ||
+    enrollmentTuple.taskId !== M64.enrollmentTask ||
+    enrollmentTuple.stepId !== M64.enrollmentStep1 ||
+    typeof enrollmentTuple.launchReceiptId !== "string" ||
+    typeof enrollmentTuple.stepIdentity !== "string" ||
+    enrollmentTuple.stepIdentity.length === 0 ||
+    !/^sha256:[a-f0-9]{64}$/.test(enrollmentValidation?.effectiveMappingFingerprint ?? "") ||
+    enrollmentValidation.effectiveMappingFingerprint ===
+      contractValidation.effectiveMappingFingerprint
+  ) {
+    fail("E612_M64_BROWSER_RESULT_INVALID");
+  }
+  assertM64FinalDatabaseState();
   emit(
-    `E612|M64|BROWSER|PROBE|PASS|panel=${panelBuild.manifest.gitHead}|client=${panelBuild.manifest.clientSha256}|extension=${browserSession.extensionId}|validated_contract_work=true|fill=not_run`,
+    `E612|M64|BROWSER|VERTICAL|PASS|panel=${panelBuild.manifest.gitHead}|client=${panelBuild.manifest.clientSha256}|extension=${browserSession.extensionId}|static_host=true|optional_host_consent=unverified|contract_and_enrollment_receipts=true|exact_step_submission=true|selected_key_reset=true|stale_fill_rejected=true`,
   );
 }
 

@@ -1,7 +1,7 @@
 // First M64 browser gate: run the exact built MV3 against a deny-by-default
 // HTTPS bridge on the existing E6.12 internal Docker network. This is a
-// transport/authentication rejection smoke followed by a bounded real
-// UI/permission probe. It deliberately stops before any form fill.
+// transport/authentication rejection smoke followed by the real Contract and
+// Enrollment Work, fill-receipt, human-submission and mapping-reset path.
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createServer } from "node:https";
 import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
+import { M64 } from "./e612-m64-fixtures.mjs";
 
 const require = createRequire(import.meta.url);
 const PLAYWRIGHT_VERSION = "1.61.1";
@@ -36,7 +37,10 @@ const ENROLLMENT_STEP2_ID = "89000000-0000-4000-a000-000000000065";
 const ENROLLMENT_SIBLING_TASK_ID = "99000000-0000-4000-a000-000000000065";
 const ENROLLMENT_SIBLING_STEP_ID = "89000000-0000-4000-a000-000000000066";
 const SUPABASE_ORIGIN = `https://${SUPABASE_HOST}`;
-const PORTAL_URL = `https://${PORTAL_HOST}/application`;
+const PORTAL_URL = M64.formUrl;
+const PORTAL_PATH = new URL(PORTAL_URL).pathname;
+const SYNTHETIC_FORM_HTML =
+  '<!doctype html><html><head><meta charset="utf-8"><title>M64 synthetic application</title></head><body><main aria-label="Synthetic application"><label for="contract-npi">Contract NPI</label><input id="contract-npi" name="contract-npi" type="text"><label for="enrollment-npi">Enrollment NPI</label><input id="enrollment-npi" name="enrollment-npi" type="text"></main></body></html>';
 const SPECIALIST_EMAIL = "specialist@e612.test";
 const ADMIN_PASSWORD = "E612-Local-Password-!234";
 const BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
@@ -438,6 +442,35 @@ async function readPanelReady(expectedExtensionId) {
   });
 }
 
+async function waitForDbAck(token) {
+  assert(token === "CONTRACT_RESET_COMPLETE", "M64_BROWSER_DB_ACK_INVALID");
+  const expected = `M64_DB_ACK|${token}`;
+  const input = createInterface({ input: process.stdin });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      input.close();
+      if (error) reject(error);
+      else resolve();
+    };
+    const timeout = setTimeout(
+      () => finish(new BrowserFailure("M64_BROWSER_DB_ACK_TIMEOUT")),
+      120_000,
+    );
+    input.once("line", (line) => {
+      if (line !== expected) {
+        finish(new BrowserFailure("M64_BROWSER_DB_ACK_INVALID"));
+        return;
+      }
+      finish();
+    });
+    input.once("close", () => finish(new BrowserFailure("M64_BROWSER_DB_ACK_EOF")));
+  });
+}
+
 function extractAnonKey(bundle) {
   const candidates = bundle.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) ?? [];
   const anonymous = candidates.filter((token) => {
@@ -571,8 +604,38 @@ async function preflight() {
   }
   assert(allJavascript.includes(`https://${PANEL_HOST}`), "M64_BROWSER_PANEL_ORIGIN_DRIFT");
   assert(allJavascript.includes(`https://${SUPABASE_HOST}`), "M64_BROWSER_SUPABASE_ORIGIN_DRIFT");
+  assertStaticPanelFormPolicy();
   assertAuthPreflightPolicy();
   assertDataPreflightPolicy();
+}
+
+function assertStaticPanelFormPolicy() {
+  assert(
+    new URL(PORTAL_URL).origin === PANEL_ORIGIN && PORTAL_PATH === "/__m64__/form",
+    "M64_BROWSER_STATIC_FORM_URL_INVALID",
+  );
+  assert(
+    routeFor(PANEL_HOST, "GET", PORTAL_PATH, PORTAL_PATH)?.name === "panel.synthetic_form",
+    "M64_BROWSER_STATIC_FORM_ROUTE_INVALID",
+  );
+  for (const [method, target] of [
+    ["GET", `${PORTAL_PATH}?probe=1`],
+    ["HEAD", PORTAL_PATH],
+    ["POST", PORTAL_PATH],
+    ["OPTIONS", PORTAL_PATH],
+    ["GET", "/__m64__/unknown"],
+  ]) {
+    assert(
+      routeFor(PANEL_HOST, method, new URL(target, PANEL_ORIGIN).pathname, target) === null,
+      "M64_BROWSER_STATIC_FORM_ROUTE_TOO_BROAD",
+    );
+  }
+  assert(
+    !/<\/?(?:script|form|button)\b|<input[^>]+type=["']?submit/i.test(SYNTHETIC_FORM_HTML) &&
+      SYNTHETIC_FORM_HTML.includes('id="contract-npi"') &&
+      SYNTHETIC_FORM_HTML.includes('id="enrollment-npi"'),
+    "M64_BROWSER_STATIC_FORM_SHAPE_INVALID",
+  );
 }
 
 function count(route, status) {
@@ -1404,6 +1467,9 @@ function classifyAuthPreflightDenialReason(host, method, pathname, requestTarget
 
 function routeFor(host, method, pathname, requestTarget, headers = {}) {
   if (host === PANEL_HOST) {
+    if (method === "GET" && requestTarget === PORTAL_PATH) {
+      return { kind: "static", name: "panel.synthetic_form" };
+    }
     if (method === "GET" && requestTarget === "/favicon.ico") {
       return { kind: "empty", name: "panel.favicon" };
     }
@@ -1510,15 +1576,17 @@ function serveStatic(response, route) {
   response.statusCode = 200;
   response.setHeader("cache-control", "no-store");
   response.setHeader("content-type", "text/html; charset=utf-8");
+  if (route.name === "panel.synthetic_form" || route.name === "portal.synthetic_form") {
+    response.end(SYNTHETIC_FORM_HTML);
+    return;
+  }
   if (route.name === "panel.handoff") {
     response.end(
       "<!doctype html><title>M64 local handoff fixture</title><main id=handoff>Local-only test handoff</main>",
     );
     return;
   }
-  response.end(
-    `<!doctype html><html><head><title>M64 synthetic payer fixture</title></head><body><main aria-label="Synthetic payer application"><label for="contract-npi">Contract NPI</label><input id="contract-npi" name="contract-npi" type="text"><label for="enrollment-npi">Enrollment NPI</label><input id="enrollment-npi" name="enrollment-npi" type="text"></main></body></html>`,
-  );
+  response.end(SYNTHETIC_FORM_HTML);
 }
 
 function serveSupabasePreflight(response, route) {
@@ -1955,12 +2023,14 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   }, boundTabId);
   assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
   await extensionPage.locator("#m64-open-real-sidepanel").click();
-  const sidePanelOpened = await poll(
-    () => extensionPage.evaluate(() => window.__m64SidePanelOpen === true),
-    Boolean,
-    "actual_sidepanel_open",
+  assert(
+    await poll(
+      () => extensionPage.evaluate(() => window.__m64SidePanelOpen === true),
+      Boolean,
+      "actual_sidepanel_open",
+    ),
+    "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED",
   );
-  assert(sidePanelOpened, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
   assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
 
   const workTupleFields = [
@@ -2011,209 +2081,327 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       async (key) => (await chrome.storage.session.get(key))[key] ?? null,
       ACTIVE_WORK_KEY,
     );
-  const initialWorkIdentity = activeWorkIdentity(boundWork);
+  const assertPayerTabActive = async (expectedTabId) => {
+    assert(
+      (await activeChromeTabId(extensionPage)) === expectedTabId,
+      "M64_BROWSER_ACTIVE_TAB_DRIFT",
+    );
+  };
+  const assertPanelPermission = async () => {
+    const requiredPattern = `${PANEL_ORIGIN}/*`;
+    assert(
+      (await extensionPage.evaluate(
+        (origin) => chrome.permissions.contains({ origins: [origin] }),
+        requiredPattern,
+      )) === true,
+      "M64_BROWSER_PANEL_REQUIRED_PERMISSION_MISSING",
+    );
+  };
+  const assertWorkRecord = async (expected, validationEvidence, caseType) => {
+    const current = await readActiveWork();
+    assert(
+      activeWorkIdentity(current) !== null &&
+        workTupleFields.every(
+          (field) => (current.tuple[field] ?? null) === (validationEvidence.tuple[field] ?? null),
+        ) &&
+        current.tuple.protocolVersion === 2 &&
+        current.tuple.launchReceiptId === validationEvidence.tuple.launchReceiptId &&
+        current.tuple.effectiveMappingFingerprint ===
+          validationEvidence.effectiveMappingFingerprint &&
+        current.formPath === PORTAL_PATH &&
+        current.formOrigin === PANEL_ORIGIN &&
+        current.caseType === caseType &&
+        current.boundTabId === expected.boundTabId,
+      "M64_BROWSER_WORK_BINDING_MISMATCH",
+    );
+    return current;
+  };
+  const evidenceFor = (workValidation) => ({
+    effectiveMappingFingerprint: workValidation.effectiveMappingFingerprint,
+    tuple: Object.fromEntries(
+      workTupleFields.map((field) => [field, workValidation.tuple[field] ?? null]),
+    ),
+  });
+
+  const contractEvidence = {
+    ...evidenceFor(validation),
+    protocolVersion: boundWork.tuple.protocolVersion,
+  };
   assert(
-    initialWorkIdentity !== null &&
-      workTupleFields.every(
-        (field) => (boundWork.tuple[field] ?? null) === (validation.tuple[field] ?? null),
-      ) &&
-      boundWork.tuple.protocolVersion === 2 &&
-      typeof validation.tuple.launchReceiptId === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        validation.tuple.launchReceiptId,
-      ) &&
+    boundWork.tuple.protocolVersion === 2 &&
+      validation.tuple.ownerKind === "contract" &&
+      validation.tuple.ownerId === CONTRACT_ID &&
+      validation.tuple.portalId === CONTRACT_PORTAL_ID &&
+      validation.tuple.portalKey === "m64_contract" &&
+      validation.tuple.assignmentId === CONTRACT_ASSIGNMENT_ID &&
+      validation.tuple.mappingGeneration === 1 &&
       validation.tuple.launchReceiptId === boundWork.tuple.launchReceiptId &&
-      validation.tuple.effectiveMappingFingerprint === validation.effectiveMappingFingerprint &&
-      boundWork.tuple.effectiveMappingFingerprint === uiTuple.effectiveMappingFingerprint &&
-      boundWork.formPath === new URL(PORTAL_URL).pathname &&
+      validation.effectiveMappingFingerprint === uiTuple.effectiveMappingFingerprint &&
+      boundWork.formPath === PORTAL_PATH &&
+      boundWork.formOrigin === PANEL_ORIGIN &&
       boundWork.caseType === "contract",
     "M64_BROWSER_WORK_BINDING_MISMATCH",
   );
-  const assertWorkUnchanged = async () => {
-    const current = await readActiveWork();
-    assert(
-      activeWorkIdentity(current) === initialWorkIdentity,
-      "M64_BROWSER_WORK_BINDING_MISMATCH",
-    );
-  };
-  const assertPayerTabActive = async () => {
-    assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
-  };
-  await assertWorkUnchanged();
-  await assertPayerTabActive();
+  await assertPanelPermission();
+  safeLog("M64|BROWSER|OPTIONAL_HOST_CONSENT|HOLD|reason=manual_only_not_tested");
 
-  // Native placement is a separate smoke; exercise permission in the built helper document.
-  const originPattern = `${new URL(PORTAL_URL).origin}/*`;
+  // The Panel origin is already an Extension host permission. This is the
+  // isolated built sidepanel document used for real user clicks; native panel
+  // placement was observed separately above.
   await bounded(
-    async () => {
-      try {
-        await extensionPage.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
-      } catch {
-        throw new BrowserFailure("M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED");
-      }
-    },
+    () => extensionPage.reload({ waitUntil: "domcontentloaded", timeout: 20_000 }),
     25_000,
     "M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED",
   );
   assert(extensionPage.url() === nativeSidePanelUrl, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
-  await assertPayerTabActive();
-  await assertWorkUnchanged();
+  await assertPanelPermission();
+  await assertPayerTabActive(boundWork.boundTabId);
+  await assertWorkRecord(boundWork, contractEvidence, "contract");
 
-  const permissionCta = extensionPage.locator("#work-portal-access-grant");
-  await permissionCta
-    .waitFor({ state: "visible", timeout: 15_000 })
-    .catch(() => assert(false, "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE"));
-  const permissionCtaReady = await permissionCta.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return (
-      style.display !== "none" &&
-      style.visibility === "visible" &&
-      Number(style.opacity) > 0 &&
-      !element.disabled &&
-      element.getAttribute("aria-disabled") !== "true"
-    );
-  });
-  assert(permissionCtaReady, "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE");
-  const permissionBefore = await extensionPage.evaluate(
-    (origin) => chrome.permissions.contains({ origins: [origin] }),
-    originPattern,
-  );
-  assert(permissionBefore === false, "M64_BROWSER_PERMISSION_PREGRANTED");
-  await assertPayerTabActive();
-  await assertWorkUnchanged();
-
-  await extensionPage.evaluate((origin) => {
-    const events = { added: false, removed: false };
-    chrome.permissions.onAdded.addListener((permissions) => {
-      if (permissions.origins?.includes(origin)) events.added = true;
-    });
-    chrome.permissions.onRemoved.addListener((permissions) => {
-      if (permissions.origins?.includes(origin)) events.removed = true;
-    });
-    window.__m64PermissionEvents = events;
-  }, originPattern);
-
-  checkpoint("permission_cta_click");
-  try {
-    await permissionCta.click({ timeout: 10_000 });
-  } catch {
-    throw new BrowserFailure("M64_BROWSER_PERMISSION_CTA_CLICK_FAILED");
-  }
-  checkpoint("permission_cta_clicked");
-  checkpoint("permission_grant_wait");
-  try {
-    await poll(
-      () =>
-        extensionPage.evaluate(
-          (origin) => chrome.permissions.contains({ origins: [origin] }),
-          originPattern,
-        ),
-      Boolean,
-      "work_origin_permission_granted",
+  const fillButton = extensionPage.locator("#fill-btn");
+  const mainError = extensionPage.locator("#main-error");
+  const waitForFillReady = async (label) => {
+    await poll(() => fillButton.isEnabled(), Boolean, label, 30_000);
+  };
+  const fillOnBoundWork = async (expectedTabId, targetPage, selectorId, label) => {
+    checkpoint(label === "Contract" ? "contract_fill" : "enrollment_fill");
+    await assertPayerTabActive(expectedTabId);
+    await waitForFillReady(`${label.toLowerCase()}_fill_button`);
+    const previousCreated = routeCount("panel.fill_events", 201);
+    await bounded(
+      () => fillButton.click({ timeout: 10_000 }),
       15_000,
+      label === "Contract"
+        ? "M64_BROWSER_CONTRACT_FILL_FAILED"
+        : "M64_BROWSER_ENROLLMENT_FILL_FAILED",
     );
-  } catch {
-    let diagnostic = {
-      activePayerTab: null,
-      ctaPresent: null,
-      ctaDisabled: null,
-      mainErrorVisible: null,
-      accessContainerHidden: null,
-      permissionPresent: null,
-      permissionAdded: null,
-      permissionRemoved: null,
-      workIdentity: null,
-    };
-    try {
-      const observed = await bounded(
-        () =>
-          extensionPage.evaluate(
-            async ({ origin, expectedTabId }) => {
-              const activePayerTab = await new Promise((resolve) =>
-                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) =>
-                  resolve(!chrome.runtime.lastError && tabs?.[0]?.id === expectedTabId),
-                ),
-              );
-              const isVisible = (element) => {
-                if (!element || element.hidden) return false;
-                const style = getComputedStyle(element);
-                return (
-                  style.display !== "none" &&
-                  style.visibility === "visible" &&
-                  Number(style.opacity) > 0
-                );
-              };
-              const cta = document.querySelector("#work-portal-access-grant");
-              const mainError = document.querySelector("#main-error");
-              const accessContainer = document.querySelector("#work-portal-access");
-              const permissionEvents = window.__m64PermissionEvents;
-              return {
-                activePayerTab,
-                ctaPresent: cta !== null,
-                ctaDisabled: Boolean(
-                  !cta || cta.disabled || cta.getAttribute("aria-disabled") === "true",
-                ),
-                mainErrorVisible: isVisible(mainError),
-                accessContainerHidden: Boolean(
-                  !accessContainer ||
-                  accessContainer.hidden ||
-                  getComputedStyle(accessContainer).display === "none",
-                ),
-                permissionPresent: await chrome.permissions.contains({ origins: [origin] }),
-                permissionAdded: permissionEvents?.added === true,
-                permissionRemoved: permissionEvents?.removed === true,
-              };
-            },
-            { origin: originPattern, expectedTabId: boundTabId },
-          ),
-        5_000,
-        "M64_BROWSER_PERMISSION_GRANT_DIAGNOSTIC_TIMEOUT",
-      );
-      diagnostic = { ...observed, workIdentity: null };
-    } catch {
-      // Keep an unknown-only diagnostic if the extension context cannot be read safely.
-    }
-    try {
-      const currentWork = await bounded(
-        () => readActiveWork(),
-        5_000,
-        "M64_BROWSER_PERMISSION_GRANT_DIAGNOSTIC_TIMEOUT",
-      );
-      diagnostic.workIdentity = activeWorkIdentity(currentWork) === initialWorkIdentity;
-    } catch {
-      // Preserve the DOM and permission checks if only storage is unavailable.
-    }
-    const fixedBoolean = (value) =>
-      value === true ? "true" : value === false ? "false" : "unknown";
-    safeLog(
-      `M64|BROWSER|PERMISSION_GRANT|active_payer_tab=${fixedBoolean(diagnostic.activePayerTab)}|work_identity=${fixedBoolean(diagnostic.workIdentity)}|cta_present=${fixedBoolean(diagnostic.ctaPresent)}|cta_disabled=${fixedBoolean(diagnostic.ctaDisabled)}|main_error_visible=${fixedBoolean(diagnostic.mainErrorVisible)}|access_container_hidden=${fixedBoolean(diagnostic.accessContainerHidden)}|permission_present=${fixedBoolean(diagnostic.permissionPresent)}|permission_added=${fixedBoolean(diagnostic.permissionAdded)}|permission_removed=${fixedBoolean(diagnostic.permissionRemoved)}`,
+    await poll(
+      () => routeCount("panel.fill_events", 201),
+      (count) => count > previousCreated,
+      `${label.toLowerCase()}_fill_receipt_api`,
+      45_000,
     );
-    throw new BrowserFailure("M64_BROWSER_PERMISSION_GRANT_TIMEOUT");
-  }
-  const permissionAfter = await extensionPage.evaluate(
-    (origin) => chrome.permissions.contains({ origins: [origin] }),
-    originPattern,
+    const summary = extensionPage.locator("#fill-summary");
+    await poll(
+      async () => ({
+        resultsVisible: await extensionPage.locator("#fill-results").isVisible(),
+        summaryVisible: await summary.isVisible(),
+        summary: await summary.innerText().catch(() => ""),
+        errorVisible: await mainError.isVisible(),
+      }),
+      (state) =>
+        state.resultsVisible &&
+        state.summaryVisible &&
+        state.summary.includes("Confirmed static: 1") &&
+        !state.errorVisible,
+      `${label.toLowerCase()}_fill_summary`,
+      30_000,
+    );
+    const filledValue = await targetPage.locator(`#${selectorId}`).inputValue();
+    assert(filledValue === "9999999995", "M64_BROWSER_SYNTHETIC_FORM_FILL_MISMATCH");
+    return summary;
+  };
+
+  await fillOnBoundWork(boundWork.boundTabId, portalPage, "contract-npi", "Contract");
+  assert(
+    (await portalPage.locator("#enrollment-npi").inputValue()) === "",
+    "M64_BROWSER_CONTRACT_FILL_CHANGED_ENROLLMENT_CONTROL",
   );
-  assert(permissionAfter === true, "M64_BROWSER_PERMISSION_CONTAINS_FAILED");
-  await assertPayerTabActive();
-  await assertWorkUnchanged();
+  assert(
+    await extensionPage.locator("#mark-submitted").evaluate((button) => button.hidden),
+    "M64_BROWSER_CONTRACT_SUBMISSION_CONTROL_VISIBLE",
+  );
+  await assertWorkRecord(boundWork, contractEvidence, "contract");
+  await assertPayerTabActive(boundWork.boundTabId);
+
+  checkpoint("contract_fill");
+  safeLog("M64|BROWSER|DB_CHECKPOINT|CONTRACT_FILL_COMPLETE");
+  await waitForDbAck("CONTRACT_RESET_COMPLETE");
+
+  checkpoint("stale_fill");
+  await assertWorkRecord(boundWork, contractEvidence, "contract");
+  await assertPayerTabActive(boundWork.boundTabId);
+  await waitForFillReady("stale_contract_fill_button");
+  const staleValidationBefore = routeCount("panel.work_validate", 409);
+  const fillEventsBefore = routeTotal("panel.fill_events");
+  const staleFormBefore = {
+    contractValue: await portalPage.locator("#contract-npi").inputValue(),
+    enrollmentValue: await portalPage.locator("#enrollment-npi").inputValue(),
+  };
+  await bounded(
+    () => fillButton.click({ timeout: 10_000 }),
+    15_000,
+    "M64_BROWSER_STALE_FILL_FAILED",
+  );
+  await poll(
+    () => routeCount("panel.work_validate", 409),
+    (count) => count > staleValidationBefore,
+    "stale_contract_work_validation_rejection",
+    45_000,
+  );
+  assert(
+    routeTotal("panel.fill_events") === fillEventsBefore,
+    "M64_BROWSER_STALE_FILL_API_REQUESTED",
+  );
+  await poll(() => mainError.isVisible(), Boolean, "stale_contract_fill_error", 20_000);
+  const staleFormAfter = {
+    contractValue: await portalPage.locator("#contract-npi").inputValue(),
+    enrollmentValue: await portalPage.locator("#enrollment-npi").inputValue(),
+  };
+  assert(
+    staleFormAfter.contractValue === staleFormBefore.contractValue &&
+      staleFormAfter.enrollmentValue === staleFormBefore.enrollmentValue &&
+      (await portalPage.locator("form, button, input[type=submit]").count()) === 0,
+    "M64_BROWSER_STALE_FILL_MUTATED_FORM",
+  );
+
+  checkpoint("enrollment_ui");
+  const enrollmentTaskTitle = panelOrgName.replace(/ Organization$/, " Enrollment Steps");
+  assert(
+    /^E612 M64 [a-f0-9]{16} Enrollment Steps$/.test(enrollmentTaskTitle),
+    "M64_BROWSER_ENROLLMENT_TASK_TITLE_INVALID",
+  );
+  await panelPage.goto(`${PANEL_ORIGIN}/cases/${ENROLLMENT_CASE_ID}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await poll(
+    () => panelPage.getByText(enrollmentTaskTitle, { exact: true }).count(),
+    (count) => count === 1,
+    "enrollment_task_loaded",
+    30_000,
+  );
+  const openStep = panelPage.getByRole("button", { name: "Open step", exact: true });
+  await poll(
+    () => openStep.count(),
+    (count) => count === 1,
+    "enrollment_open_step_ready",
+  );
+  await openStep.click();
+  const taskDialog = panelPage.getByRole("dialog");
+  await taskDialog.getByRole("heading", { name: enrollmentTaskTitle, exact: true }).waitFor({
+    state: "visible",
+  });
+  assert(
+    await taskDialog.getByText("First form", { exact: true }).isVisible(),
+    "M64_BROWSER_ENROLLMENT_STEP_NOT_SELECTED",
+  );
+  const enrollmentLaunch = taskDialog.getByRole("button", {
+    name: "Work in portal",
+    exact: true,
+  });
+  await poll(() => enrollmentLaunch.isEnabled(), Boolean, "enrollment_work_launch_ready");
+  const pagesBeforeEnrollmentLaunch = new Set(context.pages());
+  const validationCountBeforeEnrollment = workValidationSuccesses.length;
+  await enrollmentLaunch.click();
+  checkpoint("enrollment_ui");
+  const enrollmentValidation = await poll(
+    () =>
+      workValidationSuccesses
+        .slice(validationCountBeforeEnrollment)
+        .find(
+          ({ tuple }) =>
+            tuple.ownerKind === "case" &&
+            tuple.ownerId === ENROLLMENT_CASE_ID &&
+            tuple.portalId === ENROLLMENT_PORTAL_ID &&
+            tuple.portalKey === "m64_enrollment",
+        ) ?? null,
+    Boolean,
+    "enrollment_exact_work_validation",
+  );
+  const enrollmentPages = await poll(
+    () =>
+      context
+        .pages()
+        .filter((page) => !pagesBeforeEnrollmentLaunch.has(page) && page.url() === PORTAL_URL),
+    (pages) => pages.length === 1,
+    "synthetic_enrollment_tab",
+  );
+  const [enrollmentPortalPage] = enrollmentPages;
+  const enrollmentEvidence = evidenceFor(enrollmentValidation);
+  assert(
+    enrollmentValidation.tuple.ownerKind === "case" &&
+      enrollmentValidation.tuple.ownerId === ENROLLMENT_CASE_ID &&
+      enrollmentValidation.tuple.portalId === ENROLLMENT_PORTAL_ID &&
+      enrollmentValidation.tuple.portalKey === "m64_enrollment" &&
+      enrollmentValidation.tuple.taskId === ENROLLMENT_TASK_ID &&
+      enrollmentValidation.tuple.stepId === ENROLLMENT_STEP1_ID &&
+      enrollmentValidation.tuple.mappingGeneration === 1 &&
+      enrollmentValidation.effectiveMappingFingerprint !== validation.effectiveMappingFingerprint &&
+      enrollmentPortalPage.url() === PORTAL_URL,
+    "M64_BROWSER_ENROLLMENT_WORK_BINDING_MISMATCH",
+  );
+  checkpoint("enrollment_ui");
+  const enrollmentWork = await readActiveWork();
+  assert(
+    enrollmentWork?.boundTabId != null &&
+      enrollmentWork.tuple?.taskId === ENROLLMENT_TASK_ID &&
+      enrollmentWork.tuple?.stepId === ENROLLMENT_STEP1_ID,
+    "M64_BROWSER_ENROLLMENT_WORK_BINDING_MISMATCH",
+  );
+  enrollmentEvidence.protocolVersion = enrollmentWork.tuple.protocolVersion;
+  await assertWorkRecord(enrollmentWork, enrollmentEvidence, "enrollment");
+  await assertPayerTabActive(enrollmentWork.boundTabId);
+  assert(
+    (await enrollmentPortalPage.locator("form, button, input[type=submit]").count()) === 0,
+    "M64_BROWSER_SYNTHETIC_FORM_HAS_SUBMIT_CONTROL",
+  );
+
+  await fillOnBoundWork(
+    enrollmentWork.boundTabId,
+    enrollmentPortalPage,
+    "enrollment-npi",
+    "Enrollment",
+  );
+  assert(
+    (await enrollmentPortalPage.locator("#contract-npi").inputValue()) === "" &&
+      (await enrollmentPortalPage.locator("#enrollment-npi").inputValue()) === "9999999995" &&
+      (await portalPage.locator("#contract-npi").inputValue()) === "9999999995",
+    "M64_BROWSER_TYPED_KEY_FILL_ISOLATION_FAILED",
+  );
+  const pinnedStep = extensionPage.locator("#task-link-single");
+  await poll(
+    async () =>
+      (await pinnedStep.isVisible()) &&
+      (await pinnedStep.innerText()) === "This fill is pinned to First form.",
+    Boolean,
+    "enrollment_exact_step_receipt_visible",
+  );
+  const markSubmitted = extensionPage.locator("#mark-submitted");
+  assert(
+    (await markSubmitted.isVisible()) &&
+      !(await markSubmitted.isDisabled()) &&
+      (await enrollmentPortalPage.locator("form, button, input[type=submit]").count()) === 0,
+    "M64_BROWSER_ENROLLMENT_HUMAN_SUBMISSION_CONTROL_INVALID",
+  );
+
+  checkpoint("submission");
+  const touchesBeforeSubmission = routeTotal("panel.case_touches");
+  await markSubmitted.click();
+  await poll(
+    () => routeTotal("panel.case_touches"),
+    (count) => count > touchesBeforeSubmission,
+    "enrollment_submission_api",
+    45_000,
+  );
+  await poll(
+    async () =>
+      (await extensionPage.locator("#submit-status").isVisible()) &&
+      (await markSubmitted.evaluate((button) => button.hidden)),
+    Boolean,
+    "enrollment_submission_receipt_ui",
+    30_000,
+  );
+  await assertWorkRecord(enrollmentWork, enrollmentEvidence, "enrollment");
+  await assertPayerTabActive(enrollmentWork.boundTabId);
+
+  const panelRequiredPermission = await extensionPage.evaluate(
+    (origin) => chrome.permissions.contains({ origins: [origin] }),
+    `${PANEL_ORIGIN}/*`,
+  );
+  assert(panelRequiredPermission, "M64_BROWSER_PANEL_REQUIRED_PERMISSION_MISSING");
   return {
-    contractValidations: [
-      {
-        effectiveMappingFingerprint: validation.effectiveMappingFingerprint,
-        tuple: {
-          ownerKind: validation.tuple.ownerKind,
-          ownerId: validation.tuple.ownerId,
-          orgId: validation.tuple.orgId,
-          portalId: validation.tuple.portalId,
-          portalKey: validation.tuple.portalKey,
-          mappingGeneration: validation.tuple.mappingGeneration,
-          providerId: validation.tuple.providerId,
-          facilityId: validation.tuple.facilityId,
-          stepIdentity: validation.tuple.stepIdentity,
-        },
-      },
-    ],
+    contractValidations: [contractEvidence],
+    enrollmentValidations: [enrollmentEvidence],
   };
 }
 
@@ -2404,7 +2592,7 @@ async function run() {
     stepId: randomUUID(),
     stepIdentity: "m64-vertical-smoke:unknown-owner:step",
     type: "SET_ACTIVE_WORK",
-    portalUrl: `https://${PORTAL_HOST}/__m64__/form`,
+    portalUrl: PORTAL_URL,
   };
   const acknowledgement = await handoffPage.evaluate(
     async ({ extensionId: id, message }) =>
@@ -2430,7 +2618,7 @@ async function run() {
   assert(context.pages().length === pageCountBefore, "M64_BROWSER_FAILED_HANDOFF_CREATED_TAB");
   const portalTabs = context
     .pages()
-    .filter((page) => page.url().startsWith(`https://${PORTAL_HOST}/`));
+    .filter((page) => page.url().startsWith(`${PANEL_ORIGIN}${PORTAL_PATH}`));
   assert(portalTabs.length === 0, "M64_BROWSER_FAILED_HANDOFF_OPENED_PORTAL");
   const storedActiveWork = await extensionPage.evaluate(
     async (key) => (await chrome.storage.session.get(key))[key] ?? null,
@@ -2442,17 +2630,18 @@ async function run() {
     `M64|BROWSER|NEGATIVE|PASS|playwright=${PLAYWRIGHT_VERSION}|chromium=${context.browser()?.version() ?? "unknown"}|runtime_assets_sha256=${runtimeAssetsSha256}|work_validate=404|ack=CONTEXT_STALE|portal_tabs=0`,
   );
 
-  const probe = await panelContractPermissionProbe(extensionPage, extensionId);
+  const vertical = await panelContractPermissionProbe(extensionPage, extensionId);
   assert(unexpectedRoutes === 0, `M64_BROWSER_DENIED_${firstDeniedCategory ?? "UNKNOWN_HOST"}`);
   safeLog(
-    "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|native_sidepanel_open=true|active_payer_tab=true|grant_surface=built_extension_helper|permission_contains=true|fill_not_run=true",
+    "M64|BROWSER|VERTICAL|PASS|static_host=true|optional_host_consent=unverified|contract_fill_receipt=true|enrollment_fill_receipt=true|selected_step_submission=true|selected_key_reset=true|stale_fill_rejected=true",
   );
   safeLog(
     `M64_RESULT|${Buffer.from(
       JSON.stringify({
         extensionId,
         panelClientSha256,
-        contractValidations: probe.contractValidations,
+        contractValidations: vertical.contractValidations,
+        enrollmentValidations: vertical.enrollmentValidations,
       }),
     ).toString("base64url")}`,
   );

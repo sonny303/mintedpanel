@@ -21,6 +21,7 @@ export const M64 = Object.freeze({
   enrollmentStep1: "89000000-0000-4000-a000-000000000064",
   enrollmentStep2: "89000000-0000-4000-a000-000000000065",
   enrollmentSiblingStep: "89000000-0000-4000-a000-000000000066",
+  formUrl: "https://mintedpanel.vercel.app/__m64__/form",
 });
 
 /** Build a single-transaction fixture tagged with the enclosing E6.12 run. */
@@ -73,8 +74,8 @@ VALUES
    TRUE, current_date, 'M64 synthetic primary facility');
 
 -- These two typed configurations intentionally share one synthetic HTTPS URL.
--- MINT-48 clears proof on every fresh typed INSERT; only Contract receives a
--- later, current-generation proof update after both maps exist.
+-- MINT-48 clears proof on every fresh typed INSERT; each key receives its own
+-- current-generation proof update after both independent maps exist.
 INSERT INTO public.portals (
   id, org_id, portal_key, name, payer_id, form_url, case_type,
   requires_explicit_selection, is_verified, last_verified_at, proven_at,
@@ -82,10 +83,10 @@ INSERT INTO public.portals (
 ) VALUES
   (${sqlLiteral(M64.contractPortal)}, ${sqlLiteral(M64.org)}, 'm64_contract',
    ${sqlLiteral(`${runLabel} Contract Form`)}, ${sqlLiteral(M64.payer)},
-   'https://payer.m64.test/application', 'contract', TRUE, TRUE, now(), now(), 1),
+   ${sqlLiteral(M64.formUrl)}, 'contract', TRUE, TRUE, now(), now(), 1),
   (${sqlLiteral(M64.enrollmentPortal)}, ${sqlLiteral(M64.org)}, 'm64_enrollment',
    ${sqlLiteral(`${runLabel} Enrollment Form`)}, ${sqlLiteral(M64.payer)},
-   'https://payer.m64.test/application', 'enrollment', TRUE, TRUE, now(), now(), 1);
+   ${sqlLiteral(M64.formUrl)}, 'enrollment', TRUE, TRUE, now(), now(), 1);
 
 INSERT INTO public.contracts (id, org_id, group_id, payer_id, state)
 VALUES (
@@ -166,12 +167,19 @@ UPDATE public.portals
    AND portal_key = 'm64_contract'
    AND mapping_generation = 1;
 
+UPDATE public.portals
+   SET is_verified = TRUE, last_verified_at = now(), proven_at = now()
+ WHERE id = ${sqlLiteral(M64.enrollmentPortal)}
+   AND org_id = ${sqlLiteral(M64.org)}
+   AND portal_key = 'm64_enrollment'
+   AND mapping_generation = 1;
+
 DO $$
 BEGIN
   IF (SELECT count(*) FROM public.portals
        WHERE id IN ('${M64.contractPortal}', '${M64.enrollmentPortal}')
          AND org_id = '${M64.org}'
-         AND form_url = 'https://payer.m64.test/application'
+         AND form_url = '${M64.formUrl}'
          AND requires_explicit_selection
          AND mapping_generation = 1) <> 2 THEN
     RAISE EXCEPTION 'M64 typed portal fixture is incomplete';
@@ -184,10 +192,10 @@ BEGIN
   ) OR NOT EXISTS (
     SELECT 1 FROM public.portals
      WHERE id = '${M64.enrollmentPortal}' AND portal_key = 'm64_enrollment'
-       AND case_type = 'enrollment' AND NOT is_verified
-       AND last_verified_at IS NULL AND proven_at IS NULL
+       AND case_type = 'enrollment' AND is_verified
+       AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
   ) THEN
-    RAISE EXCEPTION 'M64 portal proof split is incorrect';
+    RAISE EXCEPTION 'M64 typed portal proofs are incomplete';
   END IF;
   IF (SELECT count(*) FROM public.portal_field_maps
        WHERE org_id = '${M64.org}' AND portal_key IN ('m64_contract', 'm64_enrollment')
