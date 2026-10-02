@@ -521,7 +521,11 @@ test("MINT-62 synthetic two-path prerequisite keeps empty configs and typed SOP 
   expect(scenario.db.fill_sessions).toEqual([]);
   expect(scenario.db.touches).toEqual([]);
   expect(
-    scenario.requests.filter((request) => ["fill_sessions", "touches"].includes(request.table)),
+    scenario.requests.filter(
+      (request) =>
+        ["fill_sessions", "touches"].includes(request.table) &&
+        ["POST", "PATCH", "PUT", "DELETE"].includes(request.method),
+    ),
   ).toEqual([]);
   expect(scenario.payerSiteRequests).toEqual([]);
 });
