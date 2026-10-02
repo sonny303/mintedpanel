@@ -115,6 +115,20 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
       group_id: `eq.${GROUP_ID}`,
     }),
   ]),
+  // Case detail embeds tasks in the credential_cases selector; its separate
+  // TaskDrawer lookup is not enabled until Open step has actually been reached.
+  credential_cases: Object.freeze({
+    select:
+      "*,provider:providers(*),payer:payers(*),mso:msos(*),group:provider_groups(*),facility:facilities(*),credentialing_status:status_configs(*),tasks(*),touches(*),status_history(*),payer_pipeline_history(*),case_status_history(*)",
+    id: `eq.${ENROLLMENT_CASE_ID}`,
+    org_id: `eq.${ORG_ID}`,
+  }),
+  case_facilities: Object.freeze({
+    select:
+      "id,org_id,case_id,facility_id,is_primary,created_at,created_by,facility:facilities(id,name,street,suite,city,state,zip,is_active)",
+    case_id: `eq.${ENROLLMENT_CASE_ID}`,
+    org_id: `eq.${ORG_ID}`,
+  }),
   payer_network_targets: Object.freeze({
     select: "*",
     org_id: `eq.${ORG_ID}`,
@@ -1424,6 +1438,25 @@ function assertDataPreflightPolicy() {
     order: "name.asc",
     group_id: `eq.${GROUP_ID}`,
   });
+  const enrollmentCaseQuery = {
+    select:
+      "*,provider:providers(*),payer:payers(*),mso:msos(*),group:provider_groups(*),facility:facilities(*),credentialing_status:status_configs(*),tasks(*),touches(*),status_history(*),payer_pipeline_history(*),case_status_history(*)",
+    id: `eq.${ENROLLMENT_CASE_ID}`,
+    org_id: `eq.${ORG_ID}`,
+  };
+  const enrollmentCaseTarget = queryTarget("/rest/v1/credential_cases", enrollmentCaseQuery);
+  const caseFacilitiesQuery = {
+    select:
+      "id,org_id,case_id,facility_id,is_primary,created_at,created_by,facility:facilities(id,name,street,suite,city,state,zip,is_active)",
+    case_id: `eq.${ENROLLMENT_CASE_ID}`,
+    org_id: `eq.${ORG_ID}`,
+  };
+  const caseFacilitiesTarget = queryTarget("/rest/v1/case_facilities", caseFacilitiesQuery);
+  const tasksTarget = queryTarget("/rest/v1/tasks", {
+    select: "*",
+    id: `eq.${ENROLLMENT_TASK_ID}`,
+    org_id: `eq.${ORG_ID}`,
+  });
   const route = (path, target, headers) =>
     routeFor(SUPABASE_HOST, "OPTIONS", path, target, headers);
   assert(
@@ -1446,6 +1479,10 @@ function assertDataPreflightPolicy() {
           route(`/rest/v1/${table}`, target, getHeaders)?.name ===
           `supabase.rest.${table}_preflight`,
       ) &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, getHeaders)?.name ===
+        "supabase.rest.credential_cases_preflight" &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, getHeaders)?.name ===
+        "supabase.rest.case_facilities_preflight" &&
       route("/rest/v1/facilities", groupedFacilityTarget, getHeaders)?.name ===
         "supabase.rest.facilities_preflight" &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites", postHeaders)?.name ===
@@ -1480,6 +1517,121 @@ function assertDataPreflightPolicy() {
         "access-control-request-headers":
           "apikey, authorization, x-client-info, apikey, accept-profile",
       }) === null &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, {
+        ...getHeaders,
+        origin: "https://untrusted.invalid",
+      }) === null &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      routeFor(
+        SUPABASE_HOST,
+        "POST",
+        "/rest/v1/credential_cases",
+        enrollmentCaseTarget,
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
+      }) === null &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, {
+        ...getHeaders,
+        "access-control-request-headers": undefined,
+      }) === null &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, {
+        ...getHeaders,
+        "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/credential_cases", enrollmentCaseTarget, {
+        ...getHeaders,
+        "access-control-request-headers":
+          "apikey, authorization, x-client-info, apikey, accept-profile",
+      }) === null &&
+      route(
+        "/rest/v1/credential_cases",
+        enrollmentCaseTarget.replace(ENROLLMENT_CASE_ID, "49000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/credential_cases",
+        enrollmentCaseTarget.replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/credential_cases", `${enrollmentCaseTarget}&unexpected=eq.x`, getHeaders) ===
+        null &&
+      route(
+        "/rest/v1/credential_cases",
+        `${enrollmentCaseTarget}&id=eq.${ENROLLMENT_CASE_ID}`,
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/credential_cases",
+        queryTarget("/rest/v1/credential_cases", {
+          ...enrollmentCaseQuery,
+          select: "*,provider:providers(*)",
+        }),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, {
+        ...getHeaders,
+        origin: "https://untrusted.invalid",
+      }) === null &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      routeFor(
+        SUPABASE_HOST,
+        "POST",
+        "/rest/v1/case_facilities",
+        caseFacilitiesTarget,
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
+      }) === null &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, {
+        ...getHeaders,
+        "access-control-request-headers": undefined,
+      }) === null &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, {
+        ...getHeaders,
+        "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/case_facilities", caseFacilitiesTarget, {
+        ...getHeaders,
+        "access-control-request-headers":
+          "apikey, authorization, x-client-info, apikey, accept-profile",
+      }) === null &&
+      route(
+        "/rest/v1/case_facilities",
+        caseFacilitiesTarget.replace(ENROLLMENT_CASE_ID, "49000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/case_facilities",
+        caseFacilitiesTarget.replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/case_facilities", `${caseFacilitiesTarget}&unexpected=eq.x`, getHeaders) ===
+        null &&
+      route(
+        "/rest/v1/case_facilities",
+        `${caseFacilitiesTarget}&case_id=eq.${ENROLLMENT_CASE_ID}`,
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/case_facilities",
+        queryTarget("/rest/v1/case_facilities", {
+          ...caseFacilitiesQuery,
+          select: "id,case_id,facility_id",
+        }),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/tasks", tasksTarget, getHeaders) === null &&
       route(
         "/rest/v1/memberships",
         membershipsTarget.replace("org_id%2Crole", "org_id%2Cunknown"),
