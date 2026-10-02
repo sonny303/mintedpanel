@@ -1,6 +1,7 @@
 // First M64 browser gate: run the exact built MV3 against a deny-by-default
 // HTTPS bridge on the existing E6.12 internal Docker network. This is a
-// transport/authentication rejection smoke, not owner-fill acceptance proof.
+// transport/authentication rejection smoke followed by a bounded real
+// UI/permission probe. It deliberately stops before any form fill.
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -8,16 +9,35 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:https";
+import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 
 const require = createRequire(import.meta.url);
 const PLAYWRIGHT_VERSION = "1.61.1";
 const PANEL_HOST = "mintedpanel.vercel.app";
+const PANEL_ORIGIN = `https://${PANEL_HOST}`;
 const SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
 const PORTAL_HOST = "payer.m64.test";
-const ORG_ID = "10000000-0000-4000-8000-000000000001";
-const ADMIN_EMAIL = "admin@e612.test";
+const ORG_ID = "18000000-0000-4000-a000-000000000064";
+const ORG_NAME_RE = /^E612 M64 [a-f0-9]{16} Organization$/;
+const CONTRACT_ID = "29000000-0000-4000-a000-000000000064";
+const PAYER_ID = "28000000-0000-4000-a000-000000000064";
+const GROUP_ID = "49000000-0000-4000-a000-000000000064";
+const PROVIDER_ID = "39000000-0000-4000-a000-000000000065";
+const FACILITY_ID = "78000000-0000-4000-a000-000000000064";
+const CONTRACT_PORTAL_ID = "38000000-0000-4000-a000-000000000064";
+const ENROLLMENT_PORTAL_ID = "38000000-0000-4000-a000-000000000065";
+const ENROLLMENT_CASE_ID = "49000000-0000-4000-a000-000000000064";
+const ENROLLMENT_TASK_ID = "99000000-0000-4000-a000-000000000064";
+const ENROLLMENT_STEP1_ID = "89000000-0000-4000-a000-000000000064";
+const ENROLLMENT_STEP2_ID = "89000000-0000-4000-a000-000000000065";
+const ENROLLMENT_SIBLING_TASK_ID = "99000000-0000-4000-a000-000000000065";
+const ENROLLMENT_SIBLING_STEP_ID = "89000000-0000-4000-a000-000000000066";
+const SUPABASE_ORIGIN = `https://${SUPABASE_HOST}`;
+const PORTAL_URL = `https://${PORTAL_HOST}/application`;
+const SPECIALIST_EMAIL = "specialist@e612.test";
 const ADMIN_PASSWORD = "E612-Local-Password-!234";
+const BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
 const ACTIVE_WORK_KEY = "minted.activeWork.v2";
 const EXPECTED_BACKGROUND_MARKERS = [
   "/api/work-context/validate",
@@ -37,15 +57,26 @@ function safeLog(value) {
 
 const STAGES = Object.freeze({
   preflight: "M64_BROWSER_STAGE_PREFLIGHT_FAILED",
+  panel_ready: "M64_BROWSER_STAGE_PANEL_READY_FAILED",
   tls_certificate: "M64_BROWSER_STAGE_TLS_CERTIFICATE_FAILED",
   proxy_listen: "M64_BROWSER_STAGE_PROXY_LISTEN_FAILED",
   chromium_launch: "M64_BROWSER_STAGE_CHROMIUM_LAUNCH_FAILED",
   mv3_worker: "M64_BROWSER_STAGE_MV3_WORKER_FAILED",
   sidepanel: "M64_BROWSER_STAGE_SIDEPANEL_FAILED",
+  permission_probe: "M64_BROWSER_STAGE_PERMISSION_PROBE_FAILED",
   sign_in: "M64_BROWSER_STAGE_SIGN_IN_FAILED",
   org_select: "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
   handoff_send: "M64_BROWSER_STAGE_HANDOFF_SEND_FAILED",
   postconditions: "M64_BROWSER_STAGE_POSTCONDITIONS_FAILED",
+  panel_sign_in: "M64_BROWSER_STAGE_PANEL_SIGN_IN_FAILED",
+  contract_ui: "M64_BROWSER_STAGE_CONTRACT_UI_FAILED",
+  contract_fill: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  enrollment_ui: "M64_BROWSER_STAGE_ENROLLMENT_UI_FAILED",
+  enrollment_fill: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  submission: "M64_BROWSER_STAGE_HUMAN_SUBMISSION_FAILED",
+  second_enrollment_fill: "M64_BROWSER_STAGE_SECOND_ENROLLMENT_FILL_FAILED",
+  reset: "M64_BROWSER_STAGE_MAPPING_RESET_FAILED",
+  stale_fill: "M64_BROWSER_STAGE_STALE_FILL_FAILED",
 });
 
 let currentStage = "preflight";
@@ -64,6 +95,68 @@ async function poll(read, accept, label, timeoutMs = 20_000) {
     await delay(100);
   }
   throw new Error(`M64_BROWSER_TIMEOUT_${label}${last instanceof Error ? `_${last.message}` : ""}`);
+}
+
+async function readPanelReady(expectedExtensionId) {
+  const input = createInterface({ input: process.stdin });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const failOnce = (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      input.close();
+      reject(new BrowserFailure(code));
+    };
+    const timeout = setTimeout(() => {
+      failOnce("M64_BROWSER_PANEL_READY_TIMEOUT");
+    }, 1_200_000);
+    input.once("line", (line) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      input.close();
+      const match = /^M64_PANEL_READY\|([A-Za-z0-9_-]{1,65536})$/.exec(line);
+      if (!match) {
+        reject(new BrowserFailure("M64_BROWSER_PANEL_READY_MALFORMED"));
+        return;
+      }
+      let value;
+      try {
+        value = JSON.parse(Buffer.from(match[1], "base64url").toString("utf8"));
+      } catch {
+        reject(new BrowserFailure("M64_BROWSER_PANEL_READY_MALFORMED"));
+        return;
+      }
+      const assets = value?.clientAssets;
+      const safeAssets =
+        Array.isArray(assets) &&
+        assets.length > 0 &&
+        assets.length <= 1000 &&
+        assets.every(
+          (asset) =>
+            typeof asset === "string" &&
+            /^\/[A-Za-z0-9_./-]+$/.test(asset) &&
+            !asset.split("/").includes(".."),
+        ) &&
+        new Set(assets).size === assets.length;
+      if (
+        value?.extensionId !== expectedExtensionId ||
+        !/^[a-p]{32}$/.test(value?.extensionId ?? "") ||
+        !/^[a-f0-9]{64}$/.test(value?.clientSha256 ?? "") ||
+        !safeAssets ||
+        !ORG_NAME_RE.test(value?.orgName ?? "")
+      ) {
+        reject(new BrowserFailure("M64_BROWSER_PANEL_READY_INVALID"));
+        return;
+      }
+      panelClientAssets = new Set(assets);
+      panelClientSha256 = value.clientSha256;
+      panelOrgName = value.orgName;
+      resolve(value);
+    });
+    input.once("close", () => failOnce("M64_BROWSER_PANEL_READY_EOF"));
+  });
 }
 
 function extractAnonKey(bundle) {
@@ -104,9 +197,13 @@ const backgroundPath = join(extensionRoot, "background.js");
 const manifestPath = join(extensionRoot, "manifest.json");
 let chromium;
 let extensionAnonKey;
+let panelBuildAnonKey;
 let runtimeAssetsSha256;
 let localAnonKey;
 let expectedRuntimeAssetsSha256;
+let panelClientAssets = new Set();
+let panelClientSha256;
+let panelOrgName;
 let certDir;
 let certPath;
 let keyPath;
@@ -116,18 +213,23 @@ const metrics = new Map();
 let unexpectedRoutes = 0;
 let firstDeniedCategory = null;
 let exactValidationNotFound = false;
+const workValidationAttempts = [];
+const workValidationSuccesses = [];
+let extensionIdObserved;
 let server;
 let context;
 let proxyClosed = false;
 
 async function preflight() {
   localAnonKey = process.env.M64_LOCAL_ANON_KEY;
+  panelBuildAnonKey = process.env.M64_PANEL_BUILD_ANON_KEY;
   expectedRuntimeAssetsSha256 = process.env.M64_EXPECTED_RUNTIME_ASSETS_SHA;
   assert(localAnonKey?.split(".").length === 3, "M64_BROWSER_LOCAL_ANON_KEY_MISSING");
   assert(
     /^[a-f0-9]{64}$/.test(expectedRuntimeAssetsSha256 ?? ""),
     "M64_BROWSER_EXPECTED_ASSET_HASH_MISSING",
   );
+  assert(panelBuildAnonKey === BUILD_ANON_KEY, "M64_BROWSER_PANEL_BUILD_KEY_MISMATCH");
   const playwright = require("playwright");
   const playwrightPackage = require("playwright/package.json");
   chromium = playwright.chromium;
@@ -233,29 +335,103 @@ function routeFor(host, method, pathname, requestTarget) {
     }
     if (method === "GET" && pathname === "/__m64__/handoff")
       return { kind: "static", name: "panel.handoff" };
-    if (method === "GET" && pathname === "/api/me/orgs")
-      return { kind: "app", name: "panel.me_orgs" };
-    if (method === "POST" && pathname === "/api/work-context/validate")
-      return { kind: "app", name: "panel.work_validate" };
-    return null;
-  }
-  if (host === SUPABASE_HOST) {
     if (
-      pathname.startsWith("/auth/v1/") ||
-      pathname.startsWith("/rest/v1/") ||
-      pathname.startsWith("/storage/v1/")
+      method === "GET" &&
+      ["/", "/login", "/reporting/contracts-matrix", `/cases/${ENROLLMENT_CASE_ID}`].includes(
+        pathname,
+      )
     ) {
-      let service = "storage";
-      if (pathname.startsWith("/auth/")) {
-        service = pathname === "/auth/v1/token" ? "auth_token" : "auth";
-      } else if (pathname.startsWith("/rest/")) {
-        service = "rest";
-      }
-      return { kind: "gateway", name: `supabase.${service}` };
+      return { kind: "app", name: "panel.page" };
+    }
+    if ((method === "GET" || method === "HEAD") && panelClientAssets.has(pathname)) {
+      return { kind: "app", name: "panel.asset" };
+    }
+    if (["GET", "OPTIONS"].includes(method) && pathname === "/api/me/orgs")
+      return { kind: "app", name: "panel.me_orgs" };
+    if (["GET", "OPTIONS"].includes(method) && pathname === "/api/me/access-context")
+      return { kind: "app", name: "panel.access_context" };
+    if (["POST", "OPTIONS"].includes(method) && pathname === "/api/me/access-context/select")
+      return { kind: "app", name: "panel.access_context_select" };
+    if (
+      ["GET", "OPTIONS"].includes(method) &&
+      pathname === `/api/contracts/${CONTRACT_ID}/form-context`
+    )
+      return { kind: "app", name: "panel.contract_form_context" };
+    if (["POST", "OPTIONS"].includes(method) && pathname === "/api/work-context/validate")
+      return { kind: "app", name: "panel.work_validate" };
+    if (["GET", "OPTIONS"].includes(method) && pathname === "/api/portals")
+      return { kind: "app", name: "panel.portals" };
+    if (["GET", "OPTIONS"].includes(method) && pathname === "/api/portal-field-maps")
+      return { kind: "app", name: "panel.portal_field_maps" };
+    if (["POST", "OPTIONS"].includes(method) && pathname === "/api/fill-events")
+      return { kind: "app", name: "panel.fill_events" };
+    if (
+      ["POST", "OPTIONS"].includes(method) &&
+      pathname === `/api/cases/${ENROLLMENT_CASE_ID}/touches`
+    )
+      return { kind: "app", name: "panel.case_touches" };
+    if (["GET", "OPTIONS"].includes(method) && pathname === "/api/cases")
+      return { kind: "app", name: "panel.cases" };
+    if (
+      ["GET", "OPTIONS"].includes(method) &&
+      pathname === `/api/cases/${ENROLLMENT_CASE_ID}/context`
+    )
+      return { kind: "app", name: "panel.case_context" };
+    if (
+      (method === "OPTIONS" || method === "PATCH") &&
+      pathname === `/api/tasks/${ENROLLMENT_TASK_ID}/steps`
+    ) {
+      return { kind: "app", name: "panel.task_steps" };
     }
     return null;
   }
-  if (host === PORTAL_HOST && method === "GET" && pathname === "/__m64__/form") {
+  if (host === SUPABASE_HOST) {
+    const authMethods = new Map([
+      ["/auth/v1/token", new Set(["POST", "OPTIONS"])],
+      ["/auth/v1/user", new Set(["GET", "OPTIONS"])],
+      ["/auth/v1/logout", new Set(["POST", "OPTIONS"])],
+    ]);
+    const allowedAuth = authMethods.get(pathname);
+    if (allowedAuth?.has(method)) {
+      return {
+        kind: "gateway",
+        name: pathname.endsWith("/token") ? "supabase.auth_token" : "supabase.auth",
+      };
+    }
+    const restReads = new Set([
+      "profiles",
+      "memberships",
+      "organizations",
+      "contracts",
+      "status_configs",
+      "provider_groups",
+      "payers",
+      "payer_network_targets",
+      "facilities",
+      "contract_sop_assignments",
+      "sop_templates",
+      "sop_template_versions",
+      "portals",
+      "portal_field_maps",
+      "credential_cases",
+      "tasks",
+      "case_facilities",
+      "touches",
+      "provider_group_assignments",
+      "provider_facility_assignments",
+      "providers",
+    ]);
+    const tableMatch = /^\/rest\/v1\/([a-z][a-z0-9_]*)$/.exec(pathname);
+    if (tableMatch && restReads.has(tableMatch[1]) && ["GET", "HEAD", "OPTIONS"].includes(method)) {
+      return { kind: "gateway", name: `supabase.rest.${tableMatch[1]}` };
+    }
+    const rpcMatch = /^\/rest\/v1\/rpc\/(claim_invites|reset_portal_mapping)$/.exec(pathname);
+    if (rpcMatch && (method === "POST" || method === "OPTIONS")) {
+      return { kind: "gateway", name: `supabase.rpc.${rpcMatch[1]}` };
+    }
+    return null;
+  }
+  if (host === PORTAL_HOST && method === "GET" && requestTarget === "/application") {
     return { kind: "static", name: "portal.synthetic_form" };
   }
   return null;
@@ -272,7 +448,7 @@ function serveStatic(response, route) {
     return;
   }
   response.end(
-    "<!doctype html><title>M64 synthetic payer fixture</title><main><label>Fixture field <input id=fixture-field></label></main>",
+    `<!doctype html><html><head><title>M64 synthetic payer fixture</title></head><body><main aria-label="Synthetic payer application"><label for="contract-npi">Contract NPI</label><input id="contract-npi" name="contract-npi" type="text"><label for="enrollment-npi">Enrollment NPI</label><input id="enrollment-npi" name="enrollment-npi" type="text"></main></body></html>`,
   );
 }
 
@@ -281,12 +457,15 @@ function proxyToLocal(request, response, route, requestUrl, method) {
   const destination = isSupabase ? { host: "gateway", port: 8787 } : { host: "app", port: 3000 };
   const headers = { ...request.headers, host: `${destination.host}:${destination.port}` };
   if (isSupabase) {
-    if (headers.apikey !== extensionAnonKey) {
+    if (headers.apikey !== extensionAnonKey && headers.apikey !== panelBuildAnonKey) {
       unexpected(response, "SUPABASE_APIKEY_MISMATCH");
       return;
     }
     headers.apikey = localAnonKey;
-    if (headers.authorization === `Bearer ${extensionAnonKey}`) {
+    if (
+      headers.authorization === `Bearer ${extensionAnonKey}` ||
+      headers.authorization === `Bearer ${panelBuildAnonKey}`
+    ) {
       headers.authorization = `Bearer ${localAnonKey}`;
     }
   }
@@ -312,8 +491,38 @@ function proxyToLocal(request, response, route, requestUrl, method) {
       upstreamResponse.on("end", () => {
         const body = Buffer.concat(chunks);
         const envelope = jsonEnvelope(body);
-        exactValidationNotFound =
-          status === 404 && envelope?.data === null && envelope?.error === "Case not found.";
+        if (status === 404 && envelope?.data === null && envelope?.error === "Case not found.") {
+          exactValidationNotFound = true;
+        }
+        const workData = envelope?.data;
+        const workTuple = workData?.tuple;
+        if (
+          status === 200 &&
+          workTuple &&
+          typeof workTuple === "object" &&
+          /^sha256:[a-f0-9]{64}$/.test(workData.effectiveMappingFingerprint ?? "")
+        ) {
+          workValidationSuccesses.push({
+            tuple: {
+              ownerKind: workTuple.ownerKind,
+              ownerId: workTuple.ownerId,
+              orgId: workTuple.orgId,
+              contextVersion: workTuple.contextVersion,
+              sopTemplateId: workTuple.sopTemplateId,
+              sopVersion: workTuple.sopVersion,
+              portalId: workTuple.portalId,
+              portalKey: workTuple.portalKey,
+              mappingGeneration: workTuple.mappingGeneration,
+              stepIdentity: workTuple.stepIdentity,
+              taskId: workTuple.taskId ?? null,
+              stepId: workTuple.stepId ?? null,
+              assignmentId: workTuple.assignmentId ?? null,
+              taskIndex: workTuple.taskIndex ?? null,
+              stepIndex: workTuple.stepIndex ?? null,
+            },
+            effectiveMappingFingerprint: workData.effectiveMappingFingerprint,
+          });
+        }
         response.end(body);
       });
     },
@@ -325,6 +534,220 @@ function proxyToLocal(request, response, route, requestUrl, method) {
     response.end("local verification upstream unavailable");
   });
   request.pipe(upstream);
+}
+
+function activeChromeTabId(extensionPage) {
+  return extensionPage.evaluate(
+    () =>
+      new Promise((resolve) =>
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) =>
+          resolve(Number.isInteger(tabs[0]?.id) ? tabs[0].id : null),
+        ),
+      ),
+  );
+}
+
+async function panelContractPermissionProbe(extensionPage) {
+  currentStage = "panel_sign_in";
+  const panelPage = await context.newPage();
+  await panelPage.goto(`${PANEL_ORIGIN}/login`, { waitUntil: "domcontentloaded" });
+  await panelPage.locator("#email").fill(SPECIALIST_EMAIL);
+  await panelPage.locator("#password").fill(ADMIN_PASSWORD);
+  await panelPage.getByRole("button", { name: /^Sign in$/ }).click();
+  const activeOrgButton = panelPage.locator('button[aria-label^="Active organization:"]');
+  await poll(
+    () => activeOrgButton.count(),
+    (count) => count === 1,
+    "panel_authenticated_org",
+  );
+
+  currentStage = "contract_ui";
+  const orgAttribute = await activeOrgButton.getAttribute("aria-label");
+  if (!orgAttribute?.includes(panelOrgName)) {
+    await activeOrgButton.click();
+    await panelPage.getByRole("menuitem", { name: panelOrgName, exact: true }).click();
+    await poll(
+      () => activeOrgButton.getAttribute("aria-label"),
+      (label) => label === `Active organization: ${panelOrgName}. Switch organization`,
+      "panel_m64_org_selected",
+    );
+  }
+  await panelPage.goto(
+    `${PANEL_ORIGIN}/reporting/contracts-matrix?groupId=${GROUP_ID}&payerId=${PAYER_ID}&state=NY`,
+    { waitUntil: "domcontentloaded" },
+  );
+  const targetCell = panelPage.locator('td[aria-current="location"]');
+  await poll(
+    () => targetCell.count(),
+    (count) => count === 1,
+    "contract_matrix_target",
+  );
+  await targetCell.click();
+  await panelPage.getByRole("dialog").waitFor({ state: "visible" });
+
+  const providerSelect = panelPage.getByRole("combobox", { name: "First provider for form work" });
+  await providerSelect.click();
+  await panelPage.getByRole("option", { name: /Synthetic M64 Provider/ }).click();
+  const facilitySelect = panelPage.getByRole("combobox", { name: "Location for form work" });
+  await facilitySelect.click();
+  await panelPage.getByRole("option", { name: new RegExp(`${panelOrgName} Facility`) }).click();
+
+  const tupleElement = panelPage.getByTestId("contract-launch-tuple");
+  await poll(
+    () => tupleElement.getAttribute("data-effective-mapping-fingerprint"),
+    (fingerprint) => /^sha256:[a-f0-9]{64}$/.test(fingerprint ?? ""),
+    "contract_live_map_fingerprint",
+  );
+  const uiTuple = await tupleElement.evaluate((element) => ({
+    orgId: element.getAttribute("data-org-id"),
+    portalId: element.getAttribute("data-portal-id"),
+    mappingGeneration: element.getAttribute("data-mapping-generation"),
+    effectiveMappingFingerprint: element.getAttribute("data-effective-mapping-fingerprint"),
+    providerId: element.getAttribute("data-provider-id"),
+    facilityId: element.getAttribute("data-facility-id"),
+    readiness: element.getAttribute("data-readiness-outcome"),
+    stepIdentity: element.getAttribute("data-step-identity"),
+  }));
+  assert(
+    uiTuple.orgId === ORG_ID &&
+      uiTuple.portalId === CONTRACT_PORTAL_ID &&
+      uiTuple.mappingGeneration === "1" &&
+      uiTuple.providerId === PROVIDER_ID &&
+      uiTuple.facilityId === FACILITY_ID &&
+      uiTuple.readiness === "ready",
+    "M64_BROWSER_PANEL_CONTRACT_CONTEXT_FAILED",
+  );
+  const launch = panelPage.getByRole("button", { name: "Work in portal", exact: true });
+  await poll(() => launch.isEnabled(), Boolean, "contract_work_launch_ready");
+  await launch.click();
+  await poll(
+    () => workValidationSuccesses.find(({ tuple }) => tuple.ownerKind === "contract") ?? null,
+    Boolean,
+    "contract_real_work_validation",
+  );
+  const validation = workValidationSuccesses.find(({ tuple }) => tuple.ownerKind === "contract");
+  assert(
+    validation?.tuple.ownerId === CONTRACT_ID &&
+      validation.tuple.orgId === ORG_ID &&
+      validation.tuple.portalId === CONTRACT_PORTAL_ID &&
+      validation.tuple.portalKey === "m64_contract" &&
+      validation.tuple.mappingGeneration === 1 &&
+      validation.tuple.providerId === PROVIDER_ID &&
+      validation.tuple.facilityId === FACILITY_ID &&
+      validation.tuple.stepIdentity === uiTuple.stepIdentity &&
+      validation.effectiveMappingFingerprint === uiTuple.effectiveMappingFingerprint,
+    "M64_BROWSER_PANEL_CONTRACT_LAUNCH_FAILED",
+  );
+  await panelPage
+    .getByText("The extension validated this step and opened its exact work tab.", {
+      exact: true,
+    })
+    .waitFor({ state: "visible" });
+  const portalPages = await poll(
+    () => context.pages().filter((page) => page.url().startsWith(`${PORTAL_URL}`)),
+    (pages) => pages.length === 1,
+    "synthetic_contract_tab",
+  );
+  const [portalPage] = portalPages;
+  const boundWork = await extensionPage.evaluate(
+    async (key) => (await chrome.storage.session.get(key))[key] ?? null,
+    ACTIVE_WORK_KEY,
+  );
+  const boundTabId = boundWork?.boundTabId;
+  assert(
+    Number.isInteger(boundTabId) &&
+      boundWork?.tuple?.ownerKind === "contract" &&
+      boundWork.tuple.ownerId === CONTRACT_ID &&
+      boundWork.tuple.portalId === CONTRACT_PORTAL_ID &&
+      boundWork.formOrigin === new URL(PORTAL_URL).origin,
+    "M64_BROWSER_WORK_BINDING_MISMATCH",
+  );
+  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  assert(new URL(portalPage.url()).href === PORTAL_URL, "M64_BROWSER_WORK_BINDING_MISMATCH");
+  const formControls = await portalPage
+    .locator("input")
+    .evaluateAll((inputs) => inputs.map((input) => ({ id: input.id, type: input.type })));
+  assert(
+    formControls.length === 2 &&
+      formControls.some((input) => input.id === "contract-npi" && input.type === "text") &&
+      formControls.some((input) => input.id === "enrollment-npi" && input.type === "text") &&
+      (await portalPage.locator("form, button, input[type=submit]").count()) === 0,
+    "M64_BROWSER_SYNTHETIC_FORM_SHAPE_INVALID",
+  );
+
+  currentStage = "permission_probe";
+  await extensionPage.evaluate((expectedTabId) => {
+    const button = document.createElement("button");
+    button.id = "m64-open-real-sidepanel";
+    button.type = "button";
+    button.textContent = "Open test side panel";
+    button.addEventListener("click", async () => {
+      try {
+        await chrome.sidePanel.open({ tabId: expectedTabId });
+        window.__m64SidePanelOpen = true;
+      } catch {
+        window.__m64SidePanelOpen = false;
+      }
+    });
+    document.body.append(button);
+  }, boundTabId);
+  await extensionPage.locator("#m64-open-real-sidepanel").click();
+  const sidePanelOpened = await poll(
+    () => extensionPage.evaluate(() => window.__m64SidePanelOpen === true),
+    Boolean,
+    "actual_sidepanel_open",
+  );
+  assert(sidePanelOpened, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
+  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  await extensionPage
+    .locator("#work-portal-access-grant")
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .catch(() => assert(false, "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE"));
+  const originPattern = `${new URL(PORTAL_URL).origin}/*`;
+  const permissionBefore = await extensionPage.evaluate(
+    (origin) => chrome.permissions.contains({ origins: [origin] }),
+    originPattern,
+  );
+  assert(permissionBefore === false, "M64_BROWSER_PERMISSION_PREGRANTED");
+  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  await extensionPage
+    .locator("#work-portal-access-grant")
+    .click({ timeout: 10_000 })
+    .catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
+  await poll(
+    () =>
+      extensionPage.evaluate(
+        (origin) => chrome.permissions.contains({ origins: [origin] }),
+        originPattern,
+      ),
+    Boolean,
+    "work_origin_permission_granted",
+    15_000,
+  ).catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
+  const permissionAfter = await extensionPage.evaluate(
+    (origin) => chrome.permissions.contains({ origins: [origin] }),
+    originPattern,
+  );
+  assert(permissionAfter === true, "M64_BROWSER_PERMISSION_CONTAINS_FAILED");
+  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  return {
+    contractValidations: [
+      {
+        effectiveMappingFingerprint: validation.effectiveMappingFingerprint,
+        tuple: {
+          ownerKind: validation.tuple.ownerKind,
+          ownerId: validation.tuple.ownerId,
+          orgId: validation.tuple.orgId,
+          portalId: validation.tuple.portalId,
+          portalKey: validation.tuple.portalKey,
+          mappingGeneration: validation.tuple.mappingGeneration,
+          providerId: validation.tuple.providerId,
+          facilityId: validation.tuple.facilityId,
+          stepIdentity: validation.tuple.stepIdentity,
+        },
+      },
+    ],
+  };
 }
 
 async function run() {
@@ -374,6 +797,11 @@ async function run() {
         const hostHeader = String(request.headers.host ?? "")
           .toLowerCase()
           .replace(/:\d+$/, "");
+        const sni = String(request.socket.servername ?? "").toLowerCase();
+        if (sni !== hostHeader || !certHosts.includes(sni)) {
+          unexpected(response, "UNKNOWN_HOST");
+          return;
+        }
         const pathname = new URL(request.url ?? "/", `https://${hostHeader || PANEL_HOST}`)
           .pathname;
         const method = String(request.method ?? "GET").toUpperCase();
@@ -431,6 +859,9 @@ async function run() {
     "mv3_service_worker",
   );
   const extensionId = new URL(worker.url()).hostname;
+  safeLog(`M64|BROWSER|EXTENSION_ID|${extensionId}`);
+  currentStage = "panel_ready";
+  await readPanelReady(extensionId);
   currentStage = "sidepanel";
   const extensionPage = await context.newPage();
   await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
@@ -442,7 +873,7 @@ async function run() {
   currentStage = "sign_in";
   const signIn = await extensionPage.evaluate(
     async ({ email, password }) => chrome.runtime.sendMessage({ type: "SIGN_IN", email, password }),
-    { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    { email: SPECIALIST_EMAIL, password: ADMIN_PASSWORD },
   );
   assert(
     signIn?.ok === true &&
@@ -526,10 +957,22 @@ async function run() {
   assert(storedActiveWork == null, "M64_BROWSER_FAILED_HANDOFF_PERSISTED_ACTIVE_WORK");
   assert(unexpectedRoutes === 0, `M64_BROWSER_DENIED_${firstDeniedCategory ?? "UNKNOWN_HOST"}`);
   safeLog(
-    `M64|BROWSER|PASS|playwright=${PLAYWRIGHT_VERSION}|chromium=${context.browser()?.version() ?? "unknown"}|runtime_assets_sha256=${runtimeAssetsSha256}`,
+    `M64|BROWSER|NEGATIVE|PASS|playwright=${PLAYWRIGHT_VERSION}|chromium=${context.browser()?.version() ?? "unknown"}|runtime_assets_sha256=${runtimeAssetsSha256}|work_validate=404|ack=CONTEXT_STALE|portal_tabs=0`,
+  );
+
+  const probe = await panelContractPermissionProbe(extensionPage);
+  assert(unexpectedRoutes === 0, `M64_BROWSER_DENIED_${firstDeniedCategory ?? "UNKNOWN_HOST"}`);
+  safeLog(
+    "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|sidepanel_open=true|active_payer_tab=true|permission_contains=true|fill_not_run=true",
   );
   safeLog(
-    "M64|BROWSER|PASS|goTrue_local=200|panel_orgs_local=200|work_validate_local=404|ack=CONTEXT_STALE|portal_tabs=0",
+    `M64_RESULT|${Buffer.from(
+      JSON.stringify({
+        extensionId,
+        panelClientSha256,
+        contractValidations: probe.contractValidations,
+      }),
+    ).toString("base64url")}`,
   );
 }
 

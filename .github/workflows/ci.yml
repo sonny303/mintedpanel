@@ -261,7 +261,7 @@ jobs:
       - name: Build disposable Node server and bind source manifest
         env:
           NITRO_PRESET: node_server
-          VITE_SUPABASE_URL: http://gateway:8787
+          VITE_SUPABASE_URL: https://fkvuhfsqcmujywzgczmc.supabase.co
           VITE_SUPABASE_ANON_KEY: e612-build-synthetic-anon-key
         run: |
           npm run build
