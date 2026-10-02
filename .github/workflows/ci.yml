@@ -213,7 +213,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: sonny303/minted-extension
-          ref: 8a91b53577ba2c08f5907430b34fdff028f5a2e2
+          ref: 494f1e35e560992e1ca472ffbc01711311ae992d
           path: .m64-extension
           persist-credentials: false
 
@@ -261,7 +261,7 @@ jobs:
       - name: Build disposable Node server and bind source manifest
         env:
           NITRO_PRESET: node_server
-          VITE_SUPABASE_URL: http://gateway:8787
+          VITE_SUPABASE_URL: https://fkvuhfsqcmujywzgczmc.supabase.co
           VITE_SUPABASE_ANON_KEY: e612-build-synthetic-anon-key
         run: |
           npm run build

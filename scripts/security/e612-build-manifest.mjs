@@ -18,6 +18,7 @@ const roots = [
   "scripts/security/e614-http-stream-probes.mjs",
   "scripts/security/e612-profile-http-fixtures.mjs",
   "scripts/security/e612-profile-http-probes.mjs",
+  "scripts/security/e612-m64-fixtures.mjs",
   "scripts/security/e614-enrollment-report-native.mjs",
   "scripts/security/e614-report-fixtures.mjs",
   "scripts/security/verify-e612-client-access.mjs",
@@ -57,6 +58,12 @@ function runtimeFiles() {
     .sort();
 }
 
+function clientFiles() {
+  return filesUnder(".output/public")
+    .filter((file) => statSync(join(root, file)).isFile())
+    .sort();
+}
+
 function gitHead() {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
@@ -80,15 +87,22 @@ function hashFiles(files) {
 export function buildManifest() {
   const files = sourceFiles();
   const bundleFiles = runtimeFiles();
+  const publicFiles = clientFiles();
   if (!bundleFiles.includes(".output/server/index.mjs"))
     throw new Error("E612_BUILD_BUNDLE_MISSING");
+  // TanStack Start serves route HTML through Nitro SSR; builds need not emit
+  // a public index.html. Bind the actual client bundle/static assets instead.
+  if (!publicFiles.some((file) => file.endsWith(".js")))
+    throw new Error("E612_BUILD_CLIENT_BUNDLE_MISSING");
   return {
-    format: 2,
+    format: 3,
     gitHead: gitHead(),
     sourceFiles: files,
     sourceSha256: hashFiles(files),
     bundleFiles,
     bundleSha256: hashFiles(bundleFiles),
+    clientFiles: publicFiles,
+    clientSha256: hashFiles(publicFiles),
   };
 }
 
@@ -97,7 +111,7 @@ export function writeManifest() {
   mkdirSync(join(root, ".output", "server"), { recursive: true });
   writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   process.stdout.write(
-    `E612|BUILD|PASS|git=${manifest.gitHead}|source=${manifest.sourceSha256}|bundle=${manifest.bundleSha256}\n`,
+    `E612|BUILD|PASS|git=${manifest.gitHead}|source=${manifest.sourceSha256}|server=${manifest.bundleSha256}|client=${manifest.clientSha256}\n`,
   );
   return manifest;
 }

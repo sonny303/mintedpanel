@@ -10,10 +10,11 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
+import { M64, m64FixtureSql } from "./e612-m64-fixtures.mjs";
 import { profileHttpFixtureSql } from "./e612-profile-http-fixtures.mjs";
 import { m66LegacyPostFixtureSql } from "./e612-m66-legacy-post-probes.mjs";
 import { e614HttpStreamFixtureSql } from "./e614-http-stream-fixtures.mjs";
-import { buildManifest } from "./e612-build-manifest.mjs";
+import { buildManifest, writeManifest } from "./e612-build-manifest.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const context = process.env.E612_DOCKER_CONTEXT || "default";
@@ -26,7 +27,14 @@ const names = Object.fromEntries(
     `${network}-${kind}`,
   ]),
 );
-const M64_EXTENSION_SHA = "8a91b53577ba2c08f5907430b34fdff028f5a2e2";
+const M64_EXTENSION_SHA = "494f1e35e560992e1ca472ffbc01711311ae992d";
+const M64_EXTENSION_TREE = "95aae0fc69e62ca2ff34186da730f0dbf2466dc6";
+const M64_PANEL_BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
+const M64_PANEL_HOST = "mintedpanel.vercel.app";
+const M64_SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
+const M64_BROWSER_COMPLETION_TIMEOUT_MS = 10 * 60 * 1000;
+const M64_BROWSER_STOP_GRACE_MS = 5_000;
+const M64_BROWSER_CLEANUP_TIMEOUT_MS = 10_000;
 const images = {
   db:
     process.env.E612_HTTP_DB_IMAGE ||
@@ -80,6 +88,8 @@ const m64BrowserPhases = new Set([
   "browser_preflight",
   "browser_node_version",
   "browser_driver",
+  "browser_panel_build",
+  "browser_driver_finish",
 ]);
 const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_API_NOT_EXACT_CASE_NOT_FOUND",
@@ -102,6 +112,53 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_LOCAL_ANON_KEY_MISSING",
   "M64_BROWSER_NOT_MV3",
   "M64_BROWSER_PANEL_AUTH_LOOKUP_NOT_OBSERVED",
+  "M64_BROWSER_PANEL_BUILD_KEY_MISMATCH",
+  "M64_BROWSER_PANEL_READY_EOF",
+  "M64_BROWSER_PANEL_READY_INVALID",
+  "M64_BROWSER_PANEL_READY_MALFORMED",
+  "M64_BROWSER_PANEL_READY_TIMEOUT",
+  "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  "M64_BROWSER_PANEL_ORG_SELECTION_FAILED",
+  "M64_BROWSER_PANEL_MATRIX_FAILED",
+  "M64_BROWSER_PANEL_CONTRACT_CONTEXT_FAILED",
+  "M64_BROWSER_PANEL_CONTRACT_LAUNCH_FAILED",
+  "M64_BROWSER_ACTIVE_TAB_DRIFT",
+  "M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED",
+  "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED",
+  "M64_BROWSER_PERMISSION_CTA_CLICK_FAILED",
+  "M64_BROWSER_PERMISSION_GRANT_TIMEOUT",
+  "M64_BROWSER_PERMISSION_PREGRANTED",
+  "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE",
+  "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE",
+  "M64_BROWSER_DB_ACK_EOF",
+  "M64_BROWSER_DB_ACK_INVALID",
+  "M64_BROWSER_DB_ACK_TIMEOUT",
+  "M64_BROWSER_STATIC_FORM_URL_INVALID",
+  "M64_BROWSER_STATIC_FORM_ROUTE_INVALID",
+  "M64_BROWSER_STATIC_FORM_ROUTE_TOO_BROAD",
+  "M64_BROWSER_STATIC_FORM_SHAPE_INVALID",
+  "M64_BROWSER_PANEL_REQUIRED_PERMISSION_MISSING",
+  "M64_BROWSER_SYNTHETIC_FORM_FILL_MISMATCH",
+  "M64_BROWSER_CONTRACT_FILL_FAILED",
+  "M64_BROWSER_ENROLLMENT_FILL_FAILED",
+  "M64_BROWSER_STALE_FILL_FAILED",
+  "M64_BROWSER_CONTRACT_FILL_CHANGED_ENROLLMENT_CONTROL",
+  "M64_BROWSER_CONTRACT_SUBMISSION_CONTROL_VISIBLE",
+  "M64_BROWSER_STALE_FILL_API_REQUESTED",
+  "M64_BROWSER_STALE_FILL_MUTATED_FORM",
+  "M64_BROWSER_ENROLLMENT_TASK_TITLE_INVALID",
+  "M64_BROWSER_ENROLLMENT_STEP_NOT_SELECTED",
+  "M64_BROWSER_ENROLLMENT_WORK_BINDING_MISMATCH",
+  "M64_BROWSER_SYNTHETIC_FORM_HAS_SUBMIT_CONTROL",
+  "M64_BROWSER_TYPED_KEY_FILL_ISOLATION_FAILED",
+  "M64_BROWSER_ENROLLMENT_HUMAN_SUBMISSION_CONTROL_INVALID",
+  "M64_BROWSER_PERMISSION_CONTAINS_FAILED",
+  "M64_BROWSER_WORK_BINDING_MISMATCH",
+  "M64_BROWSER_SYNTHETIC_FORM_SHAPE_INVALID",
+  "M64_BROWSER_PROBE_PASS_MARKER_MISSING",
+  "M64_BROWSER_RESULT_MARKER_MISSING",
+  "M64_BROWSER_RESULT_MALFORMED",
+  "M64_BROWSER_RESULT_INVALID",
   "M64_BROWSER_PANEL_HOST_PERMISSION_MISSING",
   "M64_BROWSER_PANEL_ORIGIN_DRIFT",
   "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH",
@@ -112,6 +169,17 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_STAGE_MV3_WORKER_FAILED",
   "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
   "M64_BROWSER_STAGE_POSTCONDITIONS_FAILED",
+  "M64_BROWSER_STAGE_PANEL_READY_FAILED",
+  "M64_BROWSER_STAGE_PANEL_SIGN_IN_FAILED",
+  "M64_BROWSER_STAGE_CONTRACT_UI_FAILED",
+  "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  "M64_BROWSER_STAGE_ENROLLMENT_UI_FAILED",
+  "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  "M64_BROWSER_STAGE_HUMAN_SUBMISSION_FAILED",
+  "M64_BROWSER_STAGE_SECOND_ENROLLMENT_FILL_FAILED",
+  "M64_BROWSER_STAGE_MAPPING_RESET_FAILED",
+  "M64_BROWSER_STAGE_STALE_FILL_FAILED",
+  "M64_BROWSER_STAGE_PERMISSION_PROBE_FAILED",
   "M64_BROWSER_STAGE_PREFLIGHT_FAILED",
   "M64_BROWSER_STAGE_PROXY_LISTEN_FAILED",
   "M64_BROWSER_STAGE_SIDEPANEL_FAILED",
@@ -132,9 +200,501 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_DENIED_PORTAL_OTHER",
   "M64_BROWSER_DENIED_UNKNOWN_HOST",
   "M64_BROWSER_DENIED_SUPABASE_APIKEY_MISMATCH",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_AUTH_PATH_OTHER",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_TOKEN_TARGET_OTHER",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_ORIGIN_OTHER",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_REQUEST_METHOD_OTHER",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_HEADER_LIST_MISSING",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_HEADER_NAME_UNEXPECTED",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_HEADER_REQUIRED_MISSING",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_HEADER_DUPLICATE",
+  "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  "M64_BROWSER_AUTH_PREFLIGHT_NOT_OBSERVED",
   "M64_BROWSER_BUILT_MARKER_MISSING__api_work_context_validate",
   "M64_BROWSER_BUILT_MARKER_MISSING_SET_ACTIVE_WORK",
   "M64_BROWSER_BUILT_MARKER_MISSING_minted_activeWork_v2",
+  "M64_BROWSER_POLL_READ_TIMEOUT",
+  "M64_BROWSER_CLEANUP_TIMEOUT_CONTEXT",
+  "M64_BROWSER_CLEANUP_TIMEOUT_PROXY",
+  "M64_BROWSER_CLEANUP_ABORT",
+]);
+const m64DriverCheckpoints = new Set([
+  "preflight",
+  "panel_ready",
+  "tls_certificate",
+  "proxy_listen",
+  "chromium_launch",
+  "mv3_worker",
+  "sidepanel",
+  "sign_in",
+  "org_select",
+  "handoff_send",
+  "postconditions",
+  "panel_page_create",
+  "panel_login_navigation",
+  "panel_login_dom",
+  "panel_login_assets",
+  "panel_login_form",
+  "panel_login_credentials",
+  "panel_login_submit",
+  "panel_login_submit_no_request",
+  "panel_login_route_denied",
+  "panel_login_auth_response",
+  "panel_login_auth_non_200",
+  "panel_login_access_context",
+  "panel_login_access_context_missing",
+  "panel_login_access_context_non_200",
+  "panel_login_org_wait",
+  "panel_login_org_ready",
+  "contract_ui",
+  "contract_ui_org_state",
+  "contract_ui_org_open",
+  "contract_ui_org_select",
+  "contract_ui_org_selected",
+  "contract_ui_matrix_navigation",
+  "contract_ui_matrix_target",
+  "contract_ui_matrix_click",
+  "contract_ui_dialog",
+  "contract_ui_provider_open",
+  "contract_ui_provider_select",
+  "contract_ui_facility_open",
+  "contract_ui_facility_select",
+  "contract_ui_tuple_ready",
+  "contract_ui_tuple_read",
+  "contract_ui_launch_ready",
+  "contract_ui_launch_click",
+  "contract_ui_validation",
+  "contract_ui_confirmation",
+  "contract_ui_portal_tab",
+  "contract_ui_work_binding",
+  "contract_ui_active_tab_check",
+  "contract_ui_form_shape",
+  "contract_fill",
+  "contract_fill_active_tab",
+  "contract_fill_readiness",
+  "contract_fill_click",
+  "contract_fill_receipt_wait",
+  "contract_fill_summary_wait",
+  "stale_fill",
+  "stale_fill_readiness",
+  "enrollment_ui",
+  "enrollment_ui_case_document",
+  "enrollment_ui_task_row",
+  "enrollment_ui_open_step",
+  "enrollment_ui_task_dialog",
+  "enrollment_ui_launch_ready",
+  "enrollment_ui_launch_click",
+  "enrollment_ui_work_validation",
+  "enrollment_ui_portal_tab",
+  "enrollment_ui_work_binding",
+  "enrollment_fill",
+  "enrollment_fill_active_tab",
+  "enrollment_fill_readiness",
+  "enrollment_fill_click",
+  "enrollment_fill_receipt_wait",
+  "enrollment_fill_summary_wait",
+  "submission",
+  "permission_probe",
+  "permission_cta_click",
+  "permission_cta_clicked",
+  "permission_grant_wait",
+]);
+const m64DeniedSupabaseEndpoints = new Set([
+  ...[
+    "profiles",
+    "memberships",
+    "organizations",
+    "contracts",
+    "status_configs",
+    "provider_groups",
+    "payers",
+    "payer_network_targets",
+    "facilities",
+    "contract_sop_assignments",
+    "sop_templates",
+    "sop_template_versions",
+    "portals",
+    "portal_field_maps",
+    "credential_cases",
+    "tasks",
+    "case_facilities",
+    "touches",
+    "provider_group_assignments",
+    "provider_facility_assignments",
+    "providers",
+    "denial_reason_codes",
+    "state_licenses",
+    "group_insurance_policies",
+    "fill_sessions",
+  ].map((table) => `rest_${table}`),
+  "rest_other",
+  "rpc_claim_invites",
+  "rpc_reset_portal_mapping",
+  "rpc_other",
+  "auth_other",
+  "other",
+]);
+const m64DeniedSupabaseMethods = new Set([
+  "GET",
+  "HEAD",
+  "POST",
+  "PATCH",
+  "OPTIONS",
+  "DELETE",
+  "OTHER",
+]);
+const m64PermissionGrantFields = [
+  "active_payer_tab",
+  "work_identity",
+  "cta_present",
+  "cta_disabled",
+  "main_error_visible",
+  "access_container_hidden",
+  "permission_present",
+  "permission_added",
+  "permission_removed",
+];
+const m64PermissionGrantValues = new Set(["false", "true", "unknown"]);
+const m64ContractFillReadinessFields = [
+  "button_present",
+  "button_visible",
+  "button_enabled",
+  "work_exact",
+  "tab_exact",
+  "portal_match",
+  "org_loaded",
+  "org_selected",
+  "provider_loaded",
+  "provider_selected",
+  "facility_loaded",
+  "facility_selected",
+  "case_work_hidden",
+  "provider_card_hidden",
+  "fill_section_hidden",
+  "case_mode_active",
+  "provider_name_matches",
+  "selected_provider_exact",
+  "provider_list_contains_work_id",
+  "provider_list_state",
+  "selected_facility_exact",
+  "main_error_hidden",
+  "work_validate_200",
+  "work_validate_409",
+  "fill_events_201",
+  "profiles_200",
+  "memberships_200",
+  "contracts_200",
+  "provider_groups_200",
+  "supabase_providers_200",
+  "provider_group_assignments_200",
+  "provider_facility_assignments_200",
+  "facilities_200",
+  "contract_sop_assignments_200",
+  "sop_template_versions_200",
+  "portals_200",
+  "portal_field_maps_200",
+  "fill_sessions_count_200",
+  "panel_provider_roster_200",
+  "panel_provider_roster_preflight_204",
+  "contract_profile_200",
+  "contract_profile_preflight_204",
+];
+const m64ContractFillReadinessBooleanFields = new Set([
+  "button_present",
+  "button_visible",
+  "button_enabled",
+  "work_exact",
+  "tab_exact",
+  "portal_match",
+  "org_loaded",
+  "org_selected",
+  "provider_loaded",
+  "provider_selected",
+  "facility_loaded",
+  "facility_selected",
+  "case_work_hidden",
+  "provider_card_hidden",
+  "fill_section_hidden",
+  "case_mode_active",
+  "provider_name_matches",
+  "selected_provider_exact",
+  "provider_list_contains_work_id",
+  "selected_facility_exact",
+  "main_error_hidden",
+]);
+const m64ContractFillReadinessStatusFields = new Set(["provider_list_state"]);
+const m64ProviderListStates = new Set(["unknown", "failed", "empty", "nonempty", "malformed"]);
+const m64EnrollmentFillReadinessFields = [
+  "button_present",
+  "button_visible",
+  "button_enabled",
+  "work_exact",
+  "tab_exact",
+  "portal_match",
+  "org_loaded",
+  "org_selected",
+  "provider_loaded",
+  "provider_selected",
+  "selected_provider_exact",
+  "case_option_present",
+  "case_selected",
+  "selected_case_exact",
+  "facility_option_present",
+  "facility_selected",
+  "selected_facility_exact",
+  "main_error_hidden",
+  "enrollment_profile_get_200",
+  "enrollment_profile_get_401",
+  "enrollment_profile_get_403",
+  "enrollment_profile_get_404",
+  "enrollment_profile_get_502",
+  "enrollment_profile_get_other",
+  "enrollment_profile_options_204",
+  "enrollment_profile_options_other",
+  "enrollment_profile_denied_get_404",
+  "enrollment_profile_denied_options_404",
+];
+const m64EnrollmentFillReadinessBooleanFields = new Set(
+  m64EnrollmentFillReadinessFields.slice(0, 18),
+);
+const m64EnrollmentFillReceiptFields = [
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_note_visible",
+  "work_exact",
+  "tab_exact",
+  "enrollment_npi_nonempty",
+  "enrollment_npi_exact",
+  "fill_events_post_seen",
+  "fill_events_post_admitted",
+  "fill_events_post_denied",
+  "fill_events_201",
+  "fill_events_200",
+  "fill_events_400",
+  "fill_events_401",
+  "fill_events_403",
+  "fill_events_409",
+  "fill_events_422",
+  "fill_events_5xx",
+  "fill_events_other",
+  "fill_events_options_seen",
+  "fill_events_options_admitted",
+  "fill_events_options_denied",
+  "work_validate_200",
+  "work_validate_409",
+  "work_validate_5xx",
+  "work_validate_other",
+];
+const m64EnrollmentFillReceiptBooleanFields = new Set(m64EnrollmentFillReceiptFields.slice(0, 8));
+const m64ProviderRosterDenialFields = [
+  "target_exact",
+  "origin",
+  "bearer_present",
+  "accept_exact",
+  "org_exact",
+  "cookie_present",
+  "content_type_present",
+];
+const m64ContractFillReceiptBooleanFields = new Set([
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_button_enabled",
+  "contract_npi_nonempty",
+  "contract_npi_matches_expected",
+  "work_exact",
+  "tab_exact",
+]);
+const m64ContractFillReceiptFields = [
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_button_enabled",
+  "contract_npi_nonempty",
+  "contract_npi_matches_expected",
+  "work_exact",
+  "tab_exact",
+  "fill_events_total",
+  "fill_events_201",
+  "fill_events_200",
+  "fill_events_400",
+  "fill_events_401",
+  "fill_events_403",
+  "fill_events_409",
+  "fill_events_422",
+  "fill_events_5xx",
+  "fill_events_other",
+  "fill_events_options",
+  "work_validate_200",
+  "work_validate_409",
+];
+const m64ContractFillSummaryBooleanFields = new Set([
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+]);
+const m64ContractFillSummaryFields = [
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+  "heading_kind",
+  "verified_count",
+  "attempted_count",
+];
+const m64ContractFillSummaryHeadingKinds = new Set([
+  "verified",
+  "confirmed_static",
+  "empty",
+  "other",
+  "unknown",
+]);
+const m64ContractFillSummaryCountBuckets = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64EnrollmentFillSummaryBooleanFields = new Set([
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "event_warning_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+]);
+const m64EnrollmentFillSummaryFields = [
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "event_warning_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+  "heading_kind",
+  "verified_count",
+  "attempted_count",
+];
+const m64EnrollmentFillSummaryHeadingKinds = new Set([
+  "verified",
+  "confirmed_static",
+  "empty",
+  "other",
+  "unknown",
+]);
+const m64EnrollmentFillSummaryCountBuckets = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64OrgWaitDiagnosticFields = [
+  "memberships_200",
+  "memberships_401",
+  "memberships_403",
+  "memberships_404",
+  "memberships_502",
+  "memberships_other",
+  "profiles_200",
+  "profiles_401",
+  "profiles_403",
+  "profiles_404",
+  "profiles_502",
+  "profiles_other",
+  "claim_invites_200",
+  "claim_invites_401",
+  "claim_invites_403",
+  "claim_invites_404",
+  "claim_invites_502",
+  "claim_invites_other",
+  "options_auth_token_404",
+  "options_auth_other_404",
+  "options_rest_memberships_404",
+  "options_rest_profiles_404",
+  "options_rpc_claim_invites_404",
+  "options_other_404",
+  "api_cases_200",
+  "api_cases_403",
+  "api_cases_404",
+  "api_cases_other",
+];
+const m64OrgWaitRoutesDiagnosticFields = [
+  "options_other_rest_organizations_404",
+  "options_other_rest_contracts_404",
+  "options_other_rest_status_configs_404",
+  "options_other_rest_provider_groups_404",
+  "options_other_rest_payers_404",
+  "options_other_rest_payer_network_targets_404",
+  "options_other_rest_facilities_404",
+  "options_other_rest_contract_sop_assignments_404",
+  "options_other_rest_sop_templates_404",
+  "options_other_rest_sop_template_versions_404",
+  "options_other_rest_portals_404",
+  "options_other_rest_portal_field_maps_404",
+  "options_other_rest_credential_cases_404",
+  "options_other_rest_tasks_404",
+  "options_other_rest_case_facilities_404",
+  "options_other_rest_touches_404",
+  "options_other_rest_provider_group_assignments_404",
+  "options_other_rest_provider_facility_assignments_404",
+  "options_other_rest_providers_404",
+  "options_other_rpc_reset_portal_mapping_404",
+  "options_other_rest_unknown_404",
+  "options_other_rpc_unknown_404",
+  "options_other_unknown_route_404",
+];
+const m64OrgWaitDiagnosticCounts = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9_PLUS"]);
+const m64OrgWaitDiagnosticUiStates = new Set([
+  "login",
+  "no_org",
+  "context_loading",
+  "context_error",
+  "context_choose",
+  "context_client_ready",
+  "sidebar",
+  "other",
+]);
+const m64EnrollmentUiDiagnosticFields = [
+  "credential_cases_200",
+  "credential_cases_401",
+  "credential_cases_403",
+  "credential_cases_404",
+  "credential_cases_502",
+  "credential_cases_other",
+  "case_facilities_200",
+  "case_facilities_401",
+  "case_facilities_403",
+  "case_facilities_404",
+  "case_facilities_502",
+  "case_facilities_other",
+  "tasks_200",
+  "tasks_401",
+  "tasks_403",
+  "tasks_404",
+  "tasks_502",
+  "tasks_other",
+  "credential_cases_options_404",
+  "case_facilities_options_404",
+  "tasks_options_404",
+];
+const m64EnrollmentUiStates = new Set([
+  "case_document",
+  "case_loading",
+  "task_row",
+  "open_step",
+  "dialog",
+  "launch",
+  "other",
+  "unknown",
 ]);
 const fail = (code) => {
   throw new Error(code);
@@ -166,6 +726,689 @@ function safeM64DriverFailureMarker(error) {
   return stdout.slice(0, 8192).split(/\r?\n/).includes("M64_BROWSER_DRIVER_STARTED")
     ? "M64_BROWSER_SMOKE_FAILED"
     : "M64_BROWSER_DRIVER_NOT_STARTED";
+}
+function safeM64DriverCheckpoint(lines) {
+  let checkpoint = null;
+  for (const line of lines) {
+    const match = /^M64_BROWSER_CHECKPOINT_([A-Z0-9_]+)$/.exec(line);
+    const candidate = match?.[1]?.toLowerCase();
+    if (candidate && m64DriverCheckpoints.has(candidate)) checkpoint = candidate;
+  }
+  return checkpoint;
+}
+function reportM64BrowserCheckpoint(driver) {
+  const checkpoint = safeM64DriverCheckpoint(driver.lines);
+  if (checkpoint) emit(`E612|M64|BROWSER|DRIVER_CHECKPOINT|last=${checkpoint}`);
+  return checkpoint;
+}
+function safeM64FirstDeniedSupabaseDiagnostic(lines) {
+  const prefix = "M64|BROWSER|FIRST_DENIED_SUPABASE|";
+  const markers = lines.filter((line) => line.startsWith(prefix));
+  if (markers.length !== 1) return null;
+  const match =
+    /^M64\|BROWSER\|FIRST_DENIED_SUPABASE\|checkpoint=([a-z0-9_]+)\|method=([A-Z]+)\|requested=([A-Z]+)\|endpoint=([a-z0-9_]+)\|query=(exact|mismatch|unconfigured)$/.exec(
+      markers[0],
+    );
+  if (
+    !match ||
+    !m64DriverCheckpoints.has(match[1]) ||
+    !m64DeniedSupabaseMethods.has(match[2]) ||
+    !(m64DeniedSupabaseMethods.has(match[3]) || match[3] === "NONE") ||
+    !m64DeniedSupabaseEndpoints.has(match[4])
+  ) {
+    return null;
+  }
+  return markers[0].slice(prefix.length);
+}
+function reportM64FirstDeniedSupabaseDiagnostic(driver) {
+  const diagnostic = safeM64FirstDeniedSupabaseDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|FIRST_DENIED_SUPABASE_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64FirstDeniedSupabaseDiagnosticPolicy() {
+  const valid =
+    "M64|BROWSER|FIRST_DENIED_SUPABASE|checkpoint=enrollment_ui_case_document|method=OPTIONS|requested=GET|endpoint=rest_memberships|query=mismatch";
+  if (safeM64FirstDeniedSupabaseDiagnostic([valid]) !== valid.split("|").slice(3).join("|")) {
+    fail("E612_M64_FIRST_DENIED_SUPABASE_DIAGNOSTIC_POLICY_INVALID");
+  }
+  const invalid = [
+    valid.replace("endpoint=rest_memberships", "endpoint=rest_unknown_table"),
+    valid.replace("method=OPTIONS", "method=TRACE"),
+    valid.replace("query=mismatch", "query=raw"),
+    valid.replace("checkpoint=enrollment_ui_case_document", "checkpoint=unknown"),
+    `${valid}|url=/rest/v1/memberships`,
+  ];
+  if (
+    invalid.some((marker) => safeM64FirstDeniedSupabaseDiagnostic([marker]) !== null) ||
+    safeM64FirstDeniedSupabaseDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_FIRST_DENIED_SUPABASE_DIAGNOSTIC_POLICY_INVALID");
+  }
+}
+function safeM64OrgWaitDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ORG_WAIT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64OrgWaitDiagnosticFields.length + 4 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ORG_WAIT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64OrgWaitDiagnosticFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64OrgWaitDiagnosticFields[index] ||
+      rest.length !== 0 ||
+      !m64OrgWaitDiagnosticCounts.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  const [uiName, uiValue, ...uiRest] = parts.at(-1).split("=");
+  if (uiName !== "ui" || uiRest.length !== 0 || !m64OrgWaitDiagnosticUiStates.has(uiValue)) {
+    return null;
+  }
+  return [...fields, `ui=${uiValue}`].join("|");
+}
+function safeM64FixedRouteDiagnostic(lines, markerName) {
+  if (markerName !== "ORG_WAIT_ROUTES" && markerName !== "CONTRACT_UI_ROUTES") return null;
+  const markers = lines.filter((line) => line.startsWith(`M64|BROWSER|${markerName}|`));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64OrgWaitRoutesDiagnosticFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== markerName
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64OrgWaitRoutesDiagnosticFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64OrgWaitRoutesDiagnosticFields[index] ||
+      rest.length !== 0 ||
+      !m64OrgWaitDiagnosticCounts.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function safeM64OrgWaitRoutesDiagnostic(lines) {
+  return safeM64FixedRouteDiagnostic(lines, "ORG_WAIT_ROUTES");
+}
+function safeM64ContractUiRoutesDiagnostic(lines) {
+  return safeM64FixedRouteDiagnostic(lines, "CONTRACT_UI_ROUTES");
+}
+function safeM64EnrollmentUiDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_UI|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentUiDiagnosticFields.length + 4 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_UI"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64EnrollmentUiDiagnosticFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64EnrollmentUiDiagnosticFields[index] ||
+      rest.length !== 0 ||
+      !m64OrgWaitDiagnosticCounts.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  const [uiName, uiValue, ...uiRest] = parts.at(-1).split("=");
+  if (uiName !== "ui" || uiRest.length !== 0 || !m64EnrollmentUiStates.has(uiValue)) {
+    return null;
+  }
+  return [...fields, `ui=${uiValue}`].join("|");
+}
+function reportM64BrowserEnrollmentUiDiagnostic(driver, checkpoint) {
+  if (
+    checkpoint !== "enrollment_ui" &&
+    !(typeof checkpoint === "string" && checkpoint.startsWith("enrollment_ui_"))
+  ) {
+    return;
+  }
+  const diagnostic = safeM64EnrollmentUiDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_UI_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentUiDiagnosticPolicy() {
+  const values = Object.fromEntries(m64EnrollmentUiDiagnosticFields.map((name) => [name, "0"]));
+  values.credential_cases_200 = "1";
+  values.case_facilities_options_404 = "2";
+  const marker = (fields, ui = "task_row") =>
+    `M64|BROWSER|ENROLLMENT_UI|${m64EnrollmentUiDiagnosticFields
+      .map((name) => `${name}=${fields[name]}`)
+      .join("|")}|ui=${ui}`;
+  const valid = marker(values);
+  const expected = `${m64EnrollmentUiDiagnosticFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|")}|ui=task_row`;
+  if (safeM64EnrollmentUiDiagnostic([valid]) !== expected) {
+    fail("E612_M64_ENROLLMENT_UI_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
+  const invalidMarkers = [
+    marker({ ...values, credential_cases_200: "raw" }),
+    marker(values, "raw_text"),
+    marker({ ...values, case_facilities_options_404: "10" }),
+    `${valid}|extra=value`,
+    valid.replace(
+      "credential_cases_200=1|credential_cases_401=0",
+      "credential_cases_401=0|credential_cases_200=1",
+    ),
+  ];
+  if (
+    invalidMarkers.some((invalid) => safeM64EnrollmentUiDiagnostic([invalid]) !== null) ||
+    safeM64EnrollmentUiDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_UI_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
+}
+function reportM64BrowserOrgWaitDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "panel_login_org_wait") return;
+  const diagnostic = safeM64OrgWaitDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ORG_WAIT_DIAGNOSTIC|${diagnostic}`);
+  const routesDiagnostic = safeM64OrgWaitRoutesDiagnostic(driver.lines);
+  if (routesDiagnostic) emit(`E612|M64|BROWSER|ORG_WAIT_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
+}
+function reportM64BrowserContractUiRouteDiagnostic(driver, checkpoint) {
+  if (
+    typeof checkpoint !== "string" ||
+    (checkpoint !== "contract_ui" && !checkpoint.startsWith("contract_ui_"))
+  ) {
+    return;
+  }
+  const routesDiagnostic = safeM64ContractUiRoutesDiagnostic(driver.lines);
+  if (routesDiagnostic) emit(`E612|M64|BROWSER|CONTRACT_UI_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
+}
+function safeM64ContractFillReadinessDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|CONTRACT_FILL_READY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ContractFillReadinessFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "CONTRACT_FILL_READY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64ContractFillReadinessFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64ContractFillReadinessBooleanFields.has(name);
+    const isStatus = m64ContractFillReadinessStatusFields.has(name);
+    if (
+      name !== m64ContractFillReadinessFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean
+        ? !m64PermissionGrantValues.has(value)
+        : isStatus
+          ? !m64ProviderListStates.has(value)
+          : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserContractFillReadinessDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "contract_fill_readiness") return;
+  const diagnostic = safeM64ContractFillReadinessDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_READINESS_DIAGNOSTIC|${diagnostic}`);
+  const providerRoster = safeM64ProviderRosterDenialDiagnostic(driver.lines);
+  if (providerRoster) emit(`E612|M64|BROWSER|PROVIDER_ROSTER_DENIED_DIAGNOSTIC|${providerRoster}`);
+}
+function safeM64EnrollmentFillReadinessDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_READY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentFillReadinessFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_READY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64EnrollmentFillReadinessFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64EnrollmentFillReadinessBooleanFields.has(name);
+    if (
+      name !== m64EnrollmentFillReadinessFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserEnrollmentFillReadinessDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "enrollment_fill_readiness") return;
+  const diagnostic = safeM64EnrollmentFillReadinessDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_FILL_READINESS_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentFillReadinessDiagnosticPolicy() {
+  const values = Object.fromEntries(m64EnrollmentFillReadinessFields.map((name) => [name, "0"]));
+  for (const name of m64EnrollmentFillReadinessBooleanFields) values[name] = "true";
+  values.enrollment_profile_get_200 = "1";
+  values.enrollment_profile_denied_get_404 = "2";
+  const marker = `M64|BROWSER|ENROLLMENT_FILL_READY|${m64EnrollmentFillReadinessFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|")}`;
+  const expected = m64EnrollmentFillReadinessFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|");
+  const invalidMarkers = [
+    marker.replace("button_present=true", "button_present=raw"),
+    marker.replace("enrollment_profile_get_200=1", "enrollment_profile_get_200=999"),
+    `${marker}|raw=value`,
+    marker.replace(
+      "button_present=true|button_visible=true",
+      "button_visible=true|button_present=true",
+    ),
+  ];
+  if (
+    safeM64EnrollmentFillReadinessDiagnostic([marker]) !== expected ||
+    invalidMarkers.some(
+      (invalid) => safeM64EnrollmentFillReadinessDiagnostic([invalid]) !== null,
+    ) ||
+    safeM64EnrollmentFillReadinessDiagnostic([marker, marker]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_FILL_READINESS_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
+}
+function safeM64EnrollmentFillReceiptDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_RECEIPT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentFillReceiptFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_RECEIPT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64EnrollmentFillReceiptFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64EnrollmentFillReceiptBooleanFields.has(name);
+    if (
+      name !== m64EnrollmentFillReceiptFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserEnrollmentFillReceiptDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "enrollment_fill_receipt_wait") return;
+  const diagnostic = safeM64EnrollmentFillReceiptDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentFillReceiptDiagnosticPolicy() {
+  const values = Object.fromEntries(m64EnrollmentFillReceiptFields.map((name) => [name, "0"]));
+  for (const name of m64EnrollmentFillReceiptBooleanFields) values[name] = "true";
+  values.fill_events_201 = "1";
+  values.work_validate_409 = "2";
+  const marker = `M64|BROWSER|ENROLLMENT_FILL_RECEIPT|${m64EnrollmentFillReceiptFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|")}`;
+  const expected = m64EnrollmentFillReceiptFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|");
+  const invalidMarkers = [
+    marker.replace("main_error_visible=true", "main_error_visible=raw"),
+    marker.replace("fill_events_201=1", "fill_events_201=10"),
+    `${marker}|raw=value`,
+    marker.replace(
+      "main_error_visible=true|fill_results_visible=true",
+      "fill_results_visible=true|main_error_visible=true",
+    ),
+  ];
+  if (
+    safeM64EnrollmentFillReceiptDiagnostic([marker]) !== expected ||
+    invalidMarkers.some((invalid) => safeM64EnrollmentFillReceiptDiagnostic([invalid]) !== null) ||
+    safeM64EnrollmentFillReceiptDiagnostic([marker, marker]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
+}
+function safeM64ProviderRosterDenialDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PROVIDER_ROSTER_DENIED|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ProviderRosterDenialFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "PROVIDER_ROSTER_DENIED"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64ProviderRosterDenialFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const validValue =
+      name === "origin"
+        ? new Set(["missing", "matching", "other"]).has(value)
+        : m64PermissionGrantValues.has(value);
+    if (name !== m64ProviderRosterDenialFields[index] || rest.length !== 0 || !validValue) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function safeM64ContractFillReceiptDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|CONTRACT_FILL_RECEIPT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ContractFillReceiptFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "CONTRACT_FILL_RECEIPT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64ContractFillReceiptFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64ContractFillReceiptBooleanFields.has(name);
+    if (
+      name !== m64ContractFillReceiptFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserContractFillReceiptDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "contract_fill_receipt_wait") return;
+  const diagnostic = safeM64ContractFillReceiptDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_RECEIPT_DIAGNOSTIC|${diagnostic}`);
+}
+function safeM64ContractFillSummaryDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|CONTRACT_FILL_SUMMARY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ContractFillSummaryFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "CONTRACT_FILL_SUMMARY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  const values = {};
+  for (let index = 0; index < m64ContractFillSummaryFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64ContractFillSummaryBooleanFields.has(name);
+    const validValue = isBoolean
+      ? m64PermissionGrantValues.has(value)
+      : name === "heading_kind"
+        ? m64ContractFillSummaryHeadingKinds.has(value)
+        : m64ContractFillSummaryCountBuckets.has(value);
+    if (name !== m64ContractFillSummaryFields[index] || rest.length !== 0 || !validValue) {
+      return null;
+    }
+    values[name] = value;
+    fields.push(`${name}=${value}`);
+  }
+  if (
+    (values.heading_kind === "verified" &&
+      (values.verified_count === "unknown" || values.attempted_count === "unknown")) ||
+    (values.heading_kind === "confirmed_static" &&
+      (values.verified_count !== "unknown" || values.attempted_count === "unknown")) ||
+    (["empty", "other", "unknown"].includes(values.heading_kind) &&
+      (values.verified_count !== "unknown" || values.attempted_count !== "unknown"))
+  ) {
+    return null;
+  }
+  return fields.join("|");
+}
+function reportM64BrowserContractFillSummaryDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "contract_fill_summary_wait") return;
+  const diagnostic = safeM64ContractFillSummaryDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_SUMMARY_DIAGNOSTIC|${diagnostic}`);
+}
+function safeM64EnrollmentFillSummaryDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_SUMMARY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentFillSummaryFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_SUMMARY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  const values = {};
+  for (let index = 0; index < m64EnrollmentFillSummaryFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64EnrollmentFillSummaryBooleanFields.has(name);
+    const validValue = isBoolean
+      ? m64PermissionGrantValues.has(value)
+      : name === "heading_kind"
+        ? m64EnrollmentFillSummaryHeadingKinds.has(value)
+        : m64EnrollmentFillSummaryCountBuckets.has(value);
+    if (name !== m64EnrollmentFillSummaryFields[index] || rest.length !== 0 || !validValue) {
+      return null;
+    }
+    values[name] = value;
+    fields.push(`${name}=${value}`);
+  }
+  if (
+    (values.heading_kind === "verified" &&
+      (values.verified_count === "unknown" || values.attempted_count === "unknown")) ||
+    (values.heading_kind === "confirmed_static" &&
+      (values.verified_count !== "unknown" || values.attempted_count === "unknown")) ||
+    (["empty", "other", "unknown"].includes(values.heading_kind) &&
+      (values.verified_count !== "unknown" || values.attempted_count !== "unknown"))
+  ) {
+    return null;
+  }
+  return fields.join("|");
+}
+function reportM64BrowserEnrollmentFillSummaryDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "enrollment_fill_summary_wait") return;
+  const diagnostic = safeM64EnrollmentFillSummaryDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_FILL_SUMMARY_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentFillSummaryDiagnosticPolicy() {
+  const values = {
+    results_visible: "true",
+    summary_visible: "true",
+    main_error_visible: "false",
+    fill_button_enabled: "false",
+    fill_note_visible: "false",
+    event_warning_visible: "false",
+    form_nonempty: "true",
+    form_matches_expected: "true",
+    innertext_expected: "false",
+    title_expected: "true",
+    heading_kind: "verified",
+    verified_count: "0",
+    attempted_count: "1",
+  };
+  const marker = (fields) =>
+    `M64|BROWSER|ENROLLMENT_FILL_SUMMARY|${m64EnrollmentFillSummaryFields
+      .map((name) => `${name}=${fields[name]}`)
+      .join("|")}`;
+  const valid = marker(values);
+  const expected = m64EnrollmentFillSummaryFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|");
+  if (safeM64EnrollmentFillSummaryDiagnostic([valid]) !== expected) {
+    fail("E612_M64_ENROLLMENT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const confirmedStatic = marker({
+    ...values,
+    heading_kind: "confirmed_static",
+    verified_count: "unknown",
+    attempted_count: "2_PLUS",
+  });
+  if (!safeM64EnrollmentFillSummaryDiagnostic([confirmedStatic])) {
+    fail("E612_M64_ENROLLMENT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const invalidMarkers = [
+    valid.replace("event_warning_visible=false", "event_warning_visible=raw"),
+    valid.replace("heading_kind=verified", "heading_kind=raw_text"),
+    valid.replace("verified_count=0", "verified_count=raw_value"),
+    valid.replace("attempted_count=1", "attempted_count=unknown"),
+    valid.replace(
+      "results_visible=true|summary_visible=true",
+      "summary_visible=true|results_visible=true",
+    ),
+    valid.replace("form_matches_expected=true", "form_matches_expected=9999999995"),
+    `${valid}|unlisted=value`,
+    valid.replace(
+      "event_warning_visible=false",
+      "event_warning_visible=false|event_warning_visible=false",
+    ),
+    valid.replace("event_warning_visible=false|form_nonempty=true", "form_nonempty=true"),
+    marker({ ...values, heading_kind: "confirmed_static", verified_count: "0" }),
+  ];
+  if (
+    invalidMarkers.some((invalid) => safeM64EnrollmentFillSummaryDiagnostic([invalid]) !== null) ||
+    safeM64EnrollmentFillSummaryDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+}
+function assertM64ContractFillSummaryDiagnosticPolicy() {
+  const values = {
+    results_visible: "true",
+    summary_visible: "true",
+    main_error_visible: "false",
+    fill_button_enabled: "false",
+    fill_note_visible: "false",
+    form_nonempty: "true",
+    form_matches_expected: "true",
+    innertext_expected: "false",
+    title_expected: "true",
+    heading_kind: "verified",
+    verified_count: "0",
+    attempted_count: "1",
+  };
+  const marker = (fields) =>
+    `M64|BROWSER|CONTRACT_FILL_SUMMARY|${m64ContractFillSummaryFields
+      .map((name) => `${name}=${fields[name]}`)
+      .join("|")}`;
+  const valid = marker(values);
+  const expected = m64ContractFillSummaryFields.map((name) => `${name}=${values[name]}`).join("|");
+  if (safeM64ContractFillSummaryDiagnostic([valid]) !== expected) {
+    fail("E612_M64_CONTRACT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const confirmedStatic = marker({
+    ...values,
+    heading_kind: "confirmed_static",
+    verified_count: "unknown",
+    attempted_count: "2_PLUS",
+  });
+  if (!safeM64ContractFillSummaryDiagnostic([confirmedStatic])) {
+    fail("E612_M64_CONTRACT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const invalidMarkers = [
+    valid.replace("results_visible=true", "results_visible=yes"),
+    valid.replace("heading_kind=verified", "heading_kind=raw_text"),
+    valid.replace("verified_count=0", "verified_count=9_PLUS"),
+    valid.replace("attempted_count=1", "attempted_count=unknown"),
+    valid.replace(
+      "results_visible=true|summary_visible=true",
+      "summary_visible=true|results_visible=true",
+    ),
+    `${valid}|unlisted=value`,
+    marker({ ...values, heading_kind: "confirmed_static", verified_count: "0" }),
+  ];
+  if (
+    invalidMarkers.some((invalid) => safeM64ContractFillSummaryDiagnostic([invalid]) !== null) ||
+    safeM64ContractFillSummaryDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_CONTRACT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+}
+function safeM64PermissionGrantDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PERMISSION_GRANT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64PermissionGrantFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "PERMISSION_GRANT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64PermissionGrantFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64PermissionGrantFields[index] ||
+      rest.length !== 0 ||
+      !m64PermissionGrantValues.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserPermissionGrantDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "permission_grant_wait") return;
+  const diagnostic = safeM64PermissionGrantDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|PERMISSION_GRANT_DIAGNOSTIC|${diagnostic}`);
+}
+function waitForM64BrowserCompletion(driver, timeoutMs) {
+  let timer;
+  return Promise.race([
+    driver.completion,
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT")),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+function waitForM64BrowserExit(driver, timeoutMs) {
+  let timer;
+  return Promise.race([
+    driver.closed.then(() => true),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 function runM64BrowserPhase(phase, operation) {
   if (!m64BrowserPhases.has(phase)) fail("E612_M64_BROWSER_PHASE_NOT_ALLOWLISTED");
@@ -220,20 +1463,61 @@ function dockerProcess(args) {
   const lines = [];
   let output = "";
   let buffer = "";
+  let capturedBytes = 0;
+  const maxCapturedBytes = 1024 * 1024;
+  const maxLineLength = 128 * 1024;
+  let childFailure;
+  let childClosed = false;
+  let stopTimer;
+  function stop() {
+    if (childClosed) return;
+    if (!child.killed) child.kill("SIGTERM");
+    if (!stopTimer) {
+      stopTimer = setTimeout(() => {
+        if (!childClosed) child.kill("SIGKILL");
+      }, M64_BROWSER_STOP_GRACE_MS);
+      stopTimer.unref();
+    }
+  }
+  const safeMarker =
+    /^(?:E6(?:12|13|14)\|[A-Z0-9_|.-]+(?:\|[A-Za-z0-9_:=.,/-]+)*|M64\|BROWSER\|[A-Z0-9_|.-]+(?:\|[A-Za-z0-9_:=.,/-]+)*|M64_BROWSER_[A-Z0-9_]+|M64_RESULT\|[A-Za-z0-9_-]{1,120000})$/;
+  const captureLine = (line) => {
+    const normalized = line.replace(/\r$/, "");
+    if (normalized.length > maxLineLength) {
+      childFailure ??= new Error("E612_HTTP_CHILD_OUTPUT_LIMIT");
+      stop();
+      return;
+    }
+    if (!safeMarker.test(normalized)) return;
+    lines.push(normalized);
+    output += `${normalized}\n`;
+  };
   const notify = (chunk) => {
-    output += chunk;
-    buffer += chunk;
+    capturedBytes += Buffer.byteLength(chunk);
+    if (capturedBytes > maxCapturedBytes) {
+      childFailure ??= new Error("E612_HTTP_CHILD_OUTPUT_LIMIT");
+      stop();
+      return;
+    }
+    buffer = `${buffer}${chunk}`;
     for (;;) {
       const newline = buffer.indexOf("\n");
       if (newline < 0) break;
-      lines.push(buffer.slice(0, newline).replace(/\r$/, ""));
+      captureLine(buffer.slice(0, newline));
       buffer = buffer.slice(newline + 1);
+    }
+    if (buffer.length > maxLineLength) {
+      childFailure ??= new Error("E612_HTTP_CHILD_OUTPUT_LIMIT");
+      stop();
+      buffer = "";
     }
   };
   child.stdout.on("data", (chunk) => notify(String(chunk)));
   child.stderr.on("data", (chunk) => notify(String(chunk)));
-  let childFailure;
-  let childClosed = false;
+  const closed = new Promise((resolve) => {
+    if (childClosed) resolve();
+    else child.once("close", resolve);
+  });
   const completion = new Promise((resolve, reject) => {
     child.once("error", (error) => {
       childFailure ??= error;
@@ -241,7 +1525,8 @@ function dockerProcess(args) {
     });
     child.once("close", (code, signal) => {
       childClosed = true;
-      if (buffer) lines.push(buffer);
+      if (stopTimer) clearTimeout(stopTimer);
+      if (buffer) captureLine(buffer);
       if (code === 0 && !childFailure) {
         resolve({ code, signal, output, lines });
         return;
@@ -309,10 +1594,7 @@ function dockerProcess(args) {
       poll();
     });
   };
-  const stop = () => {
-    if (!child.killed) child.kill("SIGTERM");
-  };
-  return { child, completion, lines, waitFor, stop };
+  return { child, closed, completion, lines, waitFor, stop };
 }
 function validateDockerContext() {
   let inspected;
@@ -364,7 +1646,7 @@ function buildM64Extension() {
     options,
   ).trim();
   if (head !== M64_EXTENSION_SHA) fail("E612_M64_EXTENSION_COMMIT_MISMATCH");
-  if (tree !== "1d980f595083a85c9cede49398340daffe613204") fail("E612_M64_EXTENSION_TREE_MISMATCH");
+  if (tree !== M64_EXTENSION_TREE) fail("E612_M64_EXTENSION_TREE_MISMATCH");
   try {
     execFileSync("npm", ["run", "build"], { ...options, cwd: extensionRoot, env });
   } catch {
@@ -396,13 +1678,15 @@ function buildM64Extension() {
     )
     .digest("hex");
   const backgroundSha = createHash("sha256").update(background).digest("hex");
-  if (backgroundSha !== "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549")
+  if (backgroundSha !== "da81573daaa459df04ab11222ebc5bd8e383933caff866da8633ef8dd8ebe4e7")
     fail("E612_M64_EXTENSION_BACKGROUND_HASH_MISMATCH");
-  emit(`M64|ARTIFACT|PASS|commit=${head}|tree=${tree}|runtime_assets_sha256=${runtimeAssetsSha}`);
+  emit(
+    `M64|ARTIFACT|PASS|candidate_source_commit=${M64_EXTENSION_SHA}|built_commit=${head}|tree=${tree}|runtime_assets_sha256=${runtimeAssetsSha}`,
+  );
   return { root: extensionRoot, runtimeAssetsSha };
 }
 
-function runM64BrowserSmoke(extensionBuild) {
+async function startM64BrowserDriver(extensionBuild) {
   const { root: extensionRoot, runtimeAssetsSha } = extensionBuild;
   const playwrightPath = `${root}node_modules/playwright`;
   const playwrightCorePath = `${root}node_modules/playwright-core`;
@@ -515,6 +1799,8 @@ function runM64BrowserSmoke(extensionBuild) {
       "-C",
       `${root}scripts/security`,
       "verify-m64-workflow-browser.mjs",
+      "e612-m64-fixtures.mjs",
+      "e612-fixtures.mjs",
     ]),
     "/tmp/m64",
   );
@@ -556,13 +1842,16 @@ function runM64BrowserSmoke(extensionBuild) {
   emit(
     `M64|BROWSER|PREFLIGHT|image=${ids.browser}|platform=${platforms.browser}|playwright=${playwrightVersion}|node=${browserNode}|xvfb=available|network=internal`,
   );
-  const output = runM64BrowserPhase("browser_driver", () =>
-    docker([
+  const browserDriver = runM64BrowserPhase("browser_driver", () =>
+    dockerProcess([
       "exec",
+      "-i",
       "-e",
       `M64_LOCAL_ANON_KEY=${anonKey}`,
       "-e",
       `M64_EXPECTED_RUNTIME_ASSETS_SHA=${runtimeAssetsSha}`,
+      "-e",
+      `M64_PANEL_BUILD_ANON_KEY=${M64_PANEL_BUILD_ANON_KEY}`,
       names.browser,
       "xvfb-run",
       "-a",
@@ -570,15 +1859,595 @@ function runM64BrowserSmoke(extensionBuild) {
       "/tmp/m64/verify-m64-workflow-browser.mjs",
     ]),
   );
-  process.stdout.write(output);
+  let marker;
+  try {
+    marker = await browserDriver.waitFor(/^M64\|BROWSER\|EXTENSION_ID\|[a-p]{32}$/);
+  } catch {
+    browserDriver.stop();
+    reportM64BrowserCheckpoint(browserDriver);
+    const knownFailure = safeM64DriverFailureMarker({ stdout: browserDriver.lines.join("\n") });
+    fail(`E612_M64_BROWSER_DRIVER_START_FAILED_${knownFailure.replaceAll(/[^A-Z0-9_]/g, "_")}`);
+  }
+  const extensionId = marker.slice("M64|BROWSER|EXTENSION_ID|".length);
+  if (!/^[a-p]{32}$/.test(extensionId)) fail("E612_M64_EXTENSION_ID_INVALID");
+  emit("E612|M64|BROWSER|EXTENSION|ID_OBSERVED|valid=true");
+  return { browserDriver, extensionId, runtimeAssetsSha };
+}
+
+function buildM64Panel(extensionId) {
+  if (!/^[a-p]{32}$/.test(extensionId)) fail("E612_M64_EXTENSION_ID_INVALID");
+  const buildEnvironment = {
+    ...env,
+    NITRO_PRESET: "node_server",
+    VITE_SUPABASE_URL: `https://${M64_SUPABASE_HOST}`,
+    VITE_SUPABASE_ANON_KEY: M64_PANEL_BUILD_ANON_KEY,
+    VITE_MINTED_EXTENSION_ID: extensionId,
+  };
+  try {
+    execFileSync("npm", ["run", "build"], {
+      cwd: root,
+      env: buildEnvironment,
+      encoding: "utf8",
+      timeout: 240_000,
+      stdio: ["ignore", "ignore", "pipe"],
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  } catch {
+    fail("E612_M64_PANEL_BROWSER_BUILD_FAILED");
+  }
+  let manifest;
+  try {
+    manifest = writeManifest();
+  } catch {
+    fail("E612_M64_PANEL_BUILD_MANIFEST_FAILED");
+  }
+  const javascriptFiles = manifest.clientFiles.filter((file) => file.endsWith(".js"));
+  const embedsRuntimeConfig = javascriptFiles.some((file) =>
+    readFileSync(`${root}${file}`, "utf8").includes(extensionId),
+  );
+  const embedsCanonicalSupabase = javascriptFiles.some((file) =>
+    readFileSync(`${root}${file}`, "utf8").includes(`https://${M64_SUPABASE_HOST}`),
+  );
+  if (!embedsRuntimeConfig) fail("E612_M64_PANEL_EXTENSION_ID_NOT_BUILT");
+  if (!embedsCanonicalSupabase) fail("E612_M64_PANEL_SUPABASE_ORIGIN_NOT_BUILT");
+  const clientAssets = manifest.clientFiles
+    .map((file) => file.replace(/^\.output\/public\//, "/"))
+    .filter((file) => file.startsWith("/") && !file.startsWith("/../"));
+  if (!clientAssets.some((file) => file.endsWith(".js")) || clientAssets.length === 0) {
+    fail("E612_M64_PANEL_ASSET_ALLOWLIST_EMPTY");
+  }
+  emit(
+    `E612|M64|PANEL_BUILD|PASS|git=${manifest.gitHead}|source=${manifest.sourceSha256}|server=${manifest.bundleSha256}|client=${manifest.clientSha256}|assets=${clientAssets.length}|extension_id_bound=true`,
+  );
+  return { manifest, clientAssets, extensionId };
+}
+
+function assertM64ContractIsolationAndReset(idempotencyKey) {
   if (
-    !output.includes(
-      "M64|BROWSER|PASS|goTrue_local=200|panel_orgs_local=200|work_validate_local=404|ack=CONTEXT_STALE|portal_tabs=0",
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      idempotencyKey,
     )
   ) {
-    emit("E612|M64|BROWSER|DRIVER_MARKER|present=false");
-    fail("E612_M64_BROWSER_PASS_MARKER_MISSING");
+    fail("E612_M64_CONTRACT_RESET_KEY_INVALID");
   }
+  const sql = `
+BEGIN;
+SET LOCAL client_min_messages = warning;
+DO $m64$
+BEGIN
+  IF (SELECT count(*) FROM public.fill_sessions WHERE org_id = '${M64.org}') <> 1
+     OR (SELECT count(*) FROM public.fill_sessions AS receipt
+          WHERE receipt.org_id = '${M64.org}' AND receipt.contract_id = '${M64.contract}'
+            AND receipt.case_id IS NULL
+            AND receipt.contract_sop_assignment_id = '${M64.contractAssignment}'
+            AND receipt.portal_id = '${M64.contractPortal}' AND receipt.portal_key = 'm64_contract'
+            AND receipt.provider_id = '${M64.provider}' AND receipt.facility_id = '${M64.facility}'
+            AND receipt.sop_template_id = '${M64.contractTemplate}' AND receipt.sop_version = 1
+            AND receipt.context_version = 1 AND receipt.task_index = 0 AND receipt.step_index = 0
+            AND receipt.case_task_id IS NULL AND receipt.case_step_id IS NULL
+            AND receipt.launch_receipt_id IS NOT NULL AND receipt.mapping_generation = 1
+            AND receipt.effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND receipt.step_identity IS NOT NULL AND btrim(receipt.step_identity) <> ''
+            AND receipt.fill_mode = 'web' AND receipt.is_test = false
+            AND receipt.event_schema_version = 2
+            AND receipt.fields_attempted = 1 AND receipt.fields_verified = 0
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(receipt.field_outcomes) AS outcome(value)
+                JOIN public.portal_field_maps AS field_map
+                  ON field_map.id::text = (outcome.value->>'mapId')
+               WHERE field_map.org_id = '${M64.org}'
+                 AND field_map.portal_key = 'm64_contract'
+                 AND field_map.map_type = 'web'
+                 AND field_map.selector = '#contract-npi'
+                 AND field_map.source = 'token'
+                 AND field_map.field_type = 'text'
+                 AND field_map.token = 'provider.npi'
+                 AND field_map.status = 'approved'
+                 AND field_map.mapping_generation = 1
+                 AND jsonb_typeof(outcome.value) = 'object'
+                 AND outcome.value ?& ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]
+                 AND (outcome.value - ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]) = '{}'::jsonb
+                 AND outcome.value->>'attempted' = 'true'
+                 AND outcome.value->>'outcome' = 'unverified'
+                 AND outcome.value->>'reasonCode' = 'readback_unavailable'
+            )) <> 1
+     OR EXISTS (SELECT 1 FROM public.fill_sessions
+                 WHERE org_id = '${M64.org}' AND portal_id = '${M64.enrollmentPortal}') THEN
+    RAISE EXCEPTION 'M64 Contract receipt or pre-reset isolation failed';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.touches WHERE org_id = '${M64.org}')
+     OR NOT EXISTS (
+       SELECT 1 FROM public.credential_cases
+        WHERE id = '${M64.enrollmentCase}' AND org_id = '${M64.org}'
+          AND case_status = 'in_progress' AND context_version = 1
+     ) THEN
+    RAISE EXCEPTION 'M64 Contract fill changed the Enrollment case before submission';
+  END IF;
+  IF (SELECT count(*) FROM public.portals
+       WHERE org_id = '${M64.org}' AND form_url = '${M64.formUrl}'
+         AND requires_explicit_selection AND mapping_generation = 1) <> 2
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.contractPortal}' AND portal_key = 'm64_contract'
+          AND case_type = 'contract' AND is_verified
+          AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.enrollmentPortal}' AND portal_key = 'm64_enrollment'
+          AND case_type = 'enrollment' AND is_verified
+          AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     ) THEN
+    RAISE EXCEPTION 'M64 same-URL typed portal identities or proof state are not independent';
+  END IF;
+  IF NOT EXISTS (
+       SELECT 1 FROM public.portal_field_maps
+        WHERE org_id = '${M64.org}' AND portal_key = 'm64_contract'
+          AND map_type = 'web' AND selector = '#contract-npi'
+          AND token = 'provider.npi' AND status = 'approved' AND mapping_generation = 1
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portal_field_maps
+        WHERE org_id = '${M64.org}' AND portal_key = 'm64_enrollment'
+          AND map_type = 'web' AND selector = '#enrollment-npi'
+          AND token = 'provider.npi' AND status = 'approved' AND mapping_generation = 1
+     ) THEN
+    RAISE EXCEPTION 'M64 same-URL effective maps are not independently keyed';
+  END IF;
+  IF (SELECT count(*)
+      FROM public.tasks AS task
+        CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+       WHERE task.id = '${M64.enrollmentTask}'
+         AND item.step->>'id' IN ('${M64.enrollmentStep1}', '${M64.enrollmentStep2}')
+         AND item.step->'isCompleted' = 'false'::jsonb) <> 2
+     OR (SELECT count(*)
+           FROM public.tasks AS task
+           CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+          WHERE task.id = '${M64.enrollmentSiblingTask}'
+            AND item.step->>'id' = '${M64.enrollmentSiblingStep}'
+            AND item.step->'isCompleted' = 'false'::jsonb) <> 1 THEN
+    RAISE EXCEPTION 'M64 Contract fill changed an Enrollment SOP step';
+  END IF;
+END
+$m64$;
+SET LOCAL request.jwt.claim.sub = '${E612.specialist}';
+SET LOCAL request.jwt.claim.role = 'authenticated';
+SET LOCAL request.jwt.claims = '{"sub":"${E612.specialist}","role":"authenticated"}';
+SET LOCAL ROLE authenticated;
+DO $m64$
+DECLARE
+  first_receipt public.form_mapping_reset_events%ROWTYPE;
+  replay_receipt public.form_mapping_reset_events%ROWTYPE;
+BEGIN
+  first_receipt := public.reset_portal_mapping(
+    '${M64.contractPortal}', 1, '${idempotencyKey}'
+  );
+  replay_receipt := public.reset_portal_mapping(
+    '${M64.contractPortal}', 1, '${idempotencyKey}'
+  );
+  IF first_receipt.id IS NULL
+     OR first_receipt.id IS DISTINCT FROM replay_receipt.id
+     OR first_receipt.actor_id IS DISTINCT FROM '${E612.specialist}'::uuid
+     OR first_receipt.portal_id IS DISTINCT FROM '${M64.contractPortal}'::uuid
+     OR first_receipt.org_id IS DISTINCT FROM '${M64.org}'::uuid
+     OR first_receipt.owner_scope IS DISTINCT FROM 'organization'
+     OR first_receipt.portal_key IS DISTINCT FROM 'm64_contract'
+     OR first_receipt.old_mapping_generation IS DISTINCT FROM 1
+     OR first_receipt.new_mapping_generation IS DISTINCT FROM 2
+     OR first_receipt.affected_field_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'M64 exact-key reset or idempotent replay failed';
+  END IF;
+END
+$m64$;
+RESET ROLE;
+DO $m64$
+BEGIN
+  IF NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.contractPortal}' AND org_id = '${M64.org}'
+          AND portal_key = 'm64_contract' AND mapping_generation = 2
+          AND NOT is_verified AND last_verified_at IS NULL AND proven_at IS NULL
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.enrollmentPortal}' AND org_id = '${M64.org}'
+          AND portal_key = 'm64_enrollment' AND mapping_generation = 1
+          AND is_verified AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     )
+     OR (SELECT count(*) FROM public.portal_field_maps
+          WHERE org_id = '${M64.org}' AND portal_key = 'm64_contract'
+            AND mapping_generation = 1) <> 1
+     OR EXISTS (SELECT 1 FROM public.portal_field_maps
+                 WHERE org_id = '${M64.org}' AND portal_key = 'm64_contract'
+                   AND mapping_generation = 2)
+     OR (SELECT count(*) FROM public.form_mapping_reset_events
+          WHERE portal_id = '${M64.contractPortal}'
+            AND idempotency_key = '${idempotencyKey}'
+            AND owner_scope = 'organization' AND org_id = '${M64.org}'
+            AND old_mapping_generation = 1 AND new_mapping_generation = 2
+            AND affected_field_count = 1) <> 1 THEN
+    RAISE EXCEPTION 'M64 selected-key reset changed a sibling or lost history';
+  END IF;
+END
+$m64$;
+COMMIT;
+SELECT 'M64_CONTRACT_RESET_OK';
+`;
+  const result = dbExec(sql).trim();
+  if (result !== "M64_CONTRACT_RESET_OK") fail("E612_M64_CONTRACT_RESET_ASSERTION_FAILED");
+  emit(
+    "E612|M64|BROWSER|CONTRACT_ISOLATION_RESET|receipt=true|enrollment_untouched=true|idempotent=true",
+  );
+}
+
+function assertM64FinalDatabaseState() {
+  const sql = `
+DO $m64$
+BEGIN
+  IF (SELECT count(*) FROM public.fill_sessions WHERE org_id = '${M64.org}') <> 2
+     OR (SELECT count(*) FROM public.fill_sessions
+          AS receipt
+          WHERE receipt.org_id = '${M64.org}' AND receipt.contract_id = '${M64.contract}'
+            AND receipt.case_id IS NULL AND receipt.portal_id = '${M64.contractPortal}'
+            AND receipt.portal_key = 'm64_contract' AND receipt.mapping_generation = 1
+            AND receipt.contract_sop_assignment_id = '${M64.contractAssignment}'
+            AND receipt.launch_receipt_id IS NOT NULL
+            AND receipt.effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND receipt.is_test = false AND receipt.event_schema_version = 2
+            AND receipt.fields_attempted = 1 AND receipt.fields_verified = 0
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(receipt.field_outcomes) AS outcome(value)
+                JOIN public.portal_field_maps AS field_map
+                  ON field_map.id::text = (outcome.value->>'mapId')
+               WHERE field_map.org_id = '${M64.org}'
+                 AND field_map.portal_key = 'm64_contract'
+                 AND field_map.map_type = 'web'
+                 AND field_map.selector = '#contract-npi'
+                 AND field_map.source = 'token'
+                 AND field_map.field_type = 'text'
+                 AND field_map.token = 'provider.npi'
+                 AND field_map.status = 'approved'
+                 AND field_map.mapping_generation = 1
+                 AND jsonb_typeof(outcome.value) = 'object'
+                 AND outcome.value ?& ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]
+                 AND (outcome.value - ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]) = '{}'::jsonb
+                 AND outcome.value->>'attempted' = 'true'
+                 AND outcome.value->>'outcome' = 'unverified'
+                 AND outcome.value->>'reasonCode' = 'readback_unavailable'
+            )) <> 1
+     OR (SELECT count(*) FROM public.fill_sessions AS receipt
+          WHERE receipt.org_id = '${M64.org}' AND receipt.case_id = '${M64.enrollmentCase}'
+            AND receipt.contract_id IS NULL AND receipt.portal_id = '${M64.enrollmentPortal}'
+            AND receipt.portal_key = 'm64_enrollment' AND receipt.mapping_generation = 1
+            AND receipt.case_task_id = '${M64.enrollmentTask}'
+            AND receipt.case_step_id = '${M64.enrollmentStep1}'
+            AND receipt.context_version = 1 AND receipt.launch_receipt_id IS NOT NULL
+            AND receipt.effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND receipt.is_test = false AND receipt.event_schema_version = 2
+            AND receipt.fields_attempted = 1 AND receipt.fields_verified = 0
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(receipt.field_outcomes) AS outcome(value)
+                JOIN public.portal_field_maps AS field_map
+                  ON field_map.id::text = (outcome.value->>'mapId')
+               WHERE field_map.org_id = '${M64.org}'
+                 AND field_map.portal_key = 'm64_enrollment'
+                 AND field_map.map_type = 'web'
+                 AND field_map.selector = '#enrollment-npi'
+                 AND field_map.source = 'token'
+                 AND field_map.field_type = 'text'
+                 AND field_map.token = 'provider.npi'
+                 AND field_map.status = 'approved'
+                 AND field_map.mapping_generation = 1
+                 AND jsonb_typeof(outcome.value) = 'object'
+                 AND outcome.value ?& ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]
+                 AND (outcome.value - ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]) = '{}'::jsonb
+                 AND outcome.value->>'attempted' = 'true'
+                 AND outcome.value->>'outcome' = 'unverified'
+                 AND outcome.value->>'reasonCode' = 'readback_unavailable'
+            )) <> 1 THEN
+    RAISE EXCEPTION 'M64 Contract/Enrollment fill receipts are not exact and distinct';
+  END IF;
+  IF (SELECT count(*) FROM public.touches
+       WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+         AND task_id = '${M64.enrollmentTask}'
+         AND fill_session_id IN (
+           SELECT id FROM public.fill_sessions
+            WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+              AND case_step_id = '${M64.enrollmentStep1}'
+         )
+         AND entry_type = 'touchpoint' AND touch_type = 'portal'
+         AND outcome = 'submitted' AND source = 'extension'
+         AND coordinator_id = '${E612.specialist}') <> 1
+     OR EXISTS (SELECT 1 FROM public.touches
+                 WHERE org_id = '${M64.org}' AND task_id = '${M64.enrollmentSiblingTask}')
+     OR EXISTS (SELECT 1 FROM public.touches
+                 WHERE org_id = '${M64.org}' AND fill_session_id IS NOT NULL
+                   AND fill_session_id NOT IN (
+                     SELECT id FROM public.fill_sessions
+                      WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
+                        AND case_step_id = '${M64.enrollmentStep1}'
+                   )) THEN
+    RAISE EXCEPTION 'M64 human submission touch escaped its exact Enrollment step';
+  END IF;
+  IF (SELECT count(*)
+      FROM public.tasks AS task
+        CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+       WHERE task.id = '${M64.enrollmentTask}'
+         AND item.step->>'id' = '${M64.enrollmentStep1}'
+         AND item.step->'isCompleted' = 'true'::jsonb) <> 1
+     OR (SELECT count(*)
+           FROM public.tasks AS task
+           CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+          WHERE task.id = '${M64.enrollmentTask}'
+            AND item.step->>'id' = '${M64.enrollmentStep2}'
+            AND item.step->'isCompleted' = 'false'::jsonb) <> 1
+     OR (SELECT count(*)
+           FROM public.tasks AS task
+           CROSS JOIN LATERAL jsonb_array_elements(task.sop_content) AS item(step)
+          WHERE task.id = '${M64.enrollmentSiblingTask}'
+            AND item.step->>'id' = '${M64.enrollmentSiblingStep}'
+            AND item.step->'isCompleted' = 'false'::jsonb) <> 1 THEN
+    RAISE EXCEPTION 'M64 selected-step or sibling-step completion state is incorrect';
+  END IF;
+  IF NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.contractPortal}' AND mapping_generation = 2
+          AND NOT is_verified AND last_verified_at IS NULL AND proven_at IS NULL
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.portals
+        WHERE id = '${M64.enrollmentPortal}' AND mapping_generation = 1
+          AND is_verified AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
+     )
+     OR (SELECT count(*) FROM public.form_mapping_reset_events
+          WHERE portal_id = '${M64.contractPortal}' AND old_mapping_generation = 1
+            AND new_mapping_generation = 2 AND owner_scope = 'organization'
+            AND org_id = '${M64.org}') <> 1 THEN
+    RAISE EXCEPTION 'M64 reset history or sibling generation was not preserved';
+  END IF;
+END
+$m64$;
+SELECT 'M64_FINAL_STATE_OK';
+`;
+  const result = dbExec(sql).trim();
+  if (result !== "M64_FINAL_STATE_OK") fail("E612_M64_FINAL_DATABASE_ASSERTION_FAILED");
+  emit(
+    "E612|M64|BROWSER|FINAL_DB_ASSERTIONS|contract_history=true|enrollment_receipt=true|selected_step_only=true",
+  );
+}
+
+async function finishM64BrowserSmoke(browserSession, panelBuild) {
+  const ready = Buffer.from(
+    JSON.stringify({
+      extensionId: panelBuild.extensionId,
+      clientSha256: panelBuild.manifest.clientSha256,
+      clientAssets: panelBuild.clientAssets,
+      orgName: `E612 M64 ${runId} Organization`,
+    }),
+  ).toString("base64url");
+  browserSession.browserDriver.child.stdin.write(`M64_PANEL_READY|${ready}\n`);
+  let result;
+  try {
+    const contractCheckpoint = await browserSession.browserDriver.waitFor(
+      /^M64\|BROWSER\|DB_CHECKPOINT\|CONTRACT_FILL_COMPLETE$/,
+      180_000,
+    );
+    if (
+      contractCheckpoint !== "M64|BROWSER|DB_CHECKPOINT|CONTRACT_FILL_COMPLETE" ||
+      browserSession.browserDriver.lines.filter(
+        (line) => line === "M64|BROWSER|DB_CHECKPOINT|CONTRACT_FILL_COMPLETE",
+      ).length !== 1
+    ) {
+      fail("E612_M64_CONTRACT_CHECKPOINT_INVALID");
+    }
+    assertM64ContractIsolationAndReset(randomUUID());
+    browserSession.browserDriver.child.stdin.write("M64_DB_ACK|CONTRACT_RESET_COMPLETE\n");
+    result = await waitForM64BrowserCompletion(
+      browserSession.browserDriver,
+      M64_BROWSER_COMPLETION_TIMEOUT_MS,
+    );
+  } catch (error) {
+    browserSession.browserDriver.stop();
+    const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
+    reportM64FirstDeniedSupabaseDiagnostic(browserSession.browserDriver);
+    reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentUiDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
+    if (
+      error instanceof Error &&
+      /^E612_M64_(?:CONTRACT_CHECKPOINT_INVALID|CONTRACT_RESET_KEY_INVALID|CONTRACT_RESET_ASSERTION_FAILED)$/.test(
+        error.message,
+      )
+    ) {
+      fail(error.message);
+    }
+    if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
+      emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=10");
+      fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
+    }
+    const knownFailure = safeM64DriverFailureMarker({
+      stdout: browserSession.browserDriver.lines.join("\n"),
+    });
+    fail(`E612_M64_BROWSER_DRIVER_FAILED_${knownFailure.replaceAll(/[^A-Z0-9_]/g, "_")}`);
+  }
+  const expectedVertical =
+    "M64|BROWSER|VERTICAL|PASS|static_host=true|optional_host_consent=unverified|contract_fill_receipt=true|enrollment_fill_receipt=true|selected_step_submission=true|selected_key_reset=true|stale_fill_rejected=true";
+  const expectedConsentHold =
+    "M64|BROWSER|OPTIONAL_HOST_CONSENT|HOLD|reason=manual_only_not_tested";
+  if (
+    result.lines.filter((line) => line === expectedVertical).length !== 1 ||
+    result.lines.filter((line) => line === expectedConsentHold).length !== 1
+  ) {
+    fail("E612_M64_VERTICAL_MARKER_OR_CONSENT_HOLD_MISSING");
+  }
+  const resultLine = result.lines.find((line) => line.startsWith("M64_RESULT|"));
+  if (!resultLine) fail("E612_M64_BROWSER_RESULT_MARKER_MISSING");
+  let browserResult;
+  try {
+    browserResult = JSON.parse(
+      Buffer.from(resultLine.slice("M64_RESULT|".length), "base64url").toString("utf8"),
+    );
+  } catch {
+    fail("E612_M64_BROWSER_RESULT_MALFORMED");
+  }
+  if (
+    browserResult?.extensionId !== panelBuild.extensionId ||
+    browserResult?.panelClientSha256 !== panelBuild.manifest.clientSha256 ||
+    !Array.isArray(browserResult?.contractValidations) ||
+    browserResult.contractValidations.length !== 1 ||
+    !Array.isArray(browserResult?.enrollmentValidations) ||
+    browserResult.enrollmentValidations.length !== 1
+  ) {
+    fail("E612_M64_BROWSER_RESULT_INVALID");
+  }
+  const contractValidation = browserResult.contractValidations[0];
+  const contractTuple = contractValidation?.tuple;
+  if (
+    contractValidation?.protocolVersion !== 2 ||
+    contractTuple?.ownerKind !== "contract" ||
+    contractTuple.ownerId !== M64.contract ||
+    contractTuple.orgId !== M64.org ||
+    contractTuple.portalId !== M64.contractPortal ||
+    contractTuple.portalKey !== "m64_contract" ||
+    contractTuple.assignmentId !== M64.contractAssignment ||
+    contractTuple.mappingGeneration !== 1 ||
+    contractTuple.contextVersion !== 1 ||
+    contractTuple.providerId !== M64.provider ||
+    contractTuple.facilityId !== M64.facility ||
+    contractTuple.taskId !== null ||
+    contractTuple.stepId !== null ||
+    contractTuple.taskIndex !== 0 ||
+    contractTuple.stepIndex !== 0 ||
+    typeof contractTuple.launchReceiptId !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(contractValidation?.effectiveMappingFingerprint ?? "") ||
+    typeof contractTuple.stepIdentity !== "string" ||
+    contractTuple.stepIdentity.length === 0
+  ) {
+    fail("E612_M64_BROWSER_RESULT_INVALID");
+  }
+  const enrollmentValidation = browserResult.enrollmentValidations[0];
+  const enrollmentTuple = enrollmentValidation?.tuple;
+  if (
+    enrollmentValidation?.protocolVersion !== 2 ||
+    enrollmentTuple?.ownerKind !== "case" ||
+    enrollmentTuple.ownerId !== M64.enrollmentCase ||
+    enrollmentTuple.orgId !== M64.org ||
+    enrollmentTuple.portalId !== M64.enrollmentPortal ||
+    enrollmentTuple.portalKey !== "m64_enrollment" ||
+    enrollmentTuple.mappingGeneration !== 1 ||
+    enrollmentTuple.contextVersion !== 1 ||
+    enrollmentTuple.providerId !== M64.provider ||
+    enrollmentTuple.facilityId !== M64.facility ||
+    enrollmentTuple.taskId !== M64.enrollmentTask ||
+    enrollmentTuple.stepId !== M64.enrollmentStep1 ||
+    typeof enrollmentTuple.launchReceiptId !== "string" ||
+    typeof enrollmentTuple.stepIdentity !== "string" ||
+    enrollmentTuple.stepIdentity.length === 0 ||
+    !/^sha256:[a-f0-9]{64}$/.test(enrollmentValidation?.effectiveMappingFingerprint ?? "") ||
+    enrollmentValidation.effectiveMappingFingerprint ===
+      contractValidation.effectiveMappingFingerprint
+  ) {
+    fail("E612_M64_BROWSER_RESULT_INVALID");
+  }
+  assertM64FinalDatabaseState();
+  emit(
+    `E612|M64|BROWSER|VERTICAL|PASS|panel=${panelBuild.manifest.gitHead}|client=${panelBuild.manifest.clientSha256}|extension=${browserSession.extensionId}|static_host=true|optional_host_consent=unverified|contract_and_enrollment_receipts=true|exact_step_submission=true|selected_key_reset=true|stale_fill_rejected=true`,
+  );
+}
+
+function startM64App(extensionId) {
+  const appEnv = [
+    "--env",
+    "NITRO_HOST=0.0.0.0",
+    "--env",
+    "NITRO_PORT=3000",
+    "--env",
+    "SUPABASE_URL=http://gateway:8787",
+    "--env",
+    `VITE_SUPABASE_URL=https://${M64_SUPABASE_HOST}`,
+    "--env",
+    `SUPABASE_ANON_KEY=${anonKey}`,
+    "--env",
+    `VITE_SUPABASE_ANON_KEY=${M64_PANEL_BUILD_ANON_KEY}`,
+    "--env",
+    `SUPABASE_SERVICE_ROLE_KEY=${serviceKey}`,
+    "--env",
+    `API_CORS_ORIGINS=https://${M64_PANEL_HOST},chrome-extension://${extensionId}`,
+  ];
+  const output = `${root}.output/server`;
+  const publicOutput = `${root}.output/public`;
+  if (
+    !existsSync(`${output}/index.mjs`) ||
+    !existsSync(publicOutput) ||
+    !buildManifest().clientFiles.some((file) => file.endsWith(".js"))
+  ) {
+    fail("E612_HTTP_APP_BUILD_REQUIRED");
+  }
+  docker([
+    "create",
+    "--name",
+    names.app,
+    "--label",
+    label,
+    "--network",
+    network,
+    "--network-alias",
+    "app",
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges",
+    ...appEnv,
+    ids.node,
+    "node",
+    "/tmp/server/index.mjs",
+  ]);
+  created.add("app");
+  docker(["cp", output, `${names.app}:/tmp/server`]);
+  docker(["cp", publicOutput, `${names.app}:/tmp/public`]);
+  docker(["start", names.app]);
 }
 let ids;
 let platforms;
@@ -1022,6 +2891,12 @@ ON CONFLICT (id) DO NOTHING;
     fail("E614_HTTP_STREAM_SEED_FAILED");
   }
   try {
+    dbExec(m64FixtureSql(runId));
+    emit("E612|M64|FIXTURE|PASS|persistent=true|receipts_preseeded=false|touches_preseeded=false");
+  } catch {
+    fail("E612_M64_FIXTURE_SEED_FAILED");
+  }
+  try {
     dbExec(m66LegacyPostFixtureSql({ orgId: E612.orgA, adminId: E612.admin }));
     emit("M66|HTTP|FIXTURE|PASS|typed=1|reset_generation=2|legacy=1");
   } catch (error) {
@@ -1033,8 +2908,15 @@ ON CONFLICT (id) DO NOTHING;
 
 const created = new Set();
 let networkCreated = false;
+let browserSession;
 let stage = "docker_context";
 try {
+  assertM64ContractFillSummaryDiagnosticPolicy();
+  assertM64EnrollmentFillSummaryDiagnosticPolicy();
+  assertM64EnrollmentUiDiagnosticPolicy();
+  assertM64EnrollmentFillReadinessDiagnosticPolicy();
+  assertM64EnrollmentFillReceiptDiagnosticPolicy();
+  assertM64FirstDeniedSupabaseDiagnosticPolicy();
   validateDockerContext();
   stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));
@@ -1055,18 +2937,22 @@ try {
   if (
     manifest.sourceSha256 !== currentManifest.sourceSha256 ||
     manifest.bundleSha256 !== currentManifest.bundleSha256 ||
+    manifest.clientSha256 !== currentManifest.clientSha256 ||
     !Array.isArray(manifest.sourceFiles) ||
     !Array.isArray(manifest.bundleFiles) ||
-    manifest.format !== 2
+    !Array.isArray(manifest.clientFiles) ||
+    manifest.format !== 3
   )
     fail("E612_HTTP_BUILD_MANIFEST_MISMATCH");
   emit(
-    `E612|HTTP|BUILD|git=${manifest.gitHead}|source=${manifest.sourceSha256}|bundle=${manifest.bundleSha256}`,
+    `E612|HTTP|BUILD|git=${manifest.gitHead}|source=${manifest.sourceSha256}|server=${manifest.bundleSha256}|client=${manifest.clientSha256}`,
   );
   stage = "m64_extension_build";
   const m64ExtensionBuild = buildM64Extension();
   docker(["network", "create", "--internal", "--label", label, network]);
   networkCreated = true;
+  stage = "m64_browser_extension_id";
+  browserSession = await startM64BrowserDriver(m64ExtensionBuild);
   stage = "isolated_database";
   start(
     "db",
@@ -1227,53 +3113,16 @@ try {
   );
   created.add("rest");
   await internalReady("http://rest:3000", "/");
-  const appEnv = [
-    "--env",
-    "NITRO_HOST=0.0.0.0",
-    "--env",
-    "NITRO_PORT=3000",
-    "--env",
-    "SUPABASE_URL=http://gateway:8787",
-    "--env",
-    `VITE_SUPABASE_URL=http://gateway:8787`,
-    "--env",
-    `SUPABASE_ANON_KEY=${anonKey}`,
-    "--env",
-    `VITE_SUPABASE_ANON_KEY=${anonKey}`,
-    "--env",
-    `SUPABASE_SERVICE_ROLE_KEY=${serviceKey}`,
-  ];
-  const output = `${root}.output/server`;
-  if (!existsSync(`${output}/index.mjs`)) fail("E612_HTTP_APP_BUILD_REQUIRED");
-  docker([
-    "create",
-    "--name",
-    names.app,
-    "--label",
-    label,
-    "--network",
-    network,
-    "--network-alias",
-    "app",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges",
-    ...appEnv,
-    ids.node,
-    "node",
-    "/tmp/server/index.mjs",
-  ]);
-  created.add("app");
-  docker(["cp", output, `${names.app}:/tmp`]);
-  docker(["start", names.app]);
+  stage = "m64_panel_browser_build";
+  const panelBuild = buildM64Panel(browserSession.extensionId);
+  startM64App(browserSession.extensionId);
   await internalReady("http://app:3000", "/api/health");
   stage = "e612_e613_http_driver";
   runInternalDriver();
   stage = "authority_read_race";
   await runInternalAuthorityReadRace();
-  stage = "m64_browser_smoke";
-  runM64BrowserSmoke(m64ExtensionBuild);
+  stage = "m64_browser_positive_flow";
+  await finishM64BrowserSmoke(browserSession, panelBuild);
 } catch (error) {
   const code =
     error instanceof Error && /^E61[24]_[A-Za-z0-9_-]+$/.test(error.message)
@@ -1286,6 +3135,17 @@ try {
   process.exitCode = 1;
 } finally {
   let cleanupFailed = false;
+  if (browserSession?.browserDriver) {
+    browserSession.browserDriver.stop();
+    const browserExited = await waitForM64BrowserExit(
+      browserSession.browserDriver,
+      M64_BROWSER_CLEANUP_TIMEOUT_MS,
+    );
+    if (!browserExited) {
+      emit("E612|HTTP|CLEANUP|BROWSER_DRIVER_TIMEOUT");
+      cleanupFailed = true;
+    }
+  }
   for (const kind of ["browser", "app", "gateway", "storage", "rest", "auth", "db"]) {
     if (!created.has(kind)) continue;
     try {
