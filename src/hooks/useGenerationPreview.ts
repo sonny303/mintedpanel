@@ -132,6 +132,8 @@ export interface GenerationPreviewData {
   /** E4.2 TE-13 — proposed rows blocked by a missing required attribute. */
   gated: GatedRow[] | undefined;
   ambiguous: GenerationPreviewRow[] | undefined;
+  /** Proposed Enrollment rows that need a matching SOP before generation. */
+  unmatched: GenerationPreviewRow[] | undefined;
   /** GEN-SILENT — group members dropped before candidacy with an explanation. */
   skips: GenerationSkipRow[] | undefined;
   /** E4.2 SOP hardening — keys of PROPOSED rows that resolve to the generic
@@ -265,7 +267,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     const fallbackRowKeys = new Set<string>();
     for (const r of rows) {
       if (r.disposition !== "proposed") continue;
-      const tpl = pickTemplate(templates, r.payerId, r.state, r.groupId);
+      const tpl = pickTemplate(templates, r.payerId, r.state, r.groupId, "enrollment");
       if (tpl && isFallbackTemplate(tpl)) fallbackRowKeys.add(previewRowKey(r));
     }
 
@@ -295,6 +297,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       readinessByKey,
       gated: gating.gated,
       ambiguous: gating.ambiguous,
+      unmatched: gating.unmatched,
       skips,
       providerFacilities,
       fallbackRowKeys,
@@ -329,6 +332,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     exclusions: exclusionsQ.data,
     gated: derived?.gated,
     ambiguous: derived?.ambiguous,
+    unmatched: derived?.unmatched,
     skips: derived?.skips,
     fallbackRowKeys: derived?.fallbackRowKeys,
     providerFacilities: derived?.providerFacilities,
@@ -418,12 +422,24 @@ export function useConfirmGeneration() {
       // keeps the exact file it was generated with.
       const templateByRowKey = new Map<string, ReturnType<typeof pickTemplate>>();
       for (const row of plan.toCreate) {
-        if (topRankedTemplates(templates, row.payerId, row.state, row.groupId).length > 1) {
+        const ranked = topRankedTemplates(
+          templates,
+          row.payerId,
+          row.state,
+          row.groupId,
+          "enrollment",
+        );
+        if (ranked.length === 0) {
+          throw new Error(
+            `No Enrollment SOP matches ${row.payerName} ${row.state} for ${row.groupName}. Add an Enrollment SOP before generating this case.`,
+          );
+        }
+        if (ranked.length > 1) {
           throw new Error("Multiple SOP templates match this case. Select a template manually.");
         }
         templateByRowKey.set(
           previewRowKey(row),
-          pickTemplate(templates, row.payerId, row.state, row.groupId),
+          pickTemplate(templates, row.payerId, row.state, row.groupId, "enrollment"),
         );
       }
       const payerFormsByTemplate = await listPayerFormsForTemplates(

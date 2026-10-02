@@ -91,6 +91,11 @@ export interface GroupFormValue {
   billing: GroupContactBlock;
   correspondence: GroupContactBlock;
   credentialing: GroupContactBlock;
+  contractingContact: {
+    name: string;
+    title: string;
+    email: string;
+  };
 }
 
 export const EMPTY_GROUP_FORM: GroupFormValue = {
@@ -102,6 +107,7 @@ export const EMPTY_GROUP_FORM: GroupFormValue = {
   billing: EMPTY_GROUP_BLOCK,
   correspondence: EMPTY_GROUP_BLOCK,
   credentialing: EMPTY_GROUP_BLOCK,
+  contractingContact: { name: "", title: "", email: "" },
 };
 
 const s = (v: string | null | undefined): string => v ?? "";
@@ -147,6 +153,11 @@ export function groupToFormValue(g: ProviderGroup): GroupFormValue {
       fax: s(g.credentialingFax),
       email: s(g.credentialingEmail),
     },
+    contractingContact: {
+      name: s(g.contractingContactName),
+      title: s(g.contractingContactTitle),
+      email: s(g.contractingContactEmail),
+    },
   };
 }
 
@@ -187,6 +198,9 @@ export function formValueToInput(v: GroupFormValue): ProviderGroupInput {
     credentialingPhone: t(v.credentialing.phone),
     credentialingFax: t(v.credentialing.fax),
     credentialingEmail: t(v.credentialing.email),
+    contractingContactName: t(v.contractingContact.name),
+    contractingContactTitle: t(v.contractingContact.title),
+    contractingContactEmail: t(v.contractingContact.email),
   };
 }
 

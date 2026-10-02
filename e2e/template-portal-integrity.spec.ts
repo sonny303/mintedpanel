@@ -84,6 +84,7 @@ function portalRow(id: string, portalKey: string, name: string) {
     portal_key: portalKey,
     name,
     payer_id: null,
+    case_type: "enrollment",
     form_url: `https://${portalKey}.example`,
     is_verified: true,
     last_verified_at: null,
@@ -98,6 +99,7 @@ function templateRow(id: string, name: string, defs: unknown[]) {
     id,
     org_id: ORG_ID,
     name,
+    case_type: "enrollment",
     group_id: null,
     state: null,
     specialty: null,
@@ -131,7 +133,26 @@ const FIXTURES: Record<string, unknown[]> = {
     templateRow(CONFLICT_ID, "Enrollment SOP (two portals)", CONFLICT_DEFS),
     templateRow(CLEAN_ID, "Enrollment SOP (one portal)", CLEAN_DEFS),
   ],
-  sop_template_versions: [],
+  sop_template_versions: [
+    {
+      id: "version-conflict-v1",
+      template_id: CONFLICT_ID,
+      version: 1,
+      name: "Enrollment SOP (two portals)",
+      case_type: "enrollment",
+      task_definitions: CONFLICT_DEFS,
+      published_at: "2026-07-01T00:00:00Z",
+    },
+    {
+      id: "version-clean-v1",
+      template_id: CLEAN_ID,
+      version: 1,
+      name: "Enrollment SOP (one portal)",
+      case_type: "enrollment",
+      task_definitions: CLEAN_DEFS,
+      published_at: "2026-07-01T00:00:00Z",
+    },
+  ],
 };
 
 interface Captured {
@@ -254,5 +275,6 @@ test.describe("E1.7b portal-task integrity", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Publish" }).click();
     await expect(page.getByText("Published version 2")).toBeVisible({ timeout: 15000 });
     expect(captured.publishCount).toBe(1);
+    expect(captured.lastPublishBody?.p_case_type).toBe("enrollment");
   });
 });

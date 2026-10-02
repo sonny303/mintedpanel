@@ -30,6 +30,7 @@ import {
   useSavePortalFormUrl,
   useStopUsingPortal,
   useUpdatePortalPayer,
+  useUpdatePortalName,
 } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
 import { fmtDate } from "@/lib/format";
@@ -72,8 +73,10 @@ export function PortalDrawer({
   const saveUrlMut = useSavePortalFormUrl();
   const stopMut = useStopUsingPortal();
   const updatePayerMut = useUpdatePortalPayer();
+  const updateNameMut = useUpdatePortalName();
 
   const [url, setUrl] = useState(portal.formUrl ?? "");
+  const [name, setName] = useState(portal.name);
   const [attachedPayerId, setAttachedPayerId] = useState<string>(portal.payerId ?? NO_PAYER);
   const [confirmStop, setConfirmStop] = useState(false);
   const [ackUnlink, setAckUnlink] = useState(false);
@@ -81,11 +84,12 @@ export function PortalDrawer({
 
   useEffect(() => {
     setUrl(portal.formUrl ?? "");
+    setName(portal.name);
     setAttachedPayerId(portal.payerId ?? NO_PAYER);
     setConfirmStop(false);
     setAckUnlink(false);
     setAckGlobal(false);
-  }, [portal.id, portal.formUrl, portal.payerId]);
+  }, [portal.id, portal.name, portal.formUrl, portal.payerId]);
 
   const maps = useMemo(
     () => (mapsQ.data ?? []).filter((m) => m.status !== "retired"),
@@ -107,11 +111,17 @@ export function PortalDrawer({
   );
 
   const dirty = url.trim() !== (portal.formUrl ?? "").trim();
+  const nameDirty = name.trim() !== portal.name;
   const payerDirty =
     (attachedPayerId === NO_PAYER ? null : attachedPayerId) !== (portal.payerId ?? null);
   const hidden = isPortalHiddenFromPickers(portal);
+  const payerLocked = portal.requiresExplicitSelection === true;
   const isGlobal = portal.orgId === null;
-  const busy = saveUrlMut.isPending || stopMut.isPending || updatePayerMut.isPending;
+  const busy =
+    saveUrlMut.isPending ||
+    stopMut.isPending ||
+    updatePayerMut.isPending ||
+    updateNameMut.isPending;
 
   const recaptureTemplateId = preferTemplateId ?? refs[0]?.templateId ?? null;
 
@@ -125,6 +135,17 @@ export function PortalDrawer({
       onPortalUpdated?.(after);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update the URL");
+    }
+  }
+
+  async function saveName() {
+    if (!nameDirty) return;
+    try {
+      const after = await updateNameMut.mutateAsync({ portal, name });
+      toast.success("Configuration renamed");
+      onPortalUpdated?.(after);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not rename the configuration");
     }
   }
 
@@ -173,6 +194,39 @@ export function PortalDrawer({
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Identity
             </h3>
+            {portal.requiresExplicitSelection ? (
+              <div>
+                <Label className="text-xs">Configuration name</Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={!isAdmin || busy || hidden}
+                    aria-label="Configuration name"
+                    className="h-9 text-[12px]"
+                  />
+                  {isAdmin && !hidden ? (
+                    <Button
+                      size="sm"
+                      className="h-9 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+                      disabled={!nameDirty || busy || !name.trim()}
+                      onClick={() => void saveName()}
+                    >
+                      {updateNameMut.isPending ? "Saving…" : "Save"}
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Renaming keeps this configuration key and its SOP references unchanged.
+                </p>
+              </div>
+            ) : null}
+            {portal.caseType ? (
+              <div>
+                <Label className="text-xs">Case type</Label>
+                <p className="mt-1 text-[13px] capitalize">{portal.caseType}</p>
+              </div>
+            ) : null}
             <div>
               <Label className="text-xs">Portal key</Label>
               <Input
@@ -191,7 +245,7 @@ export function PortalDrawer({
                 <Select
                   value={attachedPayerId}
                   onValueChange={setAttachedPayerId}
-                  disabled={!isAdmin || busy || hidden}
+                  disabled={!isAdmin || busy || hidden || payerLocked}
                 >
                   <SelectTrigger className="h-9 text-[12px] flex-1" aria-label="Attached payer">
                     <SelectValue placeholder="Select a payer" />
@@ -205,7 +259,7 @@ export function PortalDrawer({
                     ))}
                   </SelectContent>
                 </Select>
-                {isAdmin && !hidden && payerDirty ? (
+                {isAdmin && !hidden && !payerLocked && payerDirty ? (
                   <Button
                     size="sm"
                     className="h-9 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
@@ -217,8 +271,9 @@ export function PortalDrawer({
                 ) : null}
               </div>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Attaching directly to a payer displays this portal on that payer's Portals tab for
-                ad hoc fills without requiring an SOP template.
+                {payerLocked
+                  ? "The payer is fixed for this independent form configuration."
+                  : "Attaching directly to a payer displays this portal on that payer's Portals tab for ad hoc fills without requiring an SOP template."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

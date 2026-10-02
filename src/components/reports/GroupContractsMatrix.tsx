@@ -21,7 +21,17 @@ import { fmtDate } from "@/lib/format";
 import type { Contract, Payer } from "@/types";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 
-export function GroupContractsMatrix() {
+interface ContractsMatrixContext {
+  groupId?: string;
+  payerId?: string;
+  state?: string;
+}
+
+export function GroupContractsMatrix({
+  initialContext,
+}: {
+  initialContext?: ContractsMatrixContext;
+}) {
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
   const contractsQ = useContracts();
@@ -29,7 +39,7 @@ export function GroupContractsMatrix() {
   const facilitiesQ = useFacilities();
   const targetsQ = usePayerNetworkTargets();
 
-  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(initialContext?.groupId ?? "");
   const [payerSearch, setPayerSearch] = useState<string>("");
 
   // Drawer state
@@ -42,7 +52,10 @@ export function GroupContractsMatrix() {
   } | null>(null);
 
   const groups = useMemo(() => groupsQ.data ?? [], [groupsQ.data]);
-  const activeGroupId = selectedGroupId || groups[0]?.id || "";
+  const activeGroupId = groups.some((group) => group.id === selectedGroupId)
+    ? selectedGroupId
+    : groups[0]?.id || "";
+  const contextPayer = (payersQ.data ?? []).find((payer) => payer.id === initialContext?.payerId);
   const currentGroup = useMemo(
     () => groups.find((g) => g.id === activeGroupId),
     [groups, activeGroupId],
@@ -165,6 +178,16 @@ export function GroupContractsMatrix() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-6">
+        {initialContext?.groupId || initialContext?.payerId || initialContext?.state ? (
+          <div className="rounded-md border border-emerald-700/30 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-950">
+            Matrix context: {currentGroup?.name ?? "selected group"}
+            {contextPayer ? ` · ${contextPayer.name}` : ""}
+            {initialContext?.state ? ` · ${initialContext.state}` : ""}
+            {initialContext?.groupId === activeGroupId && contextPayer && initialContext?.state ? (
+              <span className="ml-2 text-emerald-800">Matching cell highlighted below.</span>
+            ) : null}
+          </div>
+        ) : null}
         {/* Top Control Bar: Group Selector, Payer Search, Actions */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
@@ -290,6 +313,10 @@ export function GroupContractsMatrix() {
                     </td>
                     {states.map((s) => {
                       const contract = contractsByKey.get(`${payer.id}|${s}`);
+                      const isContextCell =
+                        initialContext?.groupId === activeGroupId &&
+                        initialContext?.payerId === payer.id &&
+                        initialContext?.state?.toUpperCase() === s;
                       const status = contract?.contractingStatusId
                         ? statusById.get(contract.contractingStatusId)
                         : null;
@@ -304,7 +331,8 @@ export function GroupContractsMatrix() {
                         <td
                           key={s}
                           onClick={() => handleCellClick(payer, s)}
-                          className="px-2 py-2.5 text-center border-l border-border/60 cursor-pointer hover:bg-muted/50 transition-colors"
+                          className={`px-2 py-2.5 text-center border-l border-border/60 cursor-pointer hover:bg-muted/50 transition-colors ${isContextCell ? "bg-emerald-100 ring-2 ring-inset ring-emerald-700" : ""}`}
+                          aria-current={isContextCell ? "location" : undefined}
                         >
                           {contract ? (
                             <div className="inline-flex flex-col items-center justify-center gap-0.5">

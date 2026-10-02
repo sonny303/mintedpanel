@@ -9,7 +9,7 @@
 // intact (TemplateTaskRow.test.ts + template-typing-latency.spec.ts). The
 // panel renders COLLAPSED by default — a summary line only — so Step 3 typing
 // never pays for its content.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
-import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
+import {
+  usePortals,
+  usePortalFieldMaps,
+  usePortalMappingResetPreview,
+  useResetPortalMapping,
+  useReviewOrgPortalFieldMapBase,
+  useStaleOrgOverridesForReview,
+} from "@/hooks/usePortals";
+import { useSops } from "@/hooks/useAdmin";
 import {
   useApproveField,
   useFinishTraining,
@@ -45,9 +53,11 @@ import {
 } from "@/hooks/useGlobalAuthoring";
 import { useCreatePortal } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
+import { createIndependentPortalInput } from "@/lib/portalKey";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
+import { PortalMappingResetDialog } from "./PortalMappingResetDialog";
 import {
   classifyFieldMap,
   registryCoverage,
@@ -58,13 +68,72 @@ import { groupTokens } from "@/lib/tokenGroups";
 import { filterMappingTokens } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { PortalDrawer } from "@/components/PortalDrawer";
-import { portalDisplayName } from "@/lib/portalRetirement";
+import {
+  isPortalHiddenFromPickers,
+  listPortalStepReferences,
+  portalDisplayName,
+} from "@/lib/portalRetirement";
+import { portalMappingResetAvailability } from "@/lib/portalMappingReset";
+import type { CaseType } from "@/lib/caseTypes";
+import type { Portal, PortalFieldMap } from "@/types";
 import { useLocation } from "@tanstack/react-router";
+
+function describeMappingDecision(map: PortalFieldMap | null): string {
+  if (!map) return "No matching shared selector";
+  if (map.status !== "approved") return map.status === "retired" ? "Retired" : "Needs a decision";
+  if (map.source === "token" || map.source === "manual_partial") {
+    return map.token ? `Maps to ${map.token}` : "Approved token mapping without a token";
+  }
+  if (map.source === "hardcoded") return "Approved fixed value";
+  if (map.source === "manual") return "A person fills this field";
+  return "Needs review";
+}
+
+function selectPortalForFormStep(input: {
+  portals: readonly Portal[];
+  portalKey: string | null;
+  orgId: string;
+  templatePayerId: string | null;
+  templateCaseType: CaseType | null;
+  isGlobalAuthoring: boolean;
+}): Portal | undefined {
+  const key = normalizePortalKey(input.portalKey ?? "");
+  if (!key) return undefined;
+  const sameKey = input.portals.filter((portal) => portal.portalKey === key);
+  if (sameKey.length === 1) {
+    const portal = sameKey[0];
+    if (!input.templateCaseType) return portal;
+    return portal.payerId === input.templatePayerId &&
+      portal.caseType === input.templateCaseType &&
+      !isPortalHiddenFromPickers(portal)
+      ? portal
+      : undefined;
+  }
+
+  // Same-key org and shared configurations are distinct MINT-48 scenarios.
+  // Resolve the exact owning tier only when both rows confirm the template's
+  // payer/type and both require explicit selection; otherwise leave ambiguous
+  // references untouched instead of training or reviewing a sibling config.
+  if (!input.templatePayerId || !input.templateCaseType) return undefined;
+  const selectedScope = input.isGlobalAuthoring ? null : input.orgId;
+  const matching = sameKey.filter(
+    (portal) =>
+      portal.payerId === input.templatePayerId &&
+      portal.caseType === input.templateCaseType &&
+      portal.requiresExplicitSelection === true &&
+      !isPortalHiddenFromPickers(portal),
+  );
+  const selected = matching.find((portal) => portal.orgId === selectedScope);
+  const counterpart = sameKey.find((portal) => portal.orgId !== selectedScope);
+  if (!selected || (counterpart && !matching.includes(counterpart))) return undefined;
+  return selected;
+}
 
 export interface FormStepPanelProps {
   /** The step's portal key, already normalized (null = no portal linked). */
   portalKey: string | null;
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   canEdit: boolean;
   /** The template is a GLOBAL row — register/train against the global tier. */
   isGlobalAuthoring: boolean;
@@ -83,6 +152,7 @@ export interface FormStepPanelProps {
 export function FormStepPanel({
   portalKey,
   templatePayerId,
+  templateCaseType,
   canEdit,
   isGlobalAuthoring,
   defaultOpen,
@@ -92,6 +162,9 @@ export function FormStepPanel({
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [registerOpen, setRegisterOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<Portal | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const resetIdempotencyRef = useRef<{ identity: string; key: string } | null>(null);
   const location = useLocation();
 
   // PortalStepSelect's "Register portal" button (and the empty-registry path)
@@ -111,7 +184,10 @@ export function FormStepPanel({
   const orgId = useActiveOrgId() ?? "no-org";
   const qc = useQueryClient();
   const portalsQ = usePortals();
+  const sopsQ = useSops();
   const mapsQ = usePortalFieldMaps(portalKey ?? undefined);
+  const staleOverridesQ = useStaleOrgOverridesForReview(portalKey ?? undefined);
+  const reviewBaseMut = useReviewOrgPortalFieldMapBase();
   const tokensQ = useTokenCatalog();
   const drift = useFormDrift();
 
@@ -126,14 +202,43 @@ export function FormStepPanel({
   const [addFieldLabel, setAddFieldLabel] = useState("");
   const finishTrainingMut = useFinishTraining();
   const globalFlagsMut = useSetGlobalPortalFlags();
+  const resetMappingMut = useResetPortalMapping();
+  const resetPreviewQ = usePortalMappingResetPreview(resetTarget);
 
-  const portal = useMemo(
-    () =>
-      portalKey
-        ? (portalsQ.data ?? []).find((p) => normalizePortalKey(p.portalKey) === portalKey)
-        : undefined,
-    [portalsQ.data, portalKey],
+  const portal = useMemo(() => {
+    return selectPortalForFormStep({
+      portals: portalsQ.data ?? [],
+      portalKey,
+      orgId,
+      templatePayerId,
+      templateCaseType,
+      isGlobalAuthoring,
+    });
+  }, [portalsQ.data, portalKey, orgId, templatePayerId, templateCaseType, isGlobalAuthoring]);
+
+  const resetAvailability = portal
+    ? portalMappingResetAvailability({
+        portal,
+        visiblePortals: portalsQ.data ?? [],
+        activeOrgId: orgId,
+      })
+    : null;
+  const resetTargetMatchesSelection = Boolean(
+    resetTarget &&
+    portal &&
+    resetTarget.id === portal.id &&
+    (resetTarget.mappingGeneration ?? 1) === (portal.mappingGeneration ?? 1),
   );
+  const resetReferences = resetTarget
+    ? listPortalStepReferences(sopsQ.data ?? [], resetTarget.portalKey)
+    : [];
+
+  useEffect(() => {
+    if (resetTarget && !resetTargetMatchesSelection) {
+      setResetTarget(null);
+      setResetError(null);
+    }
+  }, [resetTarget, resetTargetMatchesSelection]);
 
   async function copyReturnLink() {
     try {
@@ -148,6 +253,7 @@ export function FormStepPanel({
     () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey && m.status !== "retired"),
     [mapsQ.data, portalKey],
   );
+  const staleOverrides = staleOverridesQ.data ?? [];
   const brokenIds = useMemo(() => {
     const rows = portalKey ? (drift.driftByPortal.get(portalKey) ?? []) : [];
     return new Set(rows.map((m) => m.id));
@@ -193,9 +299,16 @@ export function FormStepPanel({
     if (remainingAfter > 0 || !portal) return;
     try {
       if (portal.orgId === null) {
-        await globalFlagsMut.mutateAsync({ id: portal.id, verified: true });
+        await globalFlagsMut.mutateAsync({
+          id: portal.id,
+          verified: true,
+          expectedMappingGeneration: portal.mappingGeneration,
+        });
       } else {
-        await finishTrainingMut.mutateAsync(portal.id);
+        await finishTrainingMut.mutateAsync({
+          portalId: portal.id,
+          expectedMappingGeneration: portal.mappingGeneration,
+        });
       }
       void qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) });
     } catch {
@@ -232,28 +345,42 @@ export function FormStepPanel({
                       transform: decision.transform,
                     }
                   : { status: "proposed", source: "manual" };
-        await trainGlobalMut.mutateAsync({ id: map.id, patch });
+        await trainGlobalMut.mutateAsync({
+          id: map.id,
+          patch: { ...patch, expectedMappingGeneration: map.mappingGeneration },
+        });
       } else if (decision.kind === "token") {
         await approveMut.mutateAsync({
           id: map.id,
           token: decision.token,
           fieldLabel: map.fieldLabel,
+          expectedMappingGeneration: map.mappingGeneration,
         });
       } else if (decision.kind === "human") {
-        await manualMut.mutateAsync({ id: map.id, fieldLabel: map.fieldLabel });
+        await manualMut.mutateAsync({
+          id: map.id,
+          fieldLabel: map.fieldLabel,
+          expectedMappingGeneration: map.mappingGeneration,
+        });
       } else if (decision.kind === "unmap") {
         await reproposeMut.mutateAsync({
           id: map.id,
           previous: { token: map.token, source: map.source },
+          expectedMappingGeneration: map.mappingGeneration,
         });
       } else if (decision.kind === "fixed") {
         await hardcodedMut.mutateAsync({
           id: map.id,
           value: decision.value,
           fieldLabel: map.fieldLabel,
+          expectedMappingGeneration: map.mappingGeneration,
         });
       } else {
-        await transformMut.mutateAsync({ id: map.id, transform: decision.transform });
+        await transformMut.mutateAsync({
+          id: map.id,
+          transform: decision.transform,
+          expectedMappingGeneration: map.mappingGeneration,
+        });
       }
       invalidateMaps();
       // Keep the E6.5 verification stamp working: a decision that empties the
@@ -278,7 +405,9 @@ export function FormStepPanel({
       return;
     }
     try {
-      await renameMut.mutateAsync([{ id: map.id, displayLabel }]);
+      await renameMut.mutateAsync([
+        { id: map.id, displayLabel, expectedMappingGeneration: map.mappingGeneration },
+      ]);
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the field");
@@ -299,7 +428,12 @@ export function FormStepPanel({
       return;
     }
     try {
-      await renameMut.mutateAsync(sectionRenamePatches(shared, section));
+      await renameMut.mutateAsync(
+        sectionRenamePatches(shared, section).map((patch) => ({
+          ...patch,
+          expectedMappingGeneration: shared.find((map) => map.id === patch.id)?.mappingGeneration,
+        })),
+      );
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the section");
@@ -313,11 +447,53 @@ export function FormStepPanel({
     const label = addFieldLabel.trim();
     if (!label || !portalKey) return;
     try {
-      await addFieldMut.mutateAsync({ portalKey, label });
+      await addFieldMut.mutateAsync({
+        portalKey,
+        label,
+        expectedMappingGeneration: portal?.mappingGeneration,
+      });
       setAddFieldLabel("");
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add the field");
+    }
+  }
+
+  async function confirmPortalMappingReset() {
+    if (!resetTarget || !resetTargetMatchesSelection) return;
+    const availability = portalMappingResetAvailability({
+      portal: resetTarget,
+      visiblePortals: portalsQ.data ?? [],
+      activeOrgId: orgId,
+    });
+    if (!availability.allowed) {
+      setResetError(
+        availability.reason === "shared-fallback"
+          ? "A shared mapping is available for this key. Clear the organization override separately."
+          : "This configuration is outside the active organization.",
+      );
+      return;
+    }
+
+    const mappingGeneration = resetTarget.mappingGeneration ?? 1;
+    const identity = `${resetTarget.id}:${mappingGeneration}`;
+    if (resetIdempotencyRef.current?.identity !== identity) {
+      resetIdempotencyRef.current = { identity, key: crypto.randomUUID() };
+    }
+    setResetError(null);
+    try {
+      const receipt = await resetMappingMut.mutateAsync({
+        portalId: resetTarget.id,
+        expectedMappingGeneration: mappingGeneration,
+        idempotencyKey: resetIdempotencyRef.current.key,
+      });
+      resetIdempotencyRef.current = null;
+      setResetTarget(null);
+      toast.success(
+        `Mapping reset · generation ${receipt.newMappingGeneration}. Recapture and review the form before filling again.`,
+      );
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : "Could not reset this form mapping.");
     }
   }
 
@@ -396,9 +572,40 @@ export function FormStepPanel({
                 variant="outline"
                 className="h-7"
                 onClick={() => setRegisterOpen(true)}
+                disabled={!templateCaseType || !templatePayerId}
+                title={
+                  !templateCaseType
+                    ? "Choose a case type in Basics before registering a form configuration."
+                    : !templatePayerId
+                      ? "Choose a payer in Basics before registering a form configuration."
+                      : undefined
+                }
               >
                 Register {isGlobalAuthoring ? "global " : ""}portal
               </Button>
+            ) : null}
+
+            {portal && canEdit && resetAvailability?.allowed ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[12px]"
+                onClick={() => {
+                  setResetError(null);
+                  setResetTarget(portal);
+                }}
+              >
+                Reset form mapping
+              </Button>
+            ) : null}
+            {portal &&
+            canEdit &&
+            resetAvailability?.allowed === false &&
+            resetAvailability.reason === "shared-fallback" ? (
+              <p className="text-[12px] text-muted-foreground">
+                A shared mapping is available for this key. Clear the organization override
+                separately to reveal it; a full organization reset is unavailable.
+              </p>
             ) : null}
 
             {/* E6.9 F6.9.3: EVERY row, always — decided rows included. The old
@@ -439,6 +646,65 @@ export function FormStepPanel({
                 onRenameSection={renameRegistrySection}
               />
             ) : null}
+            {portal && staleOverrides.length > 0 ? (
+              <section
+                aria-label="Shared mapping changes need review"
+                className="space-y-2 rounded-md border border-border bg-[var(--mp-warn-tint)] p-3 text-[var(--mp-warn-ink)]"
+              >
+                <div>
+                  <h3 className="text-[13px] font-semibold">Shared mapping changes need review</h3>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    These organization overrides are paused because the shared form mapping changed.
+                    Compare each saved decision with the current shared decision before retaining
+                    the override.
+                  </p>
+                </div>
+                <ul className="space-y-2">
+                  {staleOverrides.map((review) => (
+                    <li
+                      key={review.map.id}
+                      className="rounded-md border border-[#E8E5E0] bg-white p-3 text-[12px]"
+                    >
+                      <p className="font-medium">
+                        Selector <code>{review.map.selector}</code>
+                      </p>
+                      <p className="mt-1">
+                        Organization decision: {describeMappingDecision(review.map)}
+                      </p>
+                      <p>
+                        Current shared decision: {describeMappingDecision(review.currentSharedMap)}
+                      </p>
+                      {canEdit ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 h-7 text-[12px]"
+                          disabled={reviewBaseMut.isPending}
+                          onClick={() => {
+                            void reviewBaseMut
+                              .mutateAsync({
+                                id: review.map.id,
+                                expectedMappingGeneration: review.map.mappingGeneration ?? 1,
+                                expectedSharedBaseGeneration: review.currentSharedBaseGeneration,
+                              })
+                              .then(() => toast.success("Organization override reviewed."))
+                              .catch((error: unknown) =>
+                                toast.error(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Could not review the organization override.",
+                                ),
+                              );
+                          }}
+                        >
+                          {reviewBaseMut.isPending ? "Reviewing…" : "Review and retain override"}
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
             {portal && maps.length > 0 && coverage.needsDecision === 0 ? (
               <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
                 <CheckCircle2 className="h-3.5 w-3.5 text-[#1B4D3E]" />
@@ -461,6 +727,7 @@ export function FormStepPanel({
         <RegisterPortalDialog
           isGlobalAuthoring={isGlobalAuthoring}
           templatePayerId={templatePayerId}
+          templateCaseType={templateCaseType}
           initialKey={portalKey ?? ""}
           onClose={() => setRegisterOpen(false)}
           onRegistered={(key) => {
@@ -480,6 +747,30 @@ export function FormStepPanel({
           }}
         />
       ) : null}
+
+      <PortalMappingResetDialog
+        open={Boolean(resetTargetMatchesSelection)}
+        portal={resetTargetMatchesSelection ? resetTarget : null}
+        fieldCount={resetPreviewQ.data}
+        fieldCountLoading={resetPreviewQ.isLoading}
+        fieldCountError={resetPreviewQ.isError}
+        references={resetReferences}
+        referencesLoading={sopsQ.isLoading}
+        referencesError={sopsQ.isError}
+        pending={resetMappingMut.isPending}
+        error={resetError}
+        onConfirm={() => void confirmPortalMappingReset()}
+        onCancel={() => {
+          setResetTarget(null);
+          setResetError(null);
+        }}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !resetMappingMut.isPending) {
+            setResetTarget(null);
+            setResetError(null);
+          }
+        }}
+      />
     </Collapsible>
   );
 }
@@ -523,50 +814,109 @@ function WorkbenchHandoffBlock({
   );
 }
 
+type PortalRegistrationInput = {
+  name: string;
+  portalKey: string;
+  payerId: string;
+  caseType: CaseType;
+  formUrl: string | null;
+};
+
+type PortalRegistrationPlan =
+  | { mode: "new"; input: PortalRegistrationInput }
+  | { mode: "repair"; input: PortalRegistrationInput };
+
+export function buildPortalRegistrationPlan(input: {
+  name: string;
+  initialKey: string;
+  templatePayerId: string | null;
+  templateCaseType: CaseType | null;
+  formUrl: string;
+}): PortalRegistrationPlan {
+  const name = input.name.trim();
+  const payerId = input.templatePayerId?.trim();
+  if (!name) throw new Error("Portal name is required");
+  if (!payerId || !input.templateCaseType) {
+    throw new Error(
+      "Choose a payer and case type in Basics before registering a form configuration",
+    );
+  }
+
+  const formUrl = input.formUrl.trim() || null;
+  const existingKey = normalizePortalKey(input.initialKey);
+  if (existingKey) {
+    return {
+      mode: "repair",
+      input: {
+        name,
+        portalKey: existingKey,
+        payerId,
+        caseType: input.templateCaseType,
+        formUrl,
+      },
+    };
+  }
+
+  return {
+    mode: "new",
+    input: createIndependentPortalInput({
+      name,
+      payerId,
+      caseType: input.templateCaseType,
+      formUrl: input.formUrl,
+    }),
+  };
+}
+
 function RegisterPortalDialog({
   isGlobalAuthoring,
   templatePayerId,
+  templateCaseType,
   initialKey,
   onClose,
   onRegistered,
 }: {
   isGlobalAuthoring: boolean;
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   initialKey: string;
   onClose: () => void;
   onRegistered: (portalKey: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [key, setKey] = useState(initialKey);
   const [formUrl, setFormUrl] = useState("");
   const upsertGlobalMut = useUpsertGlobalPortal();
   const createOrgMut = useCreatePortal();
   const busy = upsertGlobalMut.isPending || createOrgMut.isPending;
+  const repairKey = normalizePortalKey(initialKey);
+  const mode = repairKey ? "repair" : "new";
 
   async function register() {
-    const normalized = normalizePortalKey(key);
-    if (!name.trim() || !normalized) {
-      toast.error("Portal name and key are required");
+    let plan: PortalRegistrationPlan;
+    try {
+      plan = buildPortalRegistrationPlan({
+        name,
+        initialKey,
+        templatePayerId,
+        templateCaseType,
+        formUrl,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not register the portal");
       return;
     }
     try {
       if (isGlobalAuthoring) {
-        await upsertGlobalMut.mutateAsync({
-          name,
-          portalKey: normalized,
-          payerId: templatePayerId,
-          formUrl: formUrl.trim() || null,
-        });
+        await upsertGlobalMut.mutateAsync(plan.input);
       } else {
-        await createOrgMut.mutateAsync({
-          name,
-          portalKey: normalized,
-          payerId: templatePayerId,
-          formUrl: formUrl.trim() || null,
-        });
+        await createOrgMut.mutateAsync(plan.input);
       }
-      toast.success(`Portal registered${isGlobalAuthoring ? " globally" : ""}`);
-      onRegistered(normalized);
+      toast.success(
+        plan.mode === "repair"
+          ? `Portal reference repaired${isGlobalAuthoring ? " globally" : ""}`
+          : `Portal registered${isGlobalAuthoring ? " globally" : ""}`,
+      );
+      onRegistered(plan.input.portalKey);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not register the portal");
     }
@@ -576,7 +926,10 @@ function RegisterPortalDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Register {isGlobalAuthoring ? "global " : ""}portal</DialogTitle>
+          <DialogTitle>
+            {mode === "repair" ? "Repair" : "Register"} {isGlobalAuthoring ? "global " : ""}
+            portal {mode === "repair" ? "reference" : "configuration"}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           {isGlobalAuthoring ? (
@@ -584,6 +937,12 @@ function RegisterPortalDialog({
               Registered once, inherited by every organization.
             </p>
           ) : null}
+          <p className="text-xs text-muted-foreground">
+            Case type: {templateCaseType ?? "Choose one in Basics"}.{" "}
+            {mode === "repair"
+              ? "This reconnects the existing SOP reference using its current key. Existing key-scoped maps, references, and proof data stay attached; this does not create a new empty configuration."
+              : "This creates a new independent configuration with its own key and no field maps. It starts unverified; training and verification remain separate steps."}
+          </p>
           <div>
             <Label className="text-xs">Portal name</Label>
             <Input
@@ -592,17 +951,20 @@ function RegisterPortalDialog({
               placeholder="BCBS KS enrollment"
             />
           </div>
-          <div>
-            <Label className="text-xs">Portal key</Label>
-            <Input
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder="bcbs_ks_enrollment"
-            />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Lowercased on save; immutable after — it joins SOP steps, field maps, and fill logs.
+          {repairKey ? (
+            <div>
+              <Label className="text-xs">Existing portal key</Label>
+              <Input value={repairKey} readOnly />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Repair keeps this normalized key so existing SOP steps and field maps remain bound.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              A distinct permanent key is generated when you register this configuration and cannot
+              be changed later.
             </p>
-          </div>
+          )}
           <div>
             <Label className="text-xs">Form URL (optional)</Label>
             <Input
@@ -622,7 +984,13 @@ function RegisterPortalDialog({
             style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
-            {busy ? "Registering…" : "Register"}
+            {busy
+              ? mode === "repair"
+                ? "Repairing…"
+                : "Registering…"
+              : mode === "repair"
+                ? "Repair reference"
+                : "Register"}
           </Button>
         </DialogFooter>
       </DialogContent>

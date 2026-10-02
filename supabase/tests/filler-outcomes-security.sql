@@ -113,6 +113,14 @@ INSERT INTO public.credential_cases(id, org_id, provider_id, payer_id, state) VA
   ('40000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001', 'AL'),
   ('40000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000003', '50000000-0000-4000-8000-000000000002', 'NC');
 
+-- These historical map rows use a synthetic payer-form key for fill outcome
+-- validation. Give each org a real generation-1 legacy config so the MINT-57
+-- guard can validate map ownership without relying on the special shared-PDF
+-- family exception.
+INSERT INTO public.portals(org_id, portal_key, name, payer_id, form_url, mapping_generation) VALUES
+  ('10000000-0000-4000-8000-000000000001', 'payer-form:synthetic-family', 'Synthetic Filler PDF', '50000000-0000-4000-8000-000000000001', 'https://filler.example.invalid/pdf', 1),
+  ('10000000-0000-4000-8000-000000000002', 'payer-form:synthetic-family', 'Synthetic Filler PDF', '50000000-0000-4000-8000-000000000002', 'https://filler.example.invalid/pdf', 1);
+
 INSERT INTO public.portal_field_maps(id, org_id, portal_key, map_type, selector, source, field_type, notes, status) VALUES
   ('60000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'payer-form:synthetic-family', 'pdf', 'synthetic-pdf-selector', 'manual', 'text', 'Synthetic security fixture', 'approved'),
   ('60000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001', 'payer-form:synthetic-family', 'web', 'synthetic-web-selector', 'manual', 'text', 'Synthetic security fixture', 'approved'),

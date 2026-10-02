@@ -312,7 +312,26 @@ export function TaskDrawer({
                           locked,
                           task.status,
                         )
-                          ? portalHandoff
+                          ? {
+                              ...portalHandoff,
+                              workStep: {
+                                taskId: task.id,
+                                taskExecutionType: task.executionType ?? null,
+                                sopTemplateId: task.sopTemplateId,
+                                sopVersion: task.sopVersion,
+                                stepId: step.id,
+                                stepIdentity:
+                                  task.sopTemplateId && task.sopVersion != null
+                                    ? [
+                                        portalHandoff.caseId,
+                                        task.id,
+                                        task.sopTemplateId,
+                                        task.sopVersion,
+                                        step.id,
+                                      ].join(":")
+                                    : null,
+                              },
+                            }
                           : undefined;
                       return (
                         <div key={step.id} className="flex items-start gap-3 p-3">

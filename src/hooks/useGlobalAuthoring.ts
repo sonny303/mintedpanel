@@ -26,8 +26,16 @@ export function useSetGlobalPortalFlags() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: ({ id, ...flags }: { id: string; verified?: boolean; proven?: boolean }) =>
-      setGlobalPortalFlags(id, flags),
+    mutationFn: ({
+      id,
+      expectedMappingGeneration,
+      ...flags
+    }: {
+      id: string;
+      verified?: boolean;
+      proven?: boolean;
+      expectedMappingGeneration?: number | null;
+    }) => setGlobalPortalFlags(id, flags, expectedMappingGeneration),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
   });
 }
@@ -37,7 +45,13 @@ export function useMarkPortalProven() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: (id: string) => markPortalProven(id),
+    mutationFn: ({
+      id,
+      expectedMappingGeneration,
+    }: {
+      id: string;
+      expectedMappingGeneration?: number | null;
+    }) => markPortalProven(id, expectedMappingGeneration),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
   });
 }

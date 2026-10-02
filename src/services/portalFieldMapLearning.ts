@@ -18,6 +18,7 @@ export interface BatchLearnPortalFieldMapsInput {
   portal_key: string;
   page_url: string;
   mappings: BatchLearnMappingInput[];
+  expected_mapping_generation?: number | null;
 }
 
 export interface BatchLearnPortalFieldMapsCtx {
@@ -61,6 +62,7 @@ export interface ValidatedBatchLearnInput {
   portalKey: string;
   urlPattern: string;
   mappings: BatchLearnMappingInput[];
+  expectedMappingGeneration: number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,16 +94,34 @@ export function validateBatchLearnInput(
 ): { ok: true; input: ValidatedBatchLearnInput } | { ok: false; message: string } {
   if (
     !isRecord(body) ||
-    !hasExactKeys(body, [
-      "case_id",
-      "provider_id",
-      "fill_session_id",
-      "portal_key",
-      "page_url",
-      "mappings",
-    ])
+    !(
+      hasExactKeys(body, [
+        "case_id",
+        "provider_id",
+        "fill_session_id",
+        "portal_key",
+        "page_url",
+        "mappings",
+      ]) ||
+      hasExactKeys(body, [
+        "case_id",
+        "provider_id",
+        "fill_session_id",
+        "portal_key",
+        "page_url",
+        "mappings",
+        "expected_mapping_generation",
+      ])
+    )
   ) {
     return { ok: false, message: "Request must contain only the required batch-learn fields" };
+  }
+  if (
+    body.expected_mapping_generation != null &&
+    (!Number.isInteger(body.expected_mapping_generation) ||
+      (body.expected_mapping_generation as number) < 1)
+  ) {
+    return { ok: false, message: "expected_mapping_generation must be a positive integer" };
   }
   if (!UUID_RE.test(String(body.case_id)) || !UUID_RE.test(String(body.provider_id))) {
     return { ok: false, message: "case_id and provider_id must be UUIDs" };
@@ -206,6 +226,10 @@ export function validateBatchLearnInput(
       portalKey,
       urlPattern,
       mappings,
+      expectedMappingGeneration:
+        typeof body.expected_mapping_generation === "number"
+          ? body.expected_mapping_generation
+          : null,
     },
   };
 }
@@ -255,8 +279,33 @@ export async function batchLearnPortalFieldMaps(
     p_portal_key: input.portalKey,
     p_url_pattern: input.urlPattern,
     p_mappings: input.mappings as unknown as Json,
+    p_expected_mapping_generation: input.expectedMappingGeneration,
   });
-  if (error) throw error;
+  if (error) {
+    if (error.message.includes("mapping_generation_token_required")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "This form configuration requires expected_mapping_generation.",
+      };
+    }
+    if (error.message.includes("mapping_generation_stale")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "The form mapping changed. Reload the configuration before saving learned fields.",
+      };
+    }
+    if (error.message.includes("mapping_override_base_review_required")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message:
+          "Shared mappings changed. Review this org override against the current base before saving learned fields.",
+      };
+    }
+    throw error;
+  }
   if (!isRecord(data) || data.kind !== "ok") {
     const reason =
       isRecord(data) && typeof data.reason === "string" ? data.reason : "invalid_result";
