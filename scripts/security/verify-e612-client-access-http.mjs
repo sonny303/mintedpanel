@@ -6,7 +6,7 @@
 // this run. The gateway is only transport glue so the app can use one local
 // Supabase URL while Auth, REST, and Storage remain separate containers.
 import { execFileSync, spawn } from "node:child_process";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
@@ -20,8 +20,12 @@ const runId = randomUUID().replaceAll("-", "").slice(0, 16);
 const label = `com.minted.e612=${runId}`;
 const network = `minted-e612-http-${runId}`;
 const names = Object.fromEntries(
-  ["db", "auth", "rest", "storage", "gateway", "app"].map((kind) => [kind, `${network}-${kind}`]),
+  ["db", "auth", "rest", "storage", "gateway", "app", "browser"].map((kind) => [
+    kind,
+    `${network}-${kind}`,
+  ]),
 );
+const M64_EXTENSION_SHA = "8a91b53577ba2c08f5907430b34fdff028f5a2e2";
 const images = {
   db:
     process.env.E612_HTTP_DB_IMAGE ||
@@ -38,6 +42,9 @@ const images = {
   node:
     process.env.E612_HTTP_NODE_IMAGE ||
     "node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e",
+  browser:
+    process.env.E612_M64_BROWSER_IMAGE ||
+    "mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48",
 };
 const authPassword = `e612-auth-${randomBytes(18).toString("hex")}`;
 const restPassword = `e612-rest-${randomBytes(18).toString("hex")}`;
@@ -194,6 +201,171 @@ const imagePlatform = (image) => {
   if (!/^linux\/(amd64|arm64)$/.test(platform)) fail("E612_HTTP_IMAGE_PLATFORM_UNKNOWN");
   return platform;
 };
+function listFiles(directory, prefix = "") {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const absolute = `${directory}/${entry.name}`;
+      return entry.isDirectory() ? listFiles(absolute, relative) : [relative];
+    })
+    .sort();
+}
+function buildM64Extension() {
+  const extensionRoot = process.env.E612_M64_EXTENSION_ROOT;
+  if (typeof extensionRoot !== "string" || !existsSync(`${extensionRoot}/package.json`))
+    fail("E612_M64_EXTENSION_SOURCE_REQUIRED");
+  const head = execFileSync("git", ["-C", extensionRoot, "rev-parse", "HEAD"], options).trim();
+  const tree = execFileSync(
+    "git",
+    ["-C", extensionRoot, "rev-parse", "HEAD^{tree}"],
+    options,
+  ).trim();
+  if (head !== M64_EXTENSION_SHA) fail("E612_M64_EXTENSION_COMMIT_MISMATCH");
+  if (tree !== "1d980f595083a85c9cede49398340daffe613204") fail("E612_M64_EXTENSION_TREE_MISMATCH");
+  try {
+    execFileSync("npm", ["run", "build"], { ...options, cwd: extensionRoot, env });
+  } catch {
+    fail("E612_M64_EXTENSION_BUILD_FAILED");
+  }
+  const backgroundPath = `${extensionRoot}/dist/background.js`;
+  const manifestPath = `${extensionRoot}/dist/manifest.json`;
+  if (!existsSync(backgroundPath) || !existsSync(manifestPath))
+    fail("E612_M64_EXTENSION_DIST_MISSING");
+  const background = readFileSync(backgroundPath, "utf8");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const javascript = listFiles(`${extensionRoot}/dist`)
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => [name, readFileSync(`${extensionRoot}/dist/${name}`, "utf8")]);
+  const allJavascript = javascript.map(([, source]) => source).join("\n");
+  if (
+    !allJavascript.includes("https://mintedpanel.vercel.app") ||
+    !allJavascript.includes("https://fkvuhfsqcmujywzgczmc.supabase.co") ||
+    !background.includes("/api/work-context/validate") ||
+    manifest.manifest_version !== 3
+  ) {
+    fail("E612_M64_EXTENSION_ARTIFACT_ORIGIN_OR_WORK_MISMATCH");
+  }
+  const runtimeAssetsSha = createHash("sha256")
+    .update(
+      javascript
+        .map(([name, source]) => `${name}\0${createHash("sha256").update(source).digest("hex")}\n`)
+        .join(""),
+    )
+    .digest("hex");
+  const backgroundSha = createHash("sha256").update(background).digest("hex");
+  if (backgroundSha !== "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549")
+    fail("E612_M64_EXTENSION_BACKGROUND_HASH_MISMATCH");
+  emit(`M64|ARTIFACT|PASS|commit=${head}|tree=${tree}|runtime_assets_sha256=${runtimeAssetsSha}`);
+  return { root: extensionRoot, runtimeAssetsSha };
+}
+
+function runM64BrowserSmoke(extensionBuild) {
+  const { root: extensionRoot, runtimeAssetsSha } = extensionBuild;
+  const playwrightPath = `${root}node_modules/playwright`;
+  const playwrightCorePath = `${root}node_modules/playwright-core`;
+  if (
+    !existsSync(`${playwrightPath}/package.json`) ||
+    !existsSync(`${playwrightCorePath}/package.json`)
+  )
+    fail("E612_M64_PLAYWRIGHT_PACKAGE_MISSING");
+  const playwrightVersion = JSON.parse(
+    readFileSync(`${playwrightPath}/package.json`, "utf8"),
+  ).version;
+  const playwrightCoreVersion = JSON.parse(
+    readFileSync(`${playwrightCorePath}/package.json`, "utf8"),
+  ).version;
+  if (playwrightVersion !== "1.61.1" || playwrightCoreVersion !== playwrightVersion)
+    fail("E612_M64_PLAYWRIGHT_PACKAGE_VERSION_MISMATCH");
+  const networkInfo = JSON.parse(docker(["network", "inspect", network]))[0];
+  if (networkInfo.Internal !== true || networkInfo.Labels?.[`com.minted.e612`] !== runId)
+    fail("E612_M64_DOCKER_NETWORK_NOT_INTERNAL");
+  if (platforms.browser !== "linux/amd64") fail("E612_M64_BROWSER_IMAGE_NOT_LINUX_AMD64");
+  docker([
+    "run",
+    "--detach",
+    "--rm",
+    "--name",
+    names.browser,
+    "--label",
+    label,
+    "--network",
+    network,
+    "--network-alias",
+    "browser",
+    "--read-only",
+    "--cap-drop",
+    "ALL",
+    "--cap-add",
+    "NET_BIND_SERVICE",
+    "--security-opt",
+    "no-new-privileges",
+    "--tmpfs",
+    "/tmp:rw,mode=1777",
+    "--tmpfs",
+    "/dev/shm:rw,nosuid,nodev,size=1g",
+    "--env",
+    "HOME=/tmp/m64-home",
+    ids.browser,
+    "sleep",
+    "infinity",
+  ]);
+  created.add("browser");
+  const observed = JSON.parse(docker(["inspect", names.browser]))[0];
+  if (
+    observed.Config?.Labels?.[`com.minted.e612`] !== runId ||
+    observed.HostConfig?.NetworkMode !== network ||
+    observed.HostConfig?.ReadonlyRootfs !== true ||
+    !observed.HostConfig?.CapDrop?.includes("ALL") ||
+    observed.HostConfig?.CapAdd?.length !== 1 ||
+    !observed.HostConfig?.CapAdd?.includes("NET_BIND_SERVICE") ||
+    !observed.HostConfig?.SecurityOpt?.includes("no-new-privileges") ||
+    Object.keys(observed.HostConfig?.PortBindings ?? {}).length !== 0 ||
+    !observed.NetworkSettings?.Networks?.[network]
+  ) {
+    fail("E612_M64_BROWSER_CONTAINER_HARDENING_MISMATCH");
+  }
+  docker(["exec", names.browser, "mkdir", "-p", "/tmp/m64/node_modules", "/tmp/m64-home"]);
+  docker([
+    "cp",
+    `${root}scripts/security/verify-m64-workflow-browser.mjs`,
+    `${names.browser}:/tmp/m64/driver.mjs`,
+  ]);
+  docker(["cp", `${extensionRoot}/dist`, `${names.browser}:/tmp/m64/extension`]);
+  docker(["cp", playwrightPath, `${names.browser}:/tmp/m64/node_modules/`]);
+  docker(["cp", playwrightCorePath, `${names.browser}:/tmp/m64/node_modules/`]);
+  docker([
+    "exec",
+    "-w",
+    "/tmp/m64",
+    names.browser,
+    "/bin/sh",
+    "-c",
+    "command -v Xvfb >/dev/null && command -v xvfb-run >/dev/null && node -e \"if(Number(process.versions.node.split('.')[0])<18)process.exit(3);if(require('playwright/package.json').version!=='1.61.1')process.exit(1);if(!require('fs').existsSync(require('playwright').chromium.executablePath()))process.exit(2)\"",
+  ]);
+  const browserNode = docker(["exec", names.browser, "node", "--version"]).trim();
+  emit(
+    `M64|BROWSER|PREFLIGHT|image=${ids.browser}|platform=${platforms.browser}|playwright=${playwrightVersion}|node=${browserNode}|xvfb=available|network=internal`,
+  );
+  const output = docker([
+    "exec",
+    "-e",
+    `M64_LOCAL_ANON_KEY=${anonKey}`,
+    "-e",
+    `M64_EXPECTED_RUNTIME_ASSETS_SHA=${runtimeAssetsSha}`,
+    names.browser,
+    "xvfb-run",
+    "-a",
+    "node",
+    "/tmp/m64/driver.mjs",
+  ]);
+  process.stdout.write(output);
+  if (
+    !output.includes(
+      "M64|BROWSER|PASS|goTrue_local=200|panel_orgs_local=200|work_validate_local=404|ack=CONTEXT_STALE|portal_tabs=0",
+    )
+  )
+    fail("E612_M64_BROWSER_PASS_MARKER_MISSING");
+}
 let ids;
 let platforms;
 
@@ -632,10 +804,10 @@ try {
     Object.entries(images).map(([kind, image]) => [kind, imagePlatform(image)]),
   );
   emit(
-    `E612|HTTP|IMAGES|db=${ids.db}|auth=${ids.auth}|rest=${ids.rest}|storage=${ids.storage}|node=${ids.node}`,
+    `E612|HTTP|IMAGES|db=${ids.db}|auth=${ids.auth}|rest=${ids.rest}|storage=${ids.storage}|node=${ids.node}|browser=${ids.browser}`,
   );
   emit(
-    `E612|HTTP|PLATFORM|db=${platforms.db}|auth=${platforms.auth}|rest=${platforms.rest}|storage=${platforms.storage}|node=${platforms.node}`,
+    `E612|HTTP|PLATFORM|db=${platforms.db}|auth=${platforms.auth}|rest=${platforms.rest}|storage=${platforms.storage}|node=${platforms.node}|browser=${platforms.browser}`,
   );
   stage = "build_manifest";
   const manifestPath = `${root}.output/server/.e612-build-manifest.json`;
@@ -653,6 +825,8 @@ try {
   emit(
     `E612|HTTP|BUILD|git=${manifest.gitHead}|source=${manifest.sourceSha256}|bundle=${manifest.bundleSha256}`,
   );
+  stage = "m64_extension_build";
+  const m64ExtensionBuild = buildM64Extension();
   docker(["network", "create", "--internal", "--label", label, network]);
   networkCreated = true;
   stage = "isolated_database";
@@ -860,6 +1034,8 @@ try {
   runInternalDriver();
   stage = "authority_read_race";
   await runInternalAuthorityReadRace();
+  stage = "m64_browser_smoke";
+  runM64BrowserSmoke(m64ExtensionBuild);
 } catch (error) {
   const code =
     error instanceof Error && /^E61[24]_[A-Za-z0-9_-]+$/.test(error.message)
@@ -872,7 +1048,7 @@ try {
   process.exitCode = 1;
 } finally {
   let cleanupFailed = false;
-  for (const kind of ["app", "gateway", "storage", "rest", "auth", "db"]) {
+  for (const kind of ["browser", "app", "gateway", "storage", "rest", "auth", "db"]) {
     if (!created.has(kind)) continue;
     try {
       const observed = JSON.parse(docker(["container", "inspect", names[kind]]))[0];
