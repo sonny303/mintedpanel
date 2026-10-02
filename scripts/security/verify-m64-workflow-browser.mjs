@@ -89,7 +89,15 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
     order: "sort_order.asc",
     track: "eq.contracting",
   }),
-  facilities: Object.freeze({ select: "*", org_id: `eq.${ORG_ID}`, order: "name.asc" }),
+  facilities: Object.freeze([
+    Object.freeze({ select: "*", org_id: `eq.${ORG_ID}`, order: "name.asc" }),
+    Object.freeze({
+      select: "*",
+      org_id: `eq.${ORG_ID}`,
+      order: "name.asc",
+      group_id: `eq.${GROUP_ID}`,
+    }),
+  ]),
   payer_network_targets: Object.freeze({
     select: "*",
     org_id: `eq.${ORG_ID}`,
@@ -989,6 +997,12 @@ function assertDataPreflightPolicy() {
       }),
     ],
   ];
+  const groupedFacilityTarget = queryTarget("/rest/v1/facilities", {
+    select: "*",
+    org_id: `eq.${ORG_ID}`,
+    order: "name.asc",
+    group_id: `eq.${GROUP_ID}`,
+  });
   const route = (path, target, headers) =>
     routeFor(SUPABASE_HOST, "OPTIONS", path, target, headers);
   assert(
@@ -1006,6 +1020,8 @@ function assertDataPreflightPolicy() {
           route(`/rest/v1/${table}`, target, getHeaders)?.name ===
           `supabase.rest.${table}_preflight`,
       ) &&
+      route("/rest/v1/facilities", groupedFacilityTarget, getHeaders)?.name ===
+        "supabase.rest.facilities_preflight" &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites", postHeaders)?.name ===
         "supabase.rpc.claim_invites_preflight" &&
       route("/rest/v1/fill_sessions", fillSessionCountTarget, headHeaders)?.name ===
@@ -1062,6 +1078,25 @@ function assertDataPreflightPolicy() {
         ...getHeaders,
         "access-control-request-headers":
           "apikey, authorization, x-client-info, accept-profile, apikey",
+      }) === null &&
+      route(
+        "/rest/v1/facilities",
+        groupedFacilityTarget.replace(GROUP_ID, "49000000-0000-4000-a000-000000000099"),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/facilities", `${groupedFacilityTarget}&unexpected=eq.x`, getHeaders) ===
+        null &&
+      route("/rest/v1/facilities", groupedFacilityTarget, {
+        ...getHeaders,
+        origin: "https://untrusted.invalid",
+      }) === null &&
+      route("/rest/v1/facilities", groupedFacilityTarget, {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/facilities", groupedFacilityTarget, {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
       }) === null &&
       route("/rest/v1/payer_network_targets", matrixTargets[5][1], {
         ...getHeaders,
@@ -1705,7 +1740,12 @@ async function panelContractPermissionProbe(extensionPage) {
   checkpoint("contract_ui_facility_open");
   await facilitySelect.click();
   checkpoint("contract_ui_facility_select");
-  await panelPage.getByRole("option", { name: new RegExp(`${panelOrgName} Facility`) }).click();
+  const panelFacilityName = panelOrgName.replace(/ Organization$/, " Facility");
+  assert(
+    /^E612 M64 [a-f0-9]{16} Facility$/.test(panelFacilityName),
+    "M64_BROWSER_PANEL_FACILITY_NAME_INVALID",
+  );
+  await panelPage.getByRole("option", { name: `${panelFacilityName} · NY`, exact: true }).click();
 
   const tupleElement = panelPage.getByTestId("contract-launch-tuple");
   checkpoint("contract_ui_tuple_ready");
