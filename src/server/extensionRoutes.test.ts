@@ -1064,6 +1064,24 @@ describe("propose field map handler (propose-only)", () => {
     expect(res.status).toBe(200);
   });
 
+  it("returns a body-free 409 when a legacy capture has no generation token", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "rejected",
+      status: 409,
+      message: "This form configuration requires expected_mapping_generation.",
+    });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+
+    expect(res.status).toBe(409);
+    const envelope = await body(res);
+    expect(envelope).toEqual({
+      data: null,
+      error: "This form configuration requires expected_mapping_generation.",
+      meta: null,
+    });
+    expect(JSON.stringify(envelope)).not.toContain("provider.ssnLast4");
+  });
+
   it("scopes the write to the guard-resolved org and passes the audit closure", async () => {
     proposeMapMock.mockResolvedValue({
       kind: "created",
