@@ -269,6 +269,9 @@ const STAGES = Object.freeze({
   mv3_worker: "M64_BROWSER_STAGE_MV3_WORKER_FAILED",
   sidepanel: "M64_BROWSER_STAGE_SIDEPANEL_FAILED",
   permission_probe: "M64_BROWSER_STAGE_PERMISSION_PROBE_FAILED",
+  permission_cta_click: "M64_BROWSER_STAGE_PERMISSION_PROBE_FAILED",
+  permission_cta_clicked: "M64_BROWSER_STAGE_PERMISSION_PROBE_FAILED",
+  permission_grant_wait: "M64_BROWSER_STAGE_PERMISSION_PROBE_FAILED",
   sign_in: "M64_BROWSER_STAGE_SIGN_IN_FAILED",
   org_select: "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
   handoff_send: "M64_BROWSER_STAGE_HANDOFF_SEND_FAILED",
@@ -2079,19 +2082,114 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   await assertPayerTabActive();
   await assertWorkUnchanged();
 
-  await permissionCta
-    .click({ timeout: 10_000 })
-    .catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
-  await poll(
-    () =>
-      extensionPage.evaluate(
-        (origin) => chrome.permissions.contains({ origins: [origin] }),
-        originPattern,
-      ),
-    Boolean,
-    "work_origin_permission_granted",
-    15_000,
-  ).catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
+  await extensionPage.evaluate((origin) => {
+    const events = { added: false, removed: false };
+    chrome.permissions.onAdded.addListener((permissions) => {
+      if (permissions.origins?.includes(origin)) events.added = true;
+    });
+    chrome.permissions.onRemoved.addListener((permissions) => {
+      if (permissions.origins?.includes(origin)) events.removed = true;
+    });
+    window.__m64PermissionEvents = events;
+  }, originPattern);
+
+  checkpoint("permission_cta_click");
+  try {
+    await permissionCta.click({ timeout: 10_000 });
+  } catch {
+    throw new BrowserFailure("M64_BROWSER_PERMISSION_CTA_CLICK_FAILED");
+  }
+  checkpoint("permission_cta_clicked");
+  checkpoint("permission_grant_wait");
+  try {
+    await poll(
+      () =>
+        extensionPage.evaluate(
+          (origin) => chrome.permissions.contains({ origins: [origin] }),
+          originPattern,
+        ),
+      Boolean,
+      "work_origin_permission_granted",
+      15_000,
+    );
+  } catch {
+    let diagnostic = {
+      activePayerTab: null,
+      ctaPresent: null,
+      ctaDisabled: null,
+      mainErrorVisible: null,
+      accessContainerHidden: null,
+      permissionPresent: null,
+      permissionAdded: null,
+      permissionRemoved: null,
+      workIdentity: null,
+    };
+    try {
+      const observed = await bounded(
+        () =>
+          extensionPage.evaluate(
+            async ({ origin, expectedTabId }) => {
+              const activePayerTab = await new Promise((resolve) =>
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) =>
+                  resolve(!chrome.runtime.lastError && tabs?.[0]?.id === expectedTabId),
+                ),
+              );
+              const isVisible = (element) => {
+                if (!element || element.hidden) return false;
+                const style = getComputedStyle(element);
+                return (
+                  style.display !== "none" &&
+                  style.visibility === "visible" &&
+                  Number(style.opacity) > 0
+                );
+              };
+              const cta = document.querySelector("#work-portal-access-grant");
+              const mainError = document.querySelector("#main-error");
+              const accessContainer = document.querySelector("#work-portal-access");
+              const permissionEvents = window.__m64PermissionEvents;
+              return {
+                activePayerTab,
+                ctaPresent: cta !== null,
+                ctaDisabled: Boolean(
+                  !cta || cta.disabled || cta.getAttribute("aria-disabled") === "true",
+                ),
+                mainErrorVisible: isVisible(mainError),
+                accessContainerHidden: Boolean(
+                  !accessContainer ||
+                  accessContainer.hidden ||
+                  getComputedStyle(accessContainer).display === "none",
+                ),
+                permissionPresent: await chrome.permissions.contains({ origins: [origin] }),
+                permissionAdded: permissionEvents?.added === true,
+                permissionRemoved: permissionEvents?.removed === true,
+              };
+            },
+            { origin: originPattern, expectedTabId: boundTabId },
+          ),
+        5_000,
+        "M64_BROWSER_PERMISSION_GRANT_DIAGNOSTIC_TIMEOUT",
+      );
+      diagnostic = { ...observed, workIdentity: null };
+    } catch {
+      // Keep an unknown-only diagnostic if the extension context cannot be read safely.
+    }
+    try {
+      const currentWork = await bounded(
+        () => readActiveWork(),
+        5_000,
+        "M64_BROWSER_PERMISSION_GRANT_DIAGNOSTIC_TIMEOUT",
+      );
+      diagnostic.workIdentity = activeWorkIdentity(currentWork) === initialWorkIdentity;
+    } catch {
+      // Preserve the DOM and permission checks if only storage is unavailable.
+    }
+    const fixedBoolean = (value) =>
+      value === true ? "true" : value === false ? "false" : "unknown";
+    safeLog(
+      `M64|BROWSER|PERMISSION_GRANT|active_payer_tab=${fixedBoolean(diagnostic.activePayerTab)}|work_identity=${fixedBoolean(diagnostic.workIdentity)}|cta_present=${fixedBoolean(diagnostic.ctaPresent)}|cta_disabled=${fixedBoolean(diagnostic.ctaDisabled)}|main_error_visible=${fixedBoolean(diagnostic.mainErrorVisible)}|access_container_hidden=${fixedBoolean(diagnostic.accessContainerHidden)}|permission_present=${fixedBoolean(diagnostic.permissionPresent)}|permission_added=${fixedBoolean(diagnostic.permissionAdded)}|permission_removed=${fixedBoolean(diagnostic.permissionRemoved)}`,
+    );
+    throw new BrowserFailure("M64_BROWSER_PERMISSION_GRANT_TIMEOUT");
+  }
   const permissionAfter = await extensionPage.evaluate(
     (origin) => chrome.permissions.contains({ origins: [origin] }),
     originPattern,

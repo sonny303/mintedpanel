@@ -123,6 +123,8 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_ACTIVE_TAB_DRIFT",
   "M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED",
   "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED",
+  "M64_BROWSER_PERMISSION_CTA_CLICK_FAILED",
+  "M64_BROWSER_PERMISSION_GRANT_TIMEOUT",
   "M64_BROWSER_PERMISSION_PREGRANTED",
   "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE",
   "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE",
@@ -244,7 +246,22 @@ const m64DriverCheckpoints = new Set([
   "contract_ui_active_tab_check",
   "contract_ui_form_shape",
   "permission_probe",
+  "permission_cta_click",
+  "permission_cta_clicked",
+  "permission_grant_wait",
 ]);
+const m64PermissionGrantFields = [
+  "active_payer_tab",
+  "work_identity",
+  "cta_present",
+  "cta_disabled",
+  "main_error_visible",
+  "access_container_hidden",
+  "permission_present",
+  "permission_added",
+  "permission_removed",
+];
+const m64PermissionGrantValues = new Set(["false", "true", "unknown"]);
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -435,6 +452,37 @@ function reportM64BrowserContractUiRouteDiagnostic(driver, checkpoint) {
   }
   const routesDiagnostic = safeM64ContractUiRoutesDiagnostic(driver.lines);
   if (routesDiagnostic) emit(`E612|M64|BROWSER|CONTRACT_UI_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
+}
+function safeM64PermissionGrantDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PERMISSION_GRANT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64PermissionGrantFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "PERMISSION_GRANT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64PermissionGrantFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64PermissionGrantFields[index] ||
+      rest.length !== 0 ||
+      !m64PermissionGrantValues.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserPermissionGrantDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "permission_grant_wait") return;
+  const diagnostic = safeM64PermissionGrantDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|PERMISSION_GRANT_DIAGNOSTIC|${diagnostic}`);
 }
 function waitForM64BrowserCompletion(driver, timeoutMs) {
   let timer;
@@ -988,6 +1036,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
       emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=5");
       fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
