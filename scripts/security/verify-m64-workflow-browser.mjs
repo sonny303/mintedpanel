@@ -4034,7 +4034,8 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   await poll(
     async () =>
       (await pinnedStep.isVisible()) &&
-      (await pinnedStep.innerText()) === "This fill is pinned to First form.",
+      (await pinnedStep.innerText()) ===
+        `This fill is pinned to ${enrollmentTaskTitle} · First form.`,
     Boolean,
     "enrollment_exact_step_receipt_visible",
   );
