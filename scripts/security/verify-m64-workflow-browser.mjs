@@ -114,6 +114,7 @@ let profileDir;
 const certHosts = [PANEL_HOST, SUPABASE_HOST, PORTAL_HOST];
 const metrics = new Map();
 let unexpectedRoutes = 0;
+let firstDeniedCategory = null;
 let exactValidationNotFound = false;
 let server;
 let context;
@@ -193,12 +194,36 @@ function count(route, status) {
   metrics.set(key, (metrics.get(key) ?? 0) + 1);
 }
 
-function unexpected(response, route = "proxy.unexpected") {
-  unexpectedRoutes += 1;
-  count(route, response.statusCode);
+function unexpected(response, category = "UNKNOWN_HOST") {
   response.statusCode = 404;
+  unexpectedRoutes += 1;
+  firstDeniedCategory ??= category;
+  count(`denied.${category}`, response.statusCode);
   response.setHeader("content-type", "text/plain; charset=utf-8");
   response.end("local verification route unavailable");
+}
+
+function classifyDenied(host, method, pathname) {
+  if (host === PANEL_HOST) {
+    if (method === "GET" && pathname === "/favicon.ico") return "PANEL_GET_FAVICON";
+    if (method === "OPTIONS" && pathname === "/api/work-context/validate") {
+      return "PANEL_OPTIONS_WORK_VALIDATE";
+    }
+    if (method === "GET" && pathname === "/api/portals") return "PANEL_GET_PORTALS";
+    if (method === "GET" && pathname === "/api/providers") return "PANEL_GET_PROVIDERS";
+    return "PANEL_OTHER";
+  }
+  if (host === SUPABASE_HOST) {
+    if (method === "OPTIONS" && pathname.startsWith("/auth/v1/")) {
+      return "SUPABASE_OPTIONS_AUTH";
+    }
+    return "SUPABASE_OTHER";
+  }
+  if (host === PORTAL_HOST) {
+    if (method === "GET" && pathname === "/favicon.ico") return "PORTAL_GET_FAVICON";
+    return "PORTAL_OTHER";
+  }
+  return "UNKNOWN_HOST";
 }
 
 function routeFor(host, method, pathname) {
@@ -254,7 +279,7 @@ function proxyToLocal(request, response, route, requestUrl, method) {
   const headers = { ...request.headers, host: `${destination.host}:${destination.port}` };
   if (isSupabase) {
     if (headers.apikey !== extensionAnonKey) {
-      unexpected(response, "supabase.apikey_mismatch");
+      unexpected(response, "SUPABASE_APIKEY_MISMATCH");
       return;
     }
     headers.apikey = localAnonKey;
@@ -351,7 +376,7 @@ async function run() {
         const method = String(request.method ?? "GET").toUpperCase();
         const route = routeFor(hostHeader, method, pathname);
         if (!route) {
-          unexpected(response);
+          unexpected(response, classifyDenied(hostHeader, method, pathname));
           return;
         }
         if (route.kind === "static") {
@@ -488,7 +513,7 @@ async function run() {
     ACTIVE_WORK_KEY,
   );
   assert(storedActiveWork == null, "M64_BROWSER_FAILED_HANDOFF_PERSISTED_ACTIVE_WORK");
-  assert(unexpectedRoutes === 0, "M64_BROWSER_PROXY_DENIED_UNEXPECTED_ROUTE");
+  assert(unexpectedRoutes === 0, `M64_BROWSER_DENIED_${firstDeniedCategory ?? "UNKNOWN_HOST"}`);
   safeLog(
     `M64|BROWSER|PASS|playwright=${PLAYWRIGHT_VERSION}|chromium=${context.browser()?.version() ?? "unknown"}|runtime_assets_sha256=${runtimeAssetsSha256}`,
   );
