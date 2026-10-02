@@ -47,14 +47,15 @@ CREATE FUNCTION pg_temp.m64_work_context(
   p_fill_id uuid,
   p_template_id uuid,
   p_portal_id uuid,
-  p_portal_key text
+  p_portal_key text,
+  p_context_version integer
 ) RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
   SELECT jsonb_build_object(
     'launchReceiptId', p_fill_id,
     'orgId', '18000000-0000-4000-a000-000000000064'::uuid,
     'ownerKind', 'case',
     'ownerId', p_case_id,
-    'contextVersion', 1,
+    'contextVersion', p_context_version,
     'sopTemplateId', p_template_id,
     'sopVersion', 1,
     'portalId', p_portal_id,
@@ -71,7 +72,7 @@ CREATE FUNCTION pg_temp.m64_work_context(
 $$;
 GRANT EXECUTE ON FUNCTION pg_temp.m64_mark(text, boolean) TO service_role;
 GRANT EXECUTE ON FUNCTION pg_temp.m64_expect_message(text, text) TO service_role;
-GRANT EXECUTE ON FUNCTION pg_temp.m64_work_context(uuid, uuid, uuid, uuid, uuid, uuid, text)
+GRANT EXECUTE ON FUNCTION pg_temp.m64_work_context(uuid, uuid, uuid, uuid, uuid, uuid, text, integer)
   TO service_role;
 
 INSERT INTO auth.users(id, email) VALUES
@@ -131,12 +132,6 @@ INSERT INTO public.credential_cases(
    '39000000-0000-4000-a000-000000000065',
    '49000000-0000-4000-a000-000000000064',
    '28000000-0000-4000-a000-000000000064', 'NY', 'enrollment', 'in_progress',
-   '39000000-0000-4000-a000-000000000064'),
-  ('49000000-0000-4000-a000-000000000065',
-   '18000000-0000-4000-a000-000000000064',
-   '39000000-0000-4000-a000-000000000065',
-   '49000000-0000-4000-a000-000000000064',
-   '28000000-0000-4000-a000-000000000064', 'OR', 'recredentialing', 'in_progress',
    '39000000-0000-4000-a000-000000000064');
 
 INSERT INTO public.sop_templates(
@@ -184,12 +179,7 @@ INSERT INTO public.tasks(
    '18000000-0000-4000-a000-000000000064', '49000000-0000-4000-a000-000000000064',
    '39000000-0000-4000-a000-000000000065', 'Enrollment sibling',
    '[{"id":"89000000-0000-4000-a000-000000000066","label":"Sibling form","stepType":"online_form","portalKey":"m64_enrollment","order":0,"isCompleted":false}]'::jsonb,
-   'not_started', 2, '69000000-0000-4000-a000-000000000065', 1, 'extension_fill'),
-  ('99000000-0000-4000-a000-000000000066',
-   '18000000-0000-4000-a000-000000000064', '49000000-0000-4000-a000-000000000065',
-   '39000000-0000-4000-a000-000000000065', 'Recredentialing manual review',
-   '[{"id":"89000000-0000-4000-a000-000000000067","label":"Review by hand","stepType":"online_form","portalKey":"m64_recredentialing","order":0,"isCompleted":false}]'::jsonb,
-   'not_started', 1, '69000000-0000-4000-a000-000000000066', 1, 'extension_fill');
+   'not_started', 2, '69000000-0000-4000-a000-000000000065', 1, 'extension_fill');
 
 SET LOCAL minted.expected_mapping_generation = '1';
 INSERT INTO public.portal_field_maps(
@@ -442,7 +432,7 @@ SELECT 'legacy_client_submission', public.record_typed_enrollment_submission(
     '89000000-0000-4000-a000-000000000064',
     '79000000-0000-4000-a000-000000000066',
     '69000000-0000-4000-a000-000000000065',
-    '38000000-0000-4000-a000-000000000065', 'm64_enrollment'
+    '38000000-0000-4000-a000-000000000065', 'm64_enrollment', 1
   ),
   '{"note":null,"payerReferenceId":null,"wipNote":null,"pdfFilename":null}'::jsonb
 );
@@ -483,7 +473,7 @@ SELECT 'exact_enrollment_submission', public.record_typed_enrollment_submission(
     '89000000-0000-4000-a000-000000000064',
     '79000000-0000-4000-a000-000000000067',
     '69000000-0000-4000-a000-000000000065',
-    '38000000-0000-4000-a000-000000000065', 'm64_enrollment'
+    '38000000-0000-4000-a000-000000000065', 'm64_enrollment', 1
   ),
   '{"note":"Synthetic operator confirmed the exact step","payerReferenceId":null,"wipNote":null,"pdfFilename":null}'::jsonb
 );
@@ -509,9 +499,11 @@ SELECT pg_temp.m64_mark('sibling_task_row_is_unchanged',
           AND task_id = '99000000-0000-4000-a000-000000000064'
           AND fill_session_id = '79000000-0000-4000-a000-000000000067'));
 
--- Give Recredentialing a fully valid exact fill receipt before invoking the
--- Enrollment-only RPC, so its rejection proves the owner type boundary rather
--- than receipt lookup failure.
+-- M44 intentionally permits new credential_cases rows only for Enrollment.
+-- Prove the current Enrollment-only submission boundary without fabricating a
+-- Recredentialing case: pair a valid Enrollment receipt with an otherwise
+-- well-formed Recredentialing SOP/portal tuple. The RPC must reject that
+-- mismatched context before attempting a touch or completing the step.
 INSERT INTO public.fill_sessions(
   id, org_id, case_id, case_task_id, case_step_id, step_identity,
   sop_template_id, sop_version, context_version, launch_receipt_id,
@@ -522,58 +514,71 @@ INSERT INTO public.fill_sessions(
 ) VALUES (
   '79000000-0000-4000-a000-000000000068',
   '18000000-0000-4000-a000-000000000064',
-  '49000000-0000-4000-a000-000000000065',
-  '99000000-0000-4000-a000-000000000066',
-  '89000000-0000-4000-a000-000000000067',
-  '49000000-0000-4000-a000-000000000065:99000000-0000-4000-a000-000000000066:69000000-0000-4000-a000-000000000066:1:89000000-0000-4000-a000-000000000067',
-  '69000000-0000-4000-a000-000000000066', 1, 1,
+  '49000000-0000-4000-a000-000000000064',
+  '99000000-0000-4000-a000-000000000064',
+  '89000000-0000-4000-a000-000000000065',
+  '49000000-0000-4000-a000-000000000064:99000000-0000-4000-a000-000000000064:69000000-0000-4000-a000-000000000065:1:89000000-0000-4000-a000-000000000065',
+  '69000000-0000-4000-a000-000000000065', 1,
+  (SELECT case_row.context_version FROM public.credential_cases AS case_row
+    WHERE case_row.id = '49000000-0000-4000-a000-000000000064'),
   '79000000-0000-4000-a000-000000000068', 1,
   'sha256:' || repeat('c', 64),
-  '38000000-0000-4000-a000-000000000066',
-  '39000000-0000-4000-a000-000000000065', 'm64_recredentialing', 'web',
+  '38000000-0000-4000-a000-000000000065',
+  '39000000-0000-4000-a000-000000000065', 'm64_enrollment', 'web',
   0, '[]'::jsonb, false, 2, 0, 0, 0, '[]'::jsonb,
   '39000000-0000-4000-a000-000000000064'
 );
-SELECT pg_temp.m64_mark('recredentialing_fill_receipt_is_valid',
+SELECT pg_temp.m64_mark('enrollment_fill_receipt_is_valid_for_recredentialing_context_negative',
   EXISTS (SELECT 1 FROM public.fill_sessions
            WHERE id = '79000000-0000-4000-a000-000000000068'
-             AND case_id = '49000000-0000-4000-a000-000000000065'
-             AND portal_id = '38000000-0000-4000-a000-000000000066'
+             AND case_id = '49000000-0000-4000-a000-000000000064'
+             AND case_task_id = '99000000-0000-4000-a000-000000000064'
+             AND case_step_id = '89000000-0000-4000-a000-000000000065'
+             AND sop_template_id = '69000000-0000-4000-a000-000000000065'
+             AND context_version = (SELECT case_row.context_version
+                                      FROM public.credential_cases AS case_row
+                                     WHERE case_row.id = '49000000-0000-4000-a000-000000000064')
+             AND portal_id = '38000000-0000-4000-a000-000000000065'
+             AND portal_key = 'm64_enrollment'
              AND event_schema_version = 2));
 
--- Recredentialing remains human/manual at the submission boundary.
+-- Pass Recredentialing context for the valid Enrollment receipt. This exercises
+-- the explicit tuple guard; it does not imply that a Recredentialing case row
+-- is currently a supported credential_cases insert.
 INSERT INTO m64_submission_result(name, result)
-SELECT 'recredentialing_manual_only', public.record_typed_enrollment_submission(
+SELECT 'recredentialing_context_on_enrollment_case', public.record_typed_enrollment_submission(
   '18000000-0000-4000-a000-000000000064',
   '39000000-0000-4000-a000-000000000064',
-  '49000000-0000-4000-a000-000000000065',
+  '49000000-0000-4000-a000-000000000064',
   'aa000000-0000-4000-a000-000000000066',
   '79000000-0000-4000-a000-000000000068',
   pg_temp.m64_work_context(
-    '49000000-0000-4000-a000-000000000065',
-    '99000000-0000-4000-a000-000000000066',
-    '89000000-0000-4000-a000-000000000067',
+    '49000000-0000-4000-a000-000000000064',
+    '99000000-0000-4000-a000-000000000064',
+    '89000000-0000-4000-a000-000000000065',
     '79000000-0000-4000-a000-000000000068',
     '69000000-0000-4000-a000-000000000066',
-    '38000000-0000-4000-a000-000000000066', 'm64_recredentialing'
+    '38000000-0000-4000-a000-000000000066', 'm64_recredentialing',
+    (SELECT case_row.context_version FROM public.credential_cases AS case_row
+      WHERE case_row.id = '49000000-0000-4000-a000-000000000064')
   ),
   '{"note":null,"payerReferenceId":null,"wipNote":null,"pdfFilename":null}'::jsonb
 );
-SELECT pg_temp.m64_mark('recredentialing_submission_stays_manual',
+SELECT pg_temp.m64_mark('recredentialing_context_cannot_submit_enrollment_step',
   (SELECT result->>'kind' = 'rejected' AND result->>'status' = '409'
           AND result->>'message' = 'Enrollment Work context is stale or mismatched'
-     FROM m64_submission_result WHERE name = 'recredentialing_manual_only')
+     FROM m64_submission_result WHERE name = 'recredentialing_context_on_enrollment_case')
   AND EXISTS (SELECT 1 FROM public.fill_sessions
                WHERE id = '79000000-0000-4000-a000-000000000068'
-                 AND case_id = '49000000-0000-4000-a000-000000000065'
-                 AND portal_id = '38000000-0000-4000-a000-000000000066')
+                 AND case_id = '49000000-0000-4000-a000-000000000064'
+                 AND portal_id = '38000000-0000-4000-a000-000000000065')
   AND NOT EXISTS (SELECT 1 FROM public.touches
                    WHERE id = 'aa000000-0000-4000-a000-000000000066')
   AND (SELECT step->>'isCompleted' = 'false'
          FROM public.tasks task_row,
               LATERAL jsonb_array_elements(task_row.sop_content) AS item(step)
-        WHERE task_row.id = '99000000-0000-4000-a000-000000000066'
-          AND item.step->>'id' = '89000000-0000-4000-a000-000000000067'));
+        WHERE task_row.id = '99000000-0000-4000-a000-000000000064'
+          AND item.step->>'id' = '89000000-0000-4000-a000-000000000065'));
 
 RESET ROLE;
 DO $$
