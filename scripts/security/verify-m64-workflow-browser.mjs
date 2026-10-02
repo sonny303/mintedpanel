@@ -145,7 +145,7 @@ async function preflight() {
   const background = readFileSync(backgroundPath, "utf8");
   const backgroundSha256 = createHash("sha256").update(background).digest("hex");
   assert(
-    backgroundSha256 === "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549",
+    backgroundSha256 === "83215a2c10425451e40068682fc88b76abc08cbb2f376770cedb3070adac7c84",
     "M64_BROWSER_BACKGROUND_HASH_MISMATCH",
   );
   const javascriptFiles = listFiles(extensionRoot).filter((file) => file.endsWith(".js"));

@@ -17,6 +17,7 @@ const roots = [
   "scripts/security/e614-http-stream-probes.mjs",
   "scripts/security/e612-profile-http-fixtures.mjs",
   "scripts/security/e612-profile-http-probes.mjs",
+  "scripts/security/e612-m64-fixtures.mjs",
   "scripts/security/e614-enrollment-report-native.mjs",
   "scripts/security/e614-report-fixtures.mjs",
   "scripts/security/verify-e612-client-access.mjs",

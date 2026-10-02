@@ -10,6 +10,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
+import { m64FixtureSql } from "./e612-m64-fixtures.mjs";
 import { profileHttpFixtureSql } from "./e612-profile-http-fixtures.mjs";
 import { e614HttpStreamFixtureSql } from "./e614-http-stream-fixtures.mjs";
 import { buildManifest } from "./e612-build-manifest.mjs";
@@ -25,7 +26,7 @@ const names = Object.fromEntries(
     `${network}-${kind}`,
   ]),
 );
-const M64_EXTENSION_SHA = "8a91b53577ba2c08f5907430b34fdff028f5a2e2";
+const M64_EXTENSION_SHA = "72843b665957249591975a1ce0f3b1bdce79e140";
 const images = {
   db:
     process.env.E612_HTTP_DB_IMAGE ||
@@ -363,7 +364,7 @@ function buildM64Extension() {
     options,
   ).trim();
   if (head !== M64_EXTENSION_SHA) fail("E612_M64_EXTENSION_COMMIT_MISMATCH");
-  if (tree !== "1d980f595083a85c9cede49398340daffe613204") fail("E612_M64_EXTENSION_TREE_MISMATCH");
+  if (tree !== "320a147a1a8fc978c5a172f5347c9c63fb7cc705") fail("E612_M64_EXTENSION_TREE_MISMATCH");
   try {
     execFileSync("npm", ["run", "build"], { ...options, cwd: extensionRoot, env });
   } catch {
@@ -395,7 +396,7 @@ function buildM64Extension() {
     )
     .digest("hex");
   const backgroundSha = createHash("sha256").update(background).digest("hex");
-  if (backgroundSha !== "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549")
+  if (backgroundSha !== "83215a2c10425451e40068682fc88b76abc08cbb2f376770cedb3070adac7c84")
     fail("E612_M64_EXTENSION_BACKGROUND_HASH_MISMATCH");
   emit(`M64|ARTIFACT|PASS|commit=${head}|tree=${tree}|runtime_assets_sha256=${runtimeAssetsSha}`);
   return { root: extensionRoot, runtimeAssetsSha };
@@ -1003,6 +1004,12 @@ ON CONFLICT (id) DO NOTHING;
     const state = String(error?.stderr ?? "").match(/(?:ERROR|SQLSTATE)[: ]+([A-Z0-9]{5})/i)?.[1];
     emit(`E614|HTTP|FIXTURE_SQLSTATE|${state ?? "unknown"}`);
     fail("E614_HTTP_STREAM_SEED_FAILED");
+  }
+  try {
+    dbExec(m64FixtureSql(runId));
+    emit("E612|M64|FIXTURE|PASS|persistent=true|receipts_preseeded=false|touches_preseeded=false");
+  } catch {
+    fail("E612_M64_FIXTURE_SEED_FAILED");
   }
 }
 
