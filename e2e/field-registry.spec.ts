@@ -917,7 +917,9 @@ test("TS-160 — a fixed value is picked from the portal's captured options", as
   const npi = rowFor(page, "NPI Number");
   await expect(pillIn(npi, "Text")).toBeVisible();
   await npi.getByLabel("Value shaping for NPI Number").selectOption("state_abbrev");
-  await expect(npi.getByText("Shapes the value: Kansas → KS")).toBeVisible({ timeout: 15000 });
+  await expect(npi.getByText("Shapes the value: State name → 2-letter code")).toBeVisible({
+    timeout: 15000,
+  });
   const npiRow = (db?.portal_field_maps ?? []).find((m) => m.id === "m-npi");
   expect(npiRow?.transform).toBe("state_abbrev");
   expect(npiRow?.token).toBe("provider.npi");

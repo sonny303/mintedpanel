@@ -3,6 +3,7 @@
 import type { FacilityHours } from "@/lib/facilityHours";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
 import type { CaseStatus } from "@/lib/caseStatus";
+import type { CaseType } from "@/lib/caseTypes";
 import type { ExecutionType } from "@/lib/executionTypes";
 import type { ReleaseScopeRecord } from "@/lib/releaseScope";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
@@ -394,6 +395,10 @@ export interface ProviderGroup {
   credentialingPhone?: string | null;
   credentialingFax?: string | null;
   credentialingEmail?: string | null;
+  /** Contract-specific group contact; never inferred from signer/submitter. */
+  contractingContactName?: string | null;
+  contractingContactTitle?: string | null;
+  contractingContactEmail?: string | null;
   /** Group website — fill token `group.websiteUrl` (baseline column). */
   websiteUrl?: string | null;
 }
@@ -1153,6 +1158,10 @@ export interface CredentialCase {
   // across all orgs), displayed as C-<caseNumber>. Backfilled in created_at
   // order; drawn by a column DEFAULT on every insert path.
   caseNumber: number;
+  /** Nullable for historical rows; new provider work is Enrollment only. */
+  caseType?: CaseType | null;
+  /** Monotonic owner-context version stamped for exact Extension work. */
+  contextVersion?: number;
   orgId: string;
   providerId: string;
   groupId: string | null;
@@ -1301,6 +1310,30 @@ export interface Contract {
   updatedAt: string;
 }
 
+/** Current immutable SOP pin for one group/payer/state Contract Matrix row. */
+export interface ContractSopAssignment {
+  id: string;
+  orgId: string;
+  contractId: string;
+  sopTemplateId: string;
+  sopVersion: number;
+  contextVersion: number;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Immutable SOP version rendered by the Contract Matrix assignment drawer. */
+export interface ContractSopVersion {
+  templateId: string;
+  version: number;
+  name: string;
+  caseType: CaseType | null;
+  taskDefinitions: SOPTaskDefinition[];
+  requiredProfileAttributes: string[];
+}
+
 export interface Touch {
   id: string;
   orgId: string;
@@ -1315,6 +1348,9 @@ export interface Touch {
   notes: string | null;
   coordinatorId: string | null;
   taskId: string | null;
+  /** MINT-58 durable link used only by exact typed Enrollment submissions. */
+  fillSessionId?: string | null;
+  submissionRequestFingerprint?: string | null;
   communicationEventId: string | null;
   source: "manual" | "email" | "extension";
   createdAt: string;
@@ -1477,6 +1513,8 @@ export interface Task {
   title: string;
   description: string | null;
   sopContent: SOPStep[];
+  /** Monotonic task-row version used by full-array SOP-content compare-and-set writes. */
+  sopContentRevision?: number;
   status: TaskStatus;
   sortOrder: number;
   dueDate: string | null;
@@ -1632,6 +1670,8 @@ export interface SOPTemplate {
   // TemplateWizard, TemplatesList).
   orgId: string | null;
   name: string;
+  /** Nullable legacy classification; typed resolution never crosses types. */
+  caseType?: CaseType | null;
   groupId: string | null;
   /**
    * FROZEN MIRROR of `states[0]` (multi-state migration `20260812140000`) —
@@ -1674,6 +1714,8 @@ export interface SOPTemplateVersion {
   templateId: string;
   version: number;
   name: string;
+  /** Immutable nullable snapshot; old versions remain unclassified. */
+  caseType?: CaseType | null;
   taskDefinitions: SOPTaskDefinition[];
   changeNote: string | null;
   publishedAt: string;
@@ -1691,6 +1733,7 @@ export interface SopTemplateDraft {
   id: string;
   orgId: string;
   templateId: string | null;
+  caseType?: CaseType | null;
   payload: unknown;
   updatedBy: string | null;
   updatedByName?: string | null;
@@ -1763,6 +1806,10 @@ export interface PortalFieldMap {
   controlOptions?: { value: string; label: string }[] | null;
   /** Flywheel provenance is additive so pre-migration readers remain compatible. */
   learnedVia?: "manual" | "nano" | null;
+  /** MINT-45 generation metadata; optional while existing fill projections omit it. */
+  mappingGeneration?: number;
+  /** Shared generation an org override was stamped against; NULL means no base generation is recorded (legacy/unreviewed or no parent). */
+  sharedBaseGeneration?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1811,7 +1858,27 @@ export type FillSessionSkippedField = FillSkippedField | SafeFillSkippedMetadata
 export interface FillSession {
   id: string;
   orgId: string;
-  caseId: string;
+  caseId: string | null;
+  /** Matrix-owned fill receipt; NULL for existing case/test rows. */
+  contractId?: string | null;
+  contractSopAssignmentId?: string | null;
+  /** MINT-58 exact case Work step identity, separate from legacy whole-task completion. */
+  caseTaskId?: string | null;
+  caseStepId?: string | null;
+  stepIdentity?: string | null;
+  sopTemplateId?: string | null;
+  sopVersion?: number | null;
+  taskIndex?: number | null;
+  stepIndex?: number | null;
+  facilityId?: string | null;
+  /** Exact portal config identity for a Contract receipt; NULL historically. */
+  portalId?: string | null;
+  contextVersion?: number | null;
+  launchReceiptId?: string | null;
+  mappingGeneration?: number | null;
+  /** Server-derived MINT-60 pin for org Work layered over a shared portal. */
+  sharedMappingGeneration?: number | null;
+  effectiveMappingFingerprint?: string | null;
   providerId: string | null;
   portalKey: string;
   fillMode: FillMode;
@@ -1847,9 +1914,28 @@ export interface Portal {
   // E6.5 dry-run proof stamp: set when a mock dry run fills every mapped
   // field; cleared with verification on a form-URL change.
   provenAt?: string | null;
+  /** MINT-45 fields are optional until existing registry projections select them. */
+  caseType?: CaseType | null;
+  requiresExplicitSelection?: boolean;
+  mappingGeneration?: number;
   urlChangedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Immutable MINT-45 reset receipt; no reset writer is shipped in this slice. */
+export interface FormMappingResetEvent {
+  id: string;
+  portalId: string;
+  ownerScope: "global" | "organization";
+  orgId: string | null;
+  portalKey: string;
+  oldMappingGeneration: number;
+  newMappingGeneration: number;
+  actorId: string;
+  createdAt: string;
+  affectedFieldCount: number;
+  idempotencyKey: string;
 }
 
 export type FieldDictionaryStatus = "suggested" | "confirmed" | "rejected";

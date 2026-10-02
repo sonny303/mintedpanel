@@ -30,6 +30,7 @@ import {
   usePayerFormDownload,
 } from "@/hooks/usePayerForms";
 import { useImportPdfFormFields } from "@/hooks/useMappingReview";
+import { withLegacyPdfMappingGeneration } from "@/lib/pdfFieldImport";
 import { payerFormFileError, payerFormLabelError } from "@/lib/payerForms";
 import { PayerFormFieldPanel } from "./PayerFormFieldPanel";
 import { fmtDate } from "@/lib/format";
@@ -98,7 +99,9 @@ export function PayerFormStepPanel({
     setLabel("");
     if (fileRef.current) fileRef.current.value = "";
     try {
-      const result = await importFields.mutateAsync({ familyId: form.familyId, file: pending });
+      const result = await importFields.mutateAsync(
+        withLegacyPdfMappingGeneration({ familyId: form.familyId, file: pending }),
+      );
       if (result.failed > 0) {
         toast.error(
           `Form uploaded. Imported ${result.imported} of ${result.rows.length} fillable fields; retry the remaining ${result.failed} from Field mapping.`,

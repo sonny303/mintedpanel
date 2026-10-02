@@ -12,6 +12,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { isTerminalPipelineState, type PayerPipelineState } from "@/lib/payerPipeline";
 import { isCaseStatus, isTerminalCaseStatus, mapLegacyCaseStatus } from "@/lib/caseStatus";
 import type { CaseStatus } from "@/lib/caseStatus";
+import type { CaseType } from "@/lib/caseTypes";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
 import type {
   CaseDetail,
@@ -36,6 +37,8 @@ export interface CaseFilters {
 }
 
 export interface CaseInput {
+  /** Provider credential cases are Enrollment-only; omitted legacy callers default to it. */
+  caseType?: CaseType;
   providerId: string;
   payerId: string;
   state: string;
@@ -64,7 +67,7 @@ const CASE_LIST_COLUMNS =
   // payer_group_provider_id added with Slice D (payer-and-cases screen 5): the
   // group board's Awaiting-ID derivation (expected + approved + NULL id, per
   // E6.8 F6.8.3) reads it off the same cached list.
-  "id, case_number, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_group_provider_id, payer_pipeline_state, created_at, updated_at";
+  "id, case_number, provider_id, payer_id, case_type, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_group_provider_id, payer_pipeline_state, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
@@ -1037,6 +1040,10 @@ export async function createCase(
   tasks: CaseTaskPayload[] = [],
 ): Promise<CredentialCase> {
   const orgId = requireActiveOrg();
+  const caseType = input.caseType ?? "enrollment";
+  if (caseType !== "enrollment") {
+    throw new Error("Provider credential cases support Enrollment only.");
+  }
   const p_input: Record<string, unknown> = {
     org_id: orgId,
     provider_id: input.providerId,
@@ -1051,6 +1058,7 @@ export async function createCase(
     submitted_date: input.submittedDate ?? null,
     expected_effective_date: input.expectedEffectiveDate ?? null,
     generation_run_id: input.generationRunId ?? null,
+    case_type: caseType,
   };
   if (input.credentialingStatusId) {
     p_input.credentialing_status_id = input.credentialingStatusId;

@@ -4,12 +4,16 @@ import type { AuthContext, UserContext } from "./guard";
 import type { ProviderProfile, ProviderProfileResult } from "@/services/providerProfile";
 
 vi.mock("@/services/portalFieldMaps", () => ({
-  listPortalFieldMaps: vi.fn(),
-  listSharedFieldMaps: vi.fn(),
+  listEffectivePortalMapResolutions: vi.fn(),
+  listLegacyClientPortalMapResolutions: vi.fn(),
+  resolveEffectivePortalMaps: vi.fn(),
   proposeFieldMap: vi.fn(),
 }));
 vi.mock("@/services/portalFieldMapLearning", () => ({ batchLearnPortalFieldMaps: vi.fn() }));
-vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
+vi.mock("@/services/portals", () => ({
+  listPortalsForApi: vi.fn(),
+  listSharedPortals: vi.fn(),
+}));
 vi.mock("@/services/fillSessions", () => ({
   recordFillEvent: vi.fn(),
   supportsFillEventV2: vi.fn(),
@@ -25,6 +29,8 @@ vi.mock("@/services/providerCases", () => ({
   searchOrgCases: vi.fn(),
 }));
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
+vi.mock("@/services/contractFormContext", () => ({ getContractFormContext: vi.fn() }));
+vi.mock("@/services/workContext", () => ({ validateWorkContext: vi.fn() }));
 vi.mock("@/services/ssnRelease", () => ({ releaseSsnForFill: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
@@ -37,16 +43,19 @@ vi.mock("@/services/extensionViewPrefs", () => ({
 }));
 
 import {
-  listPortalFieldMaps,
-  listSharedFieldMaps,
+  listEffectivePortalMapResolutions,
+  listLegacyClientPortalMapResolutions,
+  resolveEffectivePortalMaps,
   proposeFieldMap,
 } from "@/services/portalFieldMaps";
 import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
-import { listPortalsForApi } from "@/services/portals";
+import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2 } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
+import { getContractFormContext } from "@/services/contractFormContext";
+import { validateWorkContext } from "@/services/workContext";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
@@ -62,12 +71,15 @@ import {
   handleListPortalFieldMaps,
   handleListSharedFieldMaps,
   handleListPortals,
+  handleListSharedPortals,
   handleProposeFieldMap,
   handleBatchLearnPortalFieldMaps,
   handleCompleteTaskStep,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
+  handleContractFormContext,
+  handleValidateWorkContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
   handleNextBestAction,
@@ -76,17 +88,21 @@ import {
   handleSsnRelease,
 } from "./extensionRoutes";
 
-const listMapsMock = vi.mocked(listPortalFieldMaps);
-const listSharedMapsMock = vi.mocked(listSharedFieldMaps);
+const effectiveMapsMock = vi.mocked(listEffectivePortalMapResolutions);
+const legacyMapsMock = vi.mocked(listLegacyClientPortalMapResolutions);
+const exactMapsMock = vi.mocked(resolveEffectivePortalMaps);
 const proposeMapMock = vi.mocked(proposeFieldMap);
 const batchLearnMapMock = vi.mocked(batchLearnPortalFieldMaps);
 const listPortalsMock = vi.mocked(listPortalsForApi);
+const listSharedPortalsMock = vi.mocked(listSharedPortals);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const supportsFillEventV2Mock = vi.mocked(supportsFillEventV2);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
 const searchCasesMock = vi.mocked(searchOrgCases);
 const getCaseContextMock = vi.mocked(getCaseContext);
+const getContractFormContextMock = vi.mocked(getContractFormContext);
+const validateWorkContextMock = vi.mocked(validateWorkContext);
 const releaseSsnMock = vi.mocked(releaseSsnForFill);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
@@ -130,10 +146,37 @@ async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
 }
 
+function emptyPortalResolution(
+  portalId: string,
+  ownerScope: "global" | "organization",
+  ownerOrgId: string | null,
+) {
+  return {
+    portalKey: "availity",
+    portalId,
+    ownerScope,
+    ownerOrgId,
+    caseType: null,
+    formUrl: "https://portal.example/forms/app",
+    payerId: null,
+    requiresExplicitSelection: false,
+    mappingGeneration: 3,
+    effectiveMappingFingerprint: "sha256:empty",
+    maps: [],
+    activeFieldCount: 0,
+    isVerified: false,
+    isReady: false,
+    status: "empty" as const,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   catalogMock.mockResolvedValue(CATALOG);
   supportsFillEventV2Mock.mockResolvedValue(false);
+  effectiveMapsMock.mockResolvedValue([]);
+  legacyMapsMock.mockResolvedValue([]);
+  exactMapsMock.mockReset();
 });
 
 describe("provider profile handler", () => {
@@ -262,6 +305,8 @@ describe("provider profile handler", () => {
           state: "KS",
           facilityId: FACILITY_ID,
           caseId: null,
+          contractId: null,
+          assignmentId: null,
         },
       }),
     );
@@ -349,6 +394,94 @@ describe("provider profile handler", () => {
     );
   });
 
+  it("forwards a Contract owner and expected SOP tuple without accepting case context", async () => {
+    const contractId = "41414141-4242-4535-8686-797979797979";
+    const assignmentId = "51515151-4242-4535-8686-797979797979";
+    const templateId = "61616161-4242-4535-8686-797979797979";
+    getProfileMock.mockResolvedValue(
+      okResult({
+        contract_context: {
+          contract_id: contractId,
+          assignment_id: assignmentId,
+          context_version: 3,
+          sop_template_id: templateId,
+          sop_version: 2,
+        },
+      }),
+    );
+    const expectedStepIdentity = `${contractId}:org-1:${assignmentId}:3:${templateId}:2:0:1`;
+    const c = ctx();
+    const res = await handleProviderProfile(
+      PROVIDER_ID,
+      url(
+        `?contract_id=${contractId}&assignment_id=${assignmentId}&context_version=3&sop_template_id=${templateId}&sop_version=2&stepIdentity=${encodeURIComponent(expectedStepIdentity)}`,
+      ),
+      c,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(getProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      PROVIDER_ID,
+      {
+        state: undefined,
+        facilityId: undefined,
+        groupId: undefined,
+        caseId: undefined,
+        contractContext: {
+          contractId,
+          expected: {
+            assignmentId,
+            contextVersion: 3,
+            sopTemplateId: templateId,
+            sopVersion: 2,
+            stepIdentity: expectedStepIdentity,
+          },
+        },
+      },
+    );
+    expect(c.writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "provider",
+        entityId: PROVIDER_ID,
+        after: expect.objectContaining({ contractId, assignmentId }),
+      }),
+    );
+  });
+
+  it("rejects malformed or contradictory Contract profile selectors before service access", async () => {
+    for (const query of [
+      "?contract_id=not-a-uuid",
+      "?contract_id=41414141-4242-4535-8686-797979797979&context_version=0",
+      "?assignment_id=51515151-4242-4535-8686-797979797979",
+      `?case_id=${CASE_ID}&contract_id=41414141-4242-4535-8686-797979797979`,
+    ]) {
+      const res = await handleProviderProfile(PROVIDER_ID, url(query), ctx());
+      expect(res.status).toBe(422);
+      expect(getProfileMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("maps Contract owner failures without auditing a profile read", async () => {
+    for (const [result, status] of [
+      [{ kind: "contract_not_found" }, 404],
+      [{ kind: "contract_context_not_configured", reason: "No assignment" }, 409],
+      [{ kind: "contract_context_stale", reason: "Assignment changed" }, 409],
+      [{ kind: "contract_context_mismatch", reason: "Wrong group" }, 422],
+    ] as const) {
+      getProfileMock.mockResolvedValue(result as ProviderProfileResult);
+      const c = ctx();
+      const res = await handleProviderProfile(
+        PROVIDER_ID,
+        url("?contract_id=41414141-4242-4535-8686-797979797979"),
+        c,
+      );
+      expect(res.status).toBe(status);
+      expect(c.writeAudit).not.toHaveBeenCalled();
+    }
+  });
+
   it("returns 404 when the facility is outside the org or the provider's set, without auditing", async () => {
     // The isolation-gate contract (assertion 11): a cross-org facilityId
     // resolves nothing — not a read, no data, no audit row.
@@ -424,10 +557,33 @@ describe("me orgs handler", () => {
 });
 
 describe("portal field maps handler", () => {
+  const resolution = (over: Record<string, unknown> = {}) => ({
+    portalKey: "availity",
+    portalId: "portal-1",
+    ownerScope: "organization",
+    ownerOrgId: "org-1",
+    caseType: "enrollment",
+    formUrl: "https://portal.example/forms/app",
+    payerId: "payer-1",
+    requiresExplicitSelection: false,
+    mappingGeneration: 4,
+    effectiveMappingFingerprint: "sha256:abc123",
+    maps: [{ id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" }],
+    activeFieldCount: 1,
+    isVerified: true,
+    isReady: true,
+    status: "ready",
+    ...over,
+  });
+
   it("returns the rows with meta.total", async () => {
-    listMapsMock.mockResolvedValue([
-      { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
-      { id: "m2" },
+    legacyMapsMock.mockResolvedValue([
+      resolution({
+        maps: [
+          { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
+          { id: "m2" },
+        ],
+      }),
     ] as never);
     const res = await handleListPortalFieldMaps(
       new URL("https://x.test/api/portal-field-maps"),
@@ -439,22 +595,69 @@ describe("portal field maps handler", () => {
       { id: "m1", urlPattern: "https://portal.example/forms/app", learnedVia: "nano" },
       { id: "m2" },
     ]);
-    expect(b.meta).toEqual({ total: 2 });
+    expect(b.meta).toEqual({
+      total: 2,
+      portal_mappings: [
+        {
+          portal_key: "availity",
+          portal_id: "portal-1",
+          case_type: "enrollment",
+          requires_explicit_selection: false,
+          mapping_generation: 4,
+          active_field_count: 1,
+          mapping_ready: true,
+          is_verified: true,
+          effective_mapping_fingerprint: "sha256:abc123",
+        },
+      ],
+    });
   });
 
-  it("forwards ?portal_key to the service", async () => {
-    listMapsMock.mockResolvedValue([] as never);
+  it("resolves the exact ?portal_key using the authenticated organization", async () => {
     await handleListPortalFieldMaps(
       new URL("https://x.test/api/portal-field-maps?portal_key=availity"),
       ctx(),
     );
-    expect(listMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
+    expect(legacyMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
       portalKey: "availity",
+      mapType: "all",
+    });
+  });
+
+  it("hides an explicit-only exact key without leaking its capability metadata", async () => {
+    legacyMapsMock.mockResolvedValue([]);
+    const res = await handleListPortalFieldMaps(
+      new URL("https://x.test/api/portal-field-maps?portal_key=availity"),
+      ctx(),
+    );
+    const response = await body(res);
+    expect(response.data).toEqual([]);
+    expect(response.meta).toEqual({ total: 0, registry_empty: true });
+  });
+
+  it("hides mixed global-explicit and org-legacy maps from the old extension endpoint", async () => {
+    // The exact Panel resolver can still return the unflagged org's effective
+    // maps; the legacy capability resolver blocks the entire shared key.
+    effectiveMapsMock.mockResolvedValue([
+      resolution({ requiresExplicitSelection: false, maps: [{ id: "org-map" }] }),
+    ] as never);
+    legacyMapsMock.mockResolvedValue([]);
+
+    const response = await body(
+      await handleListPortalFieldMaps(
+        new URL("https://x.test/api/portal-field-maps?portal_key=availity"),
+        ctx(),
+      ),
+    );
+    expect(response.data).toEqual([]);
+    expect(response.meta).toEqual({ total: 0, registry_empty: true });
+    expect(legacyMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
+      portalKey: "availity",
+      mapType: "all",
     });
   });
 
   it("advertises V2 only when the authenticated database exposes the new columns", async () => {
-    listMapsMock.mockResolvedValue([] as never);
     supportsFillEventV2Mock.mockResolvedValue(true);
     const authenticated = ctx();
 
@@ -468,7 +671,6 @@ describe("portal field maps handler", () => {
   });
 
   it("advertises the same checked capability on the shared field-map route", async () => {
-    listSharedMapsMock.mockResolvedValue([] as never);
     supportsFillEventV2Mock.mockResolvedValue(true);
     const db = {} as UserContext["db"];
     const user: UserContext = {
@@ -485,6 +687,229 @@ describe("portal field maps handler", () => {
 
     expect((await body(res)).meta).toEqual({ total: 0, fill_event_schema_version: 2 });
     expect(supportsFillEventV2Mock).toHaveBeenCalledWith({ db });
+    expect(legacyMapsMock).toHaveBeenCalledWith(
+      { db, orgId: null },
+      {
+        portalKey: undefined,
+        mapType: "all",
+      },
+    );
+  });
+
+  it("keeps shared map reads global-only and hides explicit-only configs", async () => {
+    legacyMapsMock.mockResolvedValue([]);
+    const user: UserContext = {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db: {} as UserContext["db"],
+    };
+    const res = await handleListSharedFieldMaps(
+      new URL("https://x.test/api/shared-field-maps?portal_key=availity"),
+      user,
+    );
+    expect((await body(res)).data).toEqual([]);
+    expect(legacyMapsMock).toHaveBeenCalledWith(
+      { db: user.db, orgId: null },
+      { portalKey: "availity", mapType: "all" },
+    );
+  });
+});
+
+describe("explicit shared Train/Test targets", () => {
+  const sharedPortalsUrl = (query: string) => new URL(`https://x.test/api/shared-portals${query}`);
+  const sharedMapsUrl = (query: string) => new URL(`https://x.test/api/shared-field-maps${query}`);
+
+  const user = (): UserContext => ({
+    userId: "u1",
+    email: "tester@minted.com",
+    userMetadata: null,
+    db: {} as UserContext["db"],
+  });
+
+  it("keeps the legacy shared registry filtered while listing both equal-URL explicit candidates", async () => {
+    const contract = {
+      id: "aetna-contract",
+      portalKey: "aetna_contract",
+      name: "Aetna — New group contract",
+      orgId: null,
+      caseType: "contract",
+      formUrl: "https://payer.example/app",
+      requiresExplicitSelection: true,
+      mappingGeneration: null,
+      isVerified: false,
+      lastVerifiedAt: null,
+      provenAt: null,
+    };
+    const enrollment = {
+      ...contract,
+      id: "aetna-enrollment",
+      portalKey: "aetna_enrollment",
+      name: "Aetna — Add provider to existing contract",
+      caseType: "enrollment",
+    };
+    // Reverse the display order intentionally. Neither same-URL row may be
+    // treated as the identity winner on this candidate-list endpoint.
+    listSharedPortalsMock.mockResolvedValue([enrollment, contract] as never);
+    effectiveMapsMock.mockResolvedValue([
+      {
+        ...emptyPortalResolution(enrollment.id, "global", null),
+        portalKey: enrollment.portalKey,
+        caseType: "enrollment",
+        requiresExplicitSelection: true,
+        mappingGeneration: 2,
+      },
+      {
+        ...emptyPortalResolution(contract.id, "global", null),
+        portalKey: contract.portalKey,
+        caseType: "contract",
+        requiresExplicitSelection: true,
+        mappingGeneration: 4,
+      },
+    ] as never);
+    const caller = user();
+
+    const legacy = await body(await handleListSharedPortals(caller));
+    const candidates = await body(
+      await handleListSharedPortals(caller, sharedPortalsUrl("?selection=explicit")),
+    );
+
+    expect(legacy.data).toEqual([]);
+    const candidateRows = candidates.data as Array<Record<string, unknown>>;
+    expect(candidateRows.map(({ portalKey }) => portalKey)).toEqual([
+      "aetna_enrollment",
+      "aetna_contract",
+    ]);
+    expect(candidateRows).toEqual([
+      expect.objectContaining({
+        portalKey: "aetna_enrollment",
+        caseType: "enrollment",
+        mappingGeneration: 2,
+        requiresExplicitSelection: true,
+      }),
+      expect.objectContaining({
+        portalKey: "aetna_contract",
+        caseType: "contract",
+        mappingGeneration: 4,
+        requiresExplicitSelection: true,
+      }),
+    ]);
+    expect(candidates.meta).toMatchObject({
+      portal_mappings: [
+        { portal_key: "aetna_enrollment", case_type: "enrollment", mapping_generation: 2 },
+        { portal_key: "aetna_contract", case_type: "contract", mapping_generation: 4 },
+      ],
+    });
+  });
+
+  it("looks up the selected shared target by normalized exact key", async () => {
+    listSharedPortalsMock.mockResolvedValue([
+      {
+        id: "aetna-contract",
+        portalKey: "aetna_contract",
+        orgId: null,
+        caseType: "contract",
+        mappingGeneration: 1,
+        requiresExplicitSelection: true,
+      },
+    ] as never);
+    effectiveMapsMock.mockResolvedValue([
+      {
+        ...emptyPortalResolution("aetna-contract", "global", null),
+        portalKey: "aetna_contract",
+        caseType: "contract",
+        mappingGeneration: 1,
+      },
+    ] as never);
+    const caller = user();
+
+    const response = await handleListSharedPortals(
+      caller,
+      sharedPortalsUrl("?selection=explicit&portal_key=%20AETNA_CONTRACT%20"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(listSharedPortalsMock).toHaveBeenCalledWith(caller.db, {
+      portalKey: "aetna_contract",
+    });
+    expect((await body(response)).data).toEqual([
+      expect.objectContaining({ portalKey: "aetna_contract", caseType: "contract" }),
+    ]);
+  });
+
+  it("returns 404 for an unknown explicit target and 422 for a blank target", async () => {
+    listSharedPortalsMock.mockResolvedValue([]);
+    const caller = user();
+
+    const missing = await handleListSharedPortals(
+      caller,
+      sharedPortalsUrl("?selection=explicit&portal_key=missing"),
+    );
+    const blank = await handleListSharedPortals(
+      caller,
+      sharedPortalsUrl("?selection=explicit&portal_key=%20%20"),
+    );
+
+    expect(missing.status).toBe(404);
+    expect(blank.status).toBe(422);
+    expect(listSharedPortalsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads maps only for the explicitly named target and returns current mapping metadata", async () => {
+    const caller = user();
+    const resolution = {
+      ...emptyPortalResolution("aetna-contract", "global", null),
+      portalKey: "aetna_contract",
+      caseType: "contract",
+      requiresExplicitSelection: true,
+      mappingGeneration: 5,
+      maps: [{ id: "contract-map", portalKey: "aetna_contract" }],
+      activeFieldCount: 1,
+      isReady: true,
+      status: "ready" as const,
+    };
+    exactMapsMock.mockResolvedValue(resolution as never);
+
+    const response = await handleListSharedFieldMaps(
+      sharedMapsUrl("?selection=explicit&portal_key=AETNA_CONTRACT"),
+      caller,
+    );
+
+    expect(response.status).toBe(200);
+    expect(exactMapsMock).toHaveBeenCalledWith(
+      { db: caller.db, orgId: null },
+      { portalKey: "aetna_contract", mapType: "all" },
+    );
+    expect(legacyMapsMock).not.toHaveBeenCalled();
+    expect((await body(response)).meta).toMatchObject({
+      portal_mappings: [
+        {
+          portal_key: "aetna_contract",
+          case_type: "contract",
+          mapping_generation: 5,
+          effective_mapping_fingerprint: "sha256:empty",
+        },
+      ],
+    });
+  });
+
+  it("requires an exact key and returns 404 when its explicit map target is missing", async () => {
+    const caller = user();
+    exactMapsMock.mockResolvedValue({
+      ...emptyPortalResolution("missing", "global", null),
+      status: "configuration_missing",
+    } as never);
+
+    const noKey = await handleListSharedFieldMaps(sharedMapsUrl("?selection=explicit"), caller);
+    const missing = await handleListSharedFieldMaps(
+      sharedMapsUrl("?selection=explicit&portal_key=missing"),
+      caller,
+    );
+
+    expect(noKey.status).toBe(422);
+    expect(missing.status).toBe(404);
+    expect(exactMapsMock).toHaveBeenCalledTimes(1);
+    expect(legacyMapsMock).not.toHaveBeenCalled();
   });
 });
 
@@ -639,6 +1064,24 @@ describe("propose field map handler (propose-only)", () => {
     expect(res.status).toBe(200);
   });
 
+  it("returns a body-free 409 when a legacy capture has no generation token", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "rejected",
+      status: 409,
+      message: "This form configuration requires expected_mapping_generation.",
+    });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+
+    expect(res.status).toBe(409);
+    const envelope = await body(res);
+    expect(envelope).toEqual({
+      data: null,
+      error: "This form configuration requires expected_mapping_generation.",
+      meta: null,
+    });
+    expect(JSON.stringify(envelope)).not.toContain("provider.ssnLast4");
+  });
+
   it("scopes the write to the guard-resolved org and passes the audit closure", async () => {
     proposeMapMock.mockResolvedValue({
       kind: "created",
@@ -699,10 +1142,9 @@ describe("task step handler (S4.3 — the one /api task-state write)", () => {
     completeStepMock.mockResolvedValue({ kind: "ok", task: {} as never, allDone: false });
     await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx());
     expect(completeStepMock).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      expect.objectContaining({ orgId: "org-1", userId: "u1", source: "extension" }),
       TASK,
       "s1",
-      expect.any(String),
     );
   });
 
@@ -751,6 +1193,121 @@ describe("portals registry handler", () => {
     const b = await body(res);
     expect(b.data).toEqual([{ id: "p1" }, { id: "p2" }]);
     expect(b.meta).toEqual({ total: 2, registry_empty: false });
+  });
+
+  it("keeps a historical same-URL row and hides its explicit-selection sibling", async () => {
+    const formUrl = "https://portal.example/aetna/enrollment";
+    const legacy = {
+      id: "legacy",
+      portalKey: "aetna_legacy",
+      formUrl,
+      requiresExplicitSelection: false,
+    };
+    const explicit = {
+      id: "explicit",
+      portalKey: "aetna_contract",
+      formUrl,
+      requiresExplicitSelection: true,
+    };
+    listPortalsMock.mockResolvedValue([legacy, explicit] as never);
+
+    const res = await handleListPortals(url(), ctx());
+    const b = await body(res);
+    expect(b.data).toEqual([legacy]);
+    expect(b.meta).toEqual({ total: 1, registry_empty: false });
+  });
+
+  it("does not expose an explicit-selection row through an exact-key lookup", async () => {
+    const explicit = {
+      id: "explicit",
+      portalKey: "aetna_contract",
+      formUrl: "https://portal.example/aetna/enrollment",
+      requiresExplicitSelection: true,
+    };
+    listPortalsMock.mockResolvedValue([explicit] as never);
+
+    const res = await handleListPortals(url("?portal_key=aetna_contract"), ctx());
+    const b = await body(res);
+    expect(b.data).toEqual([]);
+    expect(b.meta).toEqual({ total: 0, registry_empty: true });
+    expect(listPortalsMock).toHaveBeenCalledWith(expect.anything(), {
+      portalKey: "aetna_contract",
+    });
+  });
+
+  it("blocks every same-key row when only one registry sibling needs explicit selection", async () => {
+    listPortalsMock.mockResolvedValue([
+      {
+        id: "global-explicit",
+        portalKey: "same-key",
+        orgId: null,
+        requiresExplicitSelection: true,
+      },
+      {
+        id: "org-legacy",
+        portalKey: "same-key",
+        orgId: "org-1",
+        requiresExplicitSelection: false,
+      },
+    ] as never);
+
+    const b = await body(await handleListPortals(url(), ctx()));
+    expect(b.data).toEqual([]);
+    expect(b.meta).toEqual({ total: 0, registry_empty: true });
+  });
+
+  it("masks persisted verification proof when the current API configuration has no active maps", async () => {
+    const staleProofRow = {
+      id: "portal-1",
+      portalKey: "availity",
+      orgId: "org-1",
+      requiresExplicitSelection: false,
+      isVerified: true,
+      lastVerifiedAt: "2026-08-01T00:00:00Z",
+      provenAt: "2026-08-01T00:00:00Z",
+    };
+    listPortalsMock.mockResolvedValue([staleProofRow] as never);
+    effectiveMapsMock.mockResolvedValue([
+      emptyPortalResolution("portal-1", "organization", "org-1"),
+    ] as never);
+
+    const response = await body(await handleListPortals(url(), ctx()));
+    expect(response.data).toEqual([
+      { ...staleProofRow, isVerified: false, lastVerifiedAt: null, provenAt: null },
+    ]);
+    expect(response.meta).toMatchObject({
+      portal_mappings: [{ active_field_count: 0, mapping_ready: false, is_verified: false }],
+    });
+  });
+
+  it("masks stale proof on the global shared registry response too", async () => {
+    const staleProofRow = {
+      id: "portal-1",
+      portalKey: "availity",
+      orgId: null,
+      requiresExplicitSelection: false,
+      isVerified: true,
+      lastVerifiedAt: "2026-08-01T00:00:00Z",
+      provenAt: "2026-08-01T00:00:00Z",
+    };
+    listSharedPortalsMock.mockResolvedValue([staleProofRow] as never);
+    effectiveMapsMock.mockResolvedValue([
+      emptyPortalResolution("portal-1", "global", null),
+    ] as never);
+    const user: UserContext = {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db: {} as UserContext["db"],
+    };
+
+    const response = await body(await handleListSharedPortals(user));
+    expect(response.data).toEqual([
+      { ...staleProofRow, isVerified: false, lastVerifiedAt: null, provenAt: null },
+    ]);
+    expect(response.meta).toMatchObject({
+      portal_mappings: [{ active_field_count: 0, mapping_ready: false, is_verified: false }],
+    });
   });
 
   it("marks meta.registry_empty when the registry has no rows", async () => {
@@ -1034,6 +1591,9 @@ describe("case context handler", () => {
 
   it("returns 200 with the context projection, no-store + one READ audit, forwarding the org-scoped ctx (billing may read)", async () => {
     const context = {
+      caseType: null,
+      caseStatus: "in_progress" as const,
+      contextVersion: 1,
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
       // E4.3 TE-2: identity header + open tasks with execution types.
@@ -1083,6 +1643,8 @@ describe("case context handler", () => {
           executionType: "extension_fill",
           sortOrder: 1,
           dueDate: null,
+          sopTemplateId: null,
+          sopVersion: null,
           steps: [],
         },
       ],
@@ -1123,6 +1685,195 @@ describe("case context handler", () => {
     const res = await handleCaseContext(CASE_ID, c);
     expect(res.status).toBe(404);
     expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe("Contract form-context handler", () => {
+  const CONTRACT_ID = "41414141-4242-4535-8686-797979797979";
+  const ASSIGNMENT_ID = "51515151-4242-4535-8686-797979797979";
+  const TEMPLATE_ID = "61616161-4242-4535-8686-797979797979";
+  const PROVIDER_ID = "71717171-4242-4535-8686-797979797979";
+  const FACILITY_ID = "81818181-4242-4535-8686-797979797979";
+  const url = (query = "") =>
+    new URL(`https://x.test/api/contracts/${CONTRACT_ID}/form-context${query}`);
+
+  it("returns 404 for an invalid or cross-org Contract without an audit", async () => {
+    const c = ctx();
+    expect((await handleContractFormContext("bad", url(), c)).status).toBe(404);
+    expect(getContractFormContextMock).not.toHaveBeenCalled();
+
+    getContractFormContextMock.mockResolvedValue({ kind: "not_found" });
+    expect((await handleContractFormContext(CONTRACT_ID, url(), c)).status).toBe(404);
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("validates exact selectors and uses stable prefixed outcomes", async () => {
+    const c = ctx();
+    const invalidQuery = new URL(
+      `http://x/api/contracts/${CONTRACT_ID}/form-context?contextVersion=0`,
+    );
+    expect((await handleContractFormContext(CONTRACT_ID, invalidQuery, c)).status).toBe(422);
+    expect(getContractFormContextMock).not.toHaveBeenCalled();
+
+    for (const [result, status, prefix] of [
+      [{ kind: "not_configured", reason: "assignment missing" }, 409, "not_configured:"],
+      [{ kind: "mismatch", reason: "wrong group" }, 422, "mismatch:"],
+      [{ kind: "stale", reason: "version changed" }, 409, "stale:"],
+    ] as const) {
+      getContractFormContextMock.mockResolvedValue(result as never);
+      const response = await handleContractFormContext(CONTRACT_ID, url(), c);
+      expect(response.status).toBe(status);
+      expect((await body(response)).error).toContain(prefix);
+    }
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("returns the org-derived context with no-store and identifier-only audit", async () => {
+    const c = ctx("billing");
+    const auditMock = vi.fn().mockResolvedValue(undefined);
+    c.writeAudit = auditMock;
+    const context = {
+      contract: {
+        id: CONTRACT_ID,
+        groupId: "91919191-4242-4535-8686-797979797979",
+        payerId: "a1a1a1a1-4242-4535-8686-797979797979",
+        state: "KS",
+        groupName: "Selected group",
+      },
+      assignment: {
+        id: ASSIGNMENT_ID,
+        contextVersion: 7,
+        sopTemplateId: TEMPLATE_ID,
+        sopVersion: 4,
+      },
+      sop: { templateId: TEMPLATE_ID, version: 4, name: "Contract SOP", caseType: "contract" },
+      selectedProviderId: PROVIDER_ID,
+      selectedFacilityId: FACILITY_ID,
+      steps: [
+        {
+          stepIdentity: `${CONTRACT_ID}:org-1:${ASSIGNMENT_ID}:7:${TEMPLATE_ID}:4:0:0`,
+          taskIndex: 0,
+          stepIndex: 0,
+          taskTitle: "Contract packet",
+          stepLabel: "Contract form",
+          portalKey: "payer_contract_key",
+          launch: { readiness: { outcome: "ready" } },
+        },
+      ],
+    };
+    getContractFormContextMock.mockResolvedValue({ kind: "ok", context } as never);
+    const requestUrl = new URL(
+      `http://x/api/contracts/${CONTRACT_ID}/form-context?providerId=${PROVIDER_ID}&facilityId=${FACILITY_ID}&assignmentId=${ASSIGNMENT_ID}&contextVersion=7&sopTemplateId=${TEMPLATE_ID}&sopVersion=4&stepIdentity=${encodeURIComponent(context.steps[0].stepIdentity)}`,
+    );
+
+    const response = await handleContractFormContext(CONTRACT_ID, requestUrl, c);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect((await body(response)).data).toEqual(context);
+    expect(getContractFormContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      CONTRACT_ID,
+      { providerId: PROVIDER_ID, facilityId: FACILITY_ID },
+      {
+        assignmentId: ASSIGNMENT_ID,
+        contextVersion: 7,
+        sopTemplateId: TEMPLATE_ID,
+        sopVersion: 4,
+        stepIdentity: context.steps[0].stepIdentity,
+      },
+    );
+    expect(c.writeAudit).toHaveBeenCalledTimes(1);
+    const audited = auditMock.mock.calls[0][0];
+    expect(audited).toMatchObject({
+      actionType: "READ",
+      entityType: "contract",
+      entityId: CONTRACT_ID,
+      after: {
+        assignmentId: ASSIGNMENT_ID,
+        contextVersion: 7,
+        providerId: PROVIDER_ID,
+        facilityId: FACILITY_ID,
+      },
+    });
+    expect(JSON.stringify(audited)).not.toContain("contracting_contact_email");
+  });
+});
+
+describe("POST work-context validation handler", () => {
+  const request = {
+    protocolVersion: 2,
+    launchReceiptId: "b7a90000-0000-4000-a000-0000000000c1",
+    orgId: "20563fd6-8e95-46a0-8e1c-cb3b968b3c3d",
+    ownerKind: "case",
+    ownerId: "b7a90000-0000-4000-a000-0000000000c2",
+    contextVersion: 4,
+    sopTemplateId: "b7a90000-0000-4000-a000-0000000000c3",
+    sopVersion: 3,
+    portalId: "b7a90000-0000-4000-a000-0000000000c4",
+    portalKey: "regional_enrollment",
+    mappingGeneration: 9,
+    effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+    providerId: "49ad83a8-d8b6-419d-8dcc-88c04a54c4da",
+    facilityId: null,
+    stepIdentity: "case:task:sop:3:step",
+    taskId: "b7a90000-0000-4000-a000-0000000000c5",
+    stepId: "b7a90000-0000-4000-a000-0000000000c6",
+  };
+
+  it("rejects a URL hint or extra field before calling the validator", async () => {
+    const c = ctx();
+    const response = await handleValidateWorkContext(
+      { ...request, portalUrl: "https://portal.example/form" },
+      c,
+    );
+    expect(response.status).toBe(422);
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect((await body(response)).meta).toEqual({ work_context_error: "malformed_request" });
+    expect(validateWorkContextMock).not.toHaveBeenCalled();
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("passes only a parsed URL-free tuple to org-derived validation and returns no-store canonical data", async () => {
+    const { protocolVersion: _protocolVersion, ...tuple } = request;
+    const data = {
+      tuple,
+      caseType: "enrollment",
+      formUrl: "https://portal.example/form",
+      requiresExplicitSelection: true,
+      mappingGeneration: 9,
+      sharedMappingGeneration: 2,
+      effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+      effectiveWebMaps: [{ portalKey: "regional_enrollment", mapType: "web", status: "approved" }],
+    };
+    validateWorkContextMock.mockResolvedValue({ kind: "ok", data } as never);
+    const c = ctx();
+
+    const response = await handleValidateWorkContext(request, c);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(response.headers.get("pragma")).toBe("no-cache");
+    const { sharedMappingGeneration: _serverPin, ...wireData } = data;
+    expect((await body(response)).data).toEqual(wireData);
+    expect(validateWorkContextMock).toHaveBeenCalledWith(
+      { db: c.db, orgId: c.orgId },
+      { ...request },
+    );
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not_found", 404],
+    ["mismatch", 422],
+    ["stale", 409],
+    ["not_ready", 409],
+  ] as const)("maps %s to the frozen HTTP status", async (kind, status) => {
+    validateWorkContextMock.mockResolvedValue({ kind, message: "Safe typed failure." } as never);
+    const response = await handleValidateWorkContext(request, ctx());
+    expect(response.status).toBe(status);
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect((await body(response)).meta).toEqual({ work_context_error: kind });
   });
 });
 
@@ -1226,16 +1977,19 @@ describe("case touches handler", () => {
     expect(recordTouchMock).not.toHaveBeenCalled();
   });
 
-  it.each([[404], [409], [422]])("maps a rejected result to a %i failure", async (status) => {
-    recordTouchMock.mockResolvedValue({
-      kind: "rejected",
-      status: status as 404 | 409 | 422,
-      message: "nope",
-    });
-    const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
-    expect(res.status).toBe(status);
-    expect((await body(res)).error).toBe("nope");
-  });
+  it.each([[403], [404], [409], [422]])(
+    "maps a rejected result to a %i failure",
+    async (status) => {
+      recordTouchMock.mockResolvedValue({
+        kind: "rejected",
+        status: status as 403 | 404 | 409 | 422,
+        message: "nope",
+      });
+      const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
+      expect(res.status).toBe(status);
+      expect((await body(res)).error).toBe("nope");
+    },
+  );
 
   it("returns 201 for a created touch, forwarding the writer ctx and case id", async () => {
     recordTouchMock.mockResolvedValue({ kind: "created", touch: { id: "t1" } as never });
@@ -1255,6 +2009,30 @@ describe("case touches handler", () => {
     const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
     expect(res.status).toBe(200);
     expect((await body(res)).data).toEqual({ id: "t1" });
+  });
+
+  it("passes the nested v2 Work receipt through to the service unchanged", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: { id: "t-v2" } as never });
+    const payload = {
+      kind: "portal_submission",
+      idempotency_id: "11111111-2222-4333-8444-555555555555",
+      portal_key: "aetna_enrollment_form",
+      fill_session_id: "99999999-8888-4777-8666-121212121212",
+      work_context: {
+        launchReceiptId: "71717171-4242-4535-8686-797979797979",
+        ownerKind: "case",
+        ownerId: CASE_ID,
+        taskId: "31313131-4242-4535-8686-797979797979",
+        stepId: "a1a1a1a1-1111-4111-8111-111111111111",
+      },
+    };
+    const res = await handleCreateCaseTouch(CASE_ID, payload, ctx());
+    expect(res.status).toBe(201);
+    expect(recordTouchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      CASE_ID,
+      payload,
+    );
   });
 });
 
@@ -1302,5 +2080,25 @@ describe("fill events handler", () => {
     const res = await handleCreateFillEvent({ id: "fs1" }, ctx());
     expect(res.status).toBe(200);
     expect((await body(res)).data).toEqual({ id: "fs1" });
+  });
+
+  it("passes the nested camel-case v2 Work receipt through to the service unchanged", async () => {
+    recordFillEventMock.mockResolvedValue({ kind: "created", session: { id: "fs-v2" } as never });
+    const payload = {
+      id: "11111111-2222-4333-8444-555555555555",
+      workContext: {
+        launchReceiptId: "71717171-4242-4535-8686-797979797979",
+        ownerKind: "case",
+        ownerId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        taskId: "31313131-4242-4535-8686-797979797979",
+        stepId: "a1a1a1a1-1111-4111-8111-111111111111",
+      },
+    };
+    const res = await handleCreateFillEvent(payload, ctx());
+    expect(res.status).toBe(201);
+    expect(recordFillEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      payload,
+    );
   });
 });

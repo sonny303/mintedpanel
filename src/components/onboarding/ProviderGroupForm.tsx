@@ -337,6 +337,61 @@ export function ProviderGroupForm({
           </div>
 
           <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
+            <h3 className="text-[13px] font-semibold text-foreground">Contracting contact</h3>
+            <p className="text-[12px] text-muted-foreground">
+              Used for contract forms. Submitter and signer details are kept separate.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="group-contracting-contact-name" className="text-[12px]">
+                  Contact name
+                </Label>
+                <Input
+                  id="group-contracting-contact-name"
+                  value={value.contractingContact.name}
+                  onChange={(e) =>
+                    set({
+                      contractingContact: { ...value.contractingContact, name: e.target.value },
+                    })
+                  }
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="group-contracting-contact-title" className="text-[12px]">
+                  Title
+                </Label>
+                <Input
+                  id="group-contracting-contact-title"
+                  value={value.contractingContact.title}
+                  onChange={(e) =>
+                    set({
+                      contractingContact: { ...value.contractingContact, title: e.target.value },
+                    })
+                  }
+                  className="h-9"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="group-contracting-contact-email" className="text-[12px]">
+                Email
+              </Label>
+              <Input
+                id="group-contracting-contact-email"
+                type="email"
+                value={value.contractingContact.email}
+                onChange={(e) =>
+                  set({
+                    contractingContact: { ...value.contractingContact, email: e.target.value },
+                  })
+                }
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
             <h3 className="text-[13px] font-semibold text-foreground">Billing address & contact</h3>
             <BlockFields
               idPrefix="billing"

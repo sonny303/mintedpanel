@@ -52,14 +52,15 @@ export interface ApproveArgs {
   id: string;
   token: string;
   fieldLabel: string | null;
+  expectedMappingGeneration?: number | null;
 }
 
 // Approve one field to a token and teach the dictionary. Dictionary learning is
 // best-effort: a failure there never fails the approval.
 export function useApproveField() {
   return useMutation({
-    mutationFn: async ({ id, token, fieldLabel }: ApproveArgs) => {
-      const row = await approveFieldMap(id, token, fieldLabel);
+    mutationFn: async ({ id, token, fieldLabel, expectedMappingGeneration }: ApproveArgs) => {
+      const row = await approveFieldMap(id, token, expectedMappingGeneration, fieldLabel);
       let learned = false;
       try {
         const r = await upsertDictionaryEntry(fieldLabel, normalizeTokenKey(token));
@@ -74,8 +75,15 @@ export function useApproveField() {
 
 export function useManualField() {
   return useMutation({
-    mutationFn: ({ id, fieldLabel }: { id: string; fieldLabel: string | null }) =>
-      markFieldMapManual(id, fieldLabel),
+    mutationFn: ({
+      id,
+      fieldLabel,
+      expectedMappingGeneration,
+    }: {
+      id: string;
+      fieldLabel: string | null;
+      expectedMappingGeneration?: number | null;
+    }) => markFieldMapManual(id, expectedMappingGeneration, fieldLabel),
   });
 }
 
@@ -85,18 +93,27 @@ export function useSetFieldMapHardcoded() {
       id,
       value,
       fieldLabel,
+      expectedMappingGeneration,
     }: {
       id: string;
       value: string;
       fieldLabel: string | null;
-    }) => setFieldMapHardcoded(id, value, fieldLabel),
+      expectedMappingGeneration?: number | null;
+    }) => setFieldMapHardcoded(id, value, expectedMappingGeneration, fieldLabel),
   });
 }
 
 export function useSetFieldMapTransform() {
   return useMutation({
-    mutationFn: ({ id, transform }: { id: string; transform: string | null }) =>
-      setFieldMapTransform(id, transform),
+    mutationFn: ({
+      id,
+      transform,
+      expectedMappingGeneration,
+    }: {
+      id: string;
+      transform: string | null;
+      expectedMappingGeneration?: number | null;
+    }) => setFieldMapTransform(id, transform, expectedMappingGeneration),
   });
 }
 
@@ -105,10 +122,12 @@ export function useReproposeField() {
     mutationFn: ({
       id,
       previous,
+      expectedMappingGeneration,
     }: {
       id: string;
       previous: { token: string | null; source: PortalFieldMap["source"] };
-    }) => reproposeFieldMap(id, previous),
+      expectedMappingGeneration?: number | null;
+    }) => reproposeFieldMap(id, previous, expectedMappingGeneration),
   });
 }
 
@@ -118,9 +137,15 @@ export function useReproposeField() {
 // that way; the fill engine and drift repair both skip that prefix.
 export function useAddSharedRegistryField() {
   return useMutation({
-    mutationFn: (input: { portalKey: string; label: string; pageStep?: string | null }) =>
+    mutationFn: (input: {
+      portalKey: string;
+      label: string;
+      pageStep?: string | null;
+      expectedMappingGeneration?: number | null;
+    }) =>
       proposeSharedFieldMap({
         portalKey: input.portalKey,
+        expectedMappingGeneration: input.expectedMappingGeneration,
         selector: newManualSelector(),
         fieldLabel: input.label,
         pageStep: input.pageStep ?? null,
@@ -143,13 +168,22 @@ export function useImportPdfFormFields() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: async (input: { familyId: string } & ({ signedUrl: string } | { file: File })) => {
+    mutationFn: async (
+      input: {
+        familyId: string;
+        expectedMappingGeneration?: number | null;
+      } & ({ signedUrl: string } | { file: File }),
+    ) => {
       const bytes =
         "file" in input ? await input.file.arrayBuffer() : await fetchPdfBytes(input.signedUrl);
       const descriptors = await readPdfAcroFields(bytes);
       const summary = summarizePdfImport(input.familyId, descriptors);
       const outcome = await proposePdfImportRows(summary.rows, (row) =>
-        proposeSharedFieldMap({ ...row, mapType: "pdf" }),
+        proposeSharedFieldMap({
+          ...row,
+          mapType: "pdf",
+          expectedMappingGeneration: input.expectedMappingGeneration,
+        }),
       );
       return { ...summary, ...outcome };
     },
@@ -172,8 +206,16 @@ export function useUpdateSharedFieldRegistry() {
 // best-effort and never fails the batch.
 export function useBatchApprove() {
   return useMutation({
-    mutationFn: async ({ items, portalKey }: { items: BatchApproveItem[]; portalKey: string }) => {
-      const count = await batchApproveFieldMaps(items, portalKey);
+    mutationFn: async ({
+      items,
+      portalKey,
+      expectedMappingGeneration,
+    }: {
+      items: BatchApproveItem[];
+      portalKey: string;
+      expectedMappingGeneration?: number | null;
+    }) => {
+      const count = await batchApproveFieldMaps(items, portalKey, expectedMappingGeneration);
       let learned = 0;
       for (const item of items) {
         try {
@@ -190,6 +232,12 @@ export function useBatchApprove() {
 
 export function useFinishTraining() {
   return useMutation({
-    mutationFn: (portalId: string) => markPortalVerified(portalId),
+    mutationFn: ({
+      portalId,
+      expectedMappingGeneration,
+    }: {
+      portalId: string;
+      expectedMappingGeneration?: number | null;
+    }) => markPortalVerified(portalId, expectedMappingGeneration),
   });
 }

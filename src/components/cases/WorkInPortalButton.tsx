@@ -24,6 +24,12 @@ function receiptMessage(receipt: ReceiptStatus): string | null {
   if (receipt.status === "received") {
     return "Extension received the case. Sign-in and access are checked there.";
   }
+  if (receipt.status === "ready") {
+    return "Extension opened a validated work tab for this step.";
+  }
+  if (receipt.status === "update_required") {
+    return "Update the extension before starting this exact work step.";
+  }
   if (receipt.status === "rejected") {
     return "Extension rejected the handoff. Open it and use case search.";
   }
@@ -33,16 +39,16 @@ function receiptMessage(receipt: ReceiptStatus): string | null {
   if (receipt.status === "failed") {
     return "Extension handoff failed. Open it and use case search.";
   }
-  if (receipt.reason === "missing_configuration") {
+  if (receipt.status === "unavailable" && receipt.reason === "missing_configuration") {
     return "Extension handoff is not configured for this web environment.";
   }
-  if (receipt.reason === "invalid_configuration") {
+  if (receipt.status === "unavailable" && receipt.reason === "invalid_configuration") {
     return "This web environment has an invalid extension handoff configuration.";
   }
-  if (receipt.reason === "messaging_unavailable") {
+  if (receipt.status === "unavailable" && receipt.reason === "messaging_unavailable") {
     return "Extension messaging is unavailable in this browser. Open it and use case search.";
   }
-  if (receipt.reason === "invalid_context") {
+  if (receipt.status === "invalid" && receipt.reason === "invalid_context") {
     return "The case context is invalid, so it was not sent to the extension.";
   }
   return "Extension returned an unreadable receipt. Open it and use case search.";

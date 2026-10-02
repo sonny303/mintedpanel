@@ -9,18 +9,41 @@
 // SAME publish RPC (optimistic concurrency included) — publishing never edits
 // an old version, and cases in flight keep the version they started on.
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { TemplatePreviewTasks } from "@/components/templates/TemplatePreviewTasks";
 import { usePublishSop, useTemplateVersion, useTemplateVersions } from "@/hooks/useAdmin";
 import { fmtDateTime } from "@/lib/format";
+import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
 import { SopVersionConflictError } from "@/services/templates";
 import type { Portal, SOPTemplateVersion } from "@/types";
+
+function caseTypeLabel(caseType: CaseType | null | undefined): string {
+  switch (caseType) {
+    case "contract":
+      return "Contract";
+    case "enrollment":
+      return "Enrollment";
+    case "recredentialing":
+      return "Recredentialing (authoring only)";
+    default:
+      return "Legacy / unclassified";
+  }
+}
 
 export function TemplateVersionHistoryDialog({
   templateId,
@@ -45,11 +68,24 @@ export function TemplateVersionHistoryDialog({
 }) {
   const [viewing, setViewing] = useState<number | null>(initialViewing ?? null);
   const [restoring, setRestoring] = useState<number | null>(null);
+  const [restoreCaseType, setRestoreCaseType] = useState<CaseType | null>(null);
   const versionsQ = useTemplateVersions(templateId);
   const versionQ = useTemplateVersion(templateId, viewing);
   const publishMut = usePublishSop(templateId);
+  const snapshotHasUnkeyedOnlineForm = Boolean(
+    versionQ.data?.taskDefinitions?.some((task) =>
+      task.steps?.some(
+        (step) => (step.stepType ?? "online_form") === "online_form" && !step.portalKey?.trim(),
+      ),
+    ),
+  );
 
   async function restore(v: SOPTemplateVersion) {
+    if (!v.caseType) {
+      setRestoreCaseType(null);
+      setViewing(v.version);
+      return;
+    }
     setRestoring(v.version);
     try {
       const result = await publishMut.mutateAsync({
@@ -58,6 +94,7 @@ export function TemplateVersionHistoryDialog({
         taskDefinitions: v.taskDefinitions ?? [],
         changeNote: `Restored from v${v.version}`,
         requiredProfileAttributes: v.requiredProfileAttributes ?? [],
+        caseType: v.caseType,
       });
       toast.success(`Restored v${v.version} as v${result.version}`);
       onClose();
@@ -88,16 +125,17 @@ export function TemplateVersionHistoryDialog({
                     <th className="text-left px-3 h-10 font-medium">Version</th>
                     <th className="text-left px-3 h-10 font-medium">Published</th>
                     <th className="text-left px-3 h-10 font-medium">By</th>
+                    <th className="text-left px-3 h-10 font-medium">Case type</th>
                     <th className="text-left px-3 h-10 font-medium">Change note</th>
                     {canRestore ? <th className="px-3 h-10" /> : null}
                   </tr>
                 </thead>
                 <tbody>
                   {versionsQ.isLoading ? (
-                    <TableSkeletonRows rows={3} cols={canRestore ? 5 : 4} />
+                    <TableSkeletonRows rows={3} cols={canRestore ? 6 : 5} />
                   ) : (versionsQ.data ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={canRestore ? 5 : 4} className="p-6">
+                      <td colSpan={canRestore ? 6 : 5} className="p-6">
                         <EmptyState message="No versions yet" />
                       </td>
                     </tr>
@@ -122,6 +160,9 @@ export function TemplateVersionHistoryDialog({
                         <td className="px-3 h-10 text-sm text-muted-foreground">
                           {v.publishedByName ?? "—"}
                         </td>
+                        <td className="px-3 h-10 text-sm text-muted-foreground">
+                          {caseTypeLabel(v.caseType)}
+                        </td>
                         <td className="px-3 h-10 text-sm text-muted-foreground max-w-[280px] truncate">
                           {v.changeNote ?? "—"}
                         </td>
@@ -139,7 +180,9 @@ export function TemplateVersionHistoryDialog({
                               >
                                 {restoring === v.version
                                   ? "Restoring…"
-                                  : `Restore as v${currentVersion + 1}`}
+                                  : v.caseType
+                                    ? `Restore as v${currentVersion + 1}`
+                                    : "Classify & restore"}
                               </Button>
                             ) : null}
                           </td>
@@ -175,6 +218,9 @@ export function TemplateVersionHistoryDialog({
               <div className="space-y-3">
                 <div className="text-sm">
                   <span className="font-medium">{versionQ.data.name}</span>
+                  <span className="ml-2 text-muted-foreground">
+                    · {caseTypeLabel(versionQ.data.caseType)}
+                  </span>
                   <span className="text-muted-foreground">
                     {" "}
                     · published {fmtDateTime(versionQ.data.publishedAt)}
@@ -184,15 +230,79 @@ export function TemplateVersionHistoryDialog({
                     <p className="text-muted-foreground mt-1">{versionQ.data.changeNote}</p>
                   ) : null}
                 </div>
-                {canRestore && viewing !== currentVersion ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={restoring !== null}
-                    onClick={() => versionQ.data && void restore(versionQ.data)}
-                  >
-                    {restoring === viewing ? "Restoring…" : `Restore as v${currentVersion + 1}`}
-                  </Button>
+                {canRestore && viewing !== currentVersion && !versionQ.data.caseType ? (
+                  <div className="space-y-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
+                    <p className="text-[12px] text-[#92400E]">
+                      This legacy snapshot has no case type. Choose its purpose to restore it as a
+                      new typed version.
+                    </p>
+                    {snapshotHasUnkeyedOnlineForm ? (
+                      <p className="text-[12px] text-[#92400E]">
+                        Its online-form steps also need compatible form keys for the selected payer
+                        and type. Repair missing keys in the SOP wizard before restoring.
+                        <Button asChild variant="link" size="sm" className="h-auto px-1 py-0">
+                          <Link to="/admin/templates/$id" params={{ id: templateId }}>
+                            Open SOP wizard
+                          </Link>
+                        </Button>
+                      </p>
+                    ) : null}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="legacy-restore-case-type" className="text-xs">
+                        Case type
+                      </Label>
+                      <Select
+                        value={restoreCaseType ?? "__unset__"}
+                        onValueChange={(value) =>
+                          setRestoreCaseType(value === "__unset__" ? null : (value as CaseType))
+                        }
+                      >
+                        <SelectTrigger id="legacy-restore-case-type" className="bg-white">
+                          <SelectValue placeholder="Choose a case type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__unset__">Choose a case type</SelectItem>
+                          {CASE_TYPES.map((caseType) => (
+                            <SelectItem key={caseType} value={caseType}>
+                              {caseTypeLabel(caseType)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!restoreCaseType || restoring !== null}
+                      onClick={() =>
+                        versionQ.data && restore({ ...versionQ.data, caseType: restoreCaseType })
+                      }
+                    >
+                      {restoring === viewing ? "Restoring…" : `Restore as v${currentVersion + 1}`}
+                    </Button>
+                  </div>
+                ) : canRestore && viewing !== currentVersion ? (
+                  <div className="space-y-2">
+                    {snapshotHasUnkeyedOnlineForm ? (
+                      <p className="text-[12px] text-amber-900">
+                        Each online-form step needs a compatible form key for this SOP’s payer and
+                        case type. Repair missing keys in the SOP wizard before restoring.
+                        <Button asChild variant="link" size="sm" className="h-auto px-1 py-0">
+                          <Link to="/admin/templates/$id" params={{ id: templateId }}>
+                            Open SOP wizard
+                          </Link>
+                        </Button>
+                      </p>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={restoring !== null}
+                      onClick={() => versionQ.data && void restore(versionQ.data)}
+                    >
+                      {restoring === viewing ? "Restoring…" : `Restore as v${currentVersion + 1}`}
+                    </Button>
+                  </div>
                 ) : null}
                 <TemplatePreviewTasks
                   tasks={versionQ.data.taskDefinitions ?? []}

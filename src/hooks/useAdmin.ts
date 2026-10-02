@@ -27,6 +27,7 @@ import {
   type TemplateInput,
 } from "@/services/templates";
 import type { SOPTaskDefinition } from "@/types";
+import type { CaseType } from "@/lib/caseTypes";
 import {
   createStatusConfig,
   getStatusConfig,
@@ -206,6 +207,7 @@ export function usePublishSop(id: string) {
       taskDefinitions: SOPTaskDefinition[];
       changeNote?: string | null;
       requiredProfileAttributes?: string[];
+      caseType?: CaseType | null;
     }) =>
       publishTemplate(
         id,
@@ -214,6 +216,7 @@ export function usePublishSop(id: string) {
         input.taskDefinitions,
         input.changeNote,
         input.requiredProfileAttributes,
+        input.caseType,
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });

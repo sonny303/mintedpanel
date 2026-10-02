@@ -210,12 +210,23 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/checkout@v4
+        with:
+          repository: sonny303/minted-extension
+          ref: 8a91b53577ba2c08f5907430b34fdff028f5a2e2
+          path: .m64-extension
+          persist-credentials: false
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
+        run: npm ci
+
+      - name: Install exact M64 Extension dependencies
+        working-directory: .m64-extension
         run: npm ci
 
       - name: Pull pinned disposable verification images
@@ -228,6 +239,7 @@ jobs:
           docker pull postgrest/postgrest@sha256:1791139f50b4939d738c5b0009329aa9e9d4be0a960b6b580c4944b16e157b95
           docker pull supabase/storage-api@sha256:f1546fac6d1c7e345428ac904bfaa7be7cecd50a1f549fe1cf38c628a7b15c85
           docker pull node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e
+          docker pull mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
 
       - name: Verify linux amd64 image resolution
         shell: bash
@@ -239,7 +251,8 @@ jobs:
             supabase/gotrue@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f \
             postgrest/postgrest@sha256:1791139f50b4939d738c5b0009329aa9e9d4be0a960b6b580c4944b16e157b95 \
             supabase/storage-api@sha256:f1546fac6d1c7e345428ac904bfaa7be7cecd50a1f549fe1cf38c628a7b15c85 \
-            node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e; do
+            node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e \
+            mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48; do
             platform="$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')"
             test "$platform" = linux/amd64
             echo "E612|CI|IMAGE|$image|$platform"
@@ -260,6 +273,7 @@ jobs:
           E612_POSTGRES_IMAGE: postgres@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
           E612_HTTP_AUTH_IMAGE: supabase/gotrue@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f
           E612_HTTP_REST_IMAGE: postgrest/postgrest@sha256:1791139f50b4939d738c5b0009329aa9e9d4be0a960b6b580c4944b16e157b95
+          E612_M64_EXTENSION_ROOT: ${{ github.workspace }}/.m64-extension
         run: |
           node scripts/security/verify-e612-client-access.mjs
           node scripts/security/verify-e612-client-access-http.mjs
@@ -346,6 +360,19 @@ jobs:
           CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
             SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
           $$;
+          CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
+            SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''), current_user::text);
+          $$;
+          -- Supabase's auth.jwt() is part of the hosted auth schema; this
+          -- disposable PostgreSQL harness supplies the equivalent claim reader
+          -- used by SECURITY DEFINER RPC authorization checks.
+          CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+            SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
+          $$;
+          -- Supabase grants authenticated access to its auth helpers. Mirror
+          -- that prerequisite in this plain-Postgres harness so invoker RPCs
+          -- can call auth.uid() under SET ROLE authenticated.
+          GRANT USAGE ON SCHEMA auth TO authenticated;
           CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
           CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
           SQL
@@ -362,6 +389,48 @@ jobs:
 
       - name: Verify portal field-map flywheel RPC on disposable PostgreSQL
         run: node scripts/security/verify-portal-field-map-learning.mjs
+
+      - name: Verify MINT-45 case-type and mapping metadata boundaries on disposable PostgreSQL
+        run: node scripts/security/verify-case-type-mapping-metadata.mjs
+
+      - name: Verify MINT-48 independent portal configurations on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint48-independent-portal-configurations.sql
+
+      - name: Verify MINT-49 Contract SOP assignments and receipts on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint49-contract-sop-assignment.sql
+
+      - name: Verify MINT-19 atomic SOP step completion on disposable PostgreSQL
+        run: node scripts/security/verify-mint19-atomic-sop.mjs
+
+      - name: Verify MINT-51 credential case context version on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint51-case-context-version.sql
+
+      - name: Verify MINT-57 mapping generation write guards on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint57-mapping-generation-write-guards.sql
+
+      - name: Verify MINT-57 reset/write serialization on disposable PostgreSQL
+        run: node scripts/security/verify-mint57-mapping-generation-race.mjs
+
+      - name: Verify MINT-58 exact fill and human submission transaction boundaries
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint58-exact-fill-submission.sql
+
+      - name: Verify MINT-58 concurrent independent Work step submissions
+        run: node scripts/security/verify-mint58-exact-fill-submission-race.mjs
+
+      - name: Verify MINT-60 atomic mapping reset on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint60-atomic-mapping-reset.sql
+
+      - name: Verify MINT-60 reset/capture serialization on disposable PostgreSQL
+        run: node scripts/security/verify-mint60-atomic-mapping-reset-race.mjs
+
+      - name: Record checked-out Panel revision for MINT-64 evidence
+        run: git rev-parse HEAD
+
+      - name: Verify MINT-64 integrated typed SOP owner isolation on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint64-panel-integration.sql
+
+      - name: Verify MINT-66 rollback retention on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint66-client-rollback.sql
 
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).

@@ -14,11 +14,10 @@
 //   facilities                    the ?facilityId match (validated against the
 //                                 provider's org-scoped facility set — outside
 //                                 it is facility_not_found, a 404), else the
-//                                 provider's sole facility, else unresolved
-//                                 with needsFacility flagged: with several
-//                                 facilities the server never guesses (the old
-//                                 primary-assignment heuristic is deliberately
-//                                 gone — the client asks the user instead)
+//                                 provider's sole eligible facility, else
+//                                 unresolved with needsFacility flagged: with
+//                                 several facilities the server never guesses
+//                                 (the old primary-assignment heuristic is gone)
 //   provider_facility_assignments the assignment row of the selected facility
 //                                 (the assignment IS the provider↔facility
 //                                 link, so it follows the same selection)
@@ -43,6 +42,12 @@ import { composeFacilityAddressTokens, composeProviderNameTokens } from "@/lib/e
 import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
 import { pickLicenseForState } from "@/lib/licensePick";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
+import {
+  loadContractOwnerContext,
+  validateContractOwnerSelection,
+  type ExpectedContractSopContext,
+  type ContractOwnerContext,
+} from "@/services/contractFormContext";
 import type { Provider } from "@/types";
 
 export interface ProviderProfileServiceCtx {
@@ -58,6 +63,8 @@ export interface ProfileToken {
 export interface UnresolvedToken {
   token: string;
   reason: string;
+  /** Panel record route that owns a missing value; never a guessed contact. */
+  recordPath?: string;
 }
 
 export interface ProviderProfileFacility {
@@ -80,6 +87,14 @@ export interface ProviderProfile {
   // Exact case binding for active case fills; null is the legacy provider-only
   // profile shape. Consumers must require an exact echo for case requests.
   case_id: string | null;
+  /** Present only for a Contract-owned profile request. */
+  contract_context?: {
+    contract_id: string;
+    assignment_id: string;
+    context_version: number;
+    sop_template_id: string;
+    sop_version: number;
+  };
 }
 
 export interface ProviderProfileOptions {
@@ -95,6 +110,11 @@ export interface ProviderProfileOptions {
   facilityId?: string;
   // Explicit group selection for group.* / groupInsurance.* tokens.
   groupId?: string;
+  /** Exact Contract owner and optional optimistic context selectors. */
+  contractContext?: {
+    contractId: string;
+    expected?: ExpectedContractSopContext;
+  };
 }
 
 // getProviderProfile result: not-found kinds map to a 404 at the route,
@@ -103,7 +123,11 @@ export type ProviderProfileResult =
   | { kind: "ok"; profile: ProviderProfile; needsFacility: boolean }
   | { kind: "provider_not_found" }
   | { kind: "facility_not_found" }
-  | { kind: "group_not_found" };
+  | { kind: "group_not_found" }
+  | { kind: "contract_not_found" }
+  | { kind: "contract_context_not_configured"; reason: string }
+  | { kind: "contract_context_mismatch"; reason: string }
+  | { kind: "contract_context_stale"; reason: string };
 
 // Explicit projections: every column the token catalog references for the
 // table, plus the keys resolution needs. Never select('*') here.
@@ -141,6 +165,11 @@ const PROFILE_POLICY_COLUMNS =
   "id, insurance_type, coverage_level, insurer_name, policy_number, policy_start_date, policy_end_date, notes";
 
 const CASE_SCOPED_TABLES = new Set(["payers", "msos", "contracts"]);
+const CONTRACT_GROUP_CONTACT_TOKENS = new Set([
+  "group.contractingContactName",
+  "group.contractingContactTitle",
+  "group.contractingContactEmail",
+]);
 const COMPUTED_PROFILE_TOKENS = new Set([
   "provider.fullName",
   "provider.fullNameWithCredentials",
@@ -170,6 +199,7 @@ interface CatalogEntry {
 
 interface ProfileCaseContext {
   id: string;
+  case_type: string | null;
   provider_id: string;
   group_id: string | null;
   payer_id: string | null;
@@ -223,6 +253,14 @@ function pickLicense(licenses: Row[], state: string | undefined): SourcePick {
 
 function sameId(left: string | null | undefined, right: string): boolean {
   return typeof left === "string" && left.toLowerCase() === right.toLowerCase();
+}
+
+function isCurrentFacilityAssignment(startDate: unknown, today: string): boolean {
+  return startDate == null || (typeof startDate === "string" && startDate <= today);
+}
+
+function sameState(left: unknown, right: string): boolean {
+  return typeof left === "string" && left.trim().toUpperCase() === right.trim().toUpperCase();
 }
 
 // Which facility (if any) the facility.*/assignment.* tokens resolve from.
@@ -312,6 +350,12 @@ export async function getProviderProfile(
   // Do not turn explicitly empty case intent into a provider-only response if
   // another internal caller bypasses the HTTP query parser.
   if (options.caseId === "") return { kind: "provider_not_found" };
+  if (options.caseId && options.contractContext) {
+    return {
+      kind: "contract_context_mismatch",
+      reason: "Choose either a Case or Contract owner context, not both.",
+    };
+  }
 
   // Org membership check first: a provider in another org is a 404, the same
   // contract the isolation gate proves for the provider routes.
@@ -325,10 +369,13 @@ export async function getProviderProfile(
   if (!providerRow) return { kind: "provider_not_found" };
   const provider = providerRow as unknown as Row;
   let caseContext: ProfileCaseContext | null = null;
+  let contractOwner: ContractOwnerContext | null = null;
   if (options.caseId) {
     const { data: caseRow, error: caseErr } = await db
       .from("credential_cases")
-      .select("id, provider_id, group_id, payer_id, payer_group_provider_id, state, facility_id")
+      .select(
+        "id, case_type, provider_id, group_id, payer_id, payer_group_provider_id, state, facility_id",
+      )
       .eq("id", options.caseId)
       .eq("org_id", orgId)
       .maybeSingle();
@@ -346,7 +393,51 @@ export async function getProviderProfile(
     }
   }
 
+  if (options.contractContext) {
+    const ownerResult = await loadContractOwnerContext(
+      ctx,
+      options.contractContext.contractId,
+      options.contractContext.expected,
+    );
+    if (ownerResult.kind === "not_found") return { kind: "contract_not_found" };
+    if (ownerResult.kind === "not_configured") {
+      return { kind: "contract_context_not_configured", reason: ownerResult.reason };
+    }
+    if (ownerResult.kind === "stale") {
+      return { kind: "contract_context_stale", reason: ownerResult.reason };
+    }
+    if (ownerResult.kind === "mismatch") {
+      return { kind: "contract_context_mismatch", reason: ownerResult.reason };
+    }
+    const selection = await validateContractOwnerSelection(
+      ctx,
+      ownerResult.context,
+      providerId,
+      options.facilityId,
+    );
+    if (selection.kind !== "ok") {
+      return { kind: "contract_context_mismatch", reason: selection.reason };
+    }
+    if (options.groupId && options.groupId !== ownerResult.context.contract.groupId) {
+      return {
+        kind: "contract_context_mismatch",
+        reason: "Group selection does not match the Contract owner.",
+      };
+    }
+    if (
+      options.state &&
+      options.state.toUpperCase() !== ownerResult.context.contract.state.toUpperCase()
+    ) {
+      return {
+        kind: "contract_context_mismatch",
+        reason: "State selection does not match the Contract owner.",
+      };
+    }
+    contractOwner = ownerResult.context;
+  }
+
   const groupId =
+    contractOwner?.contract.groupId ??
     options.groupId ??
     (caseContext ? caseContext.group_id : ((provider.group_id as string | null) ?? null));
 
@@ -446,9 +537,10 @@ export async function getProviderProfile(
   const policyPick = pickPolicy(policies, group != null);
 
   // The provider→facility linkage is provider_facility_assignments (unique
-  // (provider_id, facility_id)); the resolvable facility set is every assigned
-  // facility that still exists in the caller's org. State also identifies the
-  // license jurisdiction for an explicit ad hoc location.
+  // (provider_id, facility_id)); the provider-only set is every assigned
+  // facility that still exists in the caller's org. Contract profiles further
+  // restrict candidates to assignments that have started and facilities in
+  // the Contract's exact group and state before any sole-facility selection.
   const assignmentFacilityIds = [
     ...new Set(assignments.map((a) => a.facility_id as string).filter(Boolean)),
   ];
@@ -477,21 +569,43 @@ export async function getProviderProfile(
       name: String(facility?.name ?? ""),
     }));
   } else if (assignmentFacilityIds.length > 0) {
-    const { data: facilityRows, error: facilityListErr } = await db
-      .from("facilities")
-      .select("id, name, state")
+    const facilityQuery = contractOwner
+      ? db.from("facilities").select("id, name, state, group_id")
+      : db.from("facilities").select("id, name, state");
+    const { data: facilityRows, error: facilityListErr } = await facilityQuery
       .in("id", assignmentFacilityIds)
       .eq("org_id", orgId)
       .order("name")
       .order("id");
     if (facilityListErr) throw facilityListErr;
+    const today = new Date().toISOString().slice(0, 10);
+    const currentContractFacilityIds = contractOwner
+      ? new Set(
+          assignments
+            .filter((assignment) => isCurrentFacilityAssignment(assignment.start_date, today))
+            .map((assignment) => assignment.facility_id as string),
+        )
+      : null;
     facilities = (
-      (facilityRows ?? []) as Array<{ id: string; name: string | null; state: string | null }>
-    ).map((f) => ({
-      id: f.id,
-      name: f.name ?? "",
-      state: f.state ?? null,
-    }));
+      (facilityRows ?? []) as Array<{
+        id: string;
+        name: string | null;
+        state: string | null;
+        group_id?: string | null;
+      }>
+    )
+      .filter(
+        (facility) =>
+          !contractOwner ||
+          (currentContractFacilityIds?.has(facility.id) === true &&
+            facility.group_id === contractOwner.contract.groupId &&
+            sameState(facility.state, contractOwner.contract.state)),
+      )
+      .map((facility) => ({
+        id: facility.id,
+        name: facility.name ?? "",
+        state: facility.state ?? null,
+      }));
   }
 
   const selection = caseContext
@@ -501,12 +615,13 @@ export async function getProviderProfile(
   const selectedFacilityId = selection.facility?.id ?? null;
   const adHocLocation = !options.caseId && !!options.facilityId;
   const caseState = caseContext?.state?.trim() || undefined;
+  const ownerState = contractOwner?.contract.state.trim() || undefined;
   const facilityState = selection.facility?.state?.trim() || undefined;
   const licenseState = caseContext
     ? (caseState ?? options.state)
     : adHocLocation
       ? facilityState
-      : options.state;
+      : (ownerState ?? options.state);
   const licensePick =
     adHocLocation && !licenseState
       ? { row: null, reason: "selected facility has no state" }
@@ -562,6 +677,14 @@ export async function getProviderProfile(
   const unresolved: UnresolvedToken[] = [];
   for (const entry of catalog) {
     if (COMPUTED_PROFILE_TOKENS.has(entry.token)) continue;
+    if (CONTRACT_GROUP_CONTACT_TOKENS.has(entry.token) && !contractOwner) {
+      tokens.push({ token: entry.token, value: null });
+      unresolved.push({
+        token: entry.token,
+        reason: "Contracting contacts require an authorized Contract owner context.",
+      });
+      continue;
+    }
     if (CASE_SCOPED_TABLES.has(entry.table)) {
       tokens.push({ token: entry.token, value: null });
       unresolved.push({
@@ -589,7 +712,19 @@ export async function getProviderProfile(
       });
       continue;
     }
-    tokens.push({ token: entry.token, value: (pick.row[entry.column] ?? null) as Json | null });
+    const value = (pick.row[entry.column] ?? null) as Json | null;
+    tokens.push({ token: entry.token, value });
+    if (
+      CONTRACT_GROUP_CONTACT_TOKENS.has(entry.token) &&
+      contractOwner &&
+      (value == null || value === "")
+    ) {
+      unresolved.push({
+        token: entry.token,
+        reason: "This Contract group's contracting contact value is missing.",
+        recordPath: `/groups/${contractOwner.contract.groupId}`,
+      });
+    }
   }
 
   const computedValues = {
@@ -628,6 +763,17 @@ export async function getProviderProfile(
       // Keep the exact validated request spelling as binding proof. PostgreSQL
       // stores UUIDs canonically, which may lowercase a mixed-case request.
       case_id: caseContext ? (options.caseId ?? caseContext.id) : null,
+      ...(contractOwner
+        ? {
+            contract_context: {
+              contract_id: contractOwner.contract.id,
+              assignment_id: contractOwner.assignment.id,
+              context_version: contractOwner.assignment.contextVersion,
+              sop_template_id: contractOwner.assignment.sopTemplateId,
+              sop_version: contractOwner.assignment.sopVersion,
+            },
+          }
+        : {}),
     },
     needsFacility: selection.needsFacility,
   };

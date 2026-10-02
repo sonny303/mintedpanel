@@ -548,12 +548,68 @@ export type Database = {
           },
         ];
       };
+      contract_sop_assignments: {
+        Row: {
+          context_version: number;
+          contract_id: string;
+          created_at: string;
+          created_by: string;
+          id: string;
+          org_id: string;
+          sop_template_id: string;
+          sop_version: number;
+          updated_at: string;
+          updated_by: string;
+        };
+        Insert: {
+          context_version?: number;
+          contract_id: string;
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          org_id: string;
+          sop_template_id: string;
+          sop_version: number;
+          updated_at?: string;
+          updated_by: string;
+        };
+        Update: {
+          context_version?: number;
+          contract_id?: string;
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          org_id?: string;
+          sop_template_id?: string;
+          sop_version?: number;
+          updated_at?: string;
+          updated_by?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "contract_sop_assignments_contract_scope_fkey";
+            columns: ["org_id", "contract_id"];
+            isOneToOne: true;
+            referencedRelation: "contracts";
+            referencedColumns: ["org_id", "id"];
+          },
+          {
+            foreignKeyName: "contract_sop_assignments_version_fkey";
+            columns: ["sop_template_id", "sop_version"];
+            isOneToOne: false;
+            referencedRelation: "sop_template_versions";
+            referencedColumns: ["template_id", "version"];
+          },
+        ];
+      };
       credential_cases: {
         Row: {
           approved_date: string | null;
           assigned_to: string | null;
           case_email_token: string;
           case_number: number;
+          case_type: string | null;
+          context_version: number;
           case_status: string;
           confirmed_effective_date: string | null;
           contract_executed_date: string | null;
@@ -584,6 +640,8 @@ export type Database = {
           assigned_to?: string | null;
           case_email_token?: string;
           case_number?: number;
+          case_type?: string | null;
+          context_version?: number;
           case_status?: string;
           confirmed_effective_date?: string | null;
           contract_executed_date?: string | null;
@@ -614,6 +672,8 @@ export type Database = {
           assigned_to?: string | null;
           case_email_token?: string;
           case_number?: number;
+          case_type?: string | null;
+          context_version?: number;
           case_status?: string;
           confirmed_effective_date?: string | null;
           contract_executed_date?: string | null;
@@ -989,9 +1049,17 @@ export type Database = {
       fill_sessions: {
         Row: {
           case_id: string | null;
+          case_step_id: string | null;
+          case_task_id: string | null;
           completed_at: string | null;
+          context_version: number | null;
+          contract_id: string | null;
+          contract_sop_assignment_id: string | null;
           docs_attached: Json | null;
+          did_auto_start_case: boolean;
+          effective_mapping_fingerprint: string | null;
           event_schema_version: number | null;
+          facility_id: string | null;
           field_outcomes: Json | null;
           fields_attempted: number | null;
           fields_rejected: number | null;
@@ -1001,17 +1069,34 @@ export type Database = {
           fill_mode: string;
           id: string;
           is_test: boolean;
+          launch_receipt_id: string | null;
+          mapping_generation: number | null;
           org_id: string;
           performed_by: string | null;
+          portal_id: string | null;
           portal_key: string;
           provider_id: string | null;
+          shared_mapping_generation: number | null;
+          sop_template_id: string | null;
+          sop_version: number | null;
           started_at: string;
+          step_index: number | null;
+          step_identity: string | null;
+          task_index: number | null;
         };
         Insert: {
           case_id?: string | null;
+          case_step_id?: string | null;
+          case_task_id?: string | null;
           completed_at?: string | null;
+          context_version?: number | null;
+          contract_id?: string | null;
+          contract_sop_assignment_id?: string | null;
           docs_attached?: Json | null;
+          did_auto_start_case?: boolean;
+          effective_mapping_fingerprint?: string | null;
           event_schema_version?: number | null;
+          facility_id?: string | null;
           field_outcomes?: Json | null;
           fields_attempted?: number | null;
           fields_rejected?: number | null;
@@ -1021,17 +1106,34 @@ export type Database = {
           fill_mode?: string;
           id?: string;
           is_test?: boolean;
+          launch_receipt_id?: string | null;
+          mapping_generation?: number | null;
           org_id: string;
           performed_by?: string | null;
+          portal_id?: string | null;
           portal_key: string;
           provider_id?: string | null;
+          shared_mapping_generation?: number | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           started_at?: string;
+          step_index?: number | null;
+          step_identity?: string | null;
+          task_index?: number | null;
         };
         Update: {
           case_id?: string | null;
+          case_step_id?: string | null;
+          case_task_id?: string | null;
           completed_at?: string | null;
+          context_version?: number | null;
+          contract_id?: string | null;
+          contract_sop_assignment_id?: string | null;
           docs_attached?: Json | null;
+          did_auto_start_case?: boolean;
+          effective_mapping_fingerprint?: string | null;
           event_schema_version?: number | null;
+          facility_id?: string | null;
           field_outcomes?: Json | null;
           fields_attempted?: number | null;
           fields_rejected?: number | null;
@@ -1041,11 +1143,20 @@ export type Database = {
           fill_mode?: string;
           id?: string;
           is_test?: boolean;
+          launch_receipt_id?: string | null;
+          mapping_generation?: number | null;
           org_id?: string;
           performed_by?: string | null;
+          portal_id?: string | null;
           portal_key?: string;
           provider_id?: string | null;
+          shared_mapping_generation?: number | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           started_at?: string;
+          step_index?: number | null;
+          step_identity?: string | null;
+          task_index?: number | null;
         };
         Relationships: [
           {
@@ -1056,6 +1167,27 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "fill_sessions_contract_assignment_fkey";
+            columns: ["contract_sop_assignment_id"];
+            isOneToOne: false;
+            referencedRelation: "contract_sop_assignments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fill_sessions_contract_owner_fkey";
+            columns: ["org_id", "contract_id"];
+            isOneToOne: false;
+            referencedRelation: "contracts";
+            referencedColumns: ["org_id", "id"];
+          },
+          {
+            foreignKeyName: "fill_sessions_facility_fkey";
+            columns: ["org_id", "facility_id"];
+            isOneToOne: false;
+            referencedRelation: "facilities";
+            referencedColumns: ["org_id", "id"];
+          },
+          {
             foreignKeyName: "fill_sessions_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
@@ -1063,10 +1195,74 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "fill_sessions_portal_id_fkey";
+            columns: ["portal_id"];
+            isOneToOne: false;
+            referencedRelation: "portals";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "fill_sessions_provider_id_fkey";
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      form_mapping_reset_events: {
+        Row: {
+          actor_id: string;
+          affected_field_count: number;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          new_mapping_generation: number;
+          old_mapping_generation: number;
+          org_id: string | null;
+          owner_scope: string;
+          portal_id: string;
+          portal_key: string;
+        };
+        Insert: {
+          actor_id: string;
+          affected_field_count: number;
+          created_at?: string;
+          id?: string;
+          idempotency_key: string;
+          new_mapping_generation: number;
+          old_mapping_generation: number;
+          org_id?: string | null;
+          owner_scope: string;
+          portal_id: string;
+          portal_key: string;
+        };
+        Update: {
+          actor_id?: string;
+          affected_field_count?: number;
+          created_at?: string;
+          id?: string;
+          idempotency_key?: string;
+          new_mapping_generation?: number;
+          old_mapping_generation?: number;
+          org_id?: string | null;
+          owner_scope?: string;
+          portal_id?: string;
+          portal_key?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_mapping_reset_events_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "form_mapping_reset_events_portal_id_fkey";
+            columns: ["portal_id"];
+            isOneToOne: false;
+            referencedRelation: "portals";
             referencedColumns: ["id"];
           },
         ];
@@ -2387,6 +2583,7 @@ export type Database = {
           hardcoded_value: string | null;
           id: string;
           learned_via: string;
+          mapping_generation: number;
           map_type: string;
           notes: string | null;
           org_id: string | null;
@@ -2395,6 +2592,7 @@ export type Database = {
           section: string | null;
           selector: string;
           selector_fallbacks: Json | null;
+          shared_base_generation: number | null;
           sort_order: number | null;
           source: string;
           status: string;
@@ -2416,6 +2614,7 @@ export type Database = {
           hardcoded_value?: string | null;
           id?: string;
           learned_via?: string;
+          mapping_generation?: number;
           map_type: string;
           notes?: string | null;
           org_id?: string | null;
@@ -2424,6 +2623,7 @@ export type Database = {
           section?: string | null;
           selector: string;
           selector_fallbacks?: Json | null;
+          shared_base_generation?: number | null;
           sort_order?: number | null;
           source: string;
           status?: string;
@@ -2445,6 +2645,7 @@ export type Database = {
           hardcoded_value?: string | null;
           id?: string;
           learned_via?: string;
+          mapping_generation?: number;
           map_type?: string;
           notes?: string | null;
           org_id?: string | null;
@@ -2453,6 +2654,7 @@ export type Database = {
           section?: string | null;
           selector?: string;
           selector_fallbacks?: Json | null;
+          shared_base_generation?: number | null;
           sort_order?: number | null;
           source?: string;
           status?: string;
@@ -2551,44 +2753,53 @@ export type Database = {
       };
       portals: {
         Row: {
+          case_type: string | null;
           created_at: string;
           form_url: string | null;
           id: string;
           is_verified: boolean;
           last_verified_at: string | null;
+          mapping_generation: number;
           name: string;
           org_id: string | null;
           payer_id: string | null;
           portal_key: string;
           proven_at: string | null;
+          requires_explicit_selection: boolean;
           updated_at: string;
           url_changed_at: string | null;
         };
         Insert: {
+          case_type?: string | null;
           created_at?: string;
           form_url?: string | null;
           id?: string;
           is_verified?: boolean;
           last_verified_at?: string | null;
+          mapping_generation?: number;
           name: string;
           org_id?: string | null;
           payer_id?: string | null;
           portal_key: string;
           proven_at?: string | null;
+          requires_explicit_selection?: boolean;
           updated_at?: string;
           url_changed_at?: string | null;
         };
         Update: {
+          case_type?: string | null;
           created_at?: string;
           form_url?: string | null;
           id?: string;
           is_verified?: boolean;
           last_verified_at?: string | null;
+          mapping_generation?: number;
           name?: string;
           org_id?: string | null;
           payer_id?: string | null;
           portal_key?: string;
           proven_at?: string | null;
+          requires_explicit_selection?: boolean;
           updated_at?: string;
           url_changed_at?: string | null;
         };
@@ -3407,6 +3618,7 @@ export type Database = {
       };
       sop_template_drafts: {
         Row: {
+          case_type: string | null;
           created_at: string;
           id: string;
           org_id: string;
@@ -3416,6 +3628,7 @@ export type Database = {
           updated_by: string | null;
         };
         Insert: {
+          case_type?: string | null;
           created_at?: string;
           id?: string;
           org_id: string;
@@ -3425,6 +3638,7 @@ export type Database = {
           updated_by?: string | null;
         };
         Update: {
+          case_type?: string | null;
           created_at?: string;
           id?: string;
           org_id?: string;
@@ -3452,6 +3666,7 @@ export type Database = {
       };
       sop_template_versions: {
         Row: {
+          case_type: string | null;
           change_note: string | null;
           id: string;
           name: string;
@@ -3463,6 +3678,7 @@ export type Database = {
           version: number;
         };
         Insert: {
+          case_type?: string | null;
           change_note?: string | null;
           id?: string;
           name: string;
@@ -3474,6 +3690,7 @@ export type Database = {
           version: number;
         };
         Update: {
+          case_type?: string | null;
           change_note?: string | null;
           id?: string;
           name?: string;
@@ -3497,6 +3714,7 @@ export type Database = {
       sop_templates: {
         Row: {
           archived: boolean;
+          case_type: string | null;
           created_at: string | null;
           current_version: number;
           group_id: string | null;
@@ -3513,6 +3731,7 @@ export type Database = {
         };
         Insert: {
           archived?: boolean;
+          case_type?: string | null;
           created_at?: string | null;
           current_version?: number;
           group_id?: string | null;
@@ -3529,6 +3748,7 @@ export type Database = {
         };
         Update: {
           archived?: boolean;
+          case_type?: string | null;
           created_at?: string | null;
           current_version?: number;
           group_id?: string | null;
@@ -3761,6 +3981,7 @@ export type Database = {
           org_id: string;
           provider_id: string | null;
           sop_content: Json | null;
+          sop_content_revision: number;
           sop_resolution_tier: string | null;
           sop_template_id: string | null;
           sop_version: number | null;
@@ -3781,6 +4002,7 @@ export type Database = {
           org_id: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_content_revision?: number;
           sop_resolution_tier?: string | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
@@ -3801,6 +4023,7 @@ export type Database = {
           org_id?: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_content_revision?: number;
           sop_resolution_tier?: string | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
@@ -3849,6 +4072,7 @@ export type Database = {
           corrects_touch_id: string | null;
           created_at: string | null;
           entry_type: string;
+          fill_session_id: string | null;
           id: string;
           next_follow_up_date: string | null;
           notes: string | null;
@@ -3857,6 +4081,7 @@ export type Database = {
           recipient_contact: string | null;
           recipient_name: string | null;
           source: string | null;
+          submission_request_fingerprint: string | null;
           task_id: string | null;
           touch_date: string;
           touch_type: string | null;
@@ -3869,6 +4094,7 @@ export type Database = {
           corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
+          fill_session_id?: string | null;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
@@ -3877,6 +4103,7 @@ export type Database = {
           recipient_contact?: string | null;
           recipient_name?: string | null;
           source?: string | null;
+          submission_request_fingerprint?: string | null;
           task_id?: string | null;
           touch_date: string;
           touch_type?: string | null;
@@ -3889,6 +4116,7 @@ export type Database = {
           corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
+          fill_session_id?: string | null;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
@@ -3897,11 +4125,19 @@ export type Database = {
           recipient_contact?: string | null;
           recipient_name?: string | null;
           source?: string | null;
+          submission_request_fingerprint?: string | null;
           task_id?: string | null;
           touch_date?: string;
           touch_type?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "touches_fill_session_id_fkey";
+            columns: ["fill_session_id"];
+            isOneToOne: false;
+            referencedRelation: "fill_sessions";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "touches_case_id_fkey";
             columns: ["case_id"];
@@ -4244,7 +4480,26 @@ export type Database = {
         };
         Returns: undefined;
       };
+      assign_contract_sop: {
+        Args: {
+          p_contract_id: string;
+          p_expected_context_version?: number;
+          p_sop_template_id: string;
+          p_sop_version: number;
+        };
+        Returns: Json;
+      };
       _party_first_name: { Args: { p_name: string }; Returns: string };
+      complete_sop_task_step: {
+        Args: {
+          p_actor_id: string;
+          p_org_id: string;
+          p_source: string;
+          p_step_id: string;
+          p_task_id: string;
+        };
+        Returns: Json;
+      };
       _party_last_name: { Args: { p_name: string }; Returns: string };
       _payer_assert_name_available: {
         Args: { p_exclude_id: string; p_keys: string[] };
@@ -4326,6 +4581,7 @@ export type Database = {
       author_global_sop: {
         Args: {
           p_archived?: boolean;
+          p_case_type?: string | null;
           p_group_id: string;
           p_id: string;
           p_name: string;
@@ -4493,6 +4749,38 @@ export type Database = {
         };
         Returns: Json;
       };
+      record_typed_enrollment_submission: {
+        Args: {
+          p_actor_id: string;
+          p_case_id: string;
+          p_fill_session_id: string;
+          p_org_id: string;
+          p_payload: Json;
+          p_touch_id: string;
+          p_work_context: Json;
+        };
+        Returns: Json;
+      };
+      reset_portal_mapping: {
+        Args: {
+          p_expected_mapping_generation: number;
+          p_idempotency_key: string;
+          p_portal_id: string;
+        };
+        Returns: {
+          actor_id: string;
+          affected_field_count: number;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          new_mapping_generation: number;
+          old_mapping_generation: number;
+          org_id: string | null;
+          owner_scope: string;
+          portal_id: string;
+          portal_key: string;
+        };
+      };
       revoke_enrollment_publication: {
         Args: {
           p_actor_user_id: string;
@@ -4634,16 +4922,28 @@ export type Database = {
       document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
       learn_portal_field_maps_from_touch: {
-        Args: {
-          p_actor_id: string;
-          p_case_id: string;
-          p_fill_session_id: string;
-          p_mappings: Json;
-          p_org_id: string;
-          p_portal_key: string;
-          p_provider_id: string;
-          p_url_pattern: string;
-        };
+        Args:
+          | {
+              p_actor_id: string;
+              p_case_id: string;
+              p_fill_session_id: string;
+              p_mappings: Json;
+              p_org_id: string;
+              p_portal_key: string;
+              p_provider_id: string;
+              p_url_pattern: string;
+            }
+          | {
+              p_actor_id: string;
+              p_case_id: string;
+              p_fill_session_id: string;
+              p_mappings: Json;
+              p_org_id: string;
+              p_portal_key: string;
+              p_provider_id: string;
+              p_url_pattern: string;
+              p_expected_mapping_generation: number | null;
+            };
         Returns: Json;
       };
       insert_contact_party:
@@ -4707,6 +5007,7 @@ export type Database = {
           p_portal_key: string;
           p_selector: string;
           p_sort_order?: number;
+          p_expected_mapping_generation?: number | null;
         };
         Returns: {
           confidence: number | null;
@@ -4743,6 +5044,7 @@ export type Database = {
       };
       publish_sop_template_version: {
         Args: {
+          p_case_type?: string | null;
           p_change_note?: string;
           p_expected_version: number;
           p_name: string;
@@ -4846,7 +5148,12 @@ export type Database = {
         Returns: Json;
       };
       set_global_portal_flags: {
-        Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };
+        Args: {
+          p_id: string;
+          p_proven?: boolean;
+          p_verified?: boolean;
+          p_expected_mapping_generation?: number | null;
+        };
         Returns: {
           created_at: string;
           form_url: string | null;
@@ -4898,6 +5205,7 @@ export type Database = {
           p_status: string;
           p_token?: string;
           p_transform?: string;
+          p_expected_mapping_generation?: number | null;
         };
         Returns: {
           confidence: number | null;
@@ -5014,16 +5322,63 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      update_org_portal_configuration: {
+        Args: {
+          p_expected_mapping_generation: number | null;
+          p_id: string;
+          p_org_id: string;
+          p_patch: Json;
+        };
+        Returns: Json;
+      };
+      update_org_portal_field_map: {
+        Args: {
+          p_expected_mapping_generation: number | null;
+          p_id: string;
+          p_org_id: string;
+          p_patch: Json;
+        };
+        Returns: Json;
+      };
+      review_org_portal_field_map_base: {
+        Args: {
+          p_expected_mapping_generation: number;
+          p_expected_shared_base_generation: number | null;
+          p_id: string;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
+      update_org_portal_field_maps_batch: {
+        Args: {
+          p_entries: Json;
+          p_expected_mapping_generation: number | null;
+          p_org_id: string;
+          p_portal_key: string;
+        };
+        Returns: Json[];
+      };
+      capture_org_portal_field_map: {
+        Args: {
+          p_capture: Json;
+          p_expected_mapping_generation: number | null;
+          p_org_id: string;
+        };
+        Returns: Json;
+      };
       upsert_global_portal: {
         Args: {
+          p_case_type?: string | null;
           p_form_url?: string;
           p_id: string;
           p_name: string;
           p_payer_id?: string;
           p_portal_key: string;
+          p_expected_mapping_generation?: number | null;
         };
         Returns: {
           created_at: string;
+          case_type: string | null;
           form_url: string | null;
           id: string;
           is_verified: boolean;

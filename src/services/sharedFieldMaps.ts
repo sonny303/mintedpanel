@@ -30,6 +30,7 @@ import type { PortalFieldMap } from "@/types";
 const FIELD_TYPES = new Set(["text", "select", "radio", "checkbox", "date", "file"]);
 
 export interface SharedProposeBody {
+  expected_mapping_generation?: unknown;
   portal_key?: unknown;
   selector?: unknown;
   field_label?: unknown;
@@ -41,7 +42,7 @@ export interface SharedProposeBody {
 }
 
 export type SharedProposeResult =
-  { kind: "ok"; map: PortalFieldMap } | { kind: "rejected"; status: number; message: string };
+  { kind: "ok"; map: PortalFieldMap } | { kind: "rejected"; status: 409 | 422; message: string };
 
 const asOptionalString = (value: unknown): string | null => {
   if (value == null) return null;
@@ -67,6 +68,18 @@ export async function proposeSharedFieldMap(
 ): Promise<SharedProposeResult> {
   const portalKey = normalizePortalKey(asOptionalString(body?.portal_key) ?? "");
   if (!portalKey) return { kind: "rejected", status: 422, message: "portal_key is required" };
+  if (
+    body.expected_mapping_generation != null &&
+    (typeof body.expected_mapping_generation !== "number" ||
+      !Number.isInteger(body.expected_mapping_generation) ||
+      body.expected_mapping_generation < 1)
+  ) {
+    return {
+      kind: "rejected",
+      status: 422,
+      message: "expected_mapping_generation must be a positive integer",
+    };
+  }
 
   const rawSelector = asOptionalString(body?.selector) ?? "";
   const selector = rawSelector.trim();
@@ -115,8 +128,29 @@ export async function proposeSharedFieldMap(
     p_field_type: fieldType,
     p_sort_order: (typeof sortOrderRaw === "number" ? sortOrderRaw : null) as unknown as number,
     p_control_options: (controlOptions as unknown as string) ?? null,
+    p_expected_mapping_generation: (body.expected_mapping_generation ?? null) as unknown as number,
   });
-  if (error) throw error;
+  if (error) {
+    if (error.message.includes("mapping_generation_token_required")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "This form configuration requires expected_mapping_generation.",
+      };
+    }
+    if (error.message.includes("mapping_generation_stale")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message:
+          "The form mapping changed. Reload the configuration before capturing fields again.",
+      };
+    }
+    if (error.message.includes("portal_selector_collision")) {
+      return { kind: "rejected", status: 409, message: error.message };
+    }
+    throw error;
+  }
 
   const map = camelizeRow<PortalFieldMap>(data);
   return { kind: "ok", map: { ...map, token: normalizeTokenKey(map.token) } };

@@ -84,6 +84,9 @@ export interface ProviderGroupInput {
   credentialingPhone?: string | null;
   credentialingFax?: string | null;
   credentialingEmail?: string | null;
+  contractingContactName?: string | null;
+  contractingContactTitle?: string | null;
+  contractingContactEmail?: string | null;
   websiteUrl?: string | null;
 }
 

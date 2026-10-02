@@ -6,8 +6,10 @@ import {
   pdfFieldLabel,
   pdfFieldSection,
   pdfFormPortalKey,
+  LEGACY_PDF_MAPPING_GENERATION,
   proposePdfImportRows,
   summarizePdfImport,
+  withLegacyPdfMappingGeneration,
   type PdfAcroFieldDescriptor,
 } from "@/lib/pdfFieldImport";
 
@@ -181,5 +183,21 @@ describe("proposePdfImportRows", () => {
     expect(result).toEqual({ imported: 10, failed: 1 });
     expect(attempted).toHaveLength(11);
     expect(maximum).toBe(8);
+  });
+});
+
+describe("withLegacyPdfMappingGeneration", () => {
+  it("pins both upload-file and signed-url imports to generation 1", () => {
+    expect(LEGACY_PDF_MAPPING_GENERATION).toBe(1);
+    expect(
+      withLegacyPdfMappingGeneration({ familyId: "fam", file: {} as File })
+        .expectedMappingGeneration,
+    ).toBe(1);
+    expect(
+      withLegacyPdfMappingGeneration({
+        familyId: "fam",
+        signedUrl: "https://example.test/form.pdf",
+      }).expectedMappingGeneration,
+    ).toBe(1);
   });
 });

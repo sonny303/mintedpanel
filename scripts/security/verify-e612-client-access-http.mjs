@@ -6,11 +6,12 @@
 // this run. The gateway is only transport glue so the app can use one local
 // Supabase URL while Auth, REST, and Storage remain separate containers.
 import { execFileSync, spawn } from "node:child_process";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
 import { profileHttpFixtureSql } from "./e612-profile-http-fixtures.mjs";
+import { m66LegacyPostFixtureSql } from "./e612-m66-legacy-post-probes.mjs";
 import { e614HttpStreamFixtureSql } from "./e614-http-stream-fixtures.mjs";
 import { buildManifest } from "./e612-build-manifest.mjs";
 
@@ -20,8 +21,12 @@ const runId = randomUUID().replaceAll("-", "").slice(0, 16);
 const label = `com.minted.e612=${runId}`;
 const network = `minted-e612-http-${runId}`;
 const names = Object.fromEntries(
-  ["db", "auth", "rest", "storage", "gateway", "app"].map((kind) => [kind, `${network}-${kind}`]),
+  ["db", "auth", "rest", "storage", "gateway", "app", "browser"].map((kind) => [
+    kind,
+    `${network}-${kind}`,
+  ]),
 );
+const M64_EXTENSION_SHA = "8a91b53577ba2c08f5907430b34fdff028f5a2e2";
 const images = {
   db:
     process.env.E612_HTTP_DB_IMAGE ||
@@ -38,6 +43,9 @@ const images = {
   node:
     process.env.E612_HTTP_NODE_IMAGE ||
     "node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e",
+  browser:
+    process.env.E612_M64_BROWSER_IMAGE ||
+    "mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48",
 };
 const authPassword = `e612-auth-${randomBytes(18).toString("hex")}`;
 const restPassword = `e612-rest-${randomBytes(18).toString("hex")}`;
@@ -56,12 +64,154 @@ const options = {
   stdio: ["pipe", "pipe", "pipe"],
 };
 const emit = (line) => process.stdout.write(`${line}\n`);
+const m64BrowserPhases = new Set([
+  "network_inspect",
+  "container_create",
+  "container_inspect",
+  "workspace_create",
+  "archive_driver",
+  "extract_driver",
+  "archive_extension",
+  "extract_extension",
+  "archive_playwright",
+  "extract_playwright",
+  "archive_playwright_core",
+  "extract_playwright_core",
+  "browser_preflight",
+  "browser_node_version",
+  "browser_driver",
+]);
+const m64DriverFailureMarkers = new Set([
+  "M64_BROWSER_API_NOT_EXACT_CASE_NOT_FOUND",
+  "M64_BROWSER_BACKGROUND_HASH_MISMATCH",
+  "M64_BROWSER_BUILT_ANON_KEY_NOT_UNIQUE",
+  "M64_BROWSER_CHROMIUM_BINARY_MISSING",
+  "M64_BROWSER_DRIVER_NOT_STARTED",
+  "M64_BROWSER_EXPECTED_ASSET_HASH_MISSING",
+  "M64_BROWSER_EXTENSION_DIST_MISSING",
+  "M64_BROWSER_EXTENSION_ORG_LOOKUP_FAILED",
+  "M64_BROWSER_EXTENSION_ORG_SELECTION_FAILED",
+  "M64_BROWSER_EXTENSION_SIGN_IN_FAILED",
+  "M64_BROWSER_FAILED_HANDOFF_CREATED_TAB",
+  "M64_BROWSER_FAILED_HANDOFF_OPENED_PORTAL",
+  "M64_BROWSER_FAILED_HANDOFF_PERSISTED_ACTIVE_WORK",
+  "M64_BROWSER_GOTRUE_SIGN_IN_NOT_OBSERVED",
+  "M64_BROWSER_HANDOFF_ACK_UNEXPECTED",
+  "M64_BROWSER_HANDOFF_ORIGIN_MISMATCH",
+  "M64_BROWSER_HANDOFF_ORIGIN_NOT_ALLOWLISTED",
+  "M64_BROWSER_LOCAL_ANON_KEY_MISSING",
+  "M64_BROWSER_NOT_MV3",
+  "M64_BROWSER_PANEL_AUTH_LOOKUP_NOT_OBSERVED",
+  "M64_BROWSER_PANEL_HOST_PERMISSION_MISSING",
+  "M64_BROWSER_PANEL_ORIGIN_DRIFT",
+  "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH",
+  "M64_BROWSER_RUNTIME_ASSET_HASH_MISMATCH",
+  "M64_BROWSER_SMOKE_FAILED",
+  "M64_BROWSER_STAGE_CHROMIUM_LAUNCH_FAILED",
+  "M64_BROWSER_STAGE_HANDOFF_SEND_FAILED",
+  "M64_BROWSER_STAGE_MV3_WORKER_FAILED",
+  "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
+  "M64_BROWSER_STAGE_POSTCONDITIONS_FAILED",
+  "M64_BROWSER_STAGE_PREFLIGHT_FAILED",
+  "M64_BROWSER_STAGE_PROXY_LISTEN_FAILED",
+  "M64_BROWSER_STAGE_SIDEPANEL_FAILED",
+  "M64_BROWSER_STAGE_SIGN_IN_FAILED",
+  "M64_BROWSER_STAGE_TLS_CERTIFICATE_FAILED",
+  "M64_BROWSER_SUPABASE_HOST_PERMISSION_MISSING",
+  "M64_BROWSER_SUPABASE_ORIGIN_DRIFT",
+  "M64_BROWSER_TLS_SAN_INCOMPLETE",
+  "M64_BROWSER_UNKNOWN_FAILURE",
+  "M64_BROWSER_DENIED_PANEL_GET_FAVICON",
+  "M64_BROWSER_DENIED_PANEL_OPTIONS_WORK_VALIDATE",
+  "M64_BROWSER_DENIED_PANEL_GET_PORTALS",
+  "M64_BROWSER_DENIED_PANEL_GET_PROVIDERS",
+  "M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH",
+  "M64_BROWSER_DENIED_PORTAL_GET_FAVICON",
+  "M64_BROWSER_DENIED_PANEL_OTHER",
+  "M64_BROWSER_DENIED_SUPABASE_OTHER",
+  "M64_BROWSER_DENIED_PORTAL_OTHER",
+  "M64_BROWSER_DENIED_UNKNOWN_HOST",
+  "M64_BROWSER_DENIED_SUPABASE_APIKEY_MISMATCH",
+  "M64_BROWSER_BUILT_MARKER_MISSING__api_work_context_validate",
+  "M64_BROWSER_BUILT_MARKER_MISSING_SET_ACTIVE_WORK",
+  "M64_BROWSER_BUILT_MARKER_MISSING_minted_activeWork_v2",
+]);
 const fail = (code) => {
   throw new Error(code);
 };
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = (args, input) =>
   execFileSync("docker", ["--context", context, ...args], { ...options, input });
+function safeM64DriverFailureMarker(error) {
+  const stdout = Buffer.isBuffer(error?.stdout)
+    ? error.stdout.toString("utf8")
+    : typeof error?.stdout === "string"
+      ? error.stdout
+      : "";
+  const stderr = Buffer.isBuffer(error?.stderr)
+    ? error.stderr.toString("utf8")
+    : typeof error?.stderr === "string"
+      ? error.stderr
+      : "";
+  const boundedStderr = `${stderr.slice(0, 8192)}\n${stderr.slice(-8192)}`;
+  for (const line of boundedStderr.split(/\r?\n/).reverse()) {
+    const match = /^(?:Error: )?(M64_BROWSER_[A-Za-z0-9_]+)$/.exec(line.trimEnd());
+    if (match && m64DriverFailureMarkers.has(match[1])) return match[1];
+  }
+  const boundedStdout = `${stdout.slice(0, 8192)}\n${stdout.slice(-8192)}`;
+  for (const line of boundedStdout.split(/\r?\n/).reverse()) {
+    const match = /^(?:Error: )?(M64_BROWSER_[A-Za-z0-9_]+)$/.exec(line.trimEnd());
+    if (match && m64DriverFailureMarkers.has(match[1])) return match[1];
+  }
+  return stdout.slice(0, 8192).split(/\r?\n/).includes("M64_BROWSER_DRIVER_STARTED")
+    ? "M64_BROWSER_SMOKE_FAILED"
+    : "M64_BROWSER_DRIVER_NOT_STARTED";
+}
+function runM64BrowserPhase(phase, operation) {
+  if (!m64BrowserPhases.has(phase)) fail("E612_M64_BROWSER_PHASE_NOT_ALLOWLISTED");
+  emit(`E612|M64|BROWSER|PHASE_START|${phase}`);
+  try {
+    const result = operation();
+    emit(`E612|M64|BROWSER|PHASE_PASS|${phase}`);
+    return result;
+  } catch (error) {
+    const rawExit = error?.status ?? error?.exitCode;
+    const exit = Number.isInteger(rawExit) && rawExit >= 0 && rawExit <= 255 ? rawExit : "unknown";
+    const signal =
+      typeof error?.signal === "string" && /^SIG[A-Z0-9]+$/.test(error.signal)
+        ? error.signal
+        : "none";
+    if (phase === "browser_driver") {
+      emit(`E612|M64|BROWSER|DRIVER_MARKER|${safeM64DriverFailureMarker(error)}`);
+    }
+    emit(`E612|M64|BROWSER|PHASE_FAILED|${phase}|exit=${exit}|signal=${signal}`);
+    throw new Error(`E612_M64_BROWSER_PHASE_FAILED_${phase}`);
+  }
+}
+function archiveM64BrowserInputs(phase, tarArgs) {
+  return runM64BrowserPhase(`archive_${phase}`, () =>
+    execFileSync("tar", tarArgs, { ...options, encoding: "buffer" }),
+  );
+}
+function extractM64BrowserInput(phase, archive, destination) {
+  return runM64BrowserPhase(`extract_${phase}`, () =>
+    docker(
+      [
+        "exec",
+        "-i",
+        names.browser,
+        "tar",
+        "--no-same-owner",
+        "--no-same-permissions",
+        "-xf",
+        "-",
+        "-C",
+        destination,
+      ],
+      archive,
+    ),
+  );
+}
 function dockerProcess(args) {
   const child = spawn("docker", ["--context", context, ...args], {
     env,
@@ -194,6 +344,242 @@ const imagePlatform = (image) => {
   if (!/^linux\/(amd64|arm64)$/.test(platform)) fail("E612_HTTP_IMAGE_PLATFORM_UNKNOWN");
   return platform;
 };
+function listFiles(directory, prefix = "") {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const absolute = `${directory}/${entry.name}`;
+      return entry.isDirectory() ? listFiles(absolute, relative) : [relative];
+    })
+    .sort();
+}
+function buildM64Extension() {
+  const extensionRoot = process.env.E612_M64_EXTENSION_ROOT;
+  if (typeof extensionRoot !== "string" || !existsSync(`${extensionRoot}/package.json`))
+    fail("E612_M64_EXTENSION_SOURCE_REQUIRED");
+  const head = execFileSync("git", ["-C", extensionRoot, "rev-parse", "HEAD"], options).trim();
+  const tree = execFileSync(
+    "git",
+    ["-C", extensionRoot, "rev-parse", "HEAD^{tree}"],
+    options,
+  ).trim();
+  if (head !== M64_EXTENSION_SHA) fail("E612_M64_EXTENSION_COMMIT_MISMATCH");
+  if (tree !== "1d980f595083a85c9cede49398340daffe613204") fail("E612_M64_EXTENSION_TREE_MISMATCH");
+  try {
+    execFileSync("npm", ["run", "build"], { ...options, cwd: extensionRoot, env });
+  } catch {
+    fail("E612_M64_EXTENSION_BUILD_FAILED");
+  }
+  const backgroundPath = `${extensionRoot}/dist/background.js`;
+  const manifestPath = `${extensionRoot}/dist/manifest.json`;
+  if (!existsSync(backgroundPath) || !existsSync(manifestPath))
+    fail("E612_M64_EXTENSION_DIST_MISSING");
+  const background = readFileSync(backgroundPath, "utf8");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const javascript = listFiles(`${extensionRoot}/dist`)
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => [name, readFileSync(`${extensionRoot}/dist/${name}`, "utf8")]);
+  const allJavascript = javascript.map(([, source]) => source).join("\n");
+  if (
+    !allJavascript.includes("https://mintedpanel.vercel.app") ||
+    !allJavascript.includes("https://fkvuhfsqcmujywzgczmc.supabase.co") ||
+    !background.includes("/api/work-context/validate") ||
+    manifest.manifest_version !== 3
+  ) {
+    fail("E612_M64_EXTENSION_ARTIFACT_ORIGIN_OR_WORK_MISMATCH");
+  }
+  const runtimeAssetsSha = createHash("sha256")
+    .update(
+      javascript
+        .map(([name, source]) => `${name}\0${createHash("sha256").update(source).digest("hex")}\n`)
+        .join(""),
+    )
+    .digest("hex");
+  const backgroundSha = createHash("sha256").update(background).digest("hex");
+  if (backgroundSha !== "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549")
+    fail("E612_M64_EXTENSION_BACKGROUND_HASH_MISMATCH");
+  emit(`M64|ARTIFACT|PASS|commit=${head}|tree=${tree}|runtime_assets_sha256=${runtimeAssetsSha}`);
+  return { root: extensionRoot, runtimeAssetsSha };
+}
+
+function runM64BrowserSmoke(extensionBuild) {
+  const { root: extensionRoot, runtimeAssetsSha } = extensionBuild;
+  const playwrightPath = `${root}node_modules/playwright`;
+  const playwrightCorePath = `${root}node_modules/playwright-core`;
+  if (
+    !existsSync(`${playwrightPath}/package.json`) ||
+    !existsSync(`${playwrightCorePath}/package.json`)
+  )
+    fail("E612_M64_PLAYWRIGHT_PACKAGE_MISSING");
+  const playwrightVersion = JSON.parse(
+    readFileSync(`${playwrightPath}/package.json`, "utf8"),
+  ).version;
+  const playwrightCoreVersion = JSON.parse(
+    readFileSync(`${playwrightCorePath}/package.json`, "utf8"),
+  ).version;
+  if (playwrightVersion !== "1.61.1" || playwrightCoreVersion !== playwrightVersion)
+    fail("E612_M64_PLAYWRIGHT_PACKAGE_VERSION_MISMATCH");
+  const networkInfo = runM64BrowserPhase(
+    "network_inspect",
+    () => JSON.parse(docker(["network", "inspect", network]))[0],
+  );
+  if (networkInfo.Internal !== true || networkInfo.Labels?.[`com.minted.e612`] !== runId) {
+    emit(
+      `E612|M64|BROWSER|NETWORK|internal=${networkInfo.Internal === true}|label=${networkInfo.Labels?.[`com.minted.e612`] === runId}`,
+    );
+    fail("E612_M64_DOCKER_NETWORK_NOT_INTERNAL");
+  }
+  if (platforms.browser !== "linux/amd64") fail("E612_M64_BROWSER_IMAGE_NOT_LINUX_AMD64");
+  runM64BrowserPhase("container_create", () =>
+    docker([
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
+      names.browser,
+      "--label",
+      label,
+      "--network",
+      network,
+      "--network-alias",
+      "browser",
+      "--read-only",
+      "--cap-drop",
+      "ALL",
+      "--cap-add",
+      "NET_BIND_SERVICE",
+      "--security-opt",
+      "no-new-privileges",
+      "--tmpfs",
+      "/tmp:rw,mode=1777",
+      "--tmpfs",
+      "/dev/shm:rw,nosuid,nodev,size=1g",
+      "--env",
+      "HOME=/tmp/m64-home",
+      ids.browser,
+      "sleep",
+      "infinity",
+    ]),
+  );
+  created.add("browser");
+  const observed = runM64BrowserPhase(
+    "container_inspect",
+    () => JSON.parse(docker(["inspect", names.browser]))[0],
+  );
+  const browserHostConfig = observed.HostConfig ?? {};
+  const browserCapabilities = browserHostConfig.CapAdd ?? [];
+  const normalizedCapabilities = browserCapabilities.map((capability) =>
+    capability.replace(/^CAP_/, ""),
+  );
+  const browserSecurityOptions = browserHostConfig.SecurityOpt ?? [];
+  const browserHardening = {
+    label: observed.Config?.Labels?.[`com.minted.e612`] === runId,
+    network: browserHostConfig.NetworkMode === network,
+    readOnlyRoot: browserHostConfig.ReadonlyRootfs === true,
+    dropAllCapabilities: browserHostConfig.CapDrop?.includes("ALL") === true,
+    onlyBindServiceCapability:
+      browserCapabilities.length === 1 && normalizedCapabilities[0] === "NET_BIND_SERVICE",
+    noNewPrivileges: browserSecurityOptions.some(
+      (option) => option === "no-new-privileges" || option === "no-new-privileges:true",
+    ),
+    noPublishedPorts: Object.keys(browserHostConfig.PortBindings ?? {}).length === 0,
+    attachedToInternalNetwork: Boolean(observed.NetworkSettings?.Networks?.[network]),
+  };
+  if (Object.values(browserHardening).some((check) => !check)) {
+    emit(
+      `E612|M64|BROWSER|HARDENING|${Object.entries(browserHardening)
+        .map(([name, passed]) => `${name}=${passed}`)
+        .join(
+          "|",
+        )}|cap_add_count=${browserCapabilities.length}|security_opt_count=${browserSecurityOptions.length}`,
+    );
+    fail("E612_M64_BROWSER_CONTAINER_HARDENING_MISMATCH");
+  }
+  runM64BrowserPhase("workspace_create", () =>
+    docker([
+      "exec",
+      names.browser,
+      "mkdir",
+      "-p",
+      "/tmp/m64",
+      "/tmp/m64/extension",
+      "/tmp/m64/node_modules",
+      "/tmp/m64-home",
+    ]),
+  );
+  extractM64BrowserInput(
+    "driver",
+    archiveM64BrowserInputs("driver", [
+      "-cf",
+      "-",
+      "-C",
+      `${root}scripts/security`,
+      "verify-m64-workflow-browser.mjs",
+    ]),
+    "/tmp/m64",
+  );
+  extractM64BrowserInput(
+    "extension",
+    archiveM64BrowserInputs("extension", ["-cf", "-", "-C", `${extensionRoot}/dist`, "."]),
+    "/tmp/m64/extension",
+  );
+  extractM64BrowserInput(
+    "playwright",
+    archiveM64BrowserInputs("playwright", ["-cf", "-", "-C", `${root}node_modules`, "playwright"]),
+    "/tmp/m64/node_modules",
+  );
+  extractM64BrowserInput(
+    "playwright_core",
+    archiveM64BrowserInputs("playwright_core", [
+      "-cf",
+      "-",
+      "-C",
+      `${root}node_modules`,
+      "playwright-core",
+    ]),
+    "/tmp/m64/node_modules",
+  );
+  runM64BrowserPhase("browser_preflight", () =>
+    docker([
+      "exec",
+      "-w",
+      "/tmp/m64",
+      names.browser,
+      "/bin/sh",
+      "-c",
+      "command -v Xvfb >/dev/null && command -v xvfb-run >/dev/null && node -e \"if(Number(process.versions.node.split('.')[0])<18)process.exit(3);if(require('playwright/package.json').version!=='1.61.1')process.exit(1);if(!require('fs').existsSync(require('playwright').chromium.executablePath()))process.exit(2)\"",
+    ]),
+  );
+  const browserNode = runM64BrowserPhase("browser_node_version", () =>
+    docker(["exec", names.browser, "node", "--version"]).trim(),
+  );
+  emit(
+    `M64|BROWSER|PREFLIGHT|image=${ids.browser}|platform=${platforms.browser}|playwright=${playwrightVersion}|node=${browserNode}|xvfb=available|network=internal`,
+  );
+  const output = runM64BrowserPhase("browser_driver", () =>
+    docker([
+      "exec",
+      "-e",
+      `M64_LOCAL_ANON_KEY=${anonKey}`,
+      "-e",
+      `M64_EXPECTED_RUNTIME_ASSETS_SHA=${runtimeAssetsSha}`,
+      names.browser,
+      "xvfb-run",
+      "-a",
+      "node",
+      "/tmp/m64/verify-m64-workflow-browser.mjs",
+    ]),
+  );
+  process.stdout.write(output);
+  if (
+    !output.includes(
+      "M64|BROWSER|PASS|goTrue_local=200|panel_orgs_local=200|work_validate_local=404|ack=CONTEXT_STALE|portal_tabs=0",
+    )
+  ) {
+    emit("E612|M64|BROWSER|DRIVER_MARKER|present=false");
+    fail("E612_M64_BROWSER_PASS_MARKER_MISSING");
+  }
+}
 let ids;
 let platforms;
 
@@ -325,6 +711,11 @@ function runInternalDriver() {
     `${root}scripts/security/e612-profile-http-probes.mjs`,
     `${names.gateway}:/tmp/e612-profile-http-probes.mjs`,
   ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e612-m66-legacy-post-probes.mjs`,
+    `${names.gateway}:/tmp/e612-m66-legacy-post-probes.mjs`,
+  ]);
   try {
     const expiredToken = jwt({
       sub: E612.clientActive,
@@ -353,6 +744,12 @@ function runInternalDriver() {
     if (!output.includes("E613|HTTP|PASS")) fail("E613_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E614|HTTP|PASS")) fail("E614_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E612|PROFILE|PASS")) fail("E612_PROFILE_PROBE_PASS_MARKER_MISSING");
+    if (
+      !output.includes(
+        "M66|HTTP|PASS|legacy_post_blocked=3|state_unchanged=true|legacy_create=201|replay=200|audit=1",
+      )
+    )
+      fail("M66_HTTP_LEGACY_POST_PASS_MARKER_MISSING");
   } catch (error) {
     if (error.stdout) process.stdout.write(String(error.stdout));
     fail("E612_HTTP_DRIVER_FAILED");
@@ -481,6 +878,11 @@ SELECT 'E612|RACE|LOCK_READY|pid=' || pg_backend_pid();
 }
 
 function runAuthBootstrap() {
+  docker([
+    "cp",
+    `${root}scripts/security/e612-m66-legacy-post-probes.mjs`,
+    `${names.gateway}:/tmp/e612-m66-legacy-post-probes.mjs`,
+  ]);
   docker([
     "cp",
     `${root}scripts/security/e612-http-driver.mjs`,
@@ -619,6 +1021,14 @@ ON CONFLICT (id) DO NOTHING;
     emit(`E614|HTTP|FIXTURE_SQLSTATE|${state ?? "unknown"}`);
     fail("E614_HTTP_STREAM_SEED_FAILED");
   }
+  try {
+    dbExec(m66LegacyPostFixtureSql({ orgId: E612.orgA, adminId: E612.admin }));
+    emit("M66|HTTP|FIXTURE|PASS|typed=1|reset_generation=2|legacy=1");
+  } catch (error) {
+    const state = String(error?.stderr ?? "").match(/(?:ERROR|SQLSTATE)[: ]+([A-Z0-9]{5})/i)?.[1];
+    emit(`M66|HTTP|FIXTURE|FAILED|sqlstate=${state ?? "unknown"}`);
+    fail("E612_HTTP_SEED_FAILED_m66");
+  }
 }
 
 const created = new Set();
@@ -632,10 +1042,10 @@ try {
     Object.entries(images).map(([kind, image]) => [kind, imagePlatform(image)]),
   );
   emit(
-    `E612|HTTP|IMAGES|db=${ids.db}|auth=${ids.auth}|rest=${ids.rest}|storage=${ids.storage}|node=${ids.node}`,
+    `E612|HTTP|IMAGES|db=${ids.db}|auth=${ids.auth}|rest=${ids.rest}|storage=${ids.storage}|node=${ids.node}|browser=${ids.browser}`,
   );
   emit(
-    `E612|HTTP|PLATFORM|db=${platforms.db}|auth=${platforms.auth}|rest=${platforms.rest}|storage=${platforms.storage}|node=${platforms.node}`,
+    `E612|HTTP|PLATFORM|db=${platforms.db}|auth=${platforms.auth}|rest=${platforms.rest}|storage=${platforms.storage}|node=${platforms.node}|browser=${platforms.browser}`,
   );
   stage = "build_manifest";
   const manifestPath = `${root}.output/server/.e612-build-manifest.json`;
@@ -653,6 +1063,8 @@ try {
   emit(
     `E612|HTTP|BUILD|git=${manifest.gitHead}|source=${manifest.sourceSha256}|bundle=${manifest.bundleSha256}`,
   );
+  stage = "m64_extension_build";
+  const m64ExtensionBuild = buildM64Extension();
   docker(["network", "create", "--internal", "--label", label, network]);
   networkCreated = true;
   stage = "isolated_database";
@@ -860,6 +1272,8 @@ try {
   runInternalDriver();
   stage = "authority_read_race";
   await runInternalAuthorityReadRace();
+  stage = "m64_browser_smoke";
+  runM64BrowserSmoke(m64ExtensionBuild);
 } catch (error) {
   const code =
     error instanceof Error && /^E61[24]_[A-Za-z0-9_-]+$/.test(error.message)
@@ -872,7 +1286,7 @@ try {
   process.exitCode = 1;
 } finally {
   let cleanupFailed = false;
-  for (const kind of ["app", "gateway", "storage", "rest", "auth", "db"]) {
+  for (const kind of ["browser", "app", "gateway", "storage", "rest", "auth", "db"]) {
     if (!created.has(kind)) continue;
     try {
       const observed = JSON.parse(docker(["container", "inspect", names[kind]]))[0];

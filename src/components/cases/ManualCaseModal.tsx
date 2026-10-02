@@ -39,12 +39,13 @@ import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { usePayers, useSops } from "@/hooks/useAdmin";
 import { resolveCaseFacilityId } from "@/lib/caseFacility";
 import { manualCasePayers } from "@/lib/payerSetup";
-import { topRankedTemplates } from "@/lib/pickTemplate";
+import { isFallbackTemplate, topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
 import { isAllStates, templateStates } from "@/lib/sopMatchKey";
 import { US_STATES } from "@/lib/usStates";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
+import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
 
 interface ManualCaseModalProps {
   onClose: () => void;
@@ -68,38 +69,33 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const isAdmin = useIsAdmin();
 
   const [providerId, setProviderId] = useState(NONE);
+  const [caseType, setCaseType] = useState<CaseType>("enrollment");
   const [groupId, setGroupId] = useState(NONE);
   const [payerId, setPayerId] = useState(NONE);
   const [state, setState] = useState(NONE);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
-  // Auto-selected template according to standard match precedence
+  // Filter by business purpose before applying the existing match precedence.
   const autoTemplate = useMemo(() => {
     if (payerId === NONE || state === NONE || groupId === NONE) return null;
-    const top = topRankedTemplates(templatesQ.data ?? [], payerId, state, groupId);
+    const top = topRankedTemplates(templatesQ.data ?? [], payerId, state, groupId, caseType);
     return top.length === 1 ? top[0] : null;
-  }, [payerId, state, groupId, templatesQ.data]);
+  }, [payerId, state, groupId, caseType, templatesQ.data]);
 
   const candidateTemplates = useMemo(() => {
     if (payerId === NONE || state === NONE || groupId === NONE) return [];
-    const all = templatesQ.data ?? [];
-    return all.filter((t) => {
-      if (t.archived) return false;
+    return (templatesQ.data ?? []).filter((t) => {
+      if (t.archived || t.caseType !== caseType) return false;
+      if (isFallbackTemplate(t)) return true;
       if (t.payerId !== payerId) return false;
       if (t.groupId !== null && t.groupId !== groupId) return false;
       const states = templateStates(t);
-      if (states.length > 0 && !isAllStates(states) && !states.includes(state)) return false;
+      if (!isAllStates(states) && !states.includes(state)) return false;
       return true;
     });
-  }, [payerId, groupId, state, templatesQ.data]);
+  }, [payerId, groupId, state, caseType, templatesQ.data]);
 
-  const templateOptions = useMemo(() => {
-    const list = [...candidateTemplates];
-    if (autoTemplate && !list.some((t) => t.id === autoTemplate.id)) {
-      list.push(autoTemplate);
-    }
-    return list;
-  }, [candidateTemplates, autoTemplate]);
+  const templateOptions = candidateTemplates;
 
   const effectiveTemplateId = useMemo(() => {
     if (selectedTemplateId !== null) return selectedTemplateId;
@@ -142,10 +138,20 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
   const selection = useMemo(
     () =>
-      providerId !== NONE && groupId !== NONE && payerId !== NONE && state !== NONE
+      caseType === "enrollment" &&
+      providerId !== NONE &&
+      groupId !== NONE &&
+      payerId !== NONE &&
+      state !== NONE
         ? { providerId, groupId, payerId, state }
         : null,
-    [providerId, groupId, payerId, state],
+    [caseType, providerId, groupId, payerId, state],
+  );
+
+  const matrixContext = useMemo(
+    () =>
+      groupId !== NONE && payerId !== NONE && state !== NONE ? { groupId, payerId, state } : null,
+    [groupId, payerId, state],
   );
 
   // The TE-5 dedupe read: the full key set regardless of status — a denied
@@ -164,24 +170,63 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   }, [selection, casesQ.data]);
 
   const loading =
-    providersQ.isLoading ||
     groupsQ.isLoading ||
-    providerAssignmentsQ.isLoading ||
-    facilityAssignmentsQ.isLoading ||
-    facilitiesQ.isLoading ||
     payersQ.isLoading ||
-    templatesQ.isLoading ||
-    casesQ.isLoading;
+    (caseType !== "contract" &&
+      (providersQ.isLoading ||
+        providerAssignmentsQ.isLoading ||
+        facilityAssignmentsQ.isLoading ||
+        facilitiesQ.isLoading ||
+        templatesQ.isLoading ||
+        casesQ.isLoading));
   const failed =
-    providersQ.isError ||
     groupsQ.isError ||
-    providerAssignmentsQ.isError ||
-    facilityAssignmentsQ.isError ||
-    facilitiesQ.isError ||
     payersQ.isError ||
-    templatesQ.isError ||
-    casesQ.isError;
-  const prerequisitesReady = providers.length > 0 && payers.length > 0;
+    (caseType !== "contract" &&
+      (providersQ.isError ||
+        providerAssignmentsQ.isError ||
+        facilityAssignmentsQ.isError ||
+        facilitiesQ.isError ||
+        templatesQ.isError ||
+        casesQ.isError));
+  const prerequisitesReady =
+    payers.length > 0 &&
+    (caseType === "contract" ? (groupsQ.data ?? []).length > 0 : providers.length > 0);
+
+  const caseTypeSelector = (
+    <div className="space-y-1.5">
+      <Label htmlFor="manual-case-type">Case type</Label>
+      <Select
+        value={caseType}
+        onValueChange={(value) => {
+          setCaseType(value as CaseType);
+          setSelectedTemplateId(null);
+        }}
+      >
+        <SelectTrigger id="manual-case-type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {CASE_TYPES.map((type) => (
+            <SelectItem key={type} value={type}>
+              {type === "contract"
+                ? "Contract"
+                : type === "enrollment"
+                  ? "Enrollment"
+                  : "Recredentialing — authoring only"}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {caseType === "contract"
+          ? "Contract work is managed in the Group Contracts Matrix. It does not create a provider case."
+          : caseType === "recredentialing"
+            ? "Recredentialing SOPs can be authored, but case execution is not supported in v1."
+            : "Enrollment adds an individual provider to an existing group contract."}
+      </p>
+    </div>
+  );
 
   const retry = () => {
     void providersQ.refetch();
@@ -196,9 +241,11 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
   const submit = () => {
     if (
+      caseType !== "enrollment" ||
       !selection ||
       blockingCase ||
-      (templateOptions.length > 0 && autoTemplate === null && selectedTemplateId === null) ||
+      templateOptions.length === 0 ||
+      (templateOptions.length > 1 && autoTemplate === null && selectedTemplateId === null) ||
       (effectiveTemplateId !== NONE && !effectiveTemplate)
     )
       return;
@@ -226,6 +273,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     createCase.mutate(
       {
         input: {
+          caseType: "enrollment",
           providerId: selection.providerId,
           payerId: selection.payerId,
           state: selection.state,
@@ -274,7 +322,8 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           </div>
         ) : !prerequisitesReady ? (
           <div className="space-y-3">
-            {providers.length === 0 ? (
+            {caseTypeSelector}
+            {caseType !== "contract" && providers.length === 0 ? (
               <div className="rounded-md border p-4 text-sm">
                 <p className="font-medium">
                   {roster.length === 0 ? "Add a provider first" : "Assign a provider to a group"}
@@ -295,6 +344,14 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
                 </Button>
               </div>
             ) : null}
+            {caseType === "contract" && (groupsQ.data ?? []).length === 0 ? (
+              <div className="rounded-md border p-4 text-sm">
+                <p className="font-medium">Add a provider group first</p>
+                <p className="mt-1 text-muted-foreground">
+                  Choose a group, payer, and state to open the matching Contract Matrix cell.
+                </p>
+              </div>
+            ) : null}
             {payers.length === 0 ? (
               <div className="rounded-md border p-4 text-sm">
                 <p className="font-medium">Add a payer to this organization</p>
@@ -313,27 +370,54 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="manual-case-provider">Provider</Label>
-              <Select
-                value={providerId}
-                onValueChange={(v) => {
-                  setProviderId(v);
-                  setGroupId(NONE);
+            {caseTypeSelector}
+
+            {caseType === "contract" && matrixContext ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  onClose();
+                  navigate({
+                    to: "/reporting/contracts-matrix",
+                    search: matrixContext,
+                  });
                 }}
               >
-                <SelectTrigger id="manual-case-provider">
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.firstName} {p.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                Continue in Contract Matrix
+              </Button>
+            ) : null}
+
+            {caseType === "recredentialing" ? (
+              <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]">
+                No Recredentialing case will be created. Choose Enrollment for supported provider
+                work.
+              </div>
+            ) : null}
+
+            {caseType !== "contract" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="manual-case-provider">Provider</Label>
+                <Select
+                  value={providerId}
+                  onValueChange={(v) => {
+                    setProviderId(v);
+                    setGroupId(NONE);
+                  }}
+                >
+                  <SelectTrigger id="manual-case-provider">
+                    <SelectValue placeholder="Select a provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.firstName} {p.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-group">Group</Label>
@@ -343,21 +427,25 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
                   setGroupId(v);
                   setSelectedTemplateId(null);
                 }}
-                disabled={providerId === NONE}
+                disabled={caseType !== "contract" && providerId === NONE}
               >
                 <SelectTrigger id="manual-case-group">
                   <SelectValue
                     placeholder={
-                      providerId === NONE
-                        ? "Select a provider first"
-                        : providerGroups.length === 0
-                          ? "No group assignments for this provider"
+                      caseType === "contract"
+                        ? (groupsQ.data ?? []).length === 0
+                          ? "No groups available"
                           : "Select a group"
+                        : providerId === NONE
+                          ? "Select a provider first"
+                          : providerGroups.length === 0
+                            ? "No group assignments for this provider"
+                            : "Select a group"
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {providerGroups.map((g) => (
+                  {(caseType === "contract" ? (groupsQ.data ?? []) : providerGroups).map((g) => (
                     <SelectItem key={g.id} value={g.id}>
                       {g.name}
                     </SelectItem>
@@ -410,7 +498,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
               </Select>
             </div>
 
-            {payerId !== NONE && templateOptions.length > 0 ? (
+            {caseType === "enrollment" && payerId !== NONE && templateOptions.length > 0 ? (
               <div className="space-y-1.5">
                 <Label htmlFor="manual-case-template">Template</Label>
                 <Select value={effectiveTemplateId} onValueChange={(v) => setSelectedTemplateId(v)}>
@@ -426,14 +514,33 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
                           : ""}
                       </SelectItem>
                     ))}
-                    <SelectItem value={NONE}>None (empty checklist)</SelectItem>
                   </SelectContent>
                 </Select>
-                {templateOptions.length > 1 ? (
+                {topRankedTemplates(templatesQ.data ?? [], payerId, state, groupId, caseType)
+                  .length > 1 ? (
                   <p className="text-[11px] text-muted-foreground">
-                    Multiple templates match this payer. Select the one to apply.
+                    Several equally ranked Enrollment SOPs match this payer and case key. Choose one
+                    before creating the case. Other eligible Enrollment SOPs remain available in the
+                    list.
                   </p>
                 ) : null}
+              </div>
+            ) : null}
+
+            {caseType === "enrollment" && selection && templateOptions.length === 0 ? (
+              <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]">
+                No Enrollment SOP matches this payer, state, and group. Create an Enrollment SOP in
+                payer setup before creating this case.
+                <Button asChild variant="outline" size="sm" className="mt-2">
+                  <Link
+                    to="/admin/payer-admin/setup/$payerId"
+                    params={{ payerId: selection.payerId }}
+                    search={{ tab: "templates" }}
+                    onClick={onClose}
+                  >
+                    Open payer templates
+                  </Link>
+                </Button>
               </div>
             ) : null}
 
@@ -462,10 +569,12 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           <Button
             className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
             disabled={
+              caseType !== "enrollment" ||
               !prerequisitesReady ||
               !selection ||
               Boolean(blockingCase) ||
-              (templateOptions.length > 0 &&
+              templateOptions.length === 0 ||
+              (templateOptions.length > 1 &&
                 autoTemplate === null &&
                 selectedTemplateId === null) ||
               (effectiveTemplateId !== NONE && !effectiveTemplate) ||

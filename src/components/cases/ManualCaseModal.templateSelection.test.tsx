@@ -103,5 +103,8 @@ describe("ManualCaseModal — multi-template selection", () => {
     expect(html).toContain("New case");
     expect(html).toContain("Jane Whitaker");
     expect(html).toContain("Aetna");
+    expect(html).toContain("Case type");
+    expect(html).toContain("Recredentialing — authoring only");
+    expect(html).toContain("Enrollment adds an individual provider");
   });
 });

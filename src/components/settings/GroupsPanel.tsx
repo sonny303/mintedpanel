@@ -139,6 +139,15 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
   const [npi, setNpi] = useState(group?.npiType2 ?? "");
   const [states, setStates] = useState<string[]>(group?.states ?? []);
   const [active, setActive] = useState<boolean>(group?.isActive ?? true);
+  const [contractingContactName, setContractingContactName] = useState(
+    group?.contractingContactName ?? "",
+  );
+  const [contractingContactTitle, setContractingContactTitle] = useState(
+    group?.contractingContactTitle ?? "",
+  );
+  const [contractingContactEmail, setContractingContactEmail] = useState(
+    group?.contractingContactEmail ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const [billStreet, setBillStreet] = useState(initStr("billingStreet"));
@@ -193,6 +202,9 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
       npiType2: npi.trim() || null,
       states: states.length > 0 ? states : null,
       isActive: active,
+      contractingContactName: contractingContactName.trim() || null,
+      contractingContactTitle: contractingContactTitle.trim() || null,
+      contractingContactEmail: contractingContactEmail.trim() || null,
       billingStreet: billStreet.trim() || null,
       billingCity: billCity.trim() || null,
       billingState: billState || null,
@@ -375,6 +387,42 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
               </div>
             </CollapsibleContent>
           </Collapsible>
+
+          <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
+            <div>
+              <h3 className="text-[13px] font-semibold">Contracting contact</h3>
+              <p className="text-[12px] text-muted-foreground">
+                Contact for contract forms. Signer and submitter details stay separate.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[12px] uppercase tracking-wider">Contact name</Label>
+                <Input
+                  value={contractingContactName}
+                  onChange={(e) => setContractingContactName(e.target.value)}
+                  className="h-9 rounded-[4px]"
+                />
+              </div>
+              <div>
+                <Label className="text-[12px] uppercase tracking-wider">Title</Label>
+                <Input
+                  value={contractingContactTitle}
+                  onChange={(e) => setContractingContactTitle(e.target.value)}
+                  className="h-9 rounded-[4px]"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-[12px] uppercase tracking-wider">Email</Label>
+              <Input
+                type="email"
+                value={contractingContactEmail}
+                onChange={(e) => setContractingContactEmail(e.target.value)}
+                className="h-9 rounded-[4px]"
+              />
+            </div>
+          </div>
 
           <div className="flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">
             <div className="text-[13px] font-medium">Active</div>

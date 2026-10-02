@@ -45,6 +45,15 @@ export const PDF_PORTAL_KEY_PREFIX = "payer-form:";
 
 export const PDF_IMPORT_NOTE = "Imported from the payer's blank form";
 
+/** PDF maps have no portals row; guarded writes use this fixed generation. */
+export const LEGACY_PDF_MAPPING_GENERATION = 1;
+
+export function withLegacyPdfMappingGeneration<T extends object>(
+  input: T,
+): T & { expectedMappingGeneration: number } {
+  return { ...input, expectedMappingGeneration: LEGACY_PDF_MAPPING_GENERATION };
+}
+
 /** The synthetic portal key a form family's registry rows live under. Lowercase
  * because `portal_key` is normalized that way everywhere (normalizePortalKey). */
 export function pdfFormPortalKey(familyId: string): string {
