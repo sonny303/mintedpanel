@@ -2715,6 +2715,115 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     );
     safeLog(`M64|BROWSER|CONTRACT_FILL_RECEIPT|${fields.join("|")}`);
   };
+  const emitContractFillSummaryDiagnostic = async (targetPage) => {
+    const read = await bounded(
+      () =>
+        Promise.all([
+          extensionPage.evaluate(() => {
+            const isVisible = (element) => {
+              if (!element || element.hidden) return false;
+              const style = getComputedStyle(element);
+              return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                element.getClientRects().length > 0
+              );
+            };
+            const summaryBox = document.querySelector("#fill-summary");
+            const heading = document.querySelector("#fill-summary summary .bucket-heading");
+            const headingText = heading?.textContent?.trim() ?? "";
+            const bucket = (value) => (value === "0" ? "0" : value === "1" ? "1" : "2_PLUS");
+            const verified = /^Verified (\d+); (\d+) setter attempts remain unverified\./.exec(
+              headingText,
+            );
+            const confirmedStatic =
+              /^Confirmed static: (\d+) · AI suggestions: (\d+) of (\d+) actual writes\./.exec(
+                headingText,
+              );
+            let headingKind = "other";
+            let verifiedCount = "unknown";
+            let attemptedCount = "unknown";
+            if (!headingText) {
+              headingKind = "empty";
+            } else if (verified) {
+              headingKind = "verified";
+              verifiedCount = bucket(verified[1]);
+              attemptedCount = bucket(verified[2]);
+            } else if (confirmedStatic) {
+              headingKind = "confirmed_static";
+              attemptedCount = bucket(confirmedStatic[3]);
+            }
+            return {
+              resultsVisible: isVisible(document.querySelector("#fill-results")),
+              summaryVisible: isVisible(summaryBox),
+              mainErrorVisible: isVisible(document.querySelector("#main-error")),
+              fillButtonEnabled:
+                document.querySelector("#fill-btn") instanceof HTMLButtonElement &&
+                !document.querySelector("#fill-btn").disabled,
+              fillNoteVisible: isVisible(document.querySelector("#fill-note")),
+              innerTextExpected:
+                typeof summaryBox?.innerText === "string" &&
+                summaryBox.innerText.startsWith("Verified 0; 1 setter attempts remain unverified."),
+              titleExpected: document.title === "Minted Panel Workbench",
+              headingKind,
+              verifiedCount,
+              attemptedCount,
+            };
+          }),
+          targetPage.evaluate(() => {
+            const input = document.querySelector("#contract-npi");
+            const value = input instanceof HTMLInputElement ? input.value : "";
+            return {
+              formNonempty: value.trim().length > 0,
+              formMatchesExpected: value === "9999999995",
+            };
+          }),
+        ]),
+      5_000,
+      "M64_BROWSER_FILL_SUMMARY_DIAGNOSTIC_TIMEOUT",
+    ).then(
+      (values) => ({ ok: true, extension: values[0], form: values[1] }),
+      () => ({ ok: false, extension: null, form: null }),
+    );
+    const boolValue = (value) => (value === true ? "true" : value === false ? "false" : "unknown");
+    const allowedHeadingKinds = new Set([
+      "verified",
+      "confirmed_static",
+      "empty",
+      "other",
+      "unknown",
+    ]);
+    const allowedCountBuckets = new Set(["0", "1", "2_PLUS", "unknown"]);
+    const extension = read.extension;
+    const form = read.form;
+    const headingKind =
+      read.ok && allowedHeadingKinds.has(extension.headingKind) ? extension.headingKind : "unknown";
+    const verifiedCount =
+      read.ok && allowedCountBuckets.has(extension.verifiedCount)
+        ? extension.verifiedCount
+        : "unknown";
+    const attemptedCount =
+      read.ok && allowedCountBuckets.has(extension.attemptedCount)
+        ? extension.attemptedCount
+        : "unknown";
+    const fields = [
+      ["results_visible", read.ok ? extension.resultsVisible : null],
+      ["summary_visible", read.ok ? extension.summaryVisible : null],
+      ["main_error_visible", read.ok ? extension.mainErrorVisible : null],
+      ["fill_button_enabled", read.ok ? extension.fillButtonEnabled : null],
+      ["fill_note_visible", read.ok ? extension.fillNoteVisible : null],
+      ["form_nonempty", read.ok ? form.formNonempty : null],
+      ["form_matches_expected", read.ok ? form.formMatchesExpected : null],
+      ["innertext_expected", read.ok ? extension.innerTextExpected : null],
+      ["title_expected", read.ok ? extension.titleExpected : null],
+    ].map(([name, value]) => `${name}=${boolValue(value)}`);
+    fields.push(
+      `heading_kind=${headingKind}`,
+      `verified_count=${verifiedCount}`,
+      `attempted_count=${attemptedCount}`,
+    );
+    safeLog(`M64|BROWSER|CONTRACT_FILL_SUMMARY|${fields.join("|")}`);
+  };
   const waitForFillReady = async (label, stage, expectedWork, expectedTabId, targetPage) => {
     checkpoint(`${stage}_readiness`);
     try {
@@ -2769,21 +2878,32 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     }
     const summary = extensionPage.locator("#fill-summary");
     checkpoint(`${stage}_summary_wait`);
-    await poll(
-      async () => ({
-        resultsVisible: await extensionPage.locator("#fill-results").isVisible(),
-        summaryVisible: await summary.isVisible(),
-        summary: await summary.innerText().catch(() => ""),
-        errorVisible: await mainError.isVisible(),
-      }),
-      (state) =>
-        state.resultsVisible &&
-        state.summaryVisible &&
-        state.summary.startsWith("Verified 0; 1 setter attempts remain unverified.") &&
-        !state.errorVisible,
-      `${label.toLowerCase()}_fill_summary`,
-      30_000,
-    );
+    const waitForSummary = () =>
+      poll(
+        async () => ({
+          resultsVisible: await extensionPage.locator("#fill-results").isVisible(),
+          summaryVisible: await summary.isVisible(),
+          summary: await summary.innerText().catch(() => ""),
+          errorVisible: await mainError.isVisible(),
+        }),
+        (state) =>
+          state.resultsVisible &&
+          state.summaryVisible &&
+          state.summary.startsWith("Verified 0; 1 setter attempts remain unverified.") &&
+          !state.errorVisible,
+        `${label.toLowerCase()}_fill_summary`,
+        30_000,
+      );
+    if (stage === "contract_fill") {
+      try {
+        await waitForSummary();
+      } catch (error) {
+        await emitContractFillSummaryDiagnostic(targetPage).catch(() => {});
+        throw error;
+      }
+    } else {
+      await waitForSummary();
+    }
     const filledValue = await targetPage.locator(`#${selectorId}`).inputValue();
     assert(filledValue === "9999999995", "M64_BROWSER_SYNTHETIC_FORM_FILL_MISMATCH");
     return summary;

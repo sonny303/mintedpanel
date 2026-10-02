@@ -413,6 +413,39 @@ const m64ContractFillReceiptFields = [
   "work_validate_200",
   "work_validate_409",
 ];
+const m64ContractFillSummaryBooleanFields = new Set([
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+]);
+const m64ContractFillSummaryFields = [
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+  "heading_kind",
+  "verified_count",
+  "attempted_count",
+];
+const m64ContractFillSummaryHeadingKinds = new Set([
+  "verified",
+  "confirmed_static",
+  "empty",
+  "other",
+  "unknown",
+]);
+const m64ContractFillSummaryCountBuckets = new Set(["0", "1", "2_PLUS", "unknown"]);
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -700,6 +733,103 @@ function reportM64BrowserContractFillReceiptDiagnostic(driver, checkpoint) {
   if (checkpoint !== "contract_fill_receipt_wait") return;
   const diagnostic = safeM64ContractFillReceiptDiagnostic(driver.lines);
   if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_RECEIPT_DIAGNOSTIC|${diagnostic}`);
+}
+function safeM64ContractFillSummaryDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|CONTRACT_FILL_SUMMARY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ContractFillSummaryFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "CONTRACT_FILL_SUMMARY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  const values = {};
+  for (let index = 0; index < m64ContractFillSummaryFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64ContractFillSummaryBooleanFields.has(name);
+    const validValue = isBoolean
+      ? m64PermissionGrantValues.has(value)
+      : name === "heading_kind"
+        ? m64ContractFillSummaryHeadingKinds.has(value)
+        : m64ContractFillSummaryCountBuckets.has(value);
+    if (name !== m64ContractFillSummaryFields[index] || rest.length !== 0 || !validValue) {
+      return null;
+    }
+    values[name] = value;
+    fields.push(`${name}=${value}`);
+  }
+  if (
+    (values.heading_kind === "verified" &&
+      (values.verified_count === "unknown" || values.attempted_count === "unknown")) ||
+    (values.heading_kind === "confirmed_static" &&
+      (values.verified_count !== "unknown" || values.attempted_count === "unknown")) ||
+    (["empty", "other", "unknown"].includes(values.heading_kind) &&
+      (values.verified_count !== "unknown" || values.attempted_count !== "unknown"))
+  ) {
+    return null;
+  }
+  return fields.join("|");
+}
+function reportM64BrowserContractFillSummaryDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "contract_fill_summary_wait") return;
+  const diagnostic = safeM64ContractFillSummaryDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_SUMMARY_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64ContractFillSummaryDiagnosticPolicy() {
+  const values = {
+    results_visible: "true",
+    summary_visible: "true",
+    main_error_visible: "false",
+    fill_button_enabled: "false",
+    fill_note_visible: "false",
+    form_nonempty: "true",
+    form_matches_expected: "true",
+    innertext_expected: "false",
+    title_expected: "true",
+    heading_kind: "verified",
+    verified_count: "0",
+    attempted_count: "1",
+  };
+  const marker = (fields) =>
+    `M64|BROWSER|CONTRACT_FILL_SUMMARY|${m64ContractFillSummaryFields
+      .map((name) => `${name}=${fields[name]}`)
+      .join("|")}`;
+  const valid = marker(values);
+  const expected = m64ContractFillSummaryFields.map((name) => `${name}=${values[name]}`).join("|");
+  if (safeM64ContractFillSummaryDiagnostic([valid]) !== expected) {
+    fail("E612_M64_CONTRACT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const confirmedStatic = marker({
+    ...values,
+    heading_kind: "confirmed_static",
+    verified_count: "unknown",
+    attempted_count: "2_PLUS",
+  });
+  if (!safeM64ContractFillSummaryDiagnostic([confirmedStatic])) {
+    fail("E612_M64_CONTRACT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const invalidMarkers = [
+    valid.replace("results_visible=true", "results_visible=yes"),
+    valid.replace("heading_kind=verified", "heading_kind=raw_text"),
+    valid.replace("verified_count=0", "verified_count=9_PLUS"),
+    valid.replace("attempted_count=1", "attempted_count=unknown"),
+    valid.replace(
+      "results_visible=true|summary_visible=true",
+      "summary_visible=true|results_visible=true",
+    ),
+    `${valid}|unlisted=value`,
+    marker({ ...values, heading_kind: "confirmed_static", verified_count: "0" }),
+  ];
+  if (
+    invalidMarkers.some((invalid) => safeM64ContractFillSummaryDiagnostic([invalid]) !== null) ||
+    safeM64ContractFillSummaryDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_CONTRACT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
 }
 function safeM64PermissionGrantDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PERMISSION_GRANT|"));
@@ -1550,6 +1680,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     if (
       error instanceof Error &&
@@ -2167,6 +2298,7 @@ let networkCreated = false;
 let browserSession;
 let stage = "docker_context";
 try {
+  assertM64ContractFillSummaryDiagnosticPolicy();
   validateDockerContext();
   stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));
