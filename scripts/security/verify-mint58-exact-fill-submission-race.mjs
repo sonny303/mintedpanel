@@ -68,6 +68,16 @@ function runPsql(sql) {
   return result.stdout.trim();
 }
 
+function finalSqlResult(output) {
+  return (
+    output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1) ?? ""
+  );
+}
+
 const portalUpdateWasGranted =
   runPsql("SELECT has_table_privilege('service_role', 'public.portals', 'UPDATE')::text;") ===
   "true";
@@ -367,7 +377,9 @@ COMMIT;
   const settled = await Promise.allSettled([first.done, second.done]);
   const failures = settled.filter((result) => result.status === "rejected");
   if (failures.length > 0) throw new Error(failures.map((failure) => failure.reason).join("; "));
-  const results = settled.map((result) => (result.status === "fulfilled" ? result.value : ""));
+  const results = settled.map((result) =>
+    result.status === "fulfilled" ? finalSqlResult(result.value) : "",
+  );
   assert(
     results.every((result) => result === "created"),
     `expected both creates, got ${results}`,
