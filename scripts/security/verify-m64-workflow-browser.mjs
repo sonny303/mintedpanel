@@ -60,7 +60,7 @@ const RPC_PREFLIGHT_HEADERS = new Set([
   "x-client-info",
 ]);
 const TABLE_SELECTS = Object.freeze({
-  memberships: "org_id, role, organizations(name, lifecycle_state, created_at)",
+  memberships: "org_id,role,organizations(name,lifecycle_state,created_at)",
   profiles: "full_name",
 });
 const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
@@ -681,7 +681,7 @@ function assertDataPreflightPolicy() {
   const profileTarget =
     "/rest/v1/profiles?select=full_name&id=eq.39000000-0000-4000-a000-000000000065";
   const membershipsTarget =
-    "/rest/v1/memberships?select=org_id%2C+role%2C+organizations%28name%2C+lifecycle_state%2C+created_at%29&user_id=eq.39000000-0000-4000-a000-000000000065";
+    "/rest/v1/memberships?select=org_id%2Crole%2Corganizations%28name%2Clifecycle_state%2Ccreated_at%29&user_id=eq.30000000-0000-4000-8000-000000000002";
   const route = (path, target, headers) =>
     routeFor(SUPABASE_HOST, "OPTIONS", path, target, headers);
   assert(
@@ -714,6 +714,11 @@ function assertDataPreflightPolicy() {
         "access-control-request-headers":
           "apikey, authorization, x-client-info, apikey, accept-profile",
       }) === null &&
+      route(
+        "/rest/v1/memberships",
+        membershipsTarget.replace("org_id%2Crole", "org_id%2Cunknown"),
+        getHeaders,
+      ) === null &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites?x=1", postHeaders) === null &&
       route("/rest/v1/contracts", "/rest/v1/contracts?select=id", getHeaders) === null,
     "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
