@@ -1631,7 +1631,7 @@ function activeChromeTabId(extensionPage) {
   );
 }
 
-async function panelContractPermissionProbe(extensionPage) {
+async function panelContractPermissionProbe(extensionPage, extensionId) {
   checkpoint("panel_page_create");
   const panelPage = await bounded(
     () => context.newPage(),
@@ -1931,6 +1931,8 @@ async function panelContractPermissionProbe(extensionPage) {
   );
 
   checkpoint("permission_probe");
+  const nativeSidePanelUrl = `chrome-extension://${extensionId}/sidepanel.html`;
+  assert(extensionPage.url() === nativeSidePanelUrl, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
   await extensionPage.evaluate((expectedTabId) => {
     const button = document.createElement("button");
     button.id = "m64-open-real-sidepanel";
@@ -1946,6 +1948,8 @@ async function panelContractPermissionProbe(extensionPage) {
     });
     document.body.append(button);
   }, boundTabId);
+  // sidePanel.open creates a fresh native document; the original helper page remains separate.
+  const pagesBeforeNativePanel = new Set(context.pages());
   await extensionPage.locator("#m64-open-real-sidepanel").click();
   const sidePanelOpened = await poll(
     () => extensionPage.evaluate(() => window.__m64SidePanelOpen === true),
@@ -1954,24 +1958,41 @@ async function panelContractPermissionProbe(extensionPage) {
   );
   assert(sidePanelOpened, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
   assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
-  await extensionPage
+  let nativePanelPages;
+  try {
+    nativePanelPages = await poll(
+      () =>
+        context
+          .pages()
+          .filter((page) => !pagesBeforeNativePanel.has(page) && page.url() === nativeSidePanelUrl),
+      (pages) => pages.length === 1,
+      "native_sidepanel_document",
+      12_000,
+    );
+  } catch {
+    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
+  }
+  assert(nativePanelPages.length === 1, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
+  const nativePanelPage = nativePanelPages[0];
+  assert((await activeChromeTabId(nativePanelPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  await nativePanelPage
     .locator("#work-portal-access-grant")
     .waitFor({ state: "visible", timeout: 15_000 })
     .catch(() => assert(false, "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE"));
   const originPattern = `${new URL(PORTAL_URL).origin}/*`;
-  const permissionBefore = await extensionPage.evaluate(
+  const permissionBefore = await nativePanelPage.evaluate(
     (origin) => chrome.permissions.contains({ origins: [origin] }),
     originPattern,
   );
   assert(permissionBefore === false, "M64_BROWSER_PERMISSION_PREGRANTED");
-  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
-  await extensionPage
+  assert((await activeChromeTabId(nativePanelPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  await nativePanelPage
     .locator("#work-portal-access-grant")
     .click({ timeout: 10_000 })
     .catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
   await poll(
     () =>
-      extensionPage.evaluate(
+      nativePanelPage.evaluate(
         (origin) => chrome.permissions.contains({ origins: [origin] }),
         originPattern,
       ),
@@ -1979,12 +2000,12 @@ async function panelContractPermissionProbe(extensionPage) {
     "work_origin_permission_granted",
     15_000,
   ).catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
-  const permissionAfter = await extensionPage.evaluate(
+  const permissionAfter = await nativePanelPage.evaluate(
     (origin) => chrome.permissions.contains({ origins: [origin] }),
     originPattern,
   );
   assert(permissionAfter === true, "M64_BROWSER_PERMISSION_CONTAINS_FAILED");
-  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  assert((await activeChromeTabId(nativePanelPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
   return {
     contractValidations: [
       {
@@ -2230,7 +2251,7 @@ async function run() {
     `M64|BROWSER|NEGATIVE|PASS|playwright=${PLAYWRIGHT_VERSION}|chromium=${context.browser()?.version() ?? "unknown"}|runtime_assets_sha256=${runtimeAssetsSha256}|work_validate=404|ack=CONTEXT_STALE|portal_tabs=0`,
   );
 
-  const probe = await panelContractPermissionProbe(extensionPage);
+  const probe = await panelContractPermissionProbe(extensionPage, extensionId);
   assert(unexpectedRoutes === 0, `M64_BROWSER_DENIED_${firstDeniedCategory ?? "UNKNOWN_HOST"}`);
   safeLog(
     "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|sidepanel_open=true|active_payer_tab=true|permission_contains=true|fill_not_run=true",
