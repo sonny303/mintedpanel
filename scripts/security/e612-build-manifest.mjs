@@ -12,6 +12,7 @@ const roots = [
   "src",
   "scripts/security/e612-fixtures.mjs",
   "scripts/security/e612-http-driver.mjs",
+  "scripts/security/e612-m66-legacy-post-probes.mjs",
   "scripts/security/e613-http-probes.mjs",
   "scripts/security/e614-http-stream-fixtures.mjs",
   "scripts/security/e614-http-stream-probes.mjs",
