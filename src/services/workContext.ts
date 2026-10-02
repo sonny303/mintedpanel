@@ -42,11 +42,17 @@ function rejected(
 async function validateCaseOwner(
   ctx: WorkContextServiceCtx,
   request: Extract<WorkContextValidationRequest, { ownerKind: "case" }>,
+  allowAutoStartedContextVersion = false,
 ): Promise<ValidatedOwner | WorkContextValidationResult> {
   const context = await getCaseContext({ db: ctx.db, orgId: ctx.orgId }, request.ownerId);
   if (!context) return rejected("not_found", "Case not found.");
   if (request.orgId !== ctx.orgId) return rejected("not_found", "Case not found.");
-  if (context.contextVersion !== request.contextVersion) {
+  const exactContextVersion = context.contextVersion === request.contextVersion;
+  const fillStartedCase =
+    allowAutoStartedContextVersion &&
+    context.caseStatus === "in_progress" &&
+    context.contextVersion === request.contextVersion + 1;
+  if (!exactContextVersion && !fillStartedCase) {
     return rejected("stale", "Case context changed; refresh the work step.");
   }
   if (!context.caseStatus || !isOpenCaseStatus(context.caseStatus)) {
@@ -178,15 +184,16 @@ async function validateContractOwner(
 
 /** Revalidate one complete owner → SOP step → portal/configuration tuple in
  * the authenticated org, then return the exact current approved web maps. */
-export async function validateWorkContext(
+async function validateWorkContextWithReceiptContext(
   ctx: WorkContextServiceCtx,
   request: WorkContextValidationRequest,
+  allowAutoStartedContextVersion: boolean,
 ): Promise<WorkContextValidationResult> {
   if (request.orgId !== ctx.orgId) return rejected("not_found", "Work context not found.");
 
   const owner =
     request.ownerKind === "case"
-      ? await validateCaseOwner(ctx, request)
+      ? await validateCaseOwner(ctx, request, allowAutoStartedContextVersion)
       : await validateContractOwner(ctx, request);
   if ("kind" in owner) return owner;
 
@@ -262,4 +269,29 @@ export async function validateWorkContext(
       effectiveWebMaps,
     },
   };
+}
+
+/** Strict launch/fill validation. The requested case context version must be
+ * current with no post-launch exception. */
+export function validateWorkContext(
+  ctx: WorkContextServiceCtx,
+  request: WorkContextValidationRequest,
+): Promise<WorkContextValidationResult> {
+  return validateWorkContextWithReceiptContext(ctx, request, false);
+}
+
+/** A submission may observe the one context-version bump caused by this exact
+ * server-stamped V2 fill receipt auto-starting a not_started case. The caller
+ * must first match the persisted receipt against every tuple field and pass
+ * only its did_auto_start_case value; database validation repeats this rule
+ * under locks before writing. */
+export function validateWorkContextForFillReceipt(
+  ctx: WorkContextServiceCtx,
+  request: WorkContextValidationRequest,
+  didAutoStartCase: boolean,
+): Promise<WorkContextValidationResult> {
+  if (request.ownerKind !== "case") {
+    return Promise.resolve(rejected("mismatch", "Only case Work receipts can be submitted here."));
+  }
+  return validateWorkContextWithReceiptContext(ctx, request, didAutoStartCase);
 }

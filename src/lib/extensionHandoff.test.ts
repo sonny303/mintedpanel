@@ -44,7 +44,7 @@ const WORK_INPUT: SetActiveWorkInput = {
   portalId: "b7a90000-0000-4000-a000-0000000000c4",
   portalKey: "regional_enrollment",
   mappingGeneration: 9,
-  effectiveMappingFingerprint: "fingerprint-v2",
+  effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
   providerId: PROVIDER_ID,
   facilityId: FACILITY_ID,
   stepIdentity:

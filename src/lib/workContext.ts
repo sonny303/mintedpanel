@@ -76,8 +76,12 @@ export type WorkContextValidationErrorCode =
 export type ParseWorkContextRequestResult =
   { ok: true; request: WorkContextValidationRequest } | { ok: false; message: string };
 
+export type ParseWorkContextTupleResult =
+  { ok: true; tuple: WorkContextTuple } | { ok: false; message: string };
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PORTAL_KEY_RE = /^[a-z0-9][a-z0-9._-]{0,99}$/;
+const MAPPING_FINGERPRINT_RE = /^sha256:[0-9a-f]{64}$/;
 const COMMON_KEYS = [
   "protocolVersion",
   "launchReceiptId",
@@ -166,8 +170,7 @@ export function parseWorkContextValidationRequest(value: unknown): ParseWorkCont
   }
   if (
     typeof row.effectiveMappingFingerprint !== "string" ||
-    row.effectiveMappingFingerprint.length < 1 ||
-    row.effectiveMappingFingerprint.length > 256
+    !MAPPING_FINGERPRINT_RE.test(row.effectiveMappingFingerprint)
   ) {
     return { ok: false, message: "effectiveMappingFingerprint is invalid." };
   }
@@ -200,6 +203,19 @@ export function parseWorkContextValidationRequest(value: unknown): ParseWorkCont
     };
   }
   return { ok: true, request: row as unknown as WorkContextValidationRequest };
+}
+
+/** Parse the exact canonical tuple nested in fill-event and submission bodies.
+ * Unlike the validation endpoint request, a tuple does not carry a protocol
+ * version. Reject one if present rather than silently normalizing it away. */
+export function parseWorkContextTuple(value: unknown): ParseWorkContextTupleResult {
+  const row = recordOf(value);
+  if (!row || Object.prototype.hasOwnProperty.call(row, "protocolVersion")) {
+    return { ok: false, message: "workContext must be an exact canonical tuple." };
+  }
+  const parsed = parseWorkContextValidationRequest({ ...row, protocolVersion: 2 });
+  if (!parsed.ok) return parsed;
+  return { ok: true, tuple: workContextTuple(parsed.request) };
 }
 
 export function workContextTuple(request: WorkContextValidationRequest): WorkContextTuple {

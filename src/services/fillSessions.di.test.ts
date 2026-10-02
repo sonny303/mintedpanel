@@ -5,6 +5,7 @@ import type { Database } from "@/integrations/supabase/types";
 // fillSessions now also exposes a browser reader that imports the anon client
 // at load; stub it so this ctx-only suite needs no real env.
 vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
+vi.mock("@/services/workContext", () => ({ validateWorkContext: vi.fn() }));
 
 import {
   recordFillEvent,
@@ -12,6 +13,10 @@ import {
   type FillSessionServiceCtx,
   type RecordFillEventResult,
 } from "./fillSessions";
+import { validateWorkContext } from "@/services/workContext";
+import type { WorkContextTuple } from "@/lib/workContext";
+
+const validateWorkContextMock = vi.mocked(validateWorkContext);
 
 // Minimal chainable fake of the supabase-js query builder — enough for the
 // fill-session shapes (org-scoped maybeSingle lookups, insert().select().single(),
@@ -87,6 +92,26 @@ const SOP_TEMPLATE_ID = "61616161-4242-4535-8686-797979797979";
 const LAUNCH_RECEIPT_ID = "71717171-4242-4535-8686-797979797979";
 const FACILITY_ID = "81818181-4242-4535-8686-797979797979";
 const PORTAL_ID = "91919191-4242-4535-8686-797979797979";
+const STEP_ID = "a1a1a1a1-1111-4111-8111-111111111111";
+const STEP_IDENTITY = `${CASE_ID}:${TASK_ID}:${SOP_TEMPLATE_ID}:3:${STEP_ID}`;
+const CASE_WORK_CONTEXT: WorkContextTuple = {
+  launchReceiptId: LAUNCH_RECEIPT_ID,
+  orgId: "b7a90000-0000-4000-a000-000000000001",
+  ownerKind: "case",
+  ownerId: CASE_ID,
+  contextVersion: 2,
+  sopTemplateId: SOP_TEMPLATE_ID,
+  sopVersion: 3,
+  portalId: PORTAL_ID,
+  portalKey: "aetna_enrollment_form",
+  mappingGeneration: 4,
+  effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+  providerId: PROVIDER_ID,
+  facilityId: FACILITY_ID,
+  stepIdentity: STEP_IDENTITY,
+  taskId: TASK_ID,
+  stepId: STEP_ID,
+};
 
 const baseInput: FillEventInput = { id: FILL_ID, caseId: CASE_ID, portalKey: "availity" };
 const V2_FIELD = {
@@ -128,6 +153,16 @@ const CONTRACT_V2_INPUT: FillEventInput = {
   isTest: false,
 };
 
+const CASE_WORK_V2_INPUT: FillEventInput = {
+  ...V2_INPUT,
+  workContext: CASE_WORK_CONTEXT,
+  caseId: CASE_ID,
+  providerId: PROVIDER_ID,
+  portalKey: CASE_WORK_CONTEXT.portalKey,
+  schemaVersion: 2,
+  fillMode: "web",
+};
+
 // The row the DB hands back from insert()/the idempotency lookup.
 const storedRow = {
   id: FILL_ID,
@@ -142,6 +177,39 @@ const storedRow = {
   fields_skipped: null,
   docs_attached: null,
   performed_by: "user-1",
+};
+
+const storedCaseWorkRow = {
+  ...storedRow,
+  org_id: CASE_WORK_CONTEXT.orgId,
+  case_id: CASE_ID,
+  contract_id: null,
+  contract_sop_assignment_id: null,
+  sop_template_id: SOP_TEMPLATE_ID,
+  sop_version: 3,
+  task_index: null,
+  step_index: null,
+  case_task_id: TASK_ID,
+  case_step_id: STEP_ID,
+  step_identity: STEP_IDENTITY,
+  facility_id: FACILITY_ID,
+  portal_id: PORTAL_ID,
+  context_version: 2,
+  launch_receipt_id: LAUNCH_RECEIPT_ID,
+  mapping_generation: 4,
+  effective_mapping_fingerprint: `sha256:${"a".repeat(64)}`,
+  provider_id: PROVIDER_ID,
+  portal_key: CASE_WORK_CONTEXT.portalKey,
+  fill_mode: "web",
+  fields_filled: 1,
+  fields_skipped: [],
+  docs_attached: null,
+  is_test: false,
+  event_schema_version: 2,
+  fields_attempted: 1,
+  fields_verified: 1,
+  fields_rejected: 0,
+  field_outcomes: [V2_FIELD],
 };
 
 function expectRejected(result: RecordFillEventResult, status: 404 | 409 | 422): void {
@@ -695,6 +763,115 @@ describe("recordFillEvent — task completion", () => {
     expect(writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: "CREATE", entityType: "fill_session" }),
     );
+  });
+});
+
+describe("recordFillEvent — exact case Work receipts", () => {
+  it("persists the selected task and step from the nested canonical tuple without completing the task", async () => {
+    validateWorkContextMock.mockResolvedValue({ kind: "ok", data: {} as never } as never);
+    const { db, captures } = makeFakeDb([
+      { data: null },
+      { data: null },
+      { data: { id: CASE_ID } },
+      { data: { id: PROVIDER_ID } },
+      { data: { ...storedRow, case_id: CASE_ID, provider_id: PROVIDER_ID } },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+    ctx.orgId = CASE_WORK_CONTEXT.orgId;
+
+    const result = await recordFillEvent(ctx, CASE_WORK_V2_INPUT);
+
+    expect(result.kind).toBe("created");
+    expect(validateWorkContextMock).toHaveBeenCalledWith(
+      { db, orgId: CASE_WORK_CONTEXT.orgId },
+      { protocolVersion: 2, ...CASE_WORK_CONTEXT },
+    );
+    const insert = captures.find(
+      (capture) => capture.table === "fill_sessions" && capture.op === "insert",
+    );
+    expect(insert?.payload).toMatchObject({
+      case_id: CASE_ID,
+      contract_id: null,
+      case_task_id: TASK_ID,
+      case_step_id: STEP_ID,
+      step_identity: STEP_IDENTITY,
+      portal_id: PORTAL_ID,
+      mapping_generation: 4,
+      effective_mapping_fingerprint: `sha256:${"a".repeat(64)}`,
+    });
+    expect(captures.some((capture) => capture.table === "tasks" && capture.op === "update")).toBe(
+      false,
+    );
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["test fill", { isTest: true }],
+    ["conflicting flat owner", { caseId: PROVIDER_ID }],
+    ["conflicting selected config", { portalId: ASSIGNMENT_ID }],
+    ["conflicting snake-case organization", { org_id: "b7a90000-0000-4000-a000-000000000002" }],
+    ["conflicting selected task alias", { case_task_id: PROVIDER_ID }],
+    ["conflicting actor alias", { performed_by: "87654321-4321-4321-8321-210987654321" }],
+  ])("rejects a %s before any database call", async (_label, override) => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    ctx.orgId = CASE_WORK_CONTEXT.orgId;
+
+    const result = await recordFillEvent(ctx, {
+      ...CASE_WORK_V2_INPUT,
+      ...override,
+    });
+
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("rejects an untrusted organization selector before any database call", async () => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    ctx.orgId = "b7a90000-0000-4000-a000-000000000002";
+
+    const result = await recordFillEvent(ctx, CASE_WORK_V2_INPUT);
+
+    expectRejected(result, 404);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("maps stale current work context to 409 before inserting the receipt", async () => {
+    validateWorkContextMock.mockResolvedValue({ kind: "stale", message: "changed" });
+    const { db, captures } = makeFakeDb([{ data: null }, { data: null }]);
+    const { ctx } = ctxWith(db);
+    ctx.orgId = CASE_WORK_CONTEXT.orgId;
+
+    const result = await recordFillEvent(ctx, CASE_WORK_V2_INPUT);
+
+    expectRejected(result, 409);
+    expect(
+      captures.some((capture) => capture.table === "fill_sessions" && capture.op === "insert"),
+    ).toBe(false);
+  });
+
+  it("returns an exact historical Work fill retry before stale step or mapping validation", async () => {
+    validateWorkContextMock.mockReset();
+    validateWorkContextMock.mockResolvedValue({
+      kind: "stale",
+      message: "step completed or reset",
+    });
+    const { db, captures } = makeFakeDb([{ data: storedCaseWorkRow }]);
+    const { ctx, writeAudit } = ctxWith(db);
+    ctx.orgId = CASE_WORK_CONTEXT.orgId;
+
+    const result = await recordFillEvent(ctx, CASE_WORK_V2_INPUT);
+
+    expect(result.kind).toBe("duplicate");
+    if (result.kind !== "duplicate") throw new Error("expected an exact replay");
+    expect(result.session.id).toBe(FILL_ID);
+    expect(validateWorkContextMock).not.toHaveBeenCalled();
+    expect(captures).toHaveLength(1);
+    expect(captures[0].table).toBe("fill_sessions");
+    expect(captures[0].filters).toContainEqual(["id", FILL_ID]);
+    expect(captures[0].filters).toContainEqual(["org_id", CASE_WORK_CONTEXT.orgId]);
+    expect(writeAudit).not.toHaveBeenCalled();
   });
 });
 

@@ -1348,6 +1348,9 @@ export interface Touch {
   notes: string | null;
   coordinatorId: string | null;
   taskId: string | null;
+  /** MINT-58 durable link used only by exact typed Enrollment submissions. */
+  fillSessionId?: string | null;
+  submissionRequestFingerprint?: string | null;
   communicationEventId: string | null;
   source: "manual" | "email" | "extension";
   createdAt: string;
@@ -1859,6 +1862,10 @@ export interface FillSession {
   /** Matrix-owned fill receipt; NULL for existing case/test rows. */
   contractId?: string | null;
   contractSopAssignmentId?: string | null;
+  /** MINT-58 exact case Work step identity, separate from legacy whole-task completion. */
+  caseTaskId?: string | null;
+  caseStepId?: string | null;
+  stepIdentity?: string | null;
   sopTemplateId?: string | null;
   sopVersion?: number | null;
   taskIndex?: number | null;
