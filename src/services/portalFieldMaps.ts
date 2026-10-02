@@ -571,6 +571,24 @@ const PROPOSE_FIELD_TYPES: ReadonlySet<string> = new Set([
 export const PROPOSED_BY_EXTENSION_NOTE =
   "Proposed by the extension — seen on the form, not yet mapped to a token.";
 
+async function legacyProposalRequiresGeneration(
+  ctx: PortalFieldMapServiceCtx,
+  portalKey: string,
+): Promise<boolean> {
+  const { data, error } = await ctx.db
+    .from("portals")
+    .select("case_type, requires_explicit_selection, mapping_generation")
+    .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+    .eq("portal_key", portalKey);
+  if (error) throw error;
+  return (data ?? []).some(
+    (portal) =>
+      portal.case_type !== null ||
+      portal.requires_explicit_selection === true ||
+      (portal.mapping_generation ?? 1) > 1,
+  );
+}
+
 // Same constraint, from the trainer's "Manual" button. See markFieldMapManual.
 export const MARKED_MANUAL_NOTE = "Marked manual in the trainer — filled by hand.";
 
@@ -645,6 +663,22 @@ export async function proposeFieldMap(
   // Empty list is ignored (AJAX select not loaded); null = key absent.
   const controlOptions =
     optionsCheck.options && optionsCheck.options.length > 0 ? optionsCheck.options : null;
+
+  // Legacy clients have no selected-configuration generation. Reject those
+  // requests before the idempotent lookup can return an existing token-bearing
+  // row or the label-learning path can expose configuration-derived evidence.
+  // The query is limited to the shared row and this caller's organization;
+  // another organization's private configuration cannot block this proposal.
+  if (
+    input.expected_mapping_generation == null &&
+    (await legacyProposalRequiresGeneration({ db: ctx.db, orgId: ctx.orgId }, portalKey))
+  ) {
+    return {
+      kind: "rejected",
+      status: 409,
+      message: "This form configuration requires expected_mapping_generation.",
+    };
+  }
 
   if (input.expected_mapping_generation != null) {
     const { data, error } = await ctx.db.rpc(
