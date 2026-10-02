@@ -141,7 +141,9 @@ test.describe("contact route (submit_inbound_lead)", () => {
       return json([]);
     });
     await page.goto("/contact");
-    await expect(page.getByRole("heading", { name: "Get in touch" })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: "Tell us where credentialing needs support." }),
+    ).toBeVisible({
       timeout: 30000,
     });
     await expect(page.locator("body")).not.toContainText("token");
