@@ -44,6 +44,7 @@ const CONTRACT_PROFILE_TARGET = (() => {
 })();
 const CONTRACT_PORTAL_ID = "38000000-0000-4000-a000-000000000064";
 const ENROLLMENT_PORTAL_ID = "38000000-0000-4000-a000-000000000065";
+const ENROLLMENT_PORTAL_KEY = "m64_enrollment";
 const ENROLLMENT_CASE_ID = "49000000-0000-4000-a000-000000000064";
 const ENROLLMENT_TASK_ID = "99000000-0000-4000-a000-000000000064";
 const ENROLLMENT_STEP1_ID = "89000000-0000-4000-a000-000000000064";
@@ -120,8 +121,7 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
       group_id: `eq.${GROUP_ID}`,
     }),
   ]),
-  // Case detail embeds tasks in the credential_cases selector; its separate
-  // TaskDrawer lookup is not enabled until Open step has actually been reached.
+  // The TaskDrawer lookup is enabled only after Open step reaches this task.
   credential_cases: Object.freeze({
     select:
       "*,provider:providers(*),payer:payers(*),mso:msos(*),group:provider_groups(*),facility:facilities(*),credentialing_status:status_configs(*),tasks(*),touches(*),status_history(*),payer_pipeline_history(*),case_status_history(*)",
@@ -134,25 +134,47 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
     case_id: `eq.${ENROLLMENT_CASE_ID}`,
     org_id: `eq.${ORG_ID}`,
   }),
+  tasks: Object.freeze({
+    select: "*",
+    id: `eq.${ENROLLMENT_TASK_ID}`,
+    org_id: `eq.${ORG_ID}`,
+  }),
   payer_network_targets: Object.freeze({
     select: "*",
     org_id: `eq.${ORG_ID}`,
     order: "created_at.asc",
   }),
-  // Contract Matrix loads the active-org/global snapshot; key and mapType are
-  // resolved locally after these exact scoped reads.
-  portals: Object.freeze({
-    select:
-      "id,org_id,portal_key,name,payer_id,form_url,case_type,requires_explicit_selection,mapping_generation,is_verified,proven_at",
-    order: "portal_key.asc,id.asc",
-    or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
-  }),
-  portal_field_maps: Object.freeze({
-    select:
-      "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
-    order: "portal_key.asc,selector.asc",
-    or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
-  }),
+  // Keep the Matrix snapshot and add only the Enrollment Work key lookup.
+  portals: Object.freeze([
+    Object.freeze({
+      select:
+        "id,org_id,portal_key,name,payer_id,form_url,case_type,requires_explicit_selection,mapping_generation,is_verified,proven_at",
+      order: "portal_key.asc,id.asc",
+      or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+    }),
+    Object.freeze({
+      select:
+        "id,org_id,portal_key,name,payer_id,form_url,case_type,requires_explicit_selection,mapping_generation,is_verified,proven_at",
+      order: "portal_key.asc,id.asc",
+      or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+      portal_key: `eq.${ENROLLMENT_PORTAL_KEY}`,
+    }),
+  ]),
+  portal_field_maps: Object.freeze([
+    Object.freeze({
+      select:
+        "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
+      order: "portal_key.asc,selector.asc",
+      or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+    }),
+    Object.freeze({
+      select:
+        "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
+      order: "portal_key.asc,selector.asc",
+      or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+      portal_key: `eq.${ENROLLMENT_PORTAL_KEY}`,
+    }),
+  ]),
   contract_sop_assignments: Object.freeze({
     select: "*",
     org_id: `eq.${ORG_ID}`,
@@ -1378,6 +1400,25 @@ function assertDataPreflightPolicy() {
       }),
     ],
   ];
+  const enrollmentPortalResolverQueries = {
+    portals: {
+      select:
+        "id,org_id,portal_key,name,payer_id,form_url,case_type,requires_explicit_selection,mapping_generation,is_verified,proven_at",
+      order: "portal_key.asc,id.asc",
+      or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+      portal_key: `eq.${ENROLLMENT_PORTAL_KEY}`,
+    },
+    portal_field_maps: {
+      select:
+        "id,org_id,portal_key,url_pattern,page_step,map_type,selector,selector_fallbacks,source,token,hardcoded_value,transform,field_type,notes,status,control_options,mapping_generation,shared_base_generation,created_at,updated_at,learned_via",
+      order: "portal_key.asc,selector.asc",
+      or: `(org_id.is.null,org_id.eq.${ORG_ID})`,
+      portal_key: `eq.${ENROLLMENT_PORTAL_KEY}`,
+    },
+  };
+  const enrollmentPortalResolverTargets = Object.entries(enrollmentPortalResolverQueries).map(
+    ([table, query]) => [table, queryTarget(`/rest/v1/${table}`, query)],
+  );
   const fillSessionCountTarget = queryTarget("/rest/v1/fill_sessions", FILL_SESSION_COUNT_QUERY);
   const headHeaders = {
     origin: PANEL_ORIGIN,
@@ -1461,11 +1502,12 @@ function assertDataPreflightPolicy() {
     org_id: `eq.${ORG_ID}`,
   };
   const caseFacilitiesTarget = queryTarget("/rest/v1/case_facilities", caseFacilitiesQuery);
-  const tasksTarget = queryTarget("/rest/v1/tasks", {
+  const enrollmentTaskQuery = {
     select: "*",
     id: `eq.${ENROLLMENT_TASK_ID}`,
     org_id: `eq.${ORG_ID}`,
-  });
+  };
+  const tasksTarget = queryTarget("/rest/v1/tasks", enrollmentTaskQuery);
   const route = (path, target, headers) =>
     routeFor(SUPABASE_HOST, "OPTIONS", path, target, headers);
   assert(
@@ -1485,6 +1527,11 @@ function assertDataPreflightPolicy() {
           route(`/rest/v1/${table}`, target, getHeaders)?.name ===
           `supabase.rest.${table}_preflight`,
       ) &&
+      enrollmentPortalResolverTargets.every(
+        ([table, target]) =>
+          route(`/rest/v1/${table}`, target, getHeaders)?.name ===
+          `supabase.rest.${table}_preflight`,
+      ) &&
       matrixTargets.every(
         ([table, target]) =>
           route(`/rest/v1/${table}`, target, getHeaders)?.name ===
@@ -1494,6 +1541,7 @@ function assertDataPreflightPolicy() {
         "supabase.rest.credential_cases_preflight" &&
       route("/rest/v1/case_facilities", caseFacilitiesTarget, getHeaders)?.name ===
         "supabase.rest.case_facilities_preflight" &&
+      route("/rest/v1/tasks", tasksTarget, getHeaders)?.name === "supabase.rest.tasks_preflight" &&
       route("/rest/v1/facilities", groupedFacilityTarget, getHeaders)?.name ===
         "supabase.rest.facilities_preflight" &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites", postHeaders)?.name ===
@@ -1502,6 +1550,73 @@ function assertDataPreflightPolicy() {
         "supabase.rest.fill_sessions_count_preflight" &&
       fillSessionHeadRoute(fillSessionCountTarget)?.name === "supabase.rest.fill_sessions_count",
     "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
+  );
+  const deniedGetHeaderVariants = [
+    { origin: "https://untrusted.invalid" },
+    { "access-control-request-method": "POST" },
+    { "access-control-request-private-network": "true" },
+    { "access-control-request-headers": undefined },
+    {
+      "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+    },
+    {
+      "access-control-request-headers":
+        "apikey, authorization, x-client-info, apikey, accept-profile",
+    },
+  ];
+  const strictGetPreflightDenials = (targets) =>
+    targets.every(([table, target]) =>
+      deniedGetHeaderVariants.every(
+        (overrides) => route(`/rest/v1/${table}`, target, { ...getHeaders, ...overrides }) === null,
+      ),
+    );
+  const wrongTaskTargets = [
+    tasksTarget.replace(ENROLLMENT_TASK_ID, "99000000-0000-4000-a000-000000000099"),
+    tasksTarget.replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+    `${tasksTarget}&unexpected=eq.x`,
+    `${tasksTarget}&id=eq.${ENROLLMENT_TASK_ID}`,
+    queryTarget("/rest/v1/tasks", { ...enrollmentTaskQuery, select: "id" }),
+  ];
+  const wrongKeyResolverTargets = enrollmentPortalResolverTargets.flatMap(([table, target]) => {
+    const query = enrollmentPortalResolverQueries[table];
+    const path = `/rest/v1/${table}`;
+    const changedOrder =
+      table === "portals" ? "id.asc,portal_key.asc" : "selector.asc,portal_key.asc";
+    return [
+      [table, queryTarget(path, { ...query, portal_key: "eq.m64_contract" })],
+      [
+        table,
+        queryTarget(path, {
+          ...query,
+          or: "(org_id.is.null,org_id.eq.18000000-0000-4000-a000-000000000099)",
+        }),
+      ],
+      [table, `${target}&unexpected=eq.x`],
+      [table, `${target}&portal_key=eq.${ENROLLMENT_PORTAL_KEY}`],
+      [table, queryTarget(path, { ...query, select: "id,portal_key" })],
+      [table, queryTarget(path, { ...query, order: changedOrder })],
+    ];
+  });
+  const strictTargetRoutes = [["tasks", tasksTarget], ...enrollmentPortalResolverTargets];
+  assert(
+    wrongTaskTargets.every((target) => route("/rest/v1/tasks", target, getHeaders) === null) &&
+      wrongKeyResolverTargets.every(
+        ([table, target]) => route(`/rest/v1/${table}`, target, getHeaders) === null,
+      ) &&
+      strictTargetRoutes.every(
+        ([table, target]) => route(`/rest/v1/${table}/unexpected`, target, getHeaders) === null,
+      ) &&
+      strictGetPreflightDenials(strictTargetRoutes) &&
+      strictTargetRoutes.every(
+        ([table, target]) =>
+          routeFor(SUPABASE_HOST, "POST", `/rest/v1/${table}`, target, getHeaders) === null,
+      ) &&
+      strictTargetRoutes.every(
+        ([table, target]) =>
+          routeFor("unexpected.supabase.co", "OPTIONS", `/rest/v1/${table}`, target, getHeaders) ===
+          null,
+      ),
+    "M64_BROWSER_TASK_AND_KEYED_PORTAL_PREFLIGHT_POLICY_INVALID",
   );
   assert(
     route("/rest/v1/profiles", profileTarget, { ...getHeaders, origin: "https://other.test" }) ===
@@ -1689,7 +1804,6 @@ function assertDataPreflightPolicy() {
         }),
         getHeaders,
       ) === null &&
-      route("/rest/v1/tasks", tasksTarget, getHeaders) === null &&
       route(
         "/rest/v1/memberships",
         membershipsTarget.replace("org_id%2Crole", "org_id%2Cunknown"),
