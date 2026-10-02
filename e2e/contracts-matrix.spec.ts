@@ -4,6 +4,7 @@ const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const GROUP_1 = "33333333-3333-4333-8333-333333333333";
+const GROUP_2 = "77777777-7777-4777-8777-777777777777";
 const PAYER_BCBS = "44444444-4444-4444-8444-444444444444";
 const PAYER_HUMANA = "55555555-5555-4555-8555-555555555555";
 const STATUS_SIGNED = "66666666-6666-4666-8666-666666666666";
@@ -54,6 +55,13 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
         tin: "48-1158557",
         is_active: true,
       },
+      {
+        id: GROUP_2,
+        org_id: ORG_ID,
+        name: "Denver Nutrition",
+        tin: "84-1234567",
+        is_active: true,
+      },
     ],
     facilities: [
       {
@@ -70,6 +78,14 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
         group_id: GROUP_1,
         name: "Overland Clinic",
         state: "MO",
+        is_active: true,
+      },
+      {
+        id: "f-3",
+        org_id: ORG_ID,
+        group_id: GROUP_2,
+        name: "Denver Clinic",
+        state: "CO",
         is_active: true,
       },
     ],
@@ -113,8 +129,57 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
         payer_id: PAYER_BCBS,
         state: "KS",
         contracting_status_id: STATUS_SIGNED,
+        specialty: "Physical Therapy",
         tentative_effective_date: "2026-10-01",
         notes: "BCBS executed contract pending final loading",
+      },
+      {
+        id: "c-2",
+        org_id: ORG_ID,
+        group_id: GROUP_1,
+        payer_id: PAYER_HUMANA,
+        state: "MO",
+        contracting_status_id: STATUS_SIGNED,
+        specialty: "Nutrition",
+        notes: "Humana nutrition contract",
+      },
+      {
+        id: "c-3",
+        org_id: ORG_ID,
+        group_id: GROUP_2,
+        payer_id: PAYER_BCBS,
+        state: "CO",
+        contracting_status_id: STATUS_SIGNED,
+        specialty: "Nutrition",
+        notes: "Denver nutrition contract",
+      },
+      {
+        id: "c-4",
+        org_id: ORG_ID,
+        group_id: GROUP_2,
+        payer_id: PAYER_HUMANA,
+        state: "CO",
+        contracting_status_id: STATUS_SIGNED,
+        specialty: "Physical Therapy",
+      },
+      {
+        id: "c-5",
+        org_id: ORG_ID,
+        group_id: GROUP_1,
+        payer_id: PAYER_BCBS,
+        state: "MO",
+        contracting_status_id: STATUS_SIGNED,
+        specialty: null,
+      },
+      {
+        id: "c-6",
+        org_id: ORG_ID,
+        group_id: GROUP_2,
+        payer_id: PAYER_BCBS,
+        state: "KS",
+        contracting_status_id: STATUS_SIGNED,
+        specialty: "Nutrition",
+        notes: "Denver KS contract",
       },
     ],
     credential_cases: [],
@@ -152,7 +217,7 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
 
   // Verify PageHeader and Group selector
   await expect(page.getByRole("heading", { name: "Group Contracts Matrix" })).toBeVisible();
-  await expect(page.getByText("Kansas Fitness Physio")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Kansas Fitness Physio/ })).toBeVisible();
 
   // Verify Table headers
   await expect(page.getByRole("columnheader", { name: "Payer" })).toBeVisible();
@@ -173,4 +238,58 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
   // Drawer is visible
   await expect(page.getByRole("heading", { name: "BCBS — KS" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save Contract" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: /Kansas Fitness Physio/ }).click();
+  await page.getByRole("menuitemcheckbox", { name: /Denver Nutrition/ }).click();
+  await page.keyboard.press("Escape");
+
+  const kansas = page.getByRole("region", { name: "Kansas Fitness Physio contracts" });
+  const denver = page.getByRole("region", { name: "Denver Nutrition contracts" });
+  await expect(kansas.getByRole("columnheader", { name: "KS" })).toBeVisible();
+  await expect(denver.getByRole("columnheader", { name: "CO" })).toBeVisible();
+  await expect(denver.getByRole("columnheader", { name: "KS" })).toBeVisible();
+  await expect(denver.getByText("Denver nutrition contract")).toBeVisible();
+  await denver.getByRole("row", { name: /BCBS/ }).getByRole("cell").nth(2).click();
+  await expect(page.getByText("Group contract record for Denver Nutrition")).toBeVisible();
+  await expect(page.getByPlaceholder("e.g. Physical Therapy, Multi-Specialty")).toHaveValue(
+    "Nutrition",
+  );
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.getByRole("combobox", { name: "Specialty" }).click();
+  await page.getByRole("option", { name: "Physical Therapy" }).click();
+  await expect(kansas.getByRole("row", { name: /BCBS/ })).toBeVisible();
+  await expect(kansas.getByRole("row", { name: /Humana/ })).toHaveCount(0);
+  await expect(denver.getByRole("row", { name: /Humana/ })).toBeVisible();
+  await expect(denver.getByRole("row", { name: /BCBS/ })).toHaveCount(0);
+  await expect(denver.getByText("Denver nutrition contract")).toHaveCount(0);
+
+  await page.getByPlaceholder("Search payer...").fill("BCBS");
+  await expect(kansas.getByRole("row", { name: /BCBS/ })).toBeVisible();
+  await expect(
+    denver.getByText("No contracts match this specialty and payer search"),
+  ).toBeVisible();
+  await page.getByPlaceholder("Search payer...").fill("");
+
+  await page.getByRole("combobox", { name: "Specialty" }).click();
+  await page.getByRole("option", { name: "Multi-Specialty / Unspecified" }).click();
+  await expect(kansas.getByRole("columnheader", { name: "MO" })).toBeVisible();
+  await expect(kansas.getByRole("columnheader", { name: "KS" })).toHaveCount(0);
+
+  await page.getByRole("combobox", { name: "Specialty" }).click();
+  await page.getByRole("option", { name: "Nutrition" }).click();
+  await expect(kansas.getByRole("row", { name: /Humana/ })).toBeVisible();
+  await expect(denver.getByRole("row", { name: /BCBS/ })).toBeVisible();
+  await denver.getByRole("row", { name: /BCBS/ }).getByRole("cell").nth(1).click();
+  await expect(page.getByText("Group contract record for Denver Nutrition")).toBeVisible();
+
+  await page.goto(`/reporting/contracts-matrix?groupId=${GROUP_2}&payerId=${PAYER_BCBS}&state=KS`);
+  await expect(page.getByText(/Matrix context: Denver Nutrition · BCBS · KS/)).toBeVisible();
+  await expect(page.getByText("Matching cell highlighted below.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Denver Nutrition contracts" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Kansas Fitness Physio contracts" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator('[aria-current="location"]')).toHaveCount(1);
 });
