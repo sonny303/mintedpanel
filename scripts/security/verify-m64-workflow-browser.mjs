@@ -679,6 +679,8 @@ function assertM64ProviderReadPolicy() {
     "access-control-request-method": "GET",
     "access-control-request-headers": "authorization, x-org-id",
   };
+  const originlessGetHeaders = { ...getHeaders };
+  delete originlessGetHeaders.origin;
   const route = (method, target, headers = {}) =>
     routeFor(PANEL_HOST, method, new URL(target, PANEL_ORIGIN).pathname, target, headers);
   try {
@@ -689,6 +691,10 @@ function assertM64ProviderReadPolicy() {
       assert(
         route("GET", target, getHeaders)?.name === getName,
         "M64_BROWSER_PROVIDER_READ_POLICY_INVALID",
+      );
+      assert(
+        route("GET", target, originlessGetHeaders)?.name === getName,
+        "M64_BROWSER_PROVIDER_ORIGINLESS_GET_POLICY_INVALID",
       );
       assert(
         route("OPTIONS", target, preflightHeaders)?.name === preflightName,
@@ -735,13 +741,22 @@ function assertM64ProviderReadPolicy() {
         }) === null,
         "M64_BROWSER_PROVIDER_PREFLIGHT_POLICY_TOO_BROAD",
       );
+      const originlessOptionsHeaders = { ...preflightHeaders };
+      delete originlessOptionsHeaders.origin;
       assert(
-        route("GET", target, { ...getHeaders, origin: "https://attacker.invalid" }) === null &&
+        route("OPTIONS", target, originlessOptionsHeaders) === null &&
+          route("GET", target, { ...getHeaders, origin: "https://attacker.invalid" }) === null &&
+          route("GET", target, { ...getHeaders, origin: "null" }) === null &&
+          route("GET", target, { ...getHeaders, origin: null }) === null &&
+          route("GET", target, { ...getHeaders, origin: "" }) === null &&
           route("GET", target, {
             ...getHeaders,
             "x-org-id": "18000000-0000-4000-a000-000000000001",
           }) === null &&
           route("GET", target, { ...getHeaders, authorization: "" }) === null &&
+          route("GET", target, { ...getHeaders, authorization: undefined }) === null &&
+          route("GET", target, { ...getHeaders, authorization: "Basic synthetic" }) === null &&
+          route("GET", target, { ...getHeaders, authorization: "Bearer " }) === null &&
           route("GET", target, { ...getHeaders, accept: "text/plain" }) === null &&
           route("GET", target, { ...getHeaders, "content-type": "application/json" }) === null,
         "M64_BROWSER_PROVIDER_GET_POLICY_TOO_BROAD",
@@ -1018,9 +1033,12 @@ function hasExactPanelProviderPreflightHeaders(headers) {
 
 function hasExactPanelProviderGetHeaders(headers) {
   const extensionOrigin = extensionOriginForM64();
+  const originIsAllowed =
+    headers.origin === undefined ||
+    (extensionOrigin !== null && headers.origin === extensionOrigin);
   return (
     extensionOrigin != null &&
-    headers.origin === extensionOrigin &&
+    originIsAllowed &&
     typeof headers.authorization === "string" &&
     /^Bearer \S+$/.test(headers.authorization) &&
     headers.accept === "application/json" &&
