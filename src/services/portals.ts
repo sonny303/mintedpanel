@@ -24,7 +24,7 @@ import {
   portalDisplayName,
   withHiddenPortalPrefix,
 } from "@/lib/portalRetirement";
-import type { Portal } from "@/types";
+import type { FormMappingResetEvent, Portal } from "@/types";
 import { listEffectivePortalMapResolutions } from "@/services/portalFieldMaps";
 
 const PORTAL_COLUMNS =
@@ -65,6 +65,81 @@ function unpackPortalRow(row: EmbeddedPortalRow): {
 export interface PortalServiceCtx {
   db: SupabaseClient<Database>;
   orgId: string;
+}
+
+export interface PortalMappingResetInput {
+  portalId: string;
+  expectedMappingGeneration: number;
+  idempotencyKey: string;
+}
+
+/** Count every saved map row for this exact owner/key/current generation.
+ * `count: "exact", head: true` avoids a page-limited row fetch and returns no
+ * field selectors or provider values to the confirmation UI. */
+export async function countCurrentPortalMappingRows(portal: Portal): Promise<number> {
+  const activeOrgId = requireActiveOrg();
+  const generation = portal.mappingGeneration ?? 1;
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    throw new Error("The form mapping generation is invalid. Refresh Form setup.");
+  }
+  if (portal.orgId !== null && portal.orgId !== activeOrgId) {
+    throw new Error("This organization configuration is outside the active organization.");
+  }
+
+  let query = supabase
+    .from("portal_field_maps")
+    .select("id", { count: "exact", head: true })
+    .eq("portal_key", portal.portalKey)
+    .eq("mapping_generation", generation);
+  query = portal.orgId === null ? query.is("org_id", null) : query.eq("org_id", portal.orgId);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** Atomically reset only the exact registry row selected by the editor. The
+ * database derives actor, owner scope, organization and authorization from
+ * the authenticated session and locked portal row. */
+export async function resetPortalMapping(
+  input: PortalMappingResetInput,
+): Promise<FormMappingResetEvent> {
+  requireActiveOrg();
+  if (
+    !Number.isSafeInteger(input.expectedMappingGeneration) ||
+    input.expectedMappingGeneration < 1
+  ) {
+    throw new Error("The form mapping generation is invalid. Refresh Form setup.");
+  }
+  const { data, error } = await supabase.rpc("reset_portal_mapping", {
+    p_portal_id: input.portalId,
+    p_expected_mapping_generation: input.expectedMappingGeneration,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) {
+    if (error.message.includes("mapping_generation_stale")) {
+      throw new Error("This mapping changed since confirmation. Refresh Form setup and try again.");
+    }
+    if (error.message.includes("mapping_reset_idempotency_conflict")) {
+      throw new Error(
+        "This reset request no longer matches the selected mapping. Refresh and confirm again.",
+      );
+    }
+    if (error.message.includes("org_mapping_has_shared_fallback")) {
+      throw new Error(
+        "A shared mapping is available for this key. Clear the organization override separately.",
+      );
+    }
+    if (error.code === "42501") {
+      throw new Error("You no longer have permission to reset this form mapping.");
+    }
+    throw error;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(
+      "The reset completed without a valid receipt. Refresh Form setup before continuing.",
+    );
+  }
+  return camelizeRow<FormMappingResetEvent>(data as Record<string, unknown>);
 }
 
 /** GET /api/portals — the registry the extension matches the current tab

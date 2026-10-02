@@ -768,7 +768,10 @@ describe("recordFillEvent — task completion", () => {
 
 describe("recordFillEvent — exact case Work receipts", () => {
   it("persists the selected task and step from the nested canonical tuple without completing the task", async () => {
-    validateWorkContextMock.mockResolvedValue({ kind: "ok", data: {} as never } as never);
+    validateWorkContextMock.mockResolvedValue({
+      kind: "ok",
+      data: { sharedMappingGeneration: 6 } as never,
+    } as never);
     const { db, captures } = makeFakeDb([
       { data: null },
       { data: null },
@@ -797,6 +800,7 @@ describe("recordFillEvent — exact case Work receipts", () => {
       step_identity: STEP_IDENTITY,
       portal_id: PORTAL_ID,
       mapping_generation: 4,
+      shared_mapping_generation: 6,
       effective_mapping_fingerprint: `sha256:${"a".repeat(64)}`,
     });
     expect(captures.some((capture) => capture.table === "tasks" && capture.op === "update")).toBe(
@@ -825,6 +829,21 @@ describe("recordFillEvent — exact case Work receipts", () => {
     expectRejected(result, 422);
     expect(captures).toHaveLength(0);
   });
+
+  it.each(["sharedMappingGeneration", "shared_mapping_generation"])(
+    "does not accept a caller-supplied %s pin",
+    async (key) => {
+      const { db, captures } = makeFakeDb([]);
+      const { ctx } = ctxWith(db);
+      ctx.orgId = CASE_WORK_CONTEXT.orgId;
+      const result = await recordFillEvent(ctx, {
+        ...CASE_WORK_V2_INPUT,
+        [key]: 99,
+      } as typeof CASE_WORK_V2_INPUT);
+      expectRejected(result, 422);
+      expect(captures).toHaveLength(0);
+    },
+  );
 
   it("rejects an untrusted organization selector before any database call", async () => {
     const { db, captures } = makeFakeDb([]);

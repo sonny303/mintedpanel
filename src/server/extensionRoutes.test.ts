@@ -1824,6 +1824,7 @@ describe("POST work-context validation handler", () => {
       formUrl: "https://portal.example/form",
       requiresExplicitSelection: true,
       mappingGeneration: 9,
+      sharedMappingGeneration: 2,
       effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
       effectiveWebMaps: [{ portalKey: "regional_enrollment", mapType: "web", status: "approved" }],
     };
@@ -1835,7 +1836,8 @@ describe("POST work-context validation handler", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
     expect(response.headers.get("pragma")).toBe("no-cache");
-    expect((await body(response)).data).toEqual(data);
+    const { sharedMappingGeneration: _serverPin, ...wireData } = data;
+    expect((await body(response)).data).toEqual(wireData);
     expect(validateWorkContextMock).toHaveBeenCalledWith(
       { db: c.db, orgId: c.orgId },
       { ...request },

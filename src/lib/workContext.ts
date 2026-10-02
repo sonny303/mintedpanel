@@ -66,6 +66,8 @@ export interface WorkContextValidationData {
   formUrl: string;
   requiresExplicitSelection: true;
   mappingGeneration: number;
+  /** Server-internal pin; omitted from the public validator response. */
+  sharedMappingGeneration: number | null;
   effectiveMappingFingerprint: string;
   effectiveWebMaps: PortalFieldMap[];
 }

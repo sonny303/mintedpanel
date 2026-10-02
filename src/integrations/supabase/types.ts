@@ -1076,6 +1076,7 @@ export type Database = {
           portal_id: string | null;
           portal_key: string;
           provider_id: string | null;
+          shared_mapping_generation: number | null;
           sop_template_id: string | null;
           sop_version: number | null;
           started_at: string;
@@ -1112,6 +1113,7 @@ export type Database = {
           portal_id?: string | null;
           portal_key: string;
           provider_id?: string | null;
+          shared_mapping_generation?: number | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
           started_at?: string;
@@ -1148,6 +1150,7 @@ export type Database = {
           portal_id?: string | null;
           portal_key?: string;
           provider_id?: string | null;
+          shared_mapping_generation?: number | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
           started_at?: string;
@@ -4757,6 +4760,26 @@ export type Database = {
           p_work_context: Json;
         };
         Returns: Json;
+      };
+      reset_portal_mapping: {
+        Args: {
+          p_expected_mapping_generation: number;
+          p_idempotency_key: string;
+          p_portal_id: string;
+        };
+        Returns: {
+          actor_id: string;
+          affected_field_count: number;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          new_mapping_generation: number;
+          old_mapping_generation: number;
+          org_id: string | null;
+          owner_scope: string;
+          portal_id: string;
+          portal_key: string;
+        };
       };
       revoke_enrollment_publication: {
         Args: {

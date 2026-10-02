@@ -9,7 +9,7 @@
 // intact (TemplateTaskRow.test.ts + template-typing-latency.spec.ts). The
 // panel renders COLLAPSED by default — a summary line only — so Step 3 typing
 // never pays for its content.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,12 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import {
   usePortals,
   usePortalFieldMaps,
+  usePortalMappingResetPreview,
+  useResetPortalMapping,
   useReviewOrgPortalFieldMapBase,
   useStaleOrgOverridesForReview,
 } from "@/hooks/usePortals";
+import { useSops } from "@/hooks/useAdmin";
 import {
   useApproveField,
   useFinishTraining,
@@ -54,6 +57,7 @@ import { createIndependentPortalInput } from "@/lib/portalKey";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
+import { PortalMappingResetDialog } from "./PortalMappingResetDialog";
 import {
   classifyFieldMap,
   registryCoverage,
@@ -64,7 +68,12 @@ import { groupTokens } from "@/lib/tokenGroups";
 import { filterMappingTokens } from "@/lib/fillTokenReach";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 import { PortalDrawer } from "@/components/PortalDrawer";
-import { isPortalHiddenFromPickers, portalDisplayName } from "@/lib/portalRetirement";
+import {
+  isPortalHiddenFromPickers,
+  listPortalStepReferences,
+  portalDisplayName,
+} from "@/lib/portalRetirement";
+import { portalMappingResetAvailability } from "@/lib/portalMappingReset";
 import type { CaseType } from "@/lib/caseTypes";
 import type { Portal, PortalFieldMap } from "@/types";
 import { useLocation } from "@tanstack/react-router";
@@ -153,6 +162,9 @@ export function FormStepPanel({
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [registerOpen, setRegisterOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<Portal | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const resetIdempotencyRef = useRef<{ identity: string; key: string } | null>(null);
   const location = useLocation();
 
   // PortalStepSelect's "Register portal" button (and the empty-registry path)
@@ -172,6 +184,7 @@ export function FormStepPanel({
   const orgId = useActiveOrgId() ?? "no-org";
   const qc = useQueryClient();
   const portalsQ = usePortals();
+  const sopsQ = useSops();
   const mapsQ = usePortalFieldMaps(portalKey ?? undefined);
   const staleOverridesQ = useStaleOrgOverridesForReview(portalKey ?? undefined);
   const reviewBaseMut = useReviewOrgPortalFieldMapBase();
@@ -189,6 +202,8 @@ export function FormStepPanel({
   const [addFieldLabel, setAddFieldLabel] = useState("");
   const finishTrainingMut = useFinishTraining();
   const globalFlagsMut = useSetGlobalPortalFlags();
+  const resetMappingMut = useResetPortalMapping();
+  const resetPreviewQ = usePortalMappingResetPreview(resetTarget);
 
   const portal = useMemo(() => {
     return selectPortalForFormStep({
@@ -200,6 +215,30 @@ export function FormStepPanel({
       isGlobalAuthoring,
     });
   }, [portalsQ.data, portalKey, orgId, templatePayerId, templateCaseType, isGlobalAuthoring]);
+
+  const resetAvailability = portal
+    ? portalMappingResetAvailability({
+        portal,
+        visiblePortals: portalsQ.data ?? [],
+        activeOrgId: orgId,
+      })
+    : null;
+  const resetTargetMatchesSelection = Boolean(
+    resetTarget &&
+    portal &&
+    resetTarget.id === portal.id &&
+    (resetTarget.mappingGeneration ?? 1) === (portal.mappingGeneration ?? 1),
+  );
+  const resetReferences = resetTarget
+    ? listPortalStepReferences(sopsQ.data ?? [], resetTarget.portalKey)
+    : [];
+
+  useEffect(() => {
+    if (resetTarget && !resetTargetMatchesSelection) {
+      setResetTarget(null);
+      setResetError(null);
+    }
+  }, [resetTarget, resetTargetMatchesSelection]);
 
   async function copyReturnLink() {
     try {
@@ -420,6 +459,44 @@ export function FormStepPanel({
     }
   }
 
+  async function confirmPortalMappingReset() {
+    if (!resetTarget || !resetTargetMatchesSelection) return;
+    const availability = portalMappingResetAvailability({
+      portal: resetTarget,
+      visiblePortals: portalsQ.data ?? [],
+      activeOrgId: orgId,
+    });
+    if (!availability.allowed) {
+      setResetError(
+        availability.reason === "shared-fallback"
+          ? "A shared mapping is available for this key. Clear the organization override separately."
+          : "This configuration is outside the active organization.",
+      );
+      return;
+    }
+
+    const mappingGeneration = resetTarget.mappingGeneration ?? 1;
+    const identity = `${resetTarget.id}:${mappingGeneration}`;
+    if (resetIdempotencyRef.current?.identity !== identity) {
+      resetIdempotencyRef.current = { identity, key: crypto.randomUUID() };
+    }
+    setResetError(null);
+    try {
+      const receipt = await resetMappingMut.mutateAsync({
+        portalId: resetTarget.id,
+        expectedMappingGeneration: mappingGeneration,
+        idempotencyKey: resetIdempotencyRef.current.key,
+      });
+      resetIdempotencyRef.current = null;
+      setResetTarget(null);
+      toast.success(
+        `Mapping reset · generation ${receipt.newMappingGeneration}. Recapture and review the form before filling again.`,
+      );
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : "Could not reset this form mapping.");
+    }
+  }
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="rounded-md border border-[#E8E5E0] bg-muted/20">
@@ -508,6 +585,29 @@ export function FormStepPanel({
               </Button>
             ) : null}
 
+            {portal && canEdit && resetAvailability?.allowed ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[12px]"
+                onClick={() => {
+                  setResetError(null);
+                  setResetTarget(portal);
+                }}
+              >
+                Reset form mapping
+              </Button>
+            ) : null}
+            {portal &&
+            canEdit &&
+            resetAvailability?.allowed === false &&
+            resetAvailability.reason === "shared-fallback" ? (
+              <p className="text-[12px] text-muted-foreground">
+                A shared mapping is available for this key. Clear the organization override
+                separately to reveal it; a full organization reset is unavailable.
+              </p>
+            ) : null}
+
             {/* E6.9 F6.9.3: EVERY row, always — decided rows included. The old
                 queue dropped a field the moment it was approved, so a wrong
                 mapping was unreachable from the editor. */}
@@ -549,7 +649,7 @@ export function FormStepPanel({
             {portal && staleOverrides.length > 0 ? (
               <section
                 aria-label="Shared mapping changes need review"
-                className="space-y-2 rounded-md border border-amber-300 bg-amber-50/40 p-3"
+                className="space-y-2 rounded-md border border-border bg-[var(--mp-warn-tint)] p-3 text-[var(--mp-warn-ink)]"
               >
                 <div>
                   <h3 className="text-[13px] font-semibold">Shared mapping changes need review</h3>
@@ -647,6 +747,30 @@ export function FormStepPanel({
           }}
         />
       ) : null}
+
+      <PortalMappingResetDialog
+        open={Boolean(resetTargetMatchesSelection)}
+        portal={resetTargetMatchesSelection ? resetTarget : null}
+        fieldCount={resetPreviewQ.data}
+        fieldCountLoading={resetPreviewQ.isLoading}
+        fieldCountError={resetPreviewQ.isError}
+        references={resetReferences}
+        referencesLoading={sopsQ.isLoading}
+        referencesError={sopsQ.isError}
+        pending={resetMappingMut.isPending}
+        error={resetError}
+        onConfirm={() => void confirmPortalMappingReset()}
+        onCancel={() => {
+          setResetTarget(null);
+          setResetError(null);
+        }}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !resetMappingMut.isPending) {
+            setResetTarget(null);
+            setResetError(null);
+          }
+        }}
+      />
     </Collapsible>
   );
 }

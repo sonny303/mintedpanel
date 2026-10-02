@@ -50,6 +50,8 @@ export interface EffectivePortalMapResolution {
   payerId: string | null;
   requiresExplicitSelection: boolean;
   mappingGeneration: number | null;
+  /** Internal snapshot pin for org Work configurations layered over a shared base. */
+  sharedMappingGeneration: number | null;
   effectiveMappingFingerprint: string | null;
   maps: PortalFieldMap[];
   activeFieldCount: number;
@@ -252,6 +254,8 @@ async function resolvePortalMapSnapshot(
     payerId: selectedConfig?.payerId ?? null,
     requiresExplicitSelection: selectedConfig?.requiresExplicitSelection ?? false,
     mappingGeneration: selectedConfig ? mapGeneration(selectedConfig) : null,
+    sharedMappingGeneration:
+      selectedConfig?.orgId != null && globalConfig ? mapGeneration(globalConfig) : null,
   } as const;
 
   if (!selectedConfig) {

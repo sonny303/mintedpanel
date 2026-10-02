@@ -82,7 +82,7 @@ export type RecordFillEventResult =
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
 
 const FILL_SESSION_COLUMNS =
-  "id, org_id, case_id, contract_id, contract_sop_assignment_id, sop_template_id, sop_version, task_index, step_index, case_task_id, case_step_id, step_identity, facility_id, portal_id, context_version, launch_receipt_id, mapping_generation, effective_mapping_fingerprint, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
+  "id, org_id, case_id, contract_id, contract_sop_assignment_id, sop_template_id, sop_version, task_index, step_index, case_task_id, case_step_id, step_identity, facility_id, portal_id, context_version, launch_receipt_id, mapping_generation, shared_mapping_generation, effective_mapping_fingerprint, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 const FILL_EVENT_V2_COLUMNS =
   "event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 
@@ -539,7 +539,15 @@ export async function recordFillEvent(
   ctx: FillSessionServiceCtx,
   input: FillEventInput,
 ): Promise<RecordFillEventResult> {
+  const rawInput = input as unknown as Record<string, unknown>;
+  if (
+    Object.prototype.hasOwnProperty.call(rawInput, "sharedMappingGeneration") ||
+    Object.prototype.hasOwnProperty.call(rawInput, "shared_mapping_generation")
+  ) {
+    return reject(422, "The shared mapping generation is server-derived");
+  }
   let workTuple: WorkContextTuple | null = null;
+  let sharedMappingGeneration: number | null = null;
   if (hasOwn(input, "workContext")) {
     const parsed = parseWorkContextTuple(input.workContext);
     if (!parsed.ok) return reject(422, parsed.message);
@@ -756,6 +764,7 @@ export async function recordFillEvent(
       workContextRequest(workTuple),
     );
     if (validation.kind !== "ok") return workContextFailure(validation);
+    sharedMappingGeneration = validation.data.sharedMappingGeneration;
   }
 
   // ---- org validation, all BEFORE any write (the isolation contract) ----
@@ -806,6 +815,7 @@ export async function recordFillEvent(
     context_version: input.contextVersion ?? null,
     launch_receipt_id: input.launchReceiptId ?? null,
     mapping_generation: input.mappingGeneration ?? null,
+    shared_mapping_generation: isTypedWorkReceipt ? sharedMappingGeneration : null,
     effective_mapping_fingerprint: input.effectiveMappingFingerprint ?? null,
     provider_id: input.providerId ?? null,
     portal_key: input.portalKey,
