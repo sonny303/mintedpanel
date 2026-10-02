@@ -57,6 +57,10 @@ export interface CasePortalHandoffData {
   caseId: string;
   providerId: string;
   orgId: string;
+  caseType?: string | null;
+  caseStatus?: PortalHandoffContext["caseStatus"];
+  contextVersion?: number;
+  payerId?: string;
   caseFacilityId: string | null;
   facilityLoadState: HandoffFacilityLoadState;
   facilities: HandoffFacilityOption[];

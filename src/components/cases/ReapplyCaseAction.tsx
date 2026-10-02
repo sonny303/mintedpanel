@@ -7,6 +7,7 @@
 // gets latest) via the same pickTemplate/resolveTemplate tier every creation
 // surface uses, appended after the case's existing tasks.
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { RotateCcw } from "lucide-react";
 import {
@@ -26,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isAllStates, templateStates } from "@/lib/sopMatchKey";
-import { topRankedTemplates } from "@/lib/pickTemplate";
+import { isFallbackTemplate, topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
 import { useReapplyCase } from "@/hooks/useCases";
@@ -45,21 +46,28 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const autoTemplate = useMemo(() => {
-    const top = topRankedTemplates(templatesQ.data ?? [], c.payerId, c.state, c.groupId);
+    const top = topRankedTemplates(
+      templatesQ.data ?? [],
+      c.payerId,
+      c.state,
+      c.groupId,
+      c.caseType ?? null,
+    );
     return top.length === 1 ? top[0] : null;
-  }, [templatesQ.data, c.payerId, c.state, c.groupId]);
+  }, [templatesQ.data, c.payerId, c.state, c.groupId, c.caseType]);
 
   const candidateTemplates = useMemo(() => {
     const all = templatesQ.data ?? [];
     return all.filter((t) => {
-      if (t.archived) return false;
+      if (t.archived || (t.caseType ?? null) !== (c.caseType ?? null)) return false;
+      if (isFallbackTemplate(t)) return true;
       if (t.payerId !== c.payerId) return false;
       if (t.groupId !== null && t.groupId !== c.groupId) return false;
       const states = templateStates(t);
-      if (states.length > 0 && !isAllStates(states) && !states.includes(c.state)) return false;
+      if (!isAllStates(states) && !states.includes(c.state)) return false;
       return true;
     });
-  }, [templatesQ.data, c.payerId, c.groupId, c.state]);
+  }, [templatesQ.data, c.payerId, c.groupId, c.state, c.caseType]);
 
   const templateOptions = useMemo(() => {
     const list = [...candidateTemplates];
@@ -76,11 +84,20 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
     return autoTemplate;
   }, [selectedTemplateId, templateOptions, autoTemplate]);
 
+  if (c.caseType === "recredentialing" || c.caseType === "contract") {
+    return c.caseStatus === "denied" && canEdit ? (
+      <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+        {c.caseType === "contract"
+          ? "Contract work belongs in the Group Contracts Matrix and cannot be reapplied as a provider case."
+          : "Recredentialing execution is not supported. This SOP type is available for authoring only."}
+      </p>
+    ) : null;
+  }
   if (c.caseStatus !== "denied" || !canEdit) return null;
 
   const run = () => {
     const template = effectiveTemplate;
-    if (templateOptions.length > 0 && !template) return;
+    if (!template) return;
     const resolved =
       template && c.provider ? resolveTemplate(template, c.provider, c.group, null, null) : [];
     // Append after the case's existing tasks so the combined checklist keeps
@@ -138,6 +155,21 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
               regenerated from the current SOP. Existing tasks, touches, and the prior denial are
               kept.
             </p>
+            {templateOptions.length === 0 ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+                No matching {c.caseType ?? "legacy / unclassified"} SOP is available for this payer,
+                state, and group. Configure a matching SOP before reapplying.
+                <Button asChild variant="outline" size="sm" className="mt-2">
+                  <Link
+                    to="/admin/payer-admin/setup/$payerId"
+                    params={{ payerId: c.payerId }}
+                    search={{ tab: "templates" }}
+                  >
+                    Open payer templates
+                  </Link>
+                </Button>
+              </div>
+            ) : null}
             {templateOptions.length > 0 ? (
               <div className="space-y-1.5 pt-2">
                 <Label htmlFor="reapply-template">Template to apply</Label>
@@ -159,6 +191,18 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
                     ))}
                   </SelectContent>
                 </Select>
+                {topRankedTemplates(
+                  templatesQ.data ?? [],
+                  c.payerId,
+                  c.state,
+                  c.groupId,
+                  c.caseType ?? null,
+                ).length > 1 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Several equally ranked SOPs match. Choose one; other eligible same-type SOPs
+                    remain available.
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <DialogFooter>
@@ -167,7 +211,7 @@ export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
               </Button>
               <Button
                 className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-                disabled={reapply.isPending || (templateOptions.length > 0 && !effectiveTemplate)}
+                disabled={reapply.isPending || templateOptions.length === 0 || !effectiveTemplate}
                 onClick={run}
               >
                 {reapply.isPending ? "Reapplying…" : "Reapply"}

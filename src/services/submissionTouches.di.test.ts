@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { validateWorkContextForFillReceipt } from "@/services/workContext";
+
+vi.mock("@/services/workContext", () => ({ validateWorkContextForFillReceipt: vi.fn() }));
 
 import {
   portalKeyLabel,
@@ -33,7 +36,7 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
     // that distinction is what makes the "bump rides asUser, not db" test real.
     rpc(fn: string, args: Record<string, unknown>) {
       captures.push({ table: fn, op: "rpc", payload: args, filters: [] });
-      return Promise.resolve({ data: null, error: null });
+      return Promise.resolve(take());
     },
     from(table: string) {
       const cap: Captured = { table, op: "select", filters: [] };
@@ -75,6 +78,68 @@ const TOUCH_ID = "11111111-2222-4333-8444-555555555555";
 const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const FILL_SESSION_ID = "99999999-8888-4777-8666-121212121212";
 const TASK_ID = "cccccccc-dddd-4eee-8fff-000000000000";
+const ORG_UUID = "12345678-1234-4234-8234-123456789012";
+const PROVIDER_ID = "dddddddd-eeee-4fff-8000-111111111111";
+const SOP_TEMPLATE_ID = "eeeeeeee-ffff-4000-8000-111111111111";
+const PORTAL_ID = "ffffffff-aaaa-4000-8000-111111111111";
+const STEP_ID = "abababab-cdcd-4efe-8a8a-123456789012";
+const STEP_IDENTITY = `${CASE_ID}:${TASK_ID}:${SOP_TEMPLATE_ID}:1:${STEP_ID}`;
+const workContext = {
+  launchReceiptId: "abababab-cdcd-4efe-8a8a-123456789013",
+  orgId: ORG_UUID,
+  ownerKind: "case",
+  ownerId: CASE_ID,
+  contextVersion: 1,
+  sopTemplateId: SOP_TEMPLATE_ID,
+  sopVersion: 1,
+  portalId: PORTAL_ID,
+  portalKey: "bcbs_ks_enrollment",
+  mappingGeneration: 2,
+  effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+  providerId: PROVIDER_ID,
+  facilityId: null,
+  stepIdentity: STEP_IDENTITY,
+  taskId: TASK_ID,
+  stepId: STEP_ID,
+};
+
+function typedCtx(db: SupabaseClient<Database>) {
+  const writeAudit = vi.fn().mockResolvedValue(undefined);
+  const ctx: SubmissionTouchServiceCtx = {
+    db,
+    orgId: ORG_UUID,
+    userId: "87654321-4321-4321-8321-210987654321",
+    writeAudit,
+  };
+  return { ctx, writeAudit };
+}
+
+const typedReceiptRow = {
+  id: FILL_SESSION_ID,
+  org_id: ORG_UUID,
+  case_id: CASE_ID,
+  contract_id: null,
+  contract_sop_assignment_id: null,
+  task_index: null,
+  step_index: null,
+  case_task_id: TASK_ID,
+  case_step_id: STEP_ID,
+  step_identity: STEP_IDENTITY,
+  context_version: 1,
+  sop_template_id: SOP_TEMPLATE_ID,
+  sop_version: 1,
+  portal_id: PORTAL_ID,
+  portal_key: "bcbs_ks_enrollment",
+  launch_receipt_id: workContext.launchReceiptId,
+  mapping_generation: 2,
+  effective_mapping_fingerprint: workContext.effectiveMappingFingerprint,
+  provider_id: PROVIDER_ID,
+  facility_id: null,
+  fill_mode: "web",
+  is_test: false,
+  event_schema_version: 2,
+  did_auto_start_case: false,
+};
 
 const baseInput: SubmissionTouchInput = {
   kind: "portal_submission",
@@ -100,6 +165,14 @@ const storedRow = {
   created_at: "2026-07-05T00:00:00Z",
 };
 
+const typedTouchRow = {
+  ...storedRow,
+  org_id: ORG_UUID,
+  task_id: TASK_ID,
+  fill_session_id: FILL_SESSION_ID,
+  submission_request_fingerprint: "a".repeat(64),
+};
+
 // Convenience: the entry-type of a captured touches insert.
 function touchInserts(captures: Captured[]) {
   return captures.filter((c) => c.table === "touches" && c.op === "insert");
@@ -110,6 +183,194 @@ function expectRejected(result: RecordSubmissionTouchResult, status: 404 | 409 |
   if (result.kind !== "rejected") throw new Error("expected a rejected result");
   expect(result.status).toBe(status);
 }
+
+describe("recordSubmissionTouch — exact M56 Enrollment work", () => {
+  const typedInput: SubmissionTouchInput = {
+    ...baseInput,
+    portal_key: workContext.portalKey,
+    fill_session_id: FILL_SESSION_ID,
+    task_id: TASK_ID,
+    work_context: workContext,
+  };
+  const validContext = {
+    kind: "ok",
+    data: { caseType: "enrollment" },
+  } as never;
+
+  it("links only the exact selected fill receipt and delegates atomic completion to SQL", async () => {
+    vi.mocked(validateWorkContextForFillReceipt).mockResolvedValue(validContext);
+    const { db, captures } = makeFakeDb([
+      { data: null },
+      { data: typedReceiptRow },
+      { data: { kind: "created", touch: typedTouchRow } },
+    ]);
+    const { ctx, writeAudit } = typedCtx(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...typedInput,
+      note: "confirmed by the operator",
+      payer_reference_id: "REF-42",
+    });
+
+    expect(result.kind).toBe("created");
+    if (result.kind !== "created") throw new Error("expected a typed submission touch");
+    expect(result.touch.fillSessionId).toBe(FILL_SESSION_ID);
+    expect(validateWorkContextForFillReceipt).toHaveBeenCalledWith(
+      { db, orgId: ORG_UUID },
+      { protocolVersion: 2, ...workContext },
+      false,
+    );
+    expect(captures.map((capture) => capture.table)).toEqual([
+      "touches",
+      "fill_sessions",
+      "record_typed_enrollment_submission",
+    ]);
+    expect(captures[2]?.payload).toMatchObject({
+      p_org_id: ORG_UUID,
+      p_case_id: CASE_ID,
+      p_touch_id: TOUCH_ID,
+      p_fill_session_id: FILL_SESSION_ID,
+      p_work_context: workContext,
+      p_payload: {
+        note: "confirmed by the operator",
+        payerReferenceId: "REF-42",
+        wipNote: null,
+        pdfFilename: null,
+      },
+    });
+    expect(captures.some((capture) => capture.op === "insert" || capture.op === "update")).toBe(
+      false,
+    );
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("uses only the exact persisted fill stamp for the one M51 auto-start bump", async () => {
+    vi.mocked(validateWorkContextForFillReceipt).mockResolvedValue(validContext);
+    const { db } = makeFakeDb([
+      { data: null },
+      { data: { ...typedReceiptRow, did_auto_start_case: true } },
+      { data: { kind: "created", touch: typedTouchRow } },
+    ]);
+
+    const result = await recordSubmissionTouch(typedCtx(db).ctx, CASE_ID, typedInput);
+
+    expect(result.kind).toBe("created");
+    expect(validateWorkContextForFillReceipt).toHaveBeenCalledWith(
+      { db, orgId: ORG_UUID },
+      { protocolVersion: 2, ...workContext },
+      true,
+    );
+  });
+
+  it("returns the exact stored touch after completion/reset without current-step validation", async () => {
+    vi.mocked(validateWorkContextForFillReceipt).mockReset();
+    const { db, captures } = makeFakeDb([
+      { data: { id: TOUCH_ID } },
+      { data: { kind: "duplicate", touch: typedTouchRow } },
+    ]);
+    const { ctx } = typedCtx(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, typedInput);
+
+    expect(result.kind).toBe("duplicate");
+    expect(validateWorkContextForFillReceipt).not.toHaveBeenCalled();
+    expect(captures.map((capture) => capture.table)).toEqual([
+      "touches",
+      "record_typed_enrollment_submission",
+    ]);
+  });
+
+  it("reports same-key changed payload as a conflict", async () => {
+    vi.mocked(validateWorkContextForFillReceipt).mockReset();
+    const { db } = makeFakeDb([
+      { data: { id: TOUCH_ID } },
+      { data: { kind: "rejected", status: 409, message: "Idempotency id already used" } },
+    ]);
+    const { ctx } = typedCtx(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...typedInput,
+      note: "a different human submission",
+    });
+
+    expectRejected(result, 409);
+    expect(validateWorkContextForFillReceipt).not.toHaveBeenCalled();
+  });
+
+  it("blocks stale, non-Enrollment, or mismatched fill receipts before the RPC", async () => {
+    vi.mocked(validateWorkContextForFillReceipt).mockResolvedValue({
+      kind: "stale",
+      message: "Work changed",
+    });
+    const stale = makeFakeDb([{ data: null }, { data: typedReceiptRow }]);
+    const staleResult = await recordSubmissionTouch(typedCtx(stale.db).ctx, CASE_ID, typedInput);
+    expectRejected(staleResult, 409);
+    expect(stale.captures.map((capture) => capture.table)).toEqual(["touches", "fill_sessions"]);
+
+    vi.mocked(validateWorkContextForFillReceipt).mockResolvedValue({
+      kind: "ok",
+      data: { caseType: "recredentialing" },
+    } as never);
+    const recredentialing = makeFakeDb([{ data: null }, { data: typedReceiptRow }]);
+    const recredentialingResult = await recordSubmissionTouch(
+      typedCtx(recredentialing.db).ctx,
+      CASE_ID,
+      typedInput,
+    );
+    expectRejected(recredentialingResult, 409);
+    expect(recredentialing.captures.map((capture) => capture.table)).toEqual([
+      "touches",
+      "fill_sessions",
+    ]);
+
+    vi.mocked(validateWorkContextForFillReceipt).mockResolvedValue(validContext);
+    const wrongReceipt = makeFakeDb([
+      { data: null },
+      { data: { ...typedReceiptRow, case_step_id: "bbbbbbbb-cccc-4ddd-8eee-123456789012" } },
+    ]);
+    const wrongReceiptResult = await recordSubmissionTouch(
+      typedCtx(wrongReceipt.db).ctx,
+      CASE_ID,
+      typedInput,
+    );
+    expectRejected(wrongReceiptResult, 409);
+    expect(wrongReceipt.captures.map((capture) => capture.table)).toEqual([
+      "touches",
+      "fill_sessions",
+    ]);
+  });
+
+  it("rejects Contract tuples and conflicting flat tuple/payload aliases", async () => {
+    const contractTuple = {
+      ...workContext,
+      ownerKind: "contract",
+      assignmentId: SOP_TEMPLATE_ID,
+      taskIndex: 0,
+      stepIndex: 0,
+    };
+    delete (contractTuple as Record<string, unknown>).taskId;
+    delete (contractTuple as Record<string, unknown>).stepId;
+    const db = makeFakeDb([]);
+    const { ctx } = typedCtx(db.db);
+    const contract = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...typedInput,
+      work_context: contractTuple,
+    });
+    expectRejected(contract, 422);
+    const conflicting = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...typedInput,
+      org_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    } as SubmissionTouchInput);
+    expectRejected(conflicting, 422);
+    const conflictingPayloadAlias = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...typedInput,
+      payer_reference_id: "REF-1",
+      payerReferenceId: "REF-2",
+    } as SubmissionTouchInput);
+    expectRejected(conflictingPayloadAlias, 422);
+    expect(db.captures).toHaveLength(0);
+  });
+});
 
 describe("portalKeyLabel", () => {
   it.each([
@@ -188,6 +449,67 @@ describe("recordSubmissionTouch — org validation rejects before any write", ()
     expect(writeAudit).not.toHaveBeenCalled();
   });
 
+  it("requires Work context and a receipt before a typed case can take the legacy submit path", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, case_type: "enrollment", payers: { name: "Aetna" } } },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...baseInput,
+      // Supplying legacy task and write-back fields must not downgrade typed
+      // Work when both the exact tuple and fill receipt are omitted.
+      task_id: TASK_ID,
+      bump_status: true,
+      payer_reference_id: "REF-42",
+      wip_note: "Submitted from the extension",
+      pdf_filename: "application.pdf",
+    });
+
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(1);
+    expect(captures[0]).toMatchObject({
+      table: "credential_cases",
+      op: "select",
+      selectCols: "id, case_type, payers(name)",
+    });
+    expect(captures.some((capture) => capture.table === "tasks")).toBe(false);
+    expect(captures.some((capture) => capture.op === "insert" || capture.op === "update")).toBe(
+      false,
+    );
+    expect(captures.some((capture) => capture.op === "rpc")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("requires exact work_context for a selected typed M58 fill receipt", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, payers: { name: "Aetna" } } },
+      {
+        data: {
+          id: FILL_SESSION_ID,
+          case_task_id: TASK_ID,
+          case_step_id: STEP_ID,
+          step_identity: STEP_IDENTITY,
+        },
+      },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...baseInput,
+      fill_session_id: FILL_SESSION_ID,
+      task_id: TASK_ID,
+    });
+
+    expectRejected(result, 422);
+    expect(captures.map((capture) => capture.table)).toEqual(["credential_cases", "fill_sessions"]);
+    expect(captures.some((capture) => capture.op === "insert" || capture.op === "update")).toBe(
+      false,
+    );
+    expect(captures.some((capture) => capture.op === "rpc")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
   it("a task outside the org is a 404 before any write (isolation gate assertion 13)", async () => {
     // case lookup ok, task lookup miss (cross-org) -> 404 before idempotency.
     const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: null }]);
@@ -205,6 +527,24 @@ describe("recordSubmissionTouch — org validation rejects before any write", ()
 });
 
 describe("recordSubmissionTouch — happy path (R2 core)", () => {
+  it("keeps the legacy submit flow for an explicitly unclassified case", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, case_type: null } },
+      { data: null },
+      { data: storedRow },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, baseInput);
+
+    expect(result.kind).toBe("created");
+    expect(touchInserts(captures)[0]?.payload).toMatchObject({
+      case_id: CASE_ID,
+      outcome: "submitted",
+      source: "extension",
+    });
+  });
+
   it("inserts the anchor touchpoint with identity from ctx even when the body smuggles it", async () => {
     // Sequence: case lookup, idempotency lookup (miss), anchor insert.
     const { db, captures } = makeFakeDb([

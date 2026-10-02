@@ -13,8 +13,8 @@ import { withPortalPayerEmbed } from "./portalPayerEmbed";
 //            segment stays a shareable legacy URL with the governance note
 //            until Slice G folds it); global SOP authoring still hits
 //            author_global_sop on the wire, entered via the SOPs segment.
-//   TS-131 — the portal picker offers the payer's registered portals first
-//            (shared registry reuse), "Show all portals" reveals the rest.
+//   TS-131 — the Enrollment form-configuration picker offers the matching
+//            payer's registry row and excludes cross-payer configurations.
 //   TS-132 — real-fill drift telemetry → Sidebar badge + SOPs-tab banner →
 //            repair in the editor (train_global_field_map) → badge clears
 //            (repaired-since rule); nothing is ever blocked by drift.
@@ -139,6 +139,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
     portal_key: "aetna_enroll",
     name: "Aetna Portal",
     payer_id: AETNA_ID,
+    case_type: "enrollment",
     form_url: "https://portal.example/aetna",
     is_verified: false,
     last_verified_at: null,
@@ -153,6 +154,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       id: BCBS_TPL_ID,
       org_id: null,
       name: "BCBS Kansas NC Enrollment",
+      case_type: "enrollment",
       payer_id: BCBS_ID,
       state: "NC",
       states: ["NC"],
@@ -184,6 +186,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       portal_key: "bcbs_ks_enrollment",
       name: "BCBS KS Enrollment",
       payer_id: BCBS_ID,
+      case_type: "enrollment",
       form_url: "https://portal.example/bcbs",
       is_verified: true,
       last_verified_at: "2026-07-14T00:00:00Z",
@@ -326,6 +329,7 @@ async function fulfillSupabase(route: Route) {
         id: `tpl-new-${(seq += 1)}`,
         org_id: null,
         name: body.p_name,
+        case_type: body.p_case_type ?? null,
         payer_id: body.p_payer_id ?? null,
         states: body.p_states ?? null,
         state: (body.p_states as string[] | null)?.[0] ?? null,
@@ -347,6 +351,7 @@ async function fulfillSupabase(route: Route) {
       const next = Number(row.current_version ?? 1) + 1;
       Object.assign(row, {
         name: body.p_name,
+        case_type: body.p_case_type ?? row.case_type ?? null,
         task_definitions: body.p_task_definitions,
         current_version: next,
         updated_at: nowIso(),
@@ -558,6 +563,8 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   // ride the RPC — the whole point of the change.
   await page.getByRole("button", { name: "SC", exact: true }).click();
   await page.keyboard.press("Escape");
+  await page.locator("#sop-case-type").click();
+  await page.getByRole("option", { name: "Enrollment", exact: true }).click();
 
   // Step 2 (Actions): Portal preset seeds one collapsed action;
   // rename it and link the payer's portal (BITE-SOP-TT-01/03/04 — Auto-fill
@@ -588,6 +595,7 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   expect(authored).toHaveLength(1);
   const body = authored[0].body as Record<string, unknown>;
   expect(body.p_id ?? null).toBeNull();
+  expect(body.p_case_type).toBe("enrollment");
   expect(body.p_payer_id).toBe(AETNA_ID);
   expect(body.p_states).toEqual(["NC", "SC"]);
   expect(body.p_archived).toBe(false);
@@ -596,7 +604,7 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   expect(calls.filter((c) => c.kind === "rest" && c.path === "sop_templates")).toEqual([]);
 });
 
-test("TS-131 — the step's portal picker offers the payer's registered portals first, all on demand", async ({
+test("TS-131 — the step's Enrollment form-configuration picker is payer-scoped", async ({
   page,
 }) => {
   scenario = "form-setup";
@@ -606,7 +614,8 @@ test("TS-131 — the step's portal picker offers the payer's registered portals 
   });
   await page.getByRole("button", { name: /^2 Actions$/ }).click();
 
-  // Payer-filtered by default: the BCBS portal is offered, the Aetna one is not.
+  // The typed picker offers the matching BCBS enrollment configuration and
+  // excludes the Aetna configuration from another payer.
   const portalTrigger = page.getByRole("combobox").filter({ hasText: "BCBS KS Enrollment" });
   await expect(portalTrigger).toBeVisible();
   await portalTrigger.click();
@@ -614,13 +623,8 @@ test("TS-131 — the step's portal picker offers the payer's registered portals 
   await expect(page.getByRole("option", { name: "Aetna Portal" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // The shared registry is one click away (cross-payer reuse).
-  await page.getByRole("button", { name: "Show all portals" }).click();
-  await portalTrigger.click();
-  await expect(page.getByRole("option", { name: "Aetna Portal" })).toBeVisible();
-  await page.keyboard.press("Escape");
-
-  // The form panel resolves the SAME registry row (reused, not re-registered).
+  // The shared registry details remain reachable through Form setup; the
+  // task link itself stays constrained to a compatible payer/type config.
   await page.getByRole("button", { name: /Form setup/ }).click();
   await expect(page.getByText("BCBS KS Enrollment").last()).toBeVisible();
 });

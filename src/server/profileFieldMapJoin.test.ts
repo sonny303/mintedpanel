@@ -113,7 +113,28 @@ describe("profile ↔ field-map token join (extension fill contract)", () => {
     const profileTokens = envelope.data?.tokens ?? [];
 
     const maps = await listPortalFieldMaps({
-      db: makeFakeDb({ portal_field_maps: { data: [fieldMapRow] } }),
+      db: makeFakeDb({
+        // Registered legacy configuration: this unflagged generation-1 row
+        // keeps the historical portal key eligible for the default reader.
+        portals: {
+          data: [
+            {
+              id: "legacy-bcbs-ks",
+              org_id: null,
+              portal_key: "bcbs_ks_enrollment",
+              name: "BCBS KS Enrollment",
+              payer_id: null,
+              form_url: "https://portal.example/login",
+              case_type: null,
+              requires_explicit_selection: false,
+              mapping_generation: 1,
+              is_verified: false,
+              proven_at: null,
+            },
+          ],
+        },
+        portal_field_maps: { data: [fieldMapRow] },
+      }),
       orgId: "org-1",
     });
     expect(maps).toHaveLength(1);

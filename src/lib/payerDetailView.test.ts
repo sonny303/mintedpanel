@@ -158,6 +158,7 @@ describe("payerTemplateRows", () => {
 describe("templateStateCoverage", () => {
   const row = (state: string | null, id = state ?? "none") => ({
     id,
+    caseType: null,
     name: id,
     states: state === null ? [] : [state],
     groupId: null,
@@ -303,6 +304,7 @@ describe("payerMergeCandidates", () => {
 describe("templateStateCoverage — multi-state templates", () => {
   const multiRow = (states: string[], id = states.join("-")) => ({
     id,
+    caseType: null,
     name: id,
     states,
     groupId: null,

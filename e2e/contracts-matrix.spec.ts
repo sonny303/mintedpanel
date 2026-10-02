@@ -283,4 +283,13 @@ test("renders Group Contracts Matrix, displays cells, and opens edit drawer", as
   await expect(denver.getByRole("row", { name: /BCBS/ })).toBeVisible();
   await denver.getByRole("row", { name: /BCBS/ }).getByRole("cell").nth(1).click();
   await expect(page.getByText("Group contract record for Denver Nutrition")).toBeVisible();
+
+  await page.goto(`/reporting/contracts-matrix?groupId=${GROUP_2}&payerId=${PAYER_BCBS}&state=KS`);
+  await expect(page.getByText(/Matrix context: Denver Nutrition · BCBS · KS/)).toBeVisible();
+  await expect(page.getByText("Matching cell highlighted below.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Denver Nutrition contracts" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Kansas Fitness Physio contracts" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator('[aria-current="location"]')).toHaveCount(1);
 });

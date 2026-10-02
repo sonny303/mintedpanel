@@ -61,8 +61,12 @@ describe("createCase stamp round-trip", () => {
       legacyTask,
     ]);
     expect(rpcMock).toHaveBeenCalledTimes(1);
-    const [fn, args] = rpcMock.mock.calls[0] as [string, { p_tasks: Record<string, unknown>[] }];
+    const [fn, args] = rpcMock.mock.calls[0] as [
+      string,
+      { p_input: Record<string, unknown>; p_tasks: Record<string, unknown>[] },
+    ];
     expect(fn).toBe("create_case_with_tasks");
+    expect(args.p_input.case_type).toBe("enrollment");
     expect(args.p_tasks[0]).toMatchObject({
       title: "Submit application",
       sop_template_id: "tpl-humana-ks",
@@ -75,6 +79,16 @@ describe("createCase stamp round-trip", () => {
       sop_version: null,
     });
   });
+
+  it.each(["contract", "recredentialing"] as const)(
+    "rejects a %s case before calling the provider-case RPC",
+    async (caseType) => {
+      await expect(
+        createCase({ providerId: "prov-1", payerId: "pay-1", state: "KS", caseType }),
+      ).rejects.toThrow("Provider credential cases support Enrollment only.");
+      expect(rpcMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("appendCaseTasks stamp round-trip (reapply, F2.2.3)", () => {

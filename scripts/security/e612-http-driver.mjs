@@ -1,5 +1,7 @@
 // Runs inside the owned internal E6.12 Node container. Every request below is
 // real HTTP to GoTrue, PostgREST, Storage API, or the Nitro app; no mocks.
+import { runM66LegacyPostHttpProbes } from "./e612-m66-legacy-post-probes.mjs";
+
 const id = {
   orgA: "10000000-0000-4000-8000-000000000001",
   orgB: "10000000-0000-4000-8000-000000000002",
@@ -630,6 +632,7 @@ async function main() {
         p_task_definitions: [],
         p_archived: false,
         p_required_profile_attributes: [],
+        p_case_type: "enrollment",
       },
     ],
     [
@@ -684,12 +687,19 @@ async function main() {
       ["anon", anonKey],
     ]) {
       const result = await trainingRpc(name, body, token);
+      const isRegistryUpdate = name === "update_shared_field_registry";
       const trainingDenied =
         label === "anon"
           ? result.response.status === 401 && result.body?.code === "42501"
-          : result.response.status === 400 &&
-            result.body?.code === "P0001" &&
-            /Restricted client|not authorized|Not authenticated/i.test(result.body?.message ?? "");
+          : isRegistryUpdate
+            ? result.response.status === 403 &&
+              result.body?.code === "42501" &&
+              result.body?.message === "not_authorized"
+            : result.response.status === 400 &&
+              result.body?.code === "P0001" &&
+              /Restricted client|not authorized|Not authenticated/i.test(
+                result.body?.message ?? "",
+              );
       assert(
         `rest.${label}_${name}_denied`,
         trainingDenied,
@@ -708,6 +718,7 @@ async function main() {
       p_task_definitions: [],
       p_archived: false,
       p_required_profile_attributes: [],
+      p_case_type: "enrollment",
     },
     adminToken,
   );
@@ -816,6 +827,7 @@ async function main() {
       p_task_definitions: [],
       p_archived: false,
       p_required_profile_attributes: [],
+      p_case_type: "enrollment",
     },
     tokens.trainer,
   );
@@ -1972,6 +1984,28 @@ async function main() {
       afterRevoke.body?.data?.restrictedExternal === true &&
       afterRevoke.body?.data?.clientOrgs?.length === 0 &&
       afterRevoke.response.headers.get("x-minted-context-revision") !== activeRevision,
+  );
+  const m66LegacyPost = await runM66LegacyPostHttpProbes({
+    request,
+    headers,
+    app,
+    rest,
+    adminToken,
+    anonKey,
+    orgId: id.orgA,
+    adminUserToken: tokens.admin,
+  });
+  if (
+    m66LegacyPost.blockedGeneric409 !== true ||
+    m66LegacyPost.blockedStateUnchanged !== true ||
+    m66LegacyPost.legacyCreate201 !== true ||
+    m66LegacyPost.legacyReplay200 !== true ||
+    m66LegacyPost.protectedAuditAbsent !== true
+  ) {
+    throw new Error("M66_HTTP_PROBE_RESULTS_INCOMPLETE");
+  }
+  process.stdout.write(
+    "M66|HTTP|PASS|legacy_post_blocked=3|state_unchanged=true|legacy_create=201|replay=200|audit=1\n",
   );
   process.stdout.write("E612|HTTP|PASS\n");
 }

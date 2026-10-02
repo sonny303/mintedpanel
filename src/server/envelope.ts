@@ -23,6 +23,21 @@ export interface ApiMeta {
   // failure so the extension can show a loud empty-state instead of treating
   // the tab as an unrecognized page.
   registry_empty?: boolean;
+  /**
+   * Exact-key active mapping/readiness metadata. Rows are emitted only for
+   * configurations visible to the requested legacy/API scope.
+   */
+  portal_mappings?: Array<{
+    portal_key: string;
+    portal_id: string | null;
+    case_type: string | null;
+    requires_explicit_selection: boolean;
+    mapping_generation: number | null;
+    active_field_count: number;
+    mapping_ready: boolean;
+    is_verified: boolean;
+    effective_mapping_fingerprint: string | null;
+  }>;
 }
 
 export interface ApiEnvelope<T> {

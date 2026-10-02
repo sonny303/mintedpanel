@@ -493,7 +493,7 @@ test("supporting readiness failure keeps the payer catalog usable and labels una
 
   await expect(page.getByText("6 payers in the catalog")).toBeVisible({ timeout: 30000 });
   await expect(
-    page.getByText(/Payers loaded, but readiness details couldn't load \(field maps/),
+    page.getByText(/Payers loaded, but readiness details couldn't load \(portals, field maps/),
   ).toBeVisible();
   await expect(page.getByText("Couldn't load payers.")).toHaveCount(0);
   await expect(page.locator("tbody tr")).toHaveCount(5);

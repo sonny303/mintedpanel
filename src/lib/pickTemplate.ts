@@ -42,6 +42,7 @@
 // as an expanded 50-code list, which would rank as exact-state and quietly
 // outrank genuinely targeted templates.
 import type { SOPTemplate } from "@/types";
+import type { CaseType } from "@/lib/caseTypes";
 import { ALL_STATES_SENTINEL, isAllStates, templateStates } from "@/lib/sopMatchKey";
 
 export { ALL_STATES_SENTINEL };
@@ -92,7 +93,11 @@ function candidateRank(
   payerId: string,
   state: string,
   groupId: string | null,
+  caseType: CaseType | null,
 ): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | null {
+  // Business purpose is an eligibility boundary, before payer/state/group
+  // precedence. Omitted type is represented as legacy NULL by callers.
+  if ((t.caseType ?? null) !== caseType) return null;
   // Tier 9: the generic fallback qualifies for ANY request (it is the last
   // resort). Checked first so a payerless global row is never mistaken for a
   // payer-specific candidate.
@@ -139,8 +144,9 @@ export function pickTemplate(
   payerId: string,
   state: string,
   groupId: string | null,
+  caseType?: CaseType | null,
 ): SOPTemplate | null {
-  return topRankedTemplates(templates, payerId, state, groupId)[0] ?? null;
+  return topRankedTemplates(templates, payerId, state, groupId, caseType)[0] ?? null;
 }
 
 /** All eligible templates at the highest precedence tier. A caller that writes
@@ -150,12 +156,14 @@ export function topRankedTemplates(
   payerId: string,
   state: string,
   groupId: string | null,
+  caseType?: CaseType | null,
 ): SOPTemplate[] {
+  const requiredCaseType = caseType ?? null;
   let bestRank: number | null = null;
   const best: SOPTemplate[] = [];
   for (const t of templates) {
     if (isArchived(t)) continue;
-    const rank = candidateRank(t, payerId, state, groupId);
+    const rank = candidateRank(t, payerId, state, groupId, requiredCaseType);
     if (rank === null) continue;
     if (bestRank === null || rank < bestRank) {
       bestRank = rank;

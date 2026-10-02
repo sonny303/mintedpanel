@@ -80,6 +80,15 @@ describe("validateBatchLearnInput", () => {
         .ok,
     ).toBe(false);
   });
+
+  it("validates a positive expected mapping generation", () => {
+    expect(
+      validateBatchLearnInput({ ...requestBody, expected_mapping_generation: 4 }),
+    ).toMatchObject({ ok: true, input: { expectedMappingGeneration: 4 } });
+    expect(
+      validateBatchLearnInput({ ...requestBody, expected_mapping_generation: 0 }),
+    ).toMatchObject({ ok: false });
+  });
 });
 
 describe("batchLearnPortalFieldMaps", () => {
@@ -118,6 +127,38 @@ describe("batchLearnPortalFieldMaps", () => {
     expect(JSON.stringify(rpcArgs)).not.toContain("secret");
     expect(rpcArgs.p_org_id).toBe("org-from-auth");
     expect(rpcArgs.p_actor_id).toBe("actor-from-auth");
+  });
+
+  it("passes the submitted generation to the atomic learning RPC", async () => {
+    const { db, rpc } = dbWithRpc([
+      { data: [{ token: "provider.npi" }], error: null },
+      { data: { kind: "rejected", reason: "invalid_context" }, error: null },
+    ]);
+    await batchLearnPortalFieldMaps(
+      { db, orgId: "org-1", userId: "actor-1" },
+      { ...requestBody, expected_mapping_generation: 5 },
+    );
+
+    expect(rpc).toHaveBeenNthCalledWith(
+      2,
+      "learn_portal_field_maps_from_touch",
+      expect.objectContaining({ p_expected_mapping_generation: 5 }),
+    );
+  });
+
+  it("returns a conflict when the learning generation is stale", async () => {
+    const { db } = dbWithRpc([
+      { data: [{ token: "provider.npi" }], error: null },
+      { data: null, error: new Error("mapping_generation_stale") },
+    ]);
+    const result = await batchLearnPortalFieldMaps(
+      { db, orgId: "org-1", userId: "actor-1" },
+      { ...requestBody, expected_mapping_generation: 2 },
+    );
+
+    expect(result).toMatchObject({ kind: "rejected", status: 409 });
+    if (result.kind !== "rejected") throw new Error("expected a rejected result");
+    expect(result.message).toContain("Reload the configuration");
   });
 
   it("rejects tokens outside the live schema and exact user/contact families before the write RPC", async () => {

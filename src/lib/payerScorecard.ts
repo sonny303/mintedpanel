@@ -114,7 +114,8 @@ function firstPassRate(input: PayerScorecardInput): ScorecardIndicator {
   const fillsByCase = new Map<string, number>();
   for (const fs of input.fillSessions) {
     // E4.2 TE-17 — dry-run test fills never count toward first-pass rate.
-    if (fs.isTest) continue;
+    // Contract-owned fills have no case_id and do not affect case submission rates.
+    if (fs.isTest || !fs.caseId) continue;
     if (!caseIds.has(fs.caseId)) continue;
     fillsByCase.set(fs.caseId, (fillsByCase.get(fs.caseId) ?? 0) + 1);
   }

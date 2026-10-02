@@ -1,6 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
+
+vi.mock("@/services/contractFormContext", () => ({
+  loadContractOwnerContext: vi.fn(),
+  validateContractOwnerSelection: vi.fn(),
+}));
+
+import {
+  loadContractOwnerContext,
+  validateContractOwnerSelection,
+} from "@/services/contractFormContext";
 
 import {
   getProviderProfile,
@@ -97,6 +107,34 @@ const CATALOG: Json = [
   { table: "msos", token: "mso.portalUrl", column: "portal_url" },
 ];
 
+const CONTRACT_CONTACT_CATALOG: Json = [
+  ...(CATALOG as unknown as Json[]),
+  {
+    table: "provider_groups",
+    token: "group.contractingContactName",
+    column: "contracting_contact_name",
+  },
+  {
+    table: "provider_groups",
+    token: "group.contractingContactTitle",
+    column: "contracting_contact_title",
+  },
+  {
+    table: "provider_groups",
+    token: "group.contractingContactEmail",
+    column: "contracting_contact_email",
+  },
+] as Json;
+
+const CONTRACT_CONTACT_AND_SIGNER_CATALOG: Json = [
+  ...(CONTRACT_CONTACT_CATALOG as unknown as Json[]),
+  {
+    table: "provider_groups",
+    token: "group.contractSignerName",
+    column: "contract_signer_name",
+  },
+] as Json;
+
 const providerRow = {
   id: "p1",
   group_id: "g1",
@@ -104,7 +142,13 @@ const providerRow = {
   last_name: "Beck",
   ssn_last4: "1234",
 };
-const groupRow = { id: "g1", name: "Group One" };
+const groupRow = {
+  id: "g1",
+  name: "Group One",
+  contracting_contact_name: "Contract Contact",
+  contracting_contact_title: "Contracting Lead",
+  contracting_contact_email: "contract-contact@example.invalid",
+};
 const licenseKS = { id: "l1", state: "KS", license_number: "KS-100", issue_date: "2024-01-01" };
 const licenseMO = { id: "l2", state: "MO", license_number: "MO-200", issue_date: "2023-06-01" };
 const assignmentF1 = { id: "a1", facility_id: "f1", is_primary: true };
@@ -143,6 +187,347 @@ function reasonFor(profile: ProviderProfile, token: string): string {
 }
 
 describe("provider profile service — injected server context", () => {
+  it("Contract profiles resolve contracting contacts only from the exact Contract group", async () => {
+    const contractOwner = {
+      contract: {
+        id: "contract-1",
+        groupId: "g-contract",
+        payerId: "payer-1",
+        state: "KS",
+        groupName: "Contract Group",
+      },
+      assignment: {
+        id: "assignment-1",
+        contextVersion: 4,
+        sopTemplateId: "template-1",
+        sopVersion: 3,
+      },
+      sop: { templateId: "template-1", version: 3, caseType: "contract" },
+      steps: [],
+      hasRecordedActivity: false,
+    };
+    vi.mocked(loadContractOwnerContext).mockResolvedValue({
+      kind: "ok",
+      context: contractOwner as never,
+    });
+    vi.mocked(validateContractOwnerSelection).mockResolvedValue({
+      kind: "ok",
+      providerId: "p1",
+      facilityId: null,
+    });
+    const tables = {
+      ...happyTables(),
+      provider_groups: {
+        data: {
+          ...groupRow,
+          id: "g-contract",
+          name: "Contract Group",
+          contracting_contact_name: "Contract Group Contact",
+        },
+      },
+      provider_group_assignments: { data: { group_id: "g-contract" } },
+    };
+    const { db, captures } = makeFakeDb(tables, { data: CONTRACT_CONTACT_CATALOG });
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", {
+        contractContext: { contractId: "contract-1" },
+      }),
+    );
+
+    expect(valueOf(profile, "group.contractingContactName")).toBe("Contract Group Contact");
+    expect(valueOf(profile, "group.contractingContactTitle")).toBe("Contracting Lead");
+    expect(valueOf(profile, "group.contractingContactEmail")).toBe(
+      "contract-contact@example.invalid",
+    );
+    expect(profile.contract_context).toEqual({
+      contract_id: "contract-1",
+      assignment_id: "assignment-1",
+      context_version: 4,
+      sop_template_id: "template-1",
+      sop_version: 3,
+    });
+    expect(captures.find((capture) => capture.table === "provider_groups")?.filters).toContainEqual(
+      ["id", "g-contract"],
+    );
+    expect(validateContractOwnerSelection).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      expect.objectContaining({ contract: expect.objectContaining({ groupId: "g-contract" }) }),
+      "p1",
+      undefined,
+    );
+  });
+
+  it.each([
+    {
+      reason: "a sole facility in another group",
+      groupId: "g-other",
+      state: "KS",
+      startDate: "2020-01-01",
+    },
+    {
+      reason: "a sole facility in another state",
+      groupId: "g-contract",
+      state: "MO",
+      startDate: "2020-01-01",
+    },
+    {
+      reason: "a sole facility with a future assignment",
+      groupId: "g-contract",
+      state: "KS",
+      startDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    },
+  ])("does not auto-select $reason for a Contract profile", async (facilityFixture) => {
+    const contractOwner = {
+      contract: {
+        id: "contract-1",
+        groupId: "g-contract",
+        payerId: "payer-1",
+        state: "KS",
+        groupName: "Contract Group",
+      },
+      assignment: {
+        id: "assignment-1",
+        contextVersion: 4,
+        sopTemplateId: "template-1",
+        sopVersion: 3,
+      },
+      sop: { templateId: "template-1", version: 3, caseType: "contract" },
+      steps: [],
+      hasRecordedActivity: false,
+    };
+    vi.mocked(loadContractOwnerContext).mockResolvedValue({
+      kind: "ok",
+      context: contractOwner as never,
+    });
+    vi.mocked(validateContractOwnerSelection).mockResolvedValue({
+      kind: "ok",
+      providerId: "p1",
+      facilityId: null,
+    });
+    const { db, captures } = makeFakeDb(
+      {
+        ...happyTables(),
+        provider_groups: {
+          data: { ...groupRow, id: "g-contract", name: "Contract Group" },
+        },
+        provider_group_assignments: { data: { group_id: "g-contract" } },
+        provider_facility_assignments: {
+          data: [{ ...assignmentF1, start_date: facilityFixture.startDate }],
+        },
+        facilities: [
+          {
+            data: [
+              {
+                ...facilityListF1,
+                group_id: facilityFixture.groupId,
+                state: facilityFixture.state,
+              },
+            ],
+          },
+        ],
+      },
+      { data: CATALOG },
+    );
+
+    const result = await getProviderProfile(ctxWith(db), "p1", {
+      contractContext: { contractId: "contract-1" },
+    });
+
+    const profile = must(result);
+    expect(profile.facilities).toEqual([]);
+    expect(profile.selected_facility_id).toBeNull();
+    expect(valueOf(profile, "facility.name")).toBeNull();
+    expect(captures.filter((capture) => capture.table === "facilities")).toHaveLength(1);
+    expect(captures.find((capture) => capture.table === "facilities")?.selectCols).toBe(
+      "id, name, state, group_id",
+    );
+  });
+
+  it("resolves an explicitly selected current Contract group/state facility", async () => {
+    const contractOwner = {
+      contract: {
+        id: "contract-1",
+        groupId: "g-contract",
+        payerId: "payer-1",
+        state: "KS",
+        groupName: "Contract Group",
+      },
+      assignment: {
+        id: "assignment-1",
+        contextVersion: 4,
+        sopTemplateId: "template-1",
+        sopVersion: 3,
+      },
+      sop: { templateId: "template-1", version: 3, caseType: "contract" },
+      steps: [],
+      hasRecordedActivity: false,
+    };
+    vi.mocked(loadContractOwnerContext).mockResolvedValue({
+      kind: "ok",
+      context: contractOwner as never,
+    });
+    vi.mocked(validateContractOwnerSelection).mockResolvedValue({
+      kind: "ok",
+      providerId: "p1",
+      facilityId: "f1",
+    });
+    const { db } = makeFakeDb(
+      {
+        ...happyTables(),
+        provider_groups: {
+          data: { ...groupRow, id: "g-contract", name: "Contract Group" },
+        },
+        provider_group_assignments: { data: { group_id: "g-contract" } },
+        provider_facility_assignments: {
+          data: [{ ...assignmentF1, start_date: "2020-01-01" }],
+        },
+        facilities: [
+          {
+            data: [{ ...facilityListF1, group_id: "g-contract", state: "KS" }],
+          },
+          { data: { ...facilityRowF1, state: "KS" } },
+        ],
+      },
+      { data: CATALOG },
+    );
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", {
+        contractContext: { contractId: "contract-1" },
+        facilityId: "f1",
+      }),
+    );
+
+    expect(profile.facilities).toEqual([{ ...facilityListF1, state: "KS" }]);
+    expect(profile.selected_facility_id).toBe("f1");
+    expect(valueOf(profile, "facility.name")).toBe("Main Clinic");
+    expect(validateContractOwnerSelection).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      expect.objectContaining({ contract: expect.objectContaining({ groupId: "g-contract" }) }),
+      "p1",
+      "f1",
+    );
+  });
+
+  it("does not expose contracting contacts from a primary group without Contract ownership", async () => {
+    const { db } = makeFakeDb(happyTables(), { data: CONTRACT_CONTACT_CATALOG });
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1"));
+
+    for (const token of [
+      "group.contractingContactName",
+      "group.contractingContactTitle",
+      "group.contractingContactEmail",
+    ]) {
+      expect(valueOf(profile, token)).toBeNull();
+      expect(reasonFor(profile, token)).toContain("authorized Contract owner context");
+    }
+  });
+
+  it("points a missing Contract group contact to the owning group record, without substitution", async () => {
+    const contractOwner = {
+      contract: {
+        id: "contract-1",
+        groupId: "g-contract",
+        payerId: "payer-1",
+        state: "KS",
+        groupName: "Contract Group",
+      },
+      assignment: {
+        id: "assignment-1",
+        contextVersion: 4,
+        sopTemplateId: "template-1",
+        sopVersion: 3,
+      },
+      sop: { templateId: "template-1", version: 3, caseType: "contract" },
+      steps: [],
+      hasRecordedActivity: false,
+    };
+    vi.mocked(loadContractOwnerContext).mockResolvedValue({
+      kind: "ok",
+      context: contractOwner as never,
+    });
+    vi.mocked(validateContractOwnerSelection).mockResolvedValue({
+      kind: "ok",
+      providerId: "p1",
+      facilityId: null,
+    });
+    const { db } = makeFakeDb(
+      {
+        ...happyTables(),
+        provider_groups: {
+          data: {
+            ...groupRow,
+            id: "g-contract",
+            contracting_contact_name: null,
+            contract_signer_name: "Do Not Substitute",
+          },
+        },
+        provider_group_assignments: { data: { group_id: "g-contract" } },
+      },
+      { data: CONTRACT_CONTACT_AND_SIGNER_CATALOG },
+    );
+
+    const profile = must(
+      await getProviderProfile(ctxWith(db), "p1", {
+        contractContext: { contractId: "contract-1" },
+      }),
+    );
+
+    expect(valueOf(profile, "group.contractingContactName")).toBeNull();
+    expect(valueOf(profile, "group.contractSignerName")).toBe("Do Not Substitute");
+    expect(profile.unresolved).toContainEqual({
+      token: "group.contractingContactName",
+      reason: "This Contract group's contracting contact value is missing.",
+      recordPath: "/groups/g-contract",
+    });
+    expect(valueOf(profile, "group.contractingContactEmail")).toBe(
+      "contract-contact@example.invalid",
+    );
+  });
+
+  it("rejects a Contract provider outside the active group membership before resolving tokens", async () => {
+    const contractOwner = {
+      contract: {
+        id: "contract-1",
+        groupId: "g-contract",
+        payerId: "payer-1",
+        state: "KS",
+        groupName: "Contract Group",
+      },
+      assignment: {
+        id: "assignment-1",
+        contextVersion: 4,
+        sopTemplateId: "template-1",
+        sopVersion: 3,
+      },
+      sop: { templateId: "template-1", version: 3, caseType: "contract" },
+      steps: [],
+      hasRecordedActivity: false,
+    };
+    vi.mocked(loadContractOwnerContext).mockResolvedValue({
+      kind: "ok",
+      context: contractOwner as never,
+    });
+    vi.mocked(validateContractOwnerSelection).mockResolvedValue({
+      kind: "mismatch",
+      reason: "Provider is not an active member of the Contract group.",
+    });
+    const { db, rpcCalls, captures } = makeFakeDb(happyTables(), { data: CATALOG });
+
+    expect(
+      await getProviderProfile(ctxWith(db), "p1", {
+        contractContext: { contractId: "contract-1" },
+      }),
+    ).toEqual({
+      kind: "contract_context_mismatch",
+      reason: "Provider is not an active member of the Contract group.",
+    });
+    expect(rpcCalls).toEqual([]);
+    expect(captures.some((capture) => capture.table === "provider_groups")).toBe(false);
+  });
+
   it("a provider outside the org resolves to provider_not_found before the catalog is read", async () => {
     const { db, captures, rpcCalls } = makeFakeDb(
       { providers: { data: null } },
@@ -168,7 +553,7 @@ describe("provider profile service — injected server context", () => {
 
     expect(rpcCalls).toEqual(["get_sop_field_tokens"]);
     // Every catalog entry appears in tokens, resolved or not.
-    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 7);
+    expect(profile.tokens).toHaveLength((CATALOG as unknown[]).length + 8);
     expect(profile.case_id).toBeNull();
     expect(valueOf(profile, "provider.firstName")).toBe("Ana");
     expect(valueOf(profile, "group.name")).toBe("Group One");

@@ -2,7 +2,7 @@
 // templates list. Detail-level next-step lives on PayerDetailPage's banner
 // (MP-5); this tab keeps per-row facts (tasks) and does not compete with a
 // second primary CTA.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,11 +12,35 @@ import { useProviderGroups } from "@/hooks/useLookups";
 import { formatSopStateLabel } from "@/lib/sopMatchKey";
 import { fmtDate } from "@/lib/format";
 import { payerTemplateRows, templateStateCoverage } from "@/lib/payerDetailView";
+import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
 import type { Payer } from "@/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type TemplateTypeFilter = "all" | "legacy" | CaseType;
+
+function caseTypeLabel(caseType: CaseType | null | undefined): string {
+  switch (caseType) {
+    case "contract":
+      return "Contract";
+    case "enrollment":
+      return "Enrollment";
+    case "recredentialing":
+      return "Recredentialing (authoring only)";
+    default:
+      return "Legacy / unclassified";
+  }
+}
 
 export function PayerTemplatesTab({ payer }: { payer: Payer }) {
   const templatesQ = useSops();
   const groupsQ = useProviderGroups();
+  const [typeFilter, setTypeFilter] = useState<TemplateTypeFilter>("all");
 
   const rows = useMemo(
     () => payerTemplateRows(templatesQ.data ?? [], payer.id),
@@ -25,6 +49,21 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
   const groupNames = useMemo(
     () => new Map((groupsQ.data ?? []).map((g) => [g.id, g.name])),
     [groupsQ.data],
+  );
+  const caseTypeByTemplateId = useMemo(
+    () =>
+      new Map((templatesQ.data ?? []).map((template) => [template.id, template.caseType ?? null])),
+    [templatesQ.data],
+  );
+  const filteredRows = useMemo(
+    () =>
+      typeFilter === "all"
+        ? rows
+        : rows.filter((row) => {
+            const rowCaseType = caseTypeByTemplateId.get(row.id) ?? null;
+            return typeFilter === "legacy" ? rowCaseType === null : rowCaseType === typeFilter;
+          }),
+    [rows, typeFilter, caseTypeByTemplateId],
   );
   const coverage = useMemo(() => templateStateCoverage(payer, rows), [payer, rows]);
 
@@ -60,6 +99,30 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
             </p>
           </div>
           {rows.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <label htmlFor="payer-template-type-filter" className="text-xs text-muted-foreground">
+                Case type
+              </label>
+              <Select
+                value={typeFilter}
+                onValueChange={(value) => setTypeFilter(value as TemplateTypeFilter)}
+              >
+                <SelectTrigger id="payer-template-type-filter" className="h-8 w-[210px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  {CASE_TYPES.map((caseType) => (
+                    <SelectItem key={caseType} value={caseType}>
+                      {caseTypeLabel(caseType)}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="legacy">Legacy / unclassified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          {rows.length > 0 ? (
             <Button asChild variant="outline" size="sm" className="h-8 flex-none px-3 text-[12px]">
               <Link to="/admin/templates/new" search={{ payerId: payer.id, tier: "global" }}>
                 + New template
@@ -82,12 +145,22 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
                 </Link>
               </Button>
             </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="rounded-md border border-dashed border-[#E8E5E0] px-4 py-8 text-center">
+              <p className="text-[14px] font-medium text-foreground">
+                No templates for this case type
+              </p>
+              <p className="mt-1 text-[12.5px] text-muted-foreground">
+                Choose another type or author an SOP for this payer and business purpose.
+              </p>
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-[6px] border border-[#E8E5E0]">
-              <table className="w-full min-w-[720px] border-collapse text-left">
+              <table className="w-full min-w-[850px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-[#E8E5E0] bg-[#FBFBF9] text-[11px] font-semibold uppercase tracking-[.05em] text-muted-foreground">
                     <th className="px-3 py-2">Name</th>
+                    <th className="px-3 py-2">Case type</th>
                     <th className="px-3 py-2">State</th>
                     <th className="px-3 py-2">Group</th>
                     <th className="px-3 py-2">Tasks</th>
@@ -95,7 +168,7 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {filteredRows.map((row) => (
                     <tr key={row.id} className="border-b border-[#F0EEEA] last:border-b-0">
                       <td className="px-3 py-2.5 text-[13px]">
                         <div className="flex flex-wrap items-center gap-2">
@@ -110,6 +183,9 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
                             <StatusPill status="green" label="Active match" />
                           ) : null}
                         </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-[13px] text-muted-foreground">
+                        {caseTypeLabel(caseTypeByTemplateId.get(row.id))}
                       </td>
                       <td className="px-3 py-2.5 text-[13px] text-muted-foreground">
                         {row.states.length === 0 ? "Any state" : formatSopStateLabel(row.states)}

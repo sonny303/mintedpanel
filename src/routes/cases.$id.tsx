@@ -400,6 +400,10 @@ function CaseDetailPage() {
                 caseId: c.id,
                 providerId: c.providerId,
                 orgId: c.orgId,
+                caseType: c.caseType,
+                caseStatus: c.caseStatus,
+                contextVersion: c.contextVersion,
+                payerId: c.payerId,
                 caseFacilityId: c.facilityId,
                 facilityLoadState: caseFacilitiesQ.isError
                   ? "error"

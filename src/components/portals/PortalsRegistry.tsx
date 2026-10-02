@@ -47,10 +47,11 @@ import {
 } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
-import { slugifyPortalKey } from "@/lib/portalKey";
+import { createIndependentPortalInput } from "@/lib/portalKey";
 import { countStepsByPortalKey } from "@/lib/portalReferences";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { isUnlinkedFieldMap } from "@/lib/portalMappingHealth";
+import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
 import type { FillSession, Payer, Portal, PortalFieldMap } from "@/types";
 import type { PortalInput } from "@/services/portals";
 
@@ -289,6 +290,13 @@ function PortalTableRow({
       <tr className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]">
         <td className="px-3 h-11 align-middle">
           <div className="font-medium leading-tight">{portal.name}</div>
+          {portal.caseType ? (
+            <StatusPill
+              status="brand"
+              label={`${portal.caseType[0].toUpperCase()}${portal.caseType.slice(1)} configuration`}
+              className="mt-1"
+            />
+          ) : null}
           <code className="text-[11px] text-[#99A49B]">{portal.portalKey}</code>
           {sopRefs > 0 ? (
             <div className="text-[11px] text-[#99A49B]">
@@ -315,6 +323,9 @@ function PortalTableRow({
               <StatusPill status="amber" label={`${unlinked} no value`} className="ml-1.5" />
             </span>
           ) : null}
+          {portal.requiresExplicitSelection && mapped === 0 && proposed === 0 ? (
+            <StatusPill status="neutral" label="Empty · ready to train" className="ml-1.5" />
+          ) : null}
         </td>
         <td className="px-3 h-11 align-middle">
           <StatusCell portal={portal} />
@@ -327,7 +338,8 @@ function PortalTableRow({
         </td>
         <td className="px-3 h-11 align-middle text-right whitespace-nowrap">
           <div className="flex items-center justify-end gap-1.5">
-            {proposed > 0 ? (
+            {proposed > 0 ||
+            (portal.requiresExplicitSelection === true && mapped === 0 && proposed === 0) ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -384,7 +396,11 @@ function EditUrlEditor({
 
   async function save() {
     try {
-      await updateMut.mutateAsync({ id: portal.id, formUrl: url });
+      await updateMut.mutateAsync({
+        id: portal.id,
+        formUrl: url,
+        expectedMappingGeneration: portal.mappingGeneration,
+      });
       toast.success("Portal URL updated");
       onDone();
     } catch (e) {
@@ -532,8 +548,6 @@ function groupBySection(fields: PortalFieldMap[]): [string, PortalFieldMap[]][] 
   return order.map((s) => [s, bySection.get(s)!]);
 }
 
-const NONE = "__none__";
-
 function AddPortalModal({
   initialPayerId,
   onClose,
@@ -544,18 +558,11 @@ function AddPortalModal({
   const createMut = useCreatePortal();
   const payersQ = usePayers();
   const [name, setName] = useState("");
-  const [portalKey, setPortalKey] = useState("");
-  const [keyEdited, setKeyEdited] = useState(false);
-  const [payerId, setPayerId] = useState<string>(initialPayerId ?? NONE);
+  const [caseType, setCaseType] = useState<CaseType | "">("");
+  const [payerId, setPayerId] = useState<string>(initialPayerId ?? "");
   const [formUrl, setFormUrl] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  function onNameChange(v: string) {
-    setName(v);
-    if (nameError) setNameError(null);
-    if (!keyEdited) setPortalKey(slugifyPortalKey(v));
-  }
 
   async function save() {
     setError(null);
@@ -564,12 +571,21 @@ function AddPortalModal({
       setNameError("Name is required");
       return;
     }
-    const key = portalKey.trim() || slugifyPortalKey(name);
+    if (!payerId) {
+      setError("Payer is required.");
+      return;
+    }
+    if (!caseType) {
+      setError("Case type is required.");
+      return;
+    }
     const input: PortalInput = {
-      name: name.trim(),
-      portalKey: key,
-      payerId: payerId === NONE ? null : payerId,
-      formUrl: formUrl.trim() || null,
+      ...createIndependentPortalInput({
+        name,
+        payerId,
+        caseType,
+        formUrl,
+      }),
     };
     try {
       await createMut.mutateAsync(input);
@@ -594,39 +610,45 @@ function AddPortalModal({
             <Label className="text-[12px]">Name</Label>
             <Input
               value={name}
-              onChange={(e) => onNameChange(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError(null);
+              }}
               placeholder="Availity"
               aria-invalid={nameError ? true : undefined}
               className={`h-9 ${nameError ? "border-[#B91C1C] focus-visible:ring-[#B91C1C]" : ""}`}
             />
             {nameError ? <div className="text-[12px] text-[#B91C1C] mt-1">{nameError}</div> : null}
           </div>
-          <div className="col-span-2">
-            <Label className="text-[12px]">Portal key</Label>
-            <Input
-              value={portalKey}
-              onChange={(e) => {
-                setKeyEdited(true);
-                setPortalKey(e.target.value);
-              }}
-              placeholder="availity"
-              className="h-9 font-mono text-[12.5px]"
-            />
-            <div className="text-[11px] text-muted-foreground mt-1">
-              Stable identifier the extension sends. Lowercase, no spaces.
-            </div>
-          </div>
           <div>
             <Label className="text-[12px]">Payer</Label>
             <Select value={payerId} onValueChange={setPayerId}>
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="Multi-payer" />
+                <SelectValue placeholder="Select a payer…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>Multi-payer</SelectItem>
                 {(payersQ.data ?? []).map((p: Payer) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-[12px]">Case type</Label>
+            <Select value={caseType} onValueChange={(value) => setCaseType(value as CaseType)}>
+              <SelectTrigger className="h-9" aria-label="Case type">
+                <SelectValue placeholder="Select a case type…" />
+              </SelectTrigger>
+              <SelectContent>
+                {CASE_TYPES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value === "contract"
+                      ? "Contract"
+                      : value === "enrollment"
+                        ? "Enrollment"
+                        : "Recredentialing"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -640,6 +662,10 @@ function AddPortalModal({
               placeholder="https://…"
               className="h-9 font-mono text-[12.5px]"
             />
+          </div>
+          <div className="col-span-2 text-[11px] text-muted-foreground">
+            Each configuration starts empty with its own permanent key. The key is generated on
+            creation and cannot be changed later.
           </div>
         </div>
 
