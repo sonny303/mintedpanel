@@ -117,6 +117,21 @@ const ENROLLMENT_FILL_RECEIPT_COUNT_VALUES = new Set([
   "8",
   "9_PLUS",
 ]);
+const ENROLLMENT_FILL_SUMMARY_DIAGNOSTIC_FIELDS = Object.freeze([
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "event_warning_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+  "heading_kind",
+  "verified_count",
+  "attempted_count",
+]);
 const AUTH_PREFLIGHT_TARGET = "/auth/v1/token?grant_type=password";
 const AUTH_PREFLIGHT_HEADERS = new Set([
   "apikey",
@@ -3565,7 +3580,12 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     );
     safeLog(marker);
   };
-  const emitContractFillSummaryDiagnostic = async (targetPage) => {
+  const emitFillSummaryDiagnostic = async (
+    targetPage,
+    selectorId,
+    markerName,
+    includeEventWarning,
+  ) => {
     const read = await bounded(
       () =>
         Promise.all([
@@ -3611,6 +3631,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
                 document.querySelector("#fill-btn") instanceof HTMLButtonElement &&
                 !document.querySelector("#fill-btn").disabled,
               fillNoteVisible: isVisible(document.querySelector("#fill-note")),
+              eventWarningVisible: isVisible(document.querySelector("#fill-event-warn")),
               innerTextExpected:
                 typeof summaryBox?.innerText === "string" &&
                 summaryBox.innerText.startsWith("Verified 0; 1 setter attempts remain unverified."),
@@ -3620,14 +3641,14 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
               attemptedCount,
             };
           }),
-          targetPage.evaluate(() => {
-            const input = document.querySelector("#contract-npi");
+          targetPage.evaluate((targetSelectorId) => {
+            const input = document.querySelector(targetSelectorId);
             const value = input instanceof HTMLInputElement ? input.value : "";
             return {
               formNonempty: value.trim().length > 0,
               formMatchesExpected: value === "9999999995",
             };
-          }),
+          }, selectorId),
         ]),
       5_000,
       "M64_BROWSER_FILL_SUMMARY_DIAGNOSTIC_TIMEOUT",
@@ -3662,18 +3683,28 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       ["main_error_visible", read.ok ? extension.mainErrorVisible : null],
       ["fill_button_enabled", read.ok ? extension.fillButtonEnabled : null],
       ["fill_note_visible", read.ok ? extension.fillNoteVisible : null],
+    ];
+    if (includeEventWarning) {
+      fields.push(["event_warning_visible", read.ok ? extension.eventWarningVisible : null]);
+    }
+    fields.push(
       ["form_nonempty", read.ok ? form.formNonempty : null],
       ["form_matches_expected", read.ok ? form.formMatchesExpected : null],
       ["innertext_expected", read.ok ? extension.innerTextExpected : null],
       ["title_expected", read.ok ? extension.titleExpected : null],
-    ].map(([name, value]) => `${name}=${boolValue(value)}`);
-    fields.push(
+    );
+    const markerFields = fields.map(([name, value]) => `${name}=${boolValue(value)}`);
+    markerFields.push(
       `heading_kind=${headingKind}`,
       `verified_count=${verifiedCount}`,
       `attempted_count=${attemptedCount}`,
     );
-    safeLog(`M64|BROWSER|CONTRACT_FILL_SUMMARY|${fields.join("|")}`);
+    safeLog(`M64|BROWSER|${markerName}|${markerFields.join("|")}`);
   };
+  const emitContractFillSummaryDiagnostic = (targetPage) =>
+    emitFillSummaryDiagnostic(targetPage, "#contract-npi", "CONTRACT_FILL_SUMMARY", false);
+  const emitEnrollmentFillSummaryDiagnostic = (targetPage) =>
+    emitFillSummaryDiagnostic(targetPage, "#enrollment-npi", "ENROLLMENT_FILL_SUMMARY", true);
   const waitForFillReady = async (label, stage, expectedWork, expectedTabId, targetPage) => {
     checkpoint(`${stage}_readiness`);
     try {
@@ -3816,7 +3847,14 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
         throw error;
       }
     } else {
-      await waitForSummary();
+      try {
+        await waitForSummary();
+      } catch (error) {
+        if (stage === "enrollment_fill") {
+          await emitEnrollmentFillSummaryDiagnostic(targetPage).catch(() => {});
+        }
+        throw error;
+      }
     }
     const filledValue = await targetPage.locator(`#${selectorId}`).inputValue();
     assert(filledValue === "9999999995", "M64_BROWSER_SYNTHETIC_FORM_FILL_MISMATCH");

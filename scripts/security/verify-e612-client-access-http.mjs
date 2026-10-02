@@ -518,6 +518,41 @@ const m64ContractFillSummaryHeadingKinds = new Set([
   "unknown",
 ]);
 const m64ContractFillSummaryCountBuckets = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64EnrollmentFillSummaryBooleanFields = new Set([
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "event_warning_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+]);
+const m64EnrollmentFillSummaryFields = [
+  "results_visible",
+  "summary_visible",
+  "main_error_visible",
+  "fill_button_enabled",
+  "fill_note_visible",
+  "event_warning_visible",
+  "form_nonempty",
+  "form_matches_expected",
+  "innertext_expected",
+  "title_expected",
+  "heading_kind",
+  "verified_count",
+  "attempted_count",
+];
+const m64EnrollmentFillSummaryHeadingKinds = new Set([
+  "verified",
+  "confirmed_static",
+  "empty",
+  "other",
+  "unknown",
+]);
+const m64EnrollmentFillSummaryCountBuckets = new Set(["0", "1", "2_PLUS", "unknown"]);
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -1077,6 +1112,112 @@ function reportM64BrowserContractFillSummaryDiagnostic(driver, checkpoint) {
   if (checkpoint !== "contract_fill_summary_wait") return;
   const diagnostic = safeM64ContractFillSummaryDiagnostic(driver.lines);
   if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_SUMMARY_DIAGNOSTIC|${diagnostic}`);
+}
+function safeM64EnrollmentFillSummaryDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_SUMMARY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentFillSummaryFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_SUMMARY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  const values = {};
+  for (let index = 0; index < m64EnrollmentFillSummaryFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64EnrollmentFillSummaryBooleanFields.has(name);
+    const validValue = isBoolean
+      ? m64PermissionGrantValues.has(value)
+      : name === "heading_kind"
+        ? m64EnrollmentFillSummaryHeadingKinds.has(value)
+        : m64EnrollmentFillSummaryCountBuckets.has(value);
+    if (name !== m64EnrollmentFillSummaryFields[index] || rest.length !== 0 || !validValue) {
+      return null;
+    }
+    values[name] = value;
+    fields.push(`${name}=${value}`);
+  }
+  if (
+    (values.heading_kind === "verified" &&
+      (values.verified_count === "unknown" || values.attempted_count === "unknown")) ||
+    (values.heading_kind === "confirmed_static" &&
+      (values.verified_count !== "unknown" || values.attempted_count === "unknown")) ||
+    (["empty", "other", "unknown"].includes(values.heading_kind) &&
+      (values.verified_count !== "unknown" || values.attempted_count !== "unknown"))
+  ) {
+    return null;
+  }
+  return fields.join("|");
+}
+function reportM64BrowserEnrollmentFillSummaryDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "enrollment_fill_summary_wait") return;
+  const diagnostic = safeM64EnrollmentFillSummaryDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_FILL_SUMMARY_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentFillSummaryDiagnosticPolicy() {
+  const values = {
+    results_visible: "true",
+    summary_visible: "true",
+    main_error_visible: "false",
+    fill_button_enabled: "false",
+    fill_note_visible: "false",
+    event_warning_visible: "false",
+    form_nonempty: "true",
+    form_matches_expected: "true",
+    innertext_expected: "false",
+    title_expected: "true",
+    heading_kind: "verified",
+    verified_count: "0",
+    attempted_count: "1",
+  };
+  const marker = (fields) =>
+    `M64|BROWSER|ENROLLMENT_FILL_SUMMARY|${m64EnrollmentFillSummaryFields
+      .map((name) => `${name}=${fields[name]}`)
+      .join("|")}`;
+  const valid = marker(values);
+  const expected = m64EnrollmentFillSummaryFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|");
+  if (safeM64EnrollmentFillSummaryDiagnostic([valid]) !== expected) {
+    fail("E612_M64_ENROLLMENT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const confirmedStatic = marker({
+    ...values,
+    heading_kind: "confirmed_static",
+    verified_count: "unknown",
+    attempted_count: "2_PLUS",
+  });
+  if (!safeM64EnrollmentFillSummaryDiagnostic([confirmedStatic])) {
+    fail("E612_M64_ENROLLMENT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
+  const invalidMarkers = [
+    valid.replace("event_warning_visible=false", "event_warning_visible=raw"),
+    valid.replace("heading_kind=verified", "heading_kind=raw_text"),
+    valid.replace("verified_count=0", "verified_count=raw_value"),
+    valid.replace("attempted_count=1", "attempted_count=unknown"),
+    valid.replace(
+      "results_visible=true|summary_visible=true",
+      "summary_visible=true|results_visible=true",
+    ),
+    valid.replace("form_matches_expected=true", "form_matches_expected=9999999995"),
+    `${valid}|unlisted=value`,
+    valid.replace(
+      "event_warning_visible=false",
+      "event_warning_visible=false|event_warning_visible=false",
+    ),
+    valid.replace("event_warning_visible=false|form_nonempty=true", "form_nonempty=true"),
+    marker({ ...values, heading_kind: "confirmed_static", verified_count: "0" }),
+  ];
+  if (
+    invalidMarkers.some((invalid) => safeM64EnrollmentFillSummaryDiagnostic([invalid]) !== null) ||
+    safeM64EnrollmentFillSummaryDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_FILL_SUMMARY_PARSER_SELF_TEST_FAILED");
+  }
 }
 function assertM64ContractFillSummaryDiagnosticPolicy() {
   const values = {
@@ -2061,6 +2202,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserContractFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserEnrollmentUiDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserEnrollmentFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
@@ -2682,6 +2824,7 @@ let browserSession;
 let stage = "docker_context";
 try {
   assertM64ContractFillSummaryDiagnosticPolicy();
+  assertM64EnrollmentFillSummaryDiagnosticPolicy();
   assertM64EnrollmentUiDiagnosticPolicy();
   assertM64EnrollmentFillReadinessDiagnosticPolicy();
   assertM64EnrollmentFillReceiptDiagnosticPolicy();
