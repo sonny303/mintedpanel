@@ -2779,7 +2779,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       (state) =>
         state.resultsVisible &&
         state.summaryVisible &&
-        state.summary.includes("Confirmed static: 1") &&
+        state.summary.startsWith("Verified 0; 1 setter attempts remain unverified.") &&
         !state.errorVisible,
       `${label.toLowerCase()}_fill_summary`,
       30_000,
