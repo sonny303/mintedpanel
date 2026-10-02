@@ -311,17 +311,33 @@ function runM64BrowserSmoke(extensionBuild) {
   ]);
   created.add("browser");
   const observed = JSON.parse(docker(["inspect", names.browser]))[0];
-  if (
-    observed.Config?.Labels?.[`com.minted.e612`] !== runId ||
-    observed.HostConfig?.NetworkMode !== network ||
-    observed.HostConfig?.ReadonlyRootfs !== true ||
-    !observed.HostConfig?.CapDrop?.includes("ALL") ||
-    observed.HostConfig?.CapAdd?.length !== 1 ||
-    !observed.HostConfig?.CapAdd?.includes("NET_BIND_SERVICE") ||
-    !observed.HostConfig?.SecurityOpt?.includes("no-new-privileges") ||
-    Object.keys(observed.HostConfig?.PortBindings ?? {}).length !== 0 ||
-    !observed.NetworkSettings?.Networks?.[network]
-  ) {
+  const browserHostConfig = observed.HostConfig ?? {};
+  const browserCapabilities = browserHostConfig.CapAdd ?? [];
+  const normalizedCapabilities = browserCapabilities.map((capability) =>
+    capability.replace(/^CAP_/, ""),
+  );
+  const browserSecurityOptions = browserHostConfig.SecurityOpt ?? [];
+  const browserHardening = {
+    label: observed.Config?.Labels?.[`com.minted.e612`] === runId,
+    network: browserHostConfig.NetworkMode === network,
+    readOnlyRoot: browserHostConfig.ReadonlyRootfs === true,
+    dropAllCapabilities: browserHostConfig.CapDrop?.includes("ALL") === true,
+    onlyBindServiceCapability:
+      browserCapabilities.length === 1 && normalizedCapabilities[0] === "NET_BIND_SERVICE",
+    noNewPrivileges: browserSecurityOptions.some(
+      (option) => option === "no-new-privileges" || option === "no-new-privileges:true",
+    ),
+    noPublishedPorts: Object.keys(browserHostConfig.PortBindings ?? {}).length === 0,
+    attachedToInternalNetwork: Boolean(observed.NetworkSettings?.Networks?.[network]),
+  };
+  if (Object.values(browserHardening).some((check) => !check)) {
+    emit(
+      `E612|M64|BROWSER|HARDENING|${Object.entries(browserHardening)
+        .map(([name, passed]) => `${name}=${passed}`)
+        .join(
+          "|",
+        )}|cap_add_count=${browserCapabilities.length}|security_opt_count=${browserSecurityOptions.length}`,
+    );
     fail("E612_M64_BROWSER_CONTAINER_HARDENING_MISMATCH");
   }
   docker(["exec", names.browser, "mkdir", "-p", "/tmp/m64/node_modules", "/tmp/m64-home"]);
