@@ -136,6 +136,30 @@ const EXPECTED_BACKGROUND_MARKERS = [
   "minted.activeWork.v2",
   "SET_ACTIVE_WORK",
 ];
+const CONTRACT_UI_CHECKPOINTS = [
+  "contract_ui_org_state",
+  "contract_ui_org_open",
+  "contract_ui_org_select",
+  "contract_ui_org_selected",
+  "contract_ui_matrix_navigation",
+  "contract_ui_matrix_target",
+  "contract_ui_matrix_click",
+  "contract_ui_dialog",
+  "contract_ui_provider_open",
+  "contract_ui_provider_select",
+  "contract_ui_facility_open",
+  "contract_ui_facility_select",
+  "contract_ui_tuple_ready",
+  "contract_ui_tuple_read",
+  "contract_ui_launch_ready",
+  "contract_ui_launch_click",
+  "contract_ui_validation",
+  "contract_ui_confirmation",
+  "contract_ui_portal_tab",
+  "contract_ui_work_binding",
+  "contract_ui_active_tab_check",
+  "contract_ui_form_shape",
+];
 
 class BrowserFailure extends Error {}
 
@@ -177,6 +201,9 @@ const STAGES = Object.freeze({
   panel_login_org_wait: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
   panel_login_org_ready: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
   contract_ui: "M64_BROWSER_STAGE_CONTRACT_UI_FAILED",
+  ...Object.fromEntries(
+    CONTRACT_UI_CHECKPOINTS.map((stage) => [stage, "M64_BROWSER_STAGE_CONTRACT_UI_FAILED"]),
+  ),
   contract_fill: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
   enrollment_ui: "M64_BROWSER_STAGE_ENROLLMENT_UI_FAILED",
   enrollment_fill: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
@@ -587,6 +614,10 @@ async function reportOrgWaitDiagnostic(page) {
   fields.push(...routeStatusDiagnostic("panel.cases", "api_cases", [200, 403, 404]));
   fields.push(`ui=${await orgWaitUiState(page)}`);
   safeLog(`M64|BROWSER|ORG_WAIT|${fields.join("|")}`);
+  reportOptionsRouteClassDiagnostic("ORG_WAIT_ROUTES");
+}
+
+function reportOptionsRouteClassDiagnostic(marker) {
   const detailFields = ORG_WAIT_OPTION_DETAIL_BUCKETS.map((bucket) => {
     const field =
       bucket === "other" ? "options_other_unknown_route_404" : `options_other_${bucket}_404`;
@@ -594,7 +625,11 @@ async function reportOrgWaitDiagnostic(page) {
       routeCount(`supabase.options_denied_detail.${bucket}`, 404),
     )}`;
   });
-  safeLog(`M64|BROWSER|ORG_WAIT_ROUTES|${detailFields.join("|")}`);
+  safeLog(`M64|BROWSER|${marker}|${detailFields.join("|")}`);
+}
+
+function reportContractUiRouteDiagnostic() {
+  reportOptionsRouteClassDiagnostic("CONTRACT_UI_ROUTES");
 }
 
 function unexpected(response, category = "UNKNOWN_HOST", reason = null) {
@@ -1273,42 +1308,56 @@ async function panelContractPermissionProbe(extensionPage) {
   checkpoint("panel_login_org_ready");
 
   checkpoint("contract_ui");
+  checkpoint("contract_ui_org_state");
   const orgAttribute = await activeOrgButton.getAttribute("aria-label");
   if (orgAttribute !== `Active organization: ${panelOrgName}. Switch organization`) {
+    checkpoint("contract_ui_org_open");
     await activeOrgButton.click();
+    checkpoint("contract_ui_org_select");
     await panelPage.getByRole("menuitem", { name: panelOrgName, exact: true }).click();
+    checkpoint("contract_ui_org_selected");
     await poll(
       () => activeOrgButton.getAttribute("aria-label"),
       (label) => label === `Active organization: ${panelOrgName}. Switch organization`,
       "panel_m64_org_selected",
     );
   }
+  checkpoint("contract_ui_matrix_navigation");
   await panelPage.goto(
     `${PANEL_ORIGIN}/reporting/contracts-matrix?groupId=${GROUP_ID}&payerId=${PAYER_ID}&state=NY`,
     { waitUntil: "domcontentloaded" },
   );
   const targetCell = panelPage.locator('td[aria-current="location"]');
+  checkpoint("contract_ui_matrix_target");
   await poll(
     () => targetCell.count(),
     (count) => count === 1,
     "contract_matrix_target",
   );
+  checkpoint("contract_ui_matrix_click");
   await targetCell.click();
+  checkpoint("contract_ui_dialog");
   await panelPage.getByRole("dialog").waitFor({ state: "visible" });
 
   const providerSelect = panelPage.getByRole("combobox", { name: "First provider for form work" });
+  checkpoint("contract_ui_provider_open");
   await providerSelect.click();
+  checkpoint("contract_ui_provider_select");
   await panelPage.getByRole("option", { name: /Synthetic M64 Provider/ }).click();
   const facilitySelect = panelPage.getByRole("combobox", { name: "Location for form work" });
+  checkpoint("contract_ui_facility_open");
   await facilitySelect.click();
+  checkpoint("contract_ui_facility_select");
   await panelPage.getByRole("option", { name: new RegExp(`${panelOrgName} Facility`) }).click();
 
   const tupleElement = panelPage.getByTestId("contract-launch-tuple");
+  checkpoint("contract_ui_tuple_ready");
   await poll(
     () => tupleElement.getAttribute("data-effective-mapping-fingerprint"),
     (fingerprint) => /^sha256:[a-f0-9]{64}$/.test(fingerprint ?? ""),
     "contract_live_map_fingerprint",
   );
+  checkpoint("contract_ui_tuple_read");
   const uiTuple = await tupleElement.evaluate((element) => ({
     orgId: element.getAttribute("data-org-id"),
     portalId: element.getAttribute("data-portal-id"),
@@ -1329,8 +1378,11 @@ async function panelContractPermissionProbe(extensionPage) {
     "M64_BROWSER_PANEL_CONTRACT_CONTEXT_FAILED",
   );
   const launch = panelPage.getByRole("button", { name: "Work in portal", exact: true });
+  checkpoint("contract_ui_launch_ready");
   await poll(() => launch.isEnabled(), Boolean, "contract_work_launch_ready");
+  checkpoint("contract_ui_launch_click");
   await launch.click();
+  checkpoint("contract_ui_validation");
   await poll(
     () => workValidationSuccesses.find(({ tuple }) => tuple.ownerKind === "contract") ?? null,
     Boolean,
@@ -1349,17 +1401,20 @@ async function panelContractPermissionProbe(extensionPage) {
       validation.effectiveMappingFingerprint === uiTuple.effectiveMappingFingerprint,
     "M64_BROWSER_PANEL_CONTRACT_LAUNCH_FAILED",
   );
+  checkpoint("contract_ui_confirmation");
   await panelPage
     .getByText("The extension validated this step and opened its exact work tab.", {
       exact: true,
     })
     .waitFor({ state: "visible" });
+  checkpoint("contract_ui_portal_tab");
   const portalPages = await poll(
     () => context.pages().filter((page) => page.url().startsWith(`${PORTAL_URL}`)),
     (pages) => pages.length === 1,
     "synthetic_contract_tab",
   );
   const [portalPage] = portalPages;
+  checkpoint("contract_ui_work_binding");
   const boundWork = await extensionPage.evaluate(
     async (key) => (await chrome.storage.session.get(key))[key] ?? null,
     ACTIVE_WORK_KEY,
@@ -1373,8 +1428,10 @@ async function panelContractPermissionProbe(extensionPage) {
       boundWork.formOrigin === new URL(PORTAL_URL).origin,
     "M64_BROWSER_WORK_BINDING_MISMATCH",
   );
+  checkpoint("contract_ui_active_tab_check");
   assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
   assert(new URL(portalPage.url()).href === PORTAL_URL, "M64_BROWSER_WORK_BINDING_MISMATCH");
+  checkpoint("contract_ui_form_shape");
   const formControls = await portalPage
     .locator("input")
     .evaluateAll((inputs) => inputs.map((input) => ({ id: input.id, type: input.type })));
@@ -1706,6 +1763,9 @@ try {
   await run();
 } catch (error) {
   driverFailed = true;
+  if (currentStage === "contract_ui" || CONTRACT_UI_CHECKPOINTS.includes(currentStage)) {
+    reportContractUiRouteDiagnostic();
+  }
   const code =
     currentStage === "panel_login_route_denied" &&
     lastDeniedCategory === "SUPABASE_OPTIONS_AUTH" &&

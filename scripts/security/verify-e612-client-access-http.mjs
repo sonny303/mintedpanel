@@ -220,6 +220,28 @@ const m64DriverCheckpoints = new Set([
   "panel_login_org_wait",
   "panel_login_org_ready",
   "contract_ui",
+  "contract_ui_org_state",
+  "contract_ui_org_open",
+  "contract_ui_org_select",
+  "contract_ui_org_selected",
+  "contract_ui_matrix_navigation",
+  "contract_ui_matrix_target",
+  "contract_ui_matrix_click",
+  "contract_ui_dialog",
+  "contract_ui_provider_open",
+  "contract_ui_provider_select",
+  "contract_ui_facility_open",
+  "contract_ui_facility_select",
+  "contract_ui_tuple_ready",
+  "contract_ui_tuple_read",
+  "contract_ui_launch_ready",
+  "contract_ui_launch_click",
+  "contract_ui_validation",
+  "contract_ui_confirmation",
+  "contract_ui_portal_tab",
+  "contract_ui_work_binding",
+  "contract_ui_active_tab_check",
+  "contract_ui_form_shape",
   "permission_probe",
 ]);
 const m64OrgWaitDiagnosticFields = [
@@ -363,15 +385,16 @@ function safeM64OrgWaitDiagnostic(lines) {
   }
   return [...fields, `ui=${uiValue}`].join("|");
 }
-function safeM64OrgWaitRoutesDiagnostic(lines) {
-  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ORG_WAIT_ROUTES|"));
+function safeM64FixedRouteDiagnostic(lines, markerName) {
+  if (markerName !== "ORG_WAIT_ROUTES" && markerName !== "CONTRACT_UI_ROUTES") return null;
+  const markers = lines.filter((line) => line.startsWith(`M64|BROWSER|${markerName}|`));
   if (markers.length !== 1) return null;
   const parts = markers[0].split("|");
   if (
     parts.length !== m64OrgWaitRoutesDiagnosticFields.length + 3 ||
     parts[0] !== "M64" ||
     parts[1] !== "BROWSER" ||
-    parts[2] !== "ORG_WAIT_ROUTES"
+    parts[2] !== markerName
   ) {
     return null;
   }
@@ -389,12 +412,28 @@ function safeM64OrgWaitRoutesDiagnostic(lines) {
   }
   return fields.join("|");
 }
+function safeM64OrgWaitRoutesDiagnostic(lines) {
+  return safeM64FixedRouteDiagnostic(lines, "ORG_WAIT_ROUTES");
+}
+function safeM64ContractUiRoutesDiagnostic(lines) {
+  return safeM64FixedRouteDiagnostic(lines, "CONTRACT_UI_ROUTES");
+}
 function reportM64BrowserOrgWaitDiagnostic(driver, checkpoint) {
   if (checkpoint !== "panel_login_org_wait") return;
   const diagnostic = safeM64OrgWaitDiagnostic(driver.lines);
   if (diagnostic) emit(`E612|M64|BROWSER|ORG_WAIT_DIAGNOSTIC|${diagnostic}`);
   const routesDiagnostic = safeM64OrgWaitRoutesDiagnostic(driver.lines);
   if (routesDiagnostic) emit(`E612|M64|BROWSER|ORG_WAIT_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
+}
+function reportM64BrowserContractUiRouteDiagnostic(driver, checkpoint) {
+  if (
+    typeof checkpoint !== "string" ||
+    (checkpoint !== "contract_ui" && !checkpoint.startsWith("contract_ui_"))
+  ) {
+    return;
+  }
+  const routesDiagnostic = safeM64ContractUiRoutesDiagnostic(driver.lines);
+  if (routesDiagnostic) emit(`E612|M64|BROWSER|CONTRACT_UI_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
 }
 function waitForM64BrowserCompletion(driver, timeoutMs) {
   let timer;
@@ -947,6 +986,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     browserSession.browserDriver.stop();
     const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
     if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
       emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=5");
       fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
