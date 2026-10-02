@@ -130,7 +130,10 @@ async function preflight() {
   const playwright = require("playwright");
   const playwrightPackage = require("playwright/package.json");
   chromium = playwright.chromium;
-  assert(playwrightPackage.version === PLAYWRIGHT_VERSION, "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH");
+  assert(
+    playwrightPackage.version === PLAYWRIGHT_VERSION,
+    "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH",
+  );
   assert(
     existsSync(backgroundPath) && existsSync(manifestPath),
     "M64_BROWSER_EXTENSION_DIST_MISSING",
@@ -343,7 +346,8 @@ async function run() {
         const hostHeader = String(request.headers.host ?? "")
           .toLowerCase()
           .replace(/:\d+$/, "");
-        const pathname = new URL(request.url ?? "/", `https://${hostHeader || PANEL_HOST}`).pathname;
+        const pathname = new URL(request.url ?? "/", `https://${hostHeader || PANEL_HOST}`)
+          .pathname;
         const method = String(request.method ?? "GET").toUpperCase();
         const route = routeFor(hostHeader, method, pathname);
         if (!route) {
