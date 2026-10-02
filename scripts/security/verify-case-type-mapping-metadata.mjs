@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Executable contract test for MINT-45 metadata and reset-receipt boundaries.
+// Executable contract test for MINT-45 metadata and MINT-60 reset-receipt boundaries.
 // It runs only against the disposable PostgreSQL database used by migration CI.
 
 import { randomUUID } from "node:crypto";
@@ -11,10 +11,14 @@ function assert(condition, message) {
 
 function runPsql(sql, { allowFailure = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("psql", ["-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1"], {
-      env: { ...process.env, LC_ALL: "C" },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = spawn(
+      "psql",
+      ["-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
+      {
+        env: { ...process.env, LC_ALL: "C" },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk) => (stdout += chunk));
@@ -69,6 +73,7 @@ const idKeys = [
   "orgAEvent",
   "orgBEvent",
   "serviceEvent",
+  "rpcIdempotency",
   "idempotency",
   "providerA",
   "payerA",
@@ -420,19 +425,41 @@ await expectSqlFailure(
 const rls = await runPsql(`
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '${ids.actorA}';
-SELECT count(*)::text FROM public.form_mapping_reset_events WHERE portal_key = '${portalKey}';
+SELECT count(id)::text FROM public.form_mapping_reset_events WHERE portal_key = '${portalKey}';
 RESET ROLE;
 `);
 assert(
   rls.stdout === "2",
   `authenticated RLS should expose global + own-org receipt only; got ${rls.stdout}`,
 );
+const safeGlobalReceipt = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorB}';
+SELECT owner_scope || ':' || portal_key || ':' || old_mapping_generation::text || ':' ||
+       new_mapping_generation::text || ':' || affected_field_count::text
+  FROM public.form_mapping_reset_events WHERE id = '${ids.globalEvent}';
+RESET ROLE;
+`);
+assert(
+  safeGlobalReceipt.stdout === `global:${portalKey}:1:2:5`,
+  `authenticated users should read safe columns from a visible global receipt: ${safeGlobalReceipt.stdout}`,
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorB}'; SELECT actor_id FROM public.form_mapping_reset_events WHERE id = '${ids.globalEvent}';`,
+  "42501",
+  "authenticated actor_id read",
+);
+await expectSqlFailure(
+  `SET ROLE authenticated; SET request.jwt.claim.sub = '${ids.actorB}'; SELECT * FROM public.form_mapping_reset_events WHERE id = '${ids.globalEvent}';`,
+  "42501",
+  "authenticated SELECT * receipt read",
+);
 
 const restrictedRls = await runPsql(`
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '${ids.restrictedActor}';
-SELECT count(*) FILTER (WHERE owner_scope = 'global')::text || ',' ||
-       count(*) FILTER (WHERE owner_scope = 'organization')::text
+SELECT count(id) FILTER (WHERE owner_scope = 'global')::text || ',' ||
+       count(id) FILTER (WHERE owner_scope = 'organization')::text
   FROM public.form_mapping_reset_events WHERE portal_key = '${portalKey}';
 RESET ROLE;
 `);
@@ -444,17 +471,29 @@ assert(
 const grants = await runPsql(`
 SELECT has_table_privilege('anon', 'public.form_mapping_reset_events', 'SELECT')::text || ',' ||
        has_table_privilege('authenticated', 'public.form_mapping_reset_events', 'SELECT')::text || ',' ||
+       has_column_privilege('authenticated', 'public.form_mapping_reset_events', 'id', 'SELECT')::text || ',' ||
+       has_column_privilege('authenticated', 'public.form_mapping_reset_events', 'actor_id', 'SELECT')::text || ',' ||
        has_table_privilege('authenticated', 'public.form_mapping_reset_events', 'INSERT')::text || ',' ||
        has_table_privilege('authenticated', 'public.form_mapping_reset_events', 'UPDATE')::text || ',' ||
        has_table_privilege('authenticated', 'public.form_mapping_reset_events', 'DELETE')::text || ',' ||
        has_table_privilege('service_role', 'public.form_mapping_reset_events', 'SELECT')::text || ',' ||
        has_table_privilege('service_role', 'public.form_mapping_reset_events', 'INSERT')::text || ',' ||
        has_table_privilege('service_role', 'public.form_mapping_reset_events', 'UPDATE')::text || ',' ||
-       has_table_privilege('service_role', 'public.form_mapping_reset_events', 'DELETE')::text;
+       has_table_privilege('service_role', 'public.form_mapping_reset_events', 'DELETE')::text || ',' ||
+       has_column_privilege('service_role', 'public.form_mapping_reset_events', 'actor_id', 'SELECT')::text;
 `);
 assert(
-  grants.stdout === "false,true,false,false,false,true,true,false,false",
+  grants.stdout === "false,false,true,false,false,false,false,true,true,false,false,true",
   `receipt grants mismatch: ${grants.stdout}`,
+);
+const serviceReceiptActor = await runPsql(`
+SET ROLE service_role;
+SELECT actor_id::text FROM public.form_mapping_reset_events WHERE id = '${ids.globalEvent}';
+RESET ROLE;
+`);
+assert(
+  serviceReceiptActor.stdout === ids.actorA,
+  `service_role should retain trusted actor attribution: ${serviceReceiptActor.stdout}`,
 );
 
 await expectSqlFailure(
@@ -607,4 +646,29 @@ await expectSqlFailure(
   "append-only delete trigger",
 );
 
-console.log("MINT-44/45 case-type and mapping metadata security contracts verified.");
+const callerRpcReceipt = await runPsql(`
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '${ids.actorA}';
+SET request.jwt.claim.role = 'authenticated';
+SET request.jwt.claims = '{"sub":"${ids.actorA}","role":"authenticated"}';
+SELECT (public.reset_portal_mapping(
+  '${ids.portalGlobalLegacy}', 1, '${ids.rpcIdempotency}'
+)).actor_id::text;
+RESET ROLE;
+`);
+assert(
+  callerRpcReceipt.stdout === ids.actorA,
+  `authenticated reset caller should receive its own receipt actor_id from the RPC: ${callerRpcReceipt.stdout}`,
+);
+const rpcReceiptActor = await runPsql(`
+SET ROLE service_role;
+SELECT actor_id::text FROM public.form_mapping_reset_events
+ WHERE portal_id = '${ids.portalGlobalLegacy}' AND idempotency_key = '${ids.rpcIdempotency}';
+RESET ROLE;
+`);
+assert(
+  rpcReceiptActor.stdout === ids.actorA,
+  `reset RPC should persist actor attribution for trusted reads: ${rpcReceiptActor.stdout}`,
+);
+
+console.log("MINT-44/45/60 case-type, mapping metadata, and reset-receipt security contracts verified.");
