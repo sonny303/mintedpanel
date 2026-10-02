@@ -209,6 +209,10 @@ ALTER TABLE public.fill_sessions ENABLE TRIGGER trg_fill_sessions_prevent_v2_mut
 DELETE FROM public.tasks WHERE org_id = '${ids.org}';
 DELETE FROM public.credential_cases WHERE org_id = '${ids.org}';
 DELETE FROM public.portals WHERE id = '${ids.portal}';
+-- M44 gives each inserted template an immutable version-1 row. Tasks were
+-- removed above to release their composite version FK; no Contract assignment
+-- references this synthetic template. Draft rows cascade with the head.
+DELETE FROM public.sop_template_versions WHERE template_id = '${ids.template}';
 DELETE FROM public.sop_templates WHERE id = '${ids.template}';
 DELETE FROM public.provider_group_assignments WHERE org_id = '${ids.org}';
 DELETE FROM public.providers WHERE org_id = '${ids.org}';
