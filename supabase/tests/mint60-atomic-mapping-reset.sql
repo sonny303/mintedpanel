@@ -32,6 +32,20 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION pg_temp.m60_expect_state(text, text) TO authenticated;
+CREATE FUNCTION pg_temp.m60_expect_message(p_fragment text, p_statement text) RETURNS boolean
+LANGUAGE plpgsql AS $$
+DECLARE v_message text;
+BEGIN
+  BEGIN
+    EXECUTE p_statement;
+    RETURN false;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    RETURN position(p_fragment IN v_message) > 0;
+  END;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION pg_temp.m60_expect_message(text, text) TO authenticated;
 CREATE FUNCTION pg_temp.m60_tuple(p_fill_id uuid, p_context_version integer, p_generation integer)
 RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
   SELECT jsonb_build_object(
@@ -166,7 +180,27 @@ INSERT INTO public.portals(
    'https://contract.example.invalid/shared', NULL, false, 1, true, now(), now()),
   ('38000000-0000-4000-a000-000000000066', '18000000-0000-4000-a000-000000000060',
    'm60_contract_shared', 'MINT-60 org Contract form', '28000000-0000-4000-a000-000000000060',
-   'https://contract.example.invalid/org', 'contract', true, 1, true, now(), now());
+   'https://contract.example.invalid/org', 'contract', true, 1, true, now(), now()),
+  ('38000000-0000-4000-a000-000000000067', NULL,
+   'm60_shadow_incompatible', 'MINT-60 shared Contract shadow',
+   '28000000-0000-4000-a000-000000000060', 'https://shadow.example.invalid/shared',
+   'contract', true, 1, true, now(), now()),
+  ('38000000-0000-4000-a000-000000000068', '18000000-0000-4000-a000-000000000060',
+   'm60_shadow_incompatible', 'MINT-60 org Enrollment shadow',
+   '28000000-0000-4000-a000-000000000060', 'https://shadow.example.invalid/org',
+   'enrollment', true, 1, true, now(), now()),
+  ('38000000-0000-4000-a000-000000000069', '18000000-0000-4000-a000-000000000060',
+   'm60_hidden_only', '[hidden] MINT-60 hidden config',
+   '28000000-0000-4000-a000-000000000060', 'https://hidden.example.invalid/form',
+   'contract', true, 1, true, now(), now()),
+  ('38000000-0000-4000-a000-000000000070', '18000000-0000-4000-a000-000000000060',
+   'm60_org_only_key', 'MINT-60 org-only Contract form',
+   '28000000-0000-4000-a000-000000000060', 'https://org-only.example.invalid/form',
+   'contract', true, 1, true, now(), now()),
+  ('38000000-0000-4000-a000-000000000071', NULL,
+   'm60_global_only', 'MINT-60 global fallback form',
+   '28000000-0000-4000-a000-000000000060', 'https://global-only.example.invalid/form',
+   'contract', true, 1, true, now(), now());
 
 -- More than a typical client page, with every status represented: the receipt
 -- must count all rows in the selected exact-key/current generation.
@@ -234,6 +268,110 @@ INSERT INTO public.sop_templates(
   '[{"title":"Enrollment","steps":[{"stepType":"online_form","portalKey":"m60_shared"}]}]'::jsonb,
   false, 1, '[]'::jsonb, 'enrollment'
 );
+
+SELECT pg_temp.m60_mark('compatible_org_config_shadows_same_key_global_config',
+  EXISTS (
+    SELECT 1 FROM public.sop_templates
+     WHERE id = '69000000-0000-4000-a000-000000000061'
+       AND org_id = '18000000-0000-4000-a000-000000000060'
+       AND case_type = 'contract'
+  ));
+
+INSERT INTO public.sop_templates(
+  id, org_id, name, payer_id, state, states, task_definitions,
+  archived, current_version, required_profile_attributes, case_type
+) VALUES (
+  '69000000-0000-4000-a000-000000000067',
+  '18000000-0000-4000-a000-000000000060', 'MINT-60 org template uses global fallback',
+  '28000000-0000-4000-a000-000000000060', 'WA', ARRAY['WA']::text[],
+  '[{"title":"Contract","steps":[{"stepType":"online_form","portalKey":"m60_global_only"}]}]'::jsonb,
+  false, 1, '[]'::jsonb, 'contract'
+);
+SELECT pg_temp.m60_mark('organization_template_uses_global_when_org_row_is_absent',
+  EXISTS (
+    SELECT 1 FROM public.sop_templates
+     WHERE id = '69000000-0000-4000-a000-000000000067'
+       AND org_id = '18000000-0000-4000-a000-000000000060'
+       AND case_type = 'contract'
+  ));
+
+-- A global typed template only binds to the global row, even when the same
+-- key has an incompatible organization override.
+INSERT INTO public.sop_templates(
+  id, org_id, name, payer_id, state, states, task_definitions,
+  archived, current_version, required_profile_attributes, case_type
+) VALUES (
+  '69000000-0000-4000-a000-000000000062', NULL, 'MINT-60 global binding SOP',
+  '28000000-0000-4000-a000-000000000060', 'WA', ARRAY['WA']::text[],
+  '[{"title":"Contract","steps":[{"stepType":"online_form","portalKey":"m60_shadow_incompatible"}]}]'::jsonb,
+  false, 1, '[]'::jsonb, 'contract'
+);
+SELECT pg_temp.m60_mark('global_template_uses_compatible_global_row_only',
+  EXISTS (
+    SELECT 1 FROM public.sop_templates
+     WHERE id = '69000000-0000-4000-a000-000000000062'
+       AND org_id IS NULL AND case_type = 'contract'
+  ));
+
+SELECT pg_temp.m60_mark('incompatible_org_override_does_not_fall_back_to_global',
+  pg_temp.m60_expect_message(
+    'sop_portal_binding_ineligible',
+    $$INSERT INTO public.sop_templates(
+        id, org_id, name, payer_id, state, states, task_definitions,
+        archived, current_version, required_profile_attributes, case_type
+      ) VALUES (
+        '69000000-0000-4000-a000-000000000063',
+        '18000000-0000-4000-a000-000000000060', 'MINT-60 incompatible shadow SOP',
+        '28000000-0000-4000-a000-000000000060', 'WA', ARRAY['WA']::text[],
+        '[{"title":"Contract","steps":[{"stepType":"online_form","portalKey":"m60_shadow_incompatible"}]}]'::jsonb,
+        false, 1, '[]'::jsonb, 'contract'
+      )$$
+  ));
+
+SELECT pg_temp.m60_mark('hidden_org_config_is_not_a_binding_candidate',
+  pg_temp.m60_expect_message(
+    'sop_portal_binding_ineligible',
+    $$INSERT INTO public.sop_templates(
+        id, org_id, name, payer_id, state, states, task_definitions,
+        archived, current_version, required_profile_attributes, case_type
+      ) VALUES (
+        '69000000-0000-4000-a000-000000000064',
+        '18000000-0000-4000-a000-000000000060', 'MINT-60 hidden binding SOP',
+        '28000000-0000-4000-a000-000000000060', 'WA', ARRAY['WA']::text[],
+        '[{"title":"Contract","steps":[{"stepType":"online_form","portalKey":"m60_hidden_only"}]}]'::jsonb,
+        false, 1, '[]'::jsonb, 'contract'
+      )$$
+  ));
+
+SELECT pg_temp.m60_mark('missing_portal_key_is_rejected',
+  pg_temp.m60_expect_message(
+    'sop_portal_binding_ineligible',
+    $$INSERT INTO public.sop_templates(
+        id, org_id, name, payer_id, state, states, task_definitions,
+        archived, current_version, required_profile_attributes, case_type
+      ) VALUES (
+        '69000000-0000-4000-a000-000000000065',
+        '18000000-0000-4000-a000-000000000060', 'MINT-60 missing binding SOP',
+        '28000000-0000-4000-a000-000000000060', 'WA', ARRAY['WA']::text[],
+        '[{"title":"Contract","steps":[{"stepType":"online_form","portalKey":"m60_missing_key"}]}]'::jsonb,
+        false, 1, '[]'::jsonb, 'contract'
+      )$$
+  ));
+
+SELECT pg_temp.m60_mark('global_template_cannot_bind_org_only_configuration',
+  pg_temp.m60_expect_message(
+    'sop_portal_binding_ineligible',
+    $$INSERT INTO public.sop_templates(
+        id, org_id, name, payer_id, state, states, task_definitions,
+        archived, current_version, required_profile_attributes, case_type
+      ) VALUES (
+        '69000000-0000-4000-a000-000000000066', NULL, 'MINT-60 global cannot bind org-only SOP',
+        '28000000-0000-4000-a000-000000000060', 'WA', ARRAY['WA']::text[],
+        '[{"title":"Contract","steps":[{"stepType":"online_form","portalKey":"m60_org_only_key"}]}]'::jsonb,
+        false, 1, '[]'::jsonb, 'contract'
+      )$$
+  ));
+
 INSERT INTO public.fill_sessions(
   id, org_id, case_id, provider_id, portal_id, portal_key, performed_by, fields_filled
 ) VALUES (
