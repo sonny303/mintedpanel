@@ -265,6 +265,17 @@ CREATE POLICY m58_test_service_case_update ON public.credential_cases
 CREATE POLICY m58_test_service_audit_insert ON public.audit_log
   FOR INSERT TO service_role WITH CHECK (org_id = '18000000-0000-4000-a000-000000000058');
 
+-- The M51 typed-fill trigger verifies auth.jwt()->>'role' even during these
+-- privileged fixture inserts. Keep the database owner for seed privileges,
+-- but establish the same service-role actor claims used by the later RPC calls.
+SELECT set_config('request.jwt.claim.sub', '39000000-0000-4000-a000-000000000058', true);
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+SELECT set_config(
+  'request.jwt.claims',
+  '{"sub":"39000000-0000-4000-a000-000000000058","role":"service_role"}',
+  true
+);
+
 -- Seed exact immutable V2 receipts. The first receipt is inserted against a
 -- not_started case and must receive the unforgeable auto-start stamp.
 INSERT INTO public.fill_sessions(
@@ -351,13 +362,6 @@ SELECT pg_temp.m58_mark('typed_fill_receipt_is_immutable', pg_temp.m58_expect_st
       WHERE id = '79000000-0000-4000-a000-000000000058'$$
 ));
 
-SELECT set_config('request.jwt.claim.sub', '39000000-0000-4000-a000-000000000058', true);
-SELECT set_config('request.jwt.claim.role', 'service_role', true);
-SELECT set_config(
-  'request.jwt.claims',
-  '{"sub":"39000000-0000-4000-a000-000000000058","role":"service_role"}',
-  true
-);
 SET LOCAL ROLE service_role;
 
 INSERT INTO public.fill_sessions(
