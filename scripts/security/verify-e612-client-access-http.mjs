@@ -27,7 +27,8 @@ const names = Object.fromEntries(
     `${network}-${kind}`,
   ]),
 );
-const M64_EXTENSION_SHA = "72843b665957249591975a1ce0f3b1bdce79e140";
+const M64_EXTENSION_SHA = "ec388a24a1707364d93461c14a8f6b0b9a94a6fb";
+const M64_EXTENSION_TREE = "175886d40e2a655b6960b35c26a493f86b8dd992";
 const M64_PANEL_BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
 const M64_PANEL_HOST = "mintedpanel.vercel.app";
 const M64_SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
@@ -988,7 +989,7 @@ function buildM64Extension() {
     options,
   ).trim();
   if (head !== M64_EXTENSION_SHA) fail("E612_M64_EXTENSION_COMMIT_MISMATCH");
-  if (tree !== "320a147a1a8fc978c5a172f5347c9c63fb7cc705") fail("E612_M64_EXTENSION_TREE_MISMATCH");
+  if (tree !== M64_EXTENSION_TREE) fail("E612_M64_EXTENSION_TREE_MISMATCH");
   try {
     execFileSync("npm", ["run", "build"], { ...options, cwd: extensionRoot, env });
   } catch {
