@@ -264,7 +264,7 @@ INSERT INTO public.sop_templates(
 ) VALUES (
   '69000000-0000-4000-a000-000000000060',
   '18000000-0000-4000-a000-000000000060', 'MINT-60 referenced SOP',
-  '28000000-0000-4000-a000-000000000060', 'CA', ARRAY['CA']::text[],
+  '28000000-0000-4000-a000-000000000060', 'CA', ARRAY['CA', 'OR']::text[],
   '[{"title":"Enrollment","steps":[{"stepType":"online_form","portalKey":"m60_shared"}]}]'::jsonb,
   false, 1, '[]'::jsonb, 'enrollment'
 );
