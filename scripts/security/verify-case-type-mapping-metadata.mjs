@@ -671,4 +671,6 @@ assert(
   `reset RPC should persist actor attribution for trusted reads: ${rpcReceiptActor.stdout}`,
 );
 
-console.log("MINT-44/45/60 case-type, mapping metadata, and reset-receipt security contracts verified.");
+console.log(
+  "MINT-44/45/60 case-type, mapping metadata, and reset-receipt security contracts verified.",
+);
