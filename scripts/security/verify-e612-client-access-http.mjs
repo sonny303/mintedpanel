@@ -352,8 +352,8 @@ const m64ContractFillReadinessFields = [
   "fill_sessions_count_200",
   "panel_provider_roster_200",
   "panel_provider_roster_preflight_204",
-  "panel_provider_profile_200",
-  "panel_provider_profile_preflight_204",
+  "contract_profile_200",
+  "contract_profile_preflight_204",
 ];
 const m64ContractFillReadinessBooleanFields = new Set([
   "button_present",
@@ -380,6 +380,39 @@ const m64ContractFillReadinessBooleanFields = new Set([
 ]);
 const m64ContractFillReadinessStatusFields = new Set(["provider_list_state"]);
 const m64ProviderListStates = new Set(["unknown", "failed", "empty", "nonempty", "malformed"]);
+const m64EnrollmentFillReadinessFields = [
+  "button_present",
+  "button_visible",
+  "button_enabled",
+  "work_exact",
+  "tab_exact",
+  "portal_match",
+  "org_loaded",
+  "org_selected",
+  "provider_loaded",
+  "provider_selected",
+  "selected_provider_exact",
+  "case_option_present",
+  "case_selected",
+  "selected_case_exact",
+  "facility_option_present",
+  "facility_selected",
+  "selected_facility_exact",
+  "main_error_hidden",
+  "enrollment_profile_get_200",
+  "enrollment_profile_get_401",
+  "enrollment_profile_get_403",
+  "enrollment_profile_get_404",
+  "enrollment_profile_get_502",
+  "enrollment_profile_get_other",
+  "enrollment_profile_options_204",
+  "enrollment_profile_options_other",
+  "enrollment_profile_denied_get_404",
+  "enrollment_profile_denied_options_404",
+];
+const m64EnrollmentFillReadinessBooleanFields = new Set(
+  m64EnrollmentFillReadinessFields.slice(0, 18),
+);
 const m64ProviderRosterDenialFields = [
   "target_exact",
   "origin",
@@ -789,6 +822,68 @@ function reportM64BrowserContractFillReadinessDiagnostic(driver, checkpoint) {
   if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_READINESS_DIAGNOSTIC|${diagnostic}`);
   const providerRoster = safeM64ProviderRosterDenialDiagnostic(driver.lines);
   if (providerRoster) emit(`E612|M64|BROWSER|PROVIDER_ROSTER_DENIED_DIAGNOSTIC|${providerRoster}`);
+}
+function safeM64EnrollmentFillReadinessDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_READY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentFillReadinessFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_READY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64EnrollmentFillReadinessFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64EnrollmentFillReadinessBooleanFields.has(name);
+    if (
+      name !== m64EnrollmentFillReadinessFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserEnrollmentFillReadinessDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "enrollment_fill_readiness") return;
+  const diagnostic = safeM64EnrollmentFillReadinessDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_FILL_READINESS_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentFillReadinessDiagnosticPolicy() {
+  const values = Object.fromEntries(m64EnrollmentFillReadinessFields.map((name) => [name, "0"]));
+  for (const name of m64EnrollmentFillReadinessBooleanFields) values[name] = "true";
+  values.enrollment_profile_get_200 = "1";
+  values.enrollment_profile_denied_get_404 = "2";
+  const marker = `M64|BROWSER|ENROLLMENT_FILL_READY|${m64EnrollmentFillReadinessFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|")}`;
+  const expected = m64EnrollmentFillReadinessFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|");
+  const invalidMarkers = [
+    marker.replace("button_present=true", "button_present=raw"),
+    marker.replace("enrollment_profile_get_200=1", "enrollment_profile_get_200=999"),
+    `${marker}|raw=value`,
+    marker.replace(
+      "button_present=true|button_visible=true",
+      "button_visible=true|button_present=true",
+    ),
+  ];
+  if (
+    safeM64EnrollmentFillReadinessDiagnostic([marker]) !== expected ||
+    invalidMarkers.some(
+      (invalid) => safeM64EnrollmentFillReadinessDiagnostic([invalid]) !== null,
+    ) ||
+    safeM64EnrollmentFillReadinessDiagnostic([marker, marker]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_FILL_READINESS_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
 }
 function safeM64ProviderRosterDenialDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PROVIDER_ROSTER_DENIED|"));
@@ -1878,6 +1973,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserContractFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserEnrollmentUiDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
     if (
       error instanceof Error &&
       /^E612_M64_(?:CONTRACT_CHECKPOINT_INVALID|CONTRACT_RESET_KEY_INVALID|CONTRACT_RESET_ASSERTION_FAILED)$/.test(
@@ -2496,6 +2592,7 @@ let stage = "docker_context";
 try {
   assertM64ContractFillSummaryDiagnosticPolicy();
   assertM64EnrollmentUiDiagnosticPolicy();
+  assertM64EnrollmentFillReadinessDiagnosticPolicy();
   validateDockerContext();
   stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));

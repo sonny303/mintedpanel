@@ -46,6 +46,13 @@ const CONTRACT_PORTAL_ID = "38000000-0000-4000-a000-000000000064";
 const ENROLLMENT_PORTAL_ID = "38000000-0000-4000-a000-000000000065";
 const ENROLLMENT_PORTAL_KEY = "m64_enrollment";
 const ENROLLMENT_CASE_ID = "49000000-0000-4000-a000-000000000064";
+const ENROLLMENT_PROFILE_TARGET = (() => {
+  const query = new URLSearchParams();
+  query.set("state", "NY");
+  query.set("facilityId", FACILITY_ID);
+  query.set("caseId", ENROLLMENT_CASE_ID);
+  return `/api/providers/${PROVIDER_ID}/profile?${query.toString()}`;
+})();
 const ENROLLMENT_TASK_ID = "99000000-0000-4000-a000-000000000064";
 const ENROLLMENT_STEP1_ID = "89000000-0000-4000-a000-000000000064";
 const ENROLLMENT_STEP2_ID = "89000000-0000-4000-a000-000000000065";
@@ -740,6 +747,16 @@ function assertM64ProviderReadPolicy() {
   const route = (method, target, headers = {}) =>
     routeFor(PANEL_HOST, method, new URL(target, PANEL_ORIGIN).pathname, target, headers);
   try {
+    assert(
+      ENROLLMENT_PROFILE_TARGET ===
+        `/api/providers/${PROVIDER_ID}/profile?state=NY&facilityId=${FACILITY_ID}&caseId=${ENROLLMENT_CASE_ID}`,
+      "M64_BROWSER_ENROLLMENT_PROFILE_TARGET_SERIALIZATION_INVALID",
+    );
+    assert(
+      route("GET", ENROLLMENT_PROFILE_TARGET, getHeaders) === null &&
+        route("OPTIONS", ENROLLMENT_PROFILE_TARGET, preflightHeaders) === null,
+      "M64_BROWSER_ENROLLMENT_PROFILE_POLICY_TOO_BROAD",
+    );
     for (const [target, getName, preflightName] of [
       [PROVIDER_ROSTER_TARGET, "panel.providers", "panel.providers_preflight"],
       [CONTRACT_PROFILE_TARGET, "panel.provider_profile", "panel.provider_profile_preflight"],
@@ -1089,6 +1106,28 @@ function reportDeniedProviderRoster(host, method, pathname, requestTarget, heade
   ];
   providerRosterDenialReported = true;
   safeLog(`M64|BROWSER|PROVIDER_ROSTER_DENIED|${fields.join("|")}`);
+}
+
+function countDeniedEnrollmentProfileTarget(host, method, pathname, requestTarget) {
+  if (
+    host !== PANEL_HOST ||
+    pathname !== `/api/providers/${PROVIDER_ID}/profile` ||
+    requestTarget !== ENROLLMENT_PROFILE_TARGET
+  ) {
+    return;
+  }
+  if (method === "GET") count("panel.enrollment_profile_denied_get", 404);
+  if (method === "OPTIONS") count("panel.enrollment_profile_denied_options", 404);
+}
+
+function countAllowedEnrollmentProfileTarget(route, method, requestTarget, status) {
+  if (requestTarget !== ENROLLMENT_PROFILE_TARGET) return;
+  if (method === "GET" && route.name === "panel.provider_profile") {
+    count("panel.enrollment_profile_get", status);
+  }
+  if (method === "OPTIONS" && route.name === "panel.provider_profile_preflight") {
+    count("panel.enrollment_profile_options", status);
+  }
 }
 
 function classifyDenied(host, method, pathname) {
@@ -2281,6 +2320,7 @@ function proxyToLocal(request, response, route, requestUrl, method) {
     (upstreamResponse) => {
       const status = upstreamResponse.statusCode ?? 502;
       count(route.name, status);
+      countAllowedEnrollmentProfileTarget(route, method, requestUrl, status);
       response.writeHead(status, upstreamResponse.headers);
       if (route.name !== "panel.work_validate") {
         upstreamResponse.pipe(response);
@@ -2334,6 +2374,7 @@ function proxyToLocal(request, response, route, requestUrl, method) {
   upstream.on("timeout", () => upstream.destroy(new Error("local upstream timeout")));
   upstream.on("error", () => {
     count(route.name, 502);
+    countAllowedEnrollmentProfileTarget(route, method, requestUrl, 502);
     if (!response.headersSent) response.statusCode = 502;
     response.end("local verification upstream unavailable");
   });
@@ -3007,8 +3048,8 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       ["fill_sessions_count_200", "supabase.rest.fill_sessions_count", 200],
       ["panel_provider_roster_200", "panel.providers", 200],
       ["panel_provider_roster_preflight_204", "panel.providers_preflight", 204],
-      ["panel_provider_profile_200", "panel.provider_profile", 200],
-      ["panel_provider_profile_preflight_204", "panel.provider_profile_preflight", 204],
+      ["contract_profile_200", "panel.provider_profile", 200],
+      ["contract_profile_preflight_204", "panel.provider_profile_preflight", 204],
     ];
     fields.push(
       ...routeCounts.map(
@@ -3016,6 +3057,178 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       ),
     );
     safeLog(`M64|BROWSER|CONTRACT_FILL_READY|${fields.join("|")}`);
+  };
+  const emitEnrollmentFillReadinessDiagnostic = async (expectedWork, expectedTabId, targetPage) => {
+    const inspectWithinLimit = (operation) =>
+      bounded(operation, 5_000, "M64_BROWSER_ENROLLMENT_FILL_READINESS_DIAGNOSTIC_TIMEOUT").then(
+        (value) => ({ ok: true, value }),
+        () => ({ ok: false, value: null }),
+      );
+    const [uiResult, workResult, tabResult] = await Promise.all([
+      inspectWithinLimit(() =>
+        extensionPage.evaluate(
+          async ({ orgId, providerId, facilityId, caseId }) => {
+            const isVisible = (element) => {
+              if (!element || element.hidden) return false;
+              const style = getComputedStyle(element);
+              return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                element.getClientRects().length > 0
+              );
+            };
+            const button = document.querySelector("#fill-btn");
+            const orgSelect = document.querySelector("#org-select");
+            const providerCard = document.querySelector("#provider-card");
+            const providerName = document.querySelector("#provider-name");
+            const facilitySelect = document.querySelector("#facility-select");
+            const caseSelect = document.querySelector("#case-select");
+            const portalStatus = document.querySelector("#portal-status");
+            const mainError = document.querySelector("#main-error");
+            const readBackground = (request) =>
+              new Promise((resolve) => {
+                const timer = setTimeout(() => resolve(null), 2_000);
+                try {
+                  Promise.resolve(chrome.runtime.sendMessage(request)).then(
+                    (response) => {
+                      clearTimeout(timer);
+                      resolve(response);
+                    },
+                    () => {
+                      clearTimeout(timer);
+                      resolve(null);
+                    },
+                  );
+                } catch {
+                  clearTimeout(timer);
+                  resolve(null);
+                }
+              });
+            const [selectedProvider, selectedCase, selectedFacility] = await Promise.all([
+              readBackground({ type: "GET_SELECTED_PROVIDER" }),
+              readBackground({ type: "GET_SELECTED_CASE", providerId }),
+              readBackground({ type: "GET_SELECTED_FACILITY", providerId }),
+            ]);
+            const orgOptions = orgSelect ? [...orgSelect.options] : [];
+            const providerIsVisible = isVisible(providerCard);
+            return {
+              button_present: button !== null,
+              button_visible: isVisible(button),
+              button_enabled: button instanceof HTMLButtonElement ? !button.disabled : false,
+              portal_detected: portalStatus?.classList.contains("detected") === true,
+              org_loaded: orgOptions.some((option) => option.value === orgId),
+              org_selected: orgSelect?.value === orgId,
+              provider_loaded: providerIsVisible && Boolean(providerName?.textContent?.trim()),
+              provider_selected:
+                providerIsVisible &&
+                providerName?.textContent?.trim() === "Synthetic M64 Provider" &&
+                providerId === "39000000-0000-4000-a000-000000000065",
+              selected_provider_exact:
+                selectedProvider == null
+                  ? null
+                  : selectedProvider.ok === true && selectedProvider.data === providerId,
+              case_option_present:
+                caseSelect instanceof HTMLSelectElement &&
+                [...caseSelect.options].some((option) => option.value === caseId),
+              case_selected: caseSelect instanceof HTMLSelectElement && caseSelect.value === caseId,
+              selected_case_exact:
+                selectedCase == null
+                  ? null
+                  : selectedCase.ok === true && selectedCase.data === caseId,
+              facility_option_present:
+                facilitySelect instanceof HTMLSelectElement &&
+                [...facilitySelect.options].some((option) => option.value === facilityId),
+              facility_selected:
+                facilitySelect instanceof HTMLSelectElement && facilitySelect.value === facilityId,
+              selected_facility_exact:
+                selectedFacility == null
+                  ? null
+                  : selectedFacility.ok === true && selectedFacility.data === facilityId,
+              main_error_hidden: mainError?.hidden,
+            };
+          },
+          {
+            orgId: ORG_ID,
+            providerId: PROVIDER_ID,
+            facilityId: FACILITY_ID,
+            caseId: ENROLLMENT_CASE_ID,
+          },
+        ),
+      ),
+      inspectWithinLimit(() => readActiveWork()),
+      inspectWithinLimit(() => activeChromeTabId(extensionPage)),
+    ]);
+    const currentWork = workResult.value;
+    const workExact = workResult.ok
+      ? currentWork != null && activeWorkIdentity(currentWork) === activeWorkIdentity(expectedWork)
+      : null;
+    const tabExact = tabResult.ok
+      ? tabResult.value === expectedTabId && targetPage.url() === PORTAL_URL
+      : null;
+    const portalMatch =
+      uiResult.ok && workResult.ok
+        ? uiResult.value.portal_detected === true &&
+          targetPage.url() === PORTAL_URL &&
+          currentWork?.tuple?.portalId === expectedWork?.tuple?.portalId &&
+          currentWork?.tuple?.portalKey === expectedWork?.tuple?.portalKey
+        : null;
+    const ui = uiResult.value ?? {};
+    const booleans = [
+      ["button_present", ui.button_present],
+      ["button_visible", ui.button_visible],
+      ["button_enabled", ui.button_enabled],
+      ["work_exact", workExact],
+      ["tab_exact", tabExact],
+      ["portal_match", portalMatch],
+      ["org_loaded", ui.org_loaded],
+      ["org_selected", ui.org_selected],
+      ["provider_loaded", ui.provider_loaded],
+      ["provider_selected", ui.provider_selected],
+      ["selected_provider_exact", ui.selected_provider_exact],
+      ["case_option_present", ui.case_option_present],
+      ["case_selected", ui.case_selected],
+      ["selected_case_exact", ui.selected_case_exact],
+      ["facility_option_present", ui.facility_option_present],
+      ["facility_selected", ui.facility_selected],
+      ["selected_facility_exact", ui.selected_facility_exact],
+      ["main_error_hidden", ui.main_error_hidden],
+    ];
+    const fields = booleans.map(
+      ([name, value]) =>
+        `${name}=${value === true ? "true" : value === false ? "false" : "unknown"}`,
+    );
+    const profileStatuses = [200, 401, 403, 404, 502];
+    const profileRoute = "panel.enrollment_profile_get";
+    const knownProfileCount = profileStatuses.reduce(
+      (total, status) => total + routeCount(profileRoute, status),
+      0,
+    );
+    fields.push(
+      ...profileStatuses.map(
+        (status) =>
+          `enrollment_profile_get_${status}=${boundedDiagnosticCount(routeCount(profileRoute, status))}`,
+      ),
+      `enrollment_profile_get_other=${boundedDiagnosticCount(
+        Math.max(0, routeTotal(profileRoute) - knownProfileCount),
+      )}`,
+      `enrollment_profile_options_204=${boundedDiagnosticCount(
+        routeCount("panel.enrollment_profile_options", 204),
+      )}`,
+      `enrollment_profile_options_other=${boundedDiagnosticCount(
+        Math.max(
+          0,
+          routeTotal("panel.enrollment_profile_options") -
+            routeCount("panel.enrollment_profile_options", 204),
+        ),
+      )}`,
+      `enrollment_profile_denied_get_404=${boundedDiagnosticCount(
+        routeCount("panel.enrollment_profile_denied_get", 404),
+      )}`,
+      `enrollment_profile_denied_options_404=${boundedDiagnosticCount(
+        routeCount("panel.enrollment_profile_denied_options", 404),
+      )}`,
+    );
+    safeLog(`M64|BROWSER|ENROLLMENT_FILL_READY|${fields.join("|")}`);
   };
   const emitContractFillReceiptDiagnostic = async (expectedWork, expectedTabId, targetPage) => {
     const inspectWithinLimit = (operation) =>
@@ -3221,6 +3434,10 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     } catch (error) {
       if (stage === "contract_fill") {
         await emitContractFillReadinessDiagnostic(expectedWork, expectedTabId, targetPage).catch(
+          () => {},
+        );
+      } else if (stage === "enrollment_fill") {
+        await emitEnrollmentFillReadinessDiagnostic(expectedWork, expectedTabId, targetPage).catch(
           () => {},
         );
       }
@@ -3575,6 +3792,7 @@ async function run() {
         if (!route) {
           countDeniedSupabaseOptions(hostHeader, method, pathname);
           reportDeniedProviderRoster(hostHeader, method, pathname, requestTarget, request.headers);
+          countDeniedEnrollmentProfileTarget(hostHeader, method, pathname, requestTarget);
           unexpected(
             response,
             classifyDenied(hostHeader, method, pathname),
