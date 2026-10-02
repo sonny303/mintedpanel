@@ -262,6 +262,7 @@ SELECT to_jsonb(case_row) AS case_row,
          WHERE task_row.case_id = case_row.id) AS task_rows
   FROM public.credential_cases AS case_row
  WHERE case_row.id = '49000000-0000-4000-a000-000000000064';
+GRANT SELECT ON m64_enrollment_snapshot TO service_role;
 
 -- Plain CI PostgreSQL does not give service_role Supabase's hosted bypass
 -- attribute. Narrow transaction-local grants and policies expose only these
