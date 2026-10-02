@@ -1933,9 +1933,49 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   checkpoint("permission_probe");
   const nativeSidePanelUrl = `chrome-extension://${extensionId}/sidepanel.html`;
   assert(extensionPage.url() === nativeSidePanelUrl, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
+  const nativeTargetType = (type) =>
+    type === "page" || type === "tab" || type === "other" ? type : "extra";
+  const nativeTargetCount = (count) => (count === 0 ? "0" : count === 1 ? "1" : "2_PLUS");
+  const nativeTargetParent = (targets) => {
+    if (targets.length === 0) return "none";
+    if (targets.length === 1) return targets[0].parentId ? "has_parent" : "none";
+    if (targets.every((target) => !target.parentId)) return "none";
+    const page = targets.find((target) => target.type === "page");
+    const tab = targets.find((target) => target.type === "tab");
+    if (page?.parentId && tab?.targetId === page.parentId) return "page_parent_is_tab";
+    const parents = targets.map((target) => target.parentId).filter(Boolean);
+    if (parents.length === targets.length && parents.every((parent) => parent === parents[0])) {
+      return "same_parent";
+    }
+    return "unrelated";
+  };
+  const logNativeTargetDiagnostic = (state, targets = null) => {
+    if (state === "cdp_unavailable") {
+      safeLog(
+        "M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown|page=unknown|tab=unknown|other=unknown|extra=unknown|parent=unknown",
+      );
+      return;
+    }
+    const counts = { page: 0, tab: 0, other: 0, extra: 0 };
+    for (const target of targets ?? []) {
+      if (target.type === "page") counts.page += 1;
+      else if (target.type === "tab") counts.tab += 1;
+      else if (target.type === "other") counts.other += 1;
+      else counts.extra += 1;
+    }
+    const type =
+      state === "observed"
+        ? nativeTargetType(targets[0].type)
+        : state === "ambiguous"
+          ? "ambiguous"
+          : "none";
+    safeLog(
+      `M64|BROWSER|NATIVE_TARGET|state=${state}|count=${nativeTargetCount(targets?.length ?? 0)}|type=${type}|page=${nativeTargetCount(counts.page)}|tab=${nativeTargetCount(counts.tab)}|other=${nativeTargetCount(counts.other)}|extra=${nativeTargetCount(counts.extra)}|parent=${nativeTargetParent(targets ?? [])}`,
+    );
+  };
   const browser = context.browser();
   if (!browser) {
-    safeLog("M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown");
+    logNativeTargetDiagnostic("cdp_unavailable");
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
   let browserCdp;
@@ -1967,7 +2007,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     const targetInfos = await readTargetInfos();
     targetIdsBefore = new Set(targetInfos.map((target) => target.targetId));
   } catch {
-    safeLog("M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown");
+    logNativeTargetDiagnostic("cdp_unavailable");
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
   await extensionPage.evaluate((expectedTabId) => {
@@ -2017,31 +2057,18 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       nativeTargets = exactNewTargets(await readTargetInfos());
     }
   } catch {
-    safeLog("M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown");
+    logNativeTargetDiagnostic("cdp_unavailable");
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
   if (!sawNativeTarget || nativeTargets.length === 0) {
-    safeLog("M64|BROWSER|NATIVE_TARGET|state=missing|count=0|type=none");
+    logNativeTargetDiagnostic("missing", []);
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
   if (nativeTargets.length > 1) {
-    safeLog("M64|BROWSER|NATIVE_TARGET|state=ambiguous|count=2_PLUS|type=ambiguous");
+    logNativeTargetDiagnostic("ambiguous", nativeTargets);
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
-  const observedTargetType = new Set([
-    "browser",
-    "background_page",
-    "devtools",
-    "iframe",
-    "other",
-    "page",
-    "service_worker",
-    "tab",
-    "worker",
-  ]).has(nativeTargets[0].type)
-    ? nativeTargets[0].type
-    : "other";
-  safeLog(`M64|BROWSER|NATIVE_TARGET|state=observed|count=1|type=${observedTargetType}`);
+  logNativeTargetDiagnostic("observed", nativeTargets);
   let nativePanelPages;
   try {
     nativePanelPages = await poll(

@@ -313,19 +313,22 @@ const m64OrgWaitDiagnosticUiStates = new Set([
 ]);
 const m64NativeTargetStates = new Set(["observed", "missing", "ambiguous", "cdp_unavailable"]);
 const m64NativeTargetCounts = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64NativeTargetParentRelations = new Set([
+  "has_parent",
+  "none",
+  "page_parent_is_tab",
+  "same_parent",
+  "unrelated",
+  "unknown",
+]);
 const m64NativeTargetTypes = new Set([
   "ambiguous",
-  "background_page",
-  "browser",
-  "devtools",
-  "iframe",
+  "extra",
   "none",
   "other",
   "page",
-  "service_worker",
   "tab",
   "unknown",
-  "worker",
 ]);
 const fail = (code) => {
   throw new Error(code);
@@ -456,28 +459,61 @@ function safeM64NativeTargetDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|NATIVE_TARGET|"));
   if (markers.length !== 1) return null;
   const match =
-    /^M64\|BROWSER\|NATIVE_TARGET\|state=([a-z_]+)\|count=([A-Za-z0-9_]+)\|type=([a-z_]+)$/.exec(
+    /^M64\|BROWSER\|NATIVE_TARGET\|state=([a-z_]+)\|count=([A-Za-z0-9_]+)\|type=([a-z_]+)\|page=([A-Za-z0-9_]+)\|tab=([A-Za-z0-9_]+)\|other=([A-Za-z0-9_]+)\|extra=([A-Za-z0-9_]+)\|parent=([a-z_]+)$/.exec(
       markers[0],
     );
   if (!match) return null;
-  const [, state, count, type] = match;
+  const [, state, count, type, page, tab, other, extra, parent] = match;
   if (
     !m64NativeTargetStates.has(state) ||
     !m64NativeTargetCounts.has(count) ||
-    !m64NativeTargetTypes.has(type)
+    !m64NativeTargetTypes.has(type) ||
+    ![page, tab, other, extra].every((value) => m64NativeTargetCounts.has(value)) ||
+    !m64NativeTargetParentRelations.has(parent)
   ) {
     return null;
   }
+  const histogram = [page, tab, other, extra];
+  const minimumCount = histogram.reduce(
+    (total, value) => total + (value === "2_PLUS" ? 2 : value === "1" ? 1 : 0),
+    0,
+  );
+  const observedBucket = type === "page" ? 0 : type === "tab" ? 1 : type === "other" ? 2 : 3;
+  const validObservedHistogram = histogram.every(
+    (value, index) => value === (index === observedBucket ? "1" : "0"),
+  );
+  const validParentRelation =
+    (parent !== "page_parent_is_tab" || (page !== "0" && tab !== "0")) &&
+    (parent !== "has_parent" || count === "1") &&
+    (!new Set(["page_parent_is_tab", "same_parent", "unrelated"]).has(parent) ||
+      count === "2_PLUS");
   const consistent =
     (state === "observed" &&
       count === "1" &&
       type !== "none" &&
       type !== "ambiguous" &&
-      type !== "unknown") ||
-    (state === "missing" && count === "0" && type === "none") ||
-    (state === "ambiguous" && count === "2_PLUS" && type === "ambiguous") ||
-    (state === "cdp_unavailable" && count === "unknown" && type === "unknown");
-  return consistent ? `state=${state}|count=${count}|type=${type}` : null;
+      type !== "unknown" &&
+      validObservedHistogram &&
+      (parent === "none" || parent === "has_parent")) ||
+    (state === "missing" &&
+      count === "0" &&
+      type === "none" &&
+      histogram.every((value) => value === "0") &&
+      parent === "none") ||
+    (state === "ambiguous" &&
+      count === "2_PLUS" &&
+      type === "ambiguous" &&
+      minimumCount >= 2 &&
+      parent !== "unknown" &&
+      validParentRelation) ||
+    (state === "cdp_unavailable" &&
+      count === "unknown" &&
+      type === "unknown" &&
+      histogram.every((value) => value === "unknown") &&
+      parent === "unknown");
+  return consistent
+    ? `state=${state}|count=${count}|type=${type}|page=${page}|tab=${tab}|other=${other}|extra=${extra}|parent=${parent}`
+    : null;
 }
 function reportM64BrowserNativeTargetDiagnostic(driver, checkpoint) {
   if (checkpoint !== "permission_probe") return;
