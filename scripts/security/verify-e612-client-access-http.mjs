@@ -68,10 +68,14 @@ const m64BrowserPhases = new Set([
   "container_create",
   "container_inspect",
   "workspace_create",
-  "copy_driver",
-  "copy_extension",
-  "copy_playwright",
-  "copy_playwright_core",
+  "archive_driver",
+  "extract_driver",
+  "archive_extension",
+  "extract_extension",
+  "archive_playwright",
+  "extract_playwright",
+  "archive_playwright_core",
+  "extract_playwright_core",
   "browser_preflight",
   "browser_node_version",
   "browser_driver",
@@ -99,6 +103,30 @@ function runM64BrowserPhase(phase, operation) {
     emit(`E612|M64|BROWSER|PHASE_FAILED|${phase}|exit=${exit}|signal=${signal}`);
     throw new Error(`E612_M64_BROWSER_PHASE_FAILED_${phase}`);
   }
+}
+function archiveM64BrowserInputs(phase, tarArgs) {
+  return runM64BrowserPhase(`archive_${phase}`, () =>
+    execFileSync("tar", tarArgs, { ...options, encoding: "buffer" }),
+  );
+}
+function extractM64BrowserInput(phase, archive, destination) {
+  return runM64BrowserPhase(`extract_${phase}`, () =>
+    docker(
+      [
+        "exec",
+        "-i",
+        names.browser,
+        "tar",
+        "--no-same-owner",
+        "--no-same-permissions",
+        "-xf",
+        "-",
+        "-C",
+        destination,
+      ],
+      archive,
+    ),
+  );
 }
 function dockerProcess(args) {
   const child = spawn("docker", ["--context", context, ...args], {
@@ -384,23 +412,48 @@ function runM64BrowserSmoke(extensionBuild) {
     fail("E612_M64_BROWSER_CONTAINER_HARDENING_MISMATCH");
   }
   runM64BrowserPhase("workspace_create", () =>
-    docker(["exec", names.browser, "mkdir", "-p", "/tmp/m64/node_modules", "/tmp/m64-home"]),
-  );
-  runM64BrowserPhase("copy_driver", () =>
     docker([
-      "cp",
-      `${root}scripts/security/verify-m64-workflow-browser.mjs`,
-      `${names.browser}:/tmp/m64/driver.mjs`,
+      "exec",
+      names.browser,
+      "mkdir",
+      "-p",
+      "/tmp/m64",
+      "/tmp/m64/extension",
+      "/tmp/m64/node_modules",
+      "/tmp/m64-home",
     ]),
   );
-  runM64BrowserPhase("copy_extension", () =>
-    docker(["cp", `${extensionRoot}/dist`, `${names.browser}:/tmp/m64/extension`]),
+  extractM64BrowserInput(
+    "driver",
+    archiveM64BrowserInputs("driver", [
+      "-cf",
+      "-",
+      "-C",
+      `${root}scripts/security`,
+      "verify-m64-workflow-browser.mjs",
+    ]),
+    "/tmp/m64",
   );
-  runM64BrowserPhase("copy_playwright", () =>
-    docker(["cp", playwrightPath, `${names.browser}:/tmp/m64/node_modules/`]),
+  extractM64BrowserInput(
+    "extension",
+    archiveM64BrowserInputs("extension", ["-cf", "-", "-C", `${extensionRoot}/dist`, "."]),
+    "/tmp/m64/extension",
   );
-  runM64BrowserPhase("copy_playwright_core", () =>
-    docker(["cp", playwrightCorePath, `${names.browser}:/tmp/m64/node_modules/`]),
+  extractM64BrowserInput(
+    "playwright",
+    archiveM64BrowserInputs("playwright", ["-cf", "-", "-C", `${root}node_modules`, "playwright"]),
+    "/tmp/m64/node_modules",
+  );
+  extractM64BrowserInput(
+    "playwright_core",
+    archiveM64BrowserInputs("playwright_core", [
+      "-cf",
+      "-",
+      "-C",
+      `${root}node_modules`,
+      "playwright-core",
+    ]),
+    "/tmp/m64/node_modules",
   );
   runM64BrowserPhase("browser_preflight", () =>
     docker([
@@ -430,7 +483,7 @@ function runM64BrowserSmoke(extensionBuild) {
       "xvfb-run",
       "-a",
       "node",
-      "/tmp/m64/driver.mjs",
+      "/tmp/m64/verify-m64-workflow-browser.mjs",
     ]),
   );
   process.stdout.write(output);
