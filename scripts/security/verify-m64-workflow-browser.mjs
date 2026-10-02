@@ -226,8 +226,11 @@ function classifyDenied(host, method, pathname) {
   return "UNKNOWN_HOST";
 }
 
-function routeFor(host, method, pathname) {
+function routeFor(host, method, pathname, requestTarget) {
   if (host === PANEL_HOST) {
+    if (method === "GET" && requestTarget === "/favicon.ico") {
+      return { kind: "empty", name: "panel.favicon" };
+    }
     if (method === "GET" && pathname === "/__m64__/handoff")
       return { kind: "static", name: "panel.handoff" };
     if (method === "GET" && pathname === "/api/me/orgs")
@@ -374,7 +377,8 @@ async function run() {
         const pathname = new URL(request.url ?? "/", `https://${hostHeader || PANEL_HOST}`)
           .pathname;
         const method = String(request.method ?? "GET").toUpperCase();
-        const route = routeFor(hostHeader, method, pathname);
+        const requestTarget = request.url ?? "/";
+        const route = routeFor(hostHeader, method, pathname, requestTarget);
         if (!route) {
           unexpected(response, classifyDenied(hostHeader, method, pathname));
           return;
@@ -384,7 +388,14 @@ async function run() {
           serveStatic(response, route);
           return;
         }
-        proxyToLocal(request, response, route, request.url ?? "/", method);
+        if (route.kind === "empty") {
+          response.statusCode = 204;
+          response.setHeader("cache-control", "no-store");
+          count(route.name, response.statusCode);
+          response.end();
+          return;
+        }
+        proxyToLocal(request, response, route, requestTarget, method);
       } catch {
         if (!response.headersSent && !response.writableEnded) unexpected(response);
       }
