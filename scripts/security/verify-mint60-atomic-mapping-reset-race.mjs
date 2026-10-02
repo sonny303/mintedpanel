@@ -199,7 +199,7 @@ async function cleanup() {
   `);
 }
 
-await runPsql(`
+const setup = await runPsql(`
   BEGIN;
   INSERT INTO auth.users (id, email)
   VALUES ('${ids.actor}', 'mint60-${ids.actor}@example.invalid');
@@ -213,12 +213,30 @@ await runPsql(`
   VALUES ('${ids.payer}', '${ids.org}', 'MINT-60 race payer');
   INSERT INTO public.providers (id, org_id, first_name, last_name, status)
   VALUES ('${ids.provider}', '${ids.org}', 'Synthetic', 'MINT-60', 'active');
+  INSERT INTO public.portals (
+    id, org_id, portal_key, name, payer_id, form_url, case_type,
+    requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at
+  ) VALUES (
+    '${ids.portal}', '${ids.org}', '${portalKey}', 'MINT-60 race form',
+    '${ids.payer}', 'https://m60.example.invalid/form', 'enrollment',
+    true, 1, true, now(), now()
+  );
+  INSERT INTO public.portals (
+    id, org_id, portal_key, name, payer_id, form_url, case_type,
+    requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at
+  ) VALUES
+    ('${ids.workGlobalPortal}', NULL, '${workPortalKey}', 'MINT-60 shared Work form',
+     '${ids.payer}', 'https://m60.example.invalid/shared', NULL, false,
+     1, true, now(), now()),
+    ('${ids.workOrgPortal}', '${ids.org}', '${workPortalKey}', 'MINT-60 org Work form',
+     '${ids.payer}', 'https://m60.example.invalid/org', 'enrollment', true,
+     1, true, now(), now());
   INSERT INTO public.sop_templates (
     id, org_id, name, payer_id, state, states, task_definitions, archived,
     current_version, required_profile_attributes, case_type
   ) VALUES (
     '${ids.template}', '${ids.org}', 'MINT-60 Work SOP', '${ids.payer}',
-    'CO', ARRAY['CO']::text[],
+    'CO', ARRAY['CO', 'OR']::text[],
     '[{"title":"Enrollment","steps":[{"stepType":"online_form","portalKey":"${workPortalKey}"}]}]'::jsonb,
     false, 1, '[]'::jsonb, 'enrollment'
   );
@@ -239,24 +257,6 @@ await runPsql(`
     )),
     'not_started', 1, '${ids.template}', 1, 'extension_fill'
   );
-  INSERT INTO public.portals (
-    id, org_id, portal_key, name, payer_id, form_url, case_type,
-    requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at
-  ) VALUES (
-    '${ids.portal}', '${ids.org}', '${portalKey}', 'MINT-60 race form',
-    '${ids.payer}', 'https://m60.example.invalid/form', 'enrollment',
-    true, 1, true, now(), now()
-  );
-  INSERT INTO public.portals (
-    id, org_id, portal_key, name, payer_id, form_url, case_type,
-    requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at
-  ) VALUES
-    ('${ids.workGlobalPortal}', NULL, '${workPortalKey}', 'MINT-60 shared Work form',
-     '${ids.payer}', 'https://m60.example.invalid/shared', NULL, false,
-     1, true, now(), now()),
-    ('${ids.workOrgPortal}', '${ids.org}', '${workPortalKey}', 'MINT-60 org Work form',
-     '${ids.payer}', 'https://m60.example.invalid/org', 'enrollment', true,
-     1, true, now(), now());
   SET LOCAL minted.expected_mapping_generation = '1';
   INSERT INTO public.portal_field_maps (
     org_id, portal_key, map_type, selector, source, token, field_type,
@@ -307,6 +307,7 @@ await runPsql(`
     FOR INSERT TO service_role WITH CHECK (org_id = '${ids.org}');
   COMMIT;
 `);
+assert(setup.code === 0, `race fixture setup failed: ${setup.stderr}`);
 
 try {
   const resetApplicationName = `mint60-reset-${ids.org}`;
