@@ -200,7 +200,12 @@ ${dropTestPolicies}
 ${portalUpdateWasGranted ? "" : "REVOKE UPDATE ON public.portals FROM service_role;"}
 DELETE FROM public.audit_log WHERE org_id = '${ids.org}';
 DELETE FROM public.touches WHERE org_id = '${ids.org}';
+-- The verifier owns only synthetic receipts; disable the named append-only
+-- history trigger for their cleanup, then restore it before this transaction
+-- commits. If cleanup errors, PostgreSQL rolls back both trigger state and data.
+ALTER TABLE public.fill_sessions DISABLE TRIGGER trg_fill_sessions_prevent_v2_mutation;
 DELETE FROM public.fill_sessions WHERE org_id = '${ids.org}';
+ALTER TABLE public.fill_sessions ENABLE TRIGGER trg_fill_sessions_prevent_v2_mutation;
 DELETE FROM public.tasks WHERE org_id = '${ids.org}';
 DELETE FROM public.credential_cases WHERE org_id = '${ids.org}';
 DELETE FROM public.portals WHERE id = '${ids.portal}';
