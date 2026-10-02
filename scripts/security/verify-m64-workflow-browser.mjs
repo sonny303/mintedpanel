@@ -1586,6 +1586,7 @@ function proxyToLocal(request, response, route, requestUrl, method) {
         ) {
           workValidationSuccesses.push({
             tuple: {
+              launchReceiptId: workTuple.launchReceiptId,
               ownerKind: workTuple.ownerKind,
               ownerId: workTuple.ownerId,
               orgId: workTuple.orgId,
@@ -1595,6 +1596,7 @@ function proxyToLocal(request, response, route, requestUrl, method) {
               portalId: workTuple.portalId,
               portalKey: workTuple.portalKey,
               mappingGeneration: workTuple.mappingGeneration,
+              effectiveMappingFingerprint: workTuple.effectiveMappingFingerprint,
               providerId: workTuple.providerId ?? null,
               facilityId: workTuple.facilityId ?? null,
               stepIdentity: workTuple.stepIdentity,
@@ -1629,21 +1631,6 @@ function activeChromeTabId(extensionPage) {
         ),
       ),
   );
-}
-
-function matchingNativeTargetRuntimeResponse(event, expectedSessionId, expectedRequestId) {
-  if (event?.sessionId !== expectedSessionId || typeof event?.message !== "string") return null;
-  let response;
-  try {
-    response = JSON.parse(event.message);
-  } catch {
-    return null;
-  }
-  if (response?.id !== expectedRequestId) return null;
-  return {
-    exception: Boolean(response.error || response.result?.exceptionDetails),
-    value: response.result?.result?.value,
-  };
 }
 
 async function panelContractPermissionProbe(extensionPage, extensionId) {
@@ -1948,87 +1935,6 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   checkpoint("permission_probe");
   const nativeSidePanelUrl = `chrome-extension://${extensionId}/sidepanel.html`;
   assert(extensionPage.url() === nativeSidePanelUrl, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
-  const nativeTargetType = (type) =>
-    type === "page" || type === "tab" || type === "other" ? type : "extra";
-  const nativeTargetCount = (count) => (count === 0 ? "0" : count === 1 ? "1" : "2_PLUS");
-  const nativeTargetParent = (targets) => {
-    if (targets.length === 0) return "none";
-    if (targets.length === 1) return targets[0].parentId ? "has_parent" : "none";
-    if (targets.every((target) => !target.parentId)) return "none";
-    const page = targets.find((target) => target.type === "page");
-    const tab = targets.find((target) => target.type === "tab");
-    if (page?.parentId && tab?.targetId === page.parentId) return "page_parent_is_tab";
-    const parents = targets.map((target) => target.parentId).filter(Boolean);
-    if (parents.length === targets.length && parents.every((parent) => parent === parents[0])) {
-      return "same_parent";
-    }
-    return "unrelated";
-  };
-  const logNativeTargetDiagnostic = (
-    state,
-    targets = null,
-    qualifiedCount = null,
-    routing = "supported",
-  ) => {
-    if (state === "cdp_unavailable") {
-      safeLog(
-        "M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown|qualified=unknown|page=unknown|tab=unknown|other=unknown|extra=unknown|parent=unknown|routing=unknown",
-      );
-      return;
-    }
-    const counts = { page: 0, tab: 0, other: 0, extra: 0 };
-    for (const target of targets ?? []) {
-      if (target.type === "page") counts.page += 1;
-      else if (target.type === "tab") counts.tab += 1;
-      else if (target.type === "other") counts.other += 1;
-      else counts.extra += 1;
-    }
-    const type = !targets?.length
-      ? "none"
-      : targets.length === 1
-        ? nativeTargetType(targets[0].type)
-        : "ambiguous";
-    safeLog(
-      `M64|BROWSER|NATIVE_TARGET|state=${state}|count=${nativeTargetCount(targets?.length ?? 0)}|type=${type}|qualified=${qualifiedCount === null ? "unknown" : nativeTargetCount(qualifiedCount)}|page=${nativeTargetCount(counts.page)}|tab=${nativeTargetCount(counts.tab)}|other=${nativeTargetCount(counts.other)}|extra=${nativeTargetCount(counts.extra)}|parent=${nativeTargetParent(targets ?? [])}|routing=${routing}`,
-    );
-  };
-  const browser = context.browser();
-  if (!browser) {
-    logNativeTargetDiagnostic("cdp_unavailable");
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  let browserCdp;
-  let targetIdsBefore;
-  const readTargetInfos = async () => {
-    const { targetInfos } = await bounded(
-      () => browserCdp.send("Target.getTargets", { filter: [{}] }),
-      5_000,
-      "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-    );
-    assert(
-      Array.isArray(targetInfos) &&
-        targetInfos.every(
-          (target) =>
-            typeof target?.targetId === "string" &&
-            typeof target?.type === "string" &&
-            typeof target?.url === "string",
-        ),
-      "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-    );
-    return targetInfos;
-  };
-  try {
-    browserCdp = await bounded(
-      () => browser.newBrowserCDPSession(),
-      5_000,
-      "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-    );
-    const targetInfos = await readTargetInfos();
-    targetIdsBefore = new Set(targetInfos.map((target) => target.targetId));
-  } catch {
-    logNativeTargetDiagnostic("cdp_unavailable");
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
   await extensionPage.evaluate((expectedTabId) => {
     const button = document.createElement("button");
     button.id = "m64-open-real-sidepanel";
@@ -2044,8 +1950,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     });
     document.body.append(button);
   }, boundTabId);
-  // sidePanel.open creates a fresh native document; the original helper page remains separate.
-  const pagesBeforeNativePanel = new Set(context.pages());
+  assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
   await extensionPage.locator("#m64-open-real-sidepanel").click();
   const sidePanelOpened = await poll(
     () => extensionPage.evaluate(() => window.__m64SidePanelOpen === true),
@@ -2054,212 +1959,132 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   );
   assert(sidePanelOpened, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
   assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
-  let nativeTargets = [];
-  let sawNativeTarget = false;
-  try {
-    const exactNewTargets = (targetInfos) =>
-      targetInfos.filter(
-        (target) => !targetIdsBefore.has(target.targetId) && target.url === nativeSidePanelUrl,
-      );
-    const deadline = Date.now() + 12_000;
-    while (Date.now() < deadline) {
-      const targetInfos = await readTargetInfos();
-      nativeTargets = exactNewTargets(targetInfos);
-      if (nativeTargets.length > 0) {
-        sawNativeTarget = true;
-        break;
-      }
-      await delay(100);
-    }
-    if (sawNativeTarget) {
-      await delay(250);
-      nativeTargets = exactNewTargets(await readTargetInfos());
-    }
-  } catch {
-    logNativeTargetDiagnostic("cdp_unavailable");
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  if (!sawNativeTarget || nativeTargets.length === 0) {
-    logNativeTargetDiagnostic("missing", [], 0);
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  let nextTargetRuntimeId = 1;
-  const evaluateReadOnlyTarget = async (targetId) => {
-    let sessionId;
-    let unsupported = false;
-    let checks;
-    try {
-      const attached = await bounded(
-        () => browserCdp.send("Target.attachToTarget", { targetId, flatten: false }),
-        5_000,
-        "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-      );
-      sessionId = attached?.sessionId;
-      if (typeof sessionId !== "string")
-        throw new BrowserFailure("M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
 
-      const requestId = nextTargetRuntimeId++;
-      const deadline = Date.now() + 5_000;
-      const originPattern = `${new URL(PORTAL_URL).origin}/*`;
-      const expression = `(async () => {
-        const expectedUrl = ${JSON.stringify(nativeSidePanelUrl)};
-        const originPattern = ${JSON.stringify(originPattern)};
-        const expectedTabId = ${JSON.stringify(boundTabId)};
-        const isVisible = (element) => {
-          if (!element) return false;
-          const style = getComputedStyle(element);
-          const rect = element.getBoundingClientRect();
-          return style.display !== "none" && style.visibility === "visible" && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
-        };
-        const ctaDeadline = Date.now() + 3000;
-        while (Date.now() < ctaDeadline && !isVisible(document.querySelector("#work-portal-access-grant"))) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        const cta = document.querySelector("#work-portal-access-grant");
-        const rect = cta?.getBoundingClientRect();
-        const style = cta ? getComputedStyle(cta) : null;
-        const rectValues = rect ? [rect.left, rect.top, rect.right, rect.bottom, rect.width, rect.height] : [];
-        const finiteRect = rectValues.length === 6 && rectValues.every(Number.isFinite);
-        const ctaVisible = Boolean(cta && style && style.display !== "none" && style.visibility === "visible" && Number(style.opacity) > 0);
-        const ctaEnabled = Boolean(cta && !cta.disabled && cta.getAttribute("aria-disabled") !== "true");
-        const ctaInViewport = Boolean(ctaVisible && finiteRect && rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight);
-        const centerX = rect ? rect.left + rect.width / 2 : -1;
-        const centerY = rect ? rect.top + rect.height / 2 : -1;
-        const topElement = ctaInViewport ? document.elementFromPoint(centerX, centerY) : null;
-        const ctaTopmost = Boolean(cta && topElement && (topElement === cta || cta.contains(topElement)));
-        const urlMatches = location.href === expectedUrl;
-        const activeTabMatches = await new Promise((resolve) => chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => resolve(!chrome.runtime.lastError && tabs?.[0]?.id === expectedTabId)));
-        const permissionAbsent = !(await chrome.permissions.contains({ origins: [originPattern] }));
-        return { urlMatches, ctaVisible, ctaEnabled, ctaInViewport, ctaTopmost, activeTabMatches, permissionAbsent };
-      })()`;
-      let resolveResponse;
-      const responsePromise = new Promise((resolve) => {
-        resolveResponse = resolve;
-      });
-      const onTargetMessage = (event) => {
-        const response = matchingNativeTargetRuntimeResponse(event, sessionId, requestId);
-        if (response) resolveResponse(response);
-      };
-      browserCdp.on("Target.receivedMessageFromTarget", onTargetMessage);
-      try {
-        const message = JSON.stringify({
-          id: requestId,
-          method: "Runtime.evaluate",
-          params: { expression, returnByValue: true, awaitPromise: true, userGesture: false },
-        });
-        await bounded(
-          () =>
-            browserCdp.send("Target.sendMessageToTarget", {
-              sessionId,
-              message,
-            }),
-          Math.max(1, deadline - Date.now()),
-          "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-        );
-        const response = await bounded(
-          () => responsePromise,
-          Math.max(1, deadline - Date.now()),
-          "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-        );
-        const names = [
-          "urlMatches",
-          "ctaVisible",
-          "ctaEnabled",
-          "ctaInViewport",
-          "ctaTopmost",
-          "activeTabMatches",
-          "permissionAbsent",
-        ];
-        if (
-          response.exception ||
-          !response.value ||
-          names.some((name) => typeof response.value[name] !== "boolean")
-        ) {
-          unsupported = true;
-        } else {
-          checks = response.value;
-        }
-      } finally {
-        browserCdp.off("Target.receivedMessageFromTarget", onTargetMessage);
-      }
-    } catch {
-      unsupported = true;
-    } finally {
-      if (sessionId) {
-        try {
-          await bounded(
-            () => browserCdp.send("Target.detachFromTarget", { sessionId }),
-            5_000,
-            "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-          );
-        } catch {
-          unsupported = true;
-        }
-      }
+  const workTupleFields = [
+    "ownerKind",
+    "launchReceiptId",
+    "ownerId",
+    "orgId",
+    "contextVersion",
+    "sopTemplateId",
+    "sopVersion",
+    "portalId",
+    "portalKey",
+    "mappingGeneration",
+    "effectiveMappingFingerprint",
+    "providerId",
+    "facilityId",
+    "stepIdentity",
+    "taskId",
+    "stepId",
+    "assignmentId",
+    "taskIndex",
+    "stepIndex",
+  ];
+  const activeWorkIdentity = (record) => {
+    if (
+      !record ||
+      typeof record !== "object" ||
+      !record.tuple ||
+      typeof record.tuple !== "object"
+    ) {
+      return null;
     }
-    if (unsupported || !checks) return { supported: false, qualified: false };
-    return {
-      supported: true,
-      qualified: Object.values(checks).every((value) => value === true),
-    };
-  };
-  const targetResults = [];
-  let targetRoutingUnsupported = false;
-  for (const target of nativeTargets) {
-    const result = await evaluateReadOnlyTarget(target.targetId);
-    if (!result.supported) targetRoutingUnsupported = true;
-    targetResults.push(result);
-  }
-  if (targetRoutingUnsupported) {
-    logNativeTargetDiagnostic("cdp_unsupported", nativeTargets, null, "unsupported");
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  const qualifiedCount = targetResults.filter((target) => target.qualified).length;
-  if (qualifiedCount === 0) {
-    logNativeTargetDiagnostic("unqualified", nativeTargets, qualifiedCount);
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  if (qualifiedCount > 1) {
-    logNativeTargetDiagnostic("ambiguous", nativeTargets, qualifiedCount);
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  logNativeTargetDiagnostic("observed", nativeTargets, qualifiedCount);
-  assert(false, "M64_BROWSER_NATIVE_PANEL_IDENTITY_ONLY");
-  let nativePanelPages;
-  try {
-    nativePanelPages = await poll(
-      () =>
-        context
-          .pages()
-          .filter((page) => !pagesBeforeNativePanel.has(page) && page.url() === nativeSidePanelUrl),
-      (pages) => pages.length === 1,
-      "native_sidepanel_document",
-      12_000,
+    const tuple = Object.fromEntries(
+      workTupleFields.map((field) => [field, record.tuple[field] ?? null]),
     );
-  } catch {
-    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  }
-  assert(nativePanelPages.length === 1, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
-  const nativePanelPage = nativePanelPages[0];
-  assert((await activeChromeTabId(nativePanelPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
-  await nativePanelPage
-    .locator("#work-portal-access-grant")
+    return JSON.stringify({
+      tuple,
+      protocolVersion: record.tuple.protocolVersion,
+      boundTabId: record.boundTabId,
+      formOrigin: record.formOrigin,
+      formPath: record.formPath,
+      caseType: record.caseType,
+      createdAt: record.createdAt,
+    });
+  };
+  const readActiveWork = () =>
+    extensionPage.evaluate(
+      async (key) => (await chrome.storage.session.get(key))[key] ?? null,
+      ACTIVE_WORK_KEY,
+    );
+  const initialWorkIdentity = activeWorkIdentity(boundWork);
+  assert(
+    initialWorkIdentity !== null &&
+      workTupleFields.every(
+        (field) => (boundWork.tuple[field] ?? null) === (validation.tuple[field] ?? null),
+      ) &&
+      boundWork.tuple.protocolVersion === 2 &&
+      typeof validation.tuple.launchReceiptId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        validation.tuple.launchReceiptId,
+      ) &&
+      validation.tuple.launchReceiptId === boundWork.tuple.launchReceiptId &&
+      validation.tuple.effectiveMappingFingerprint === validation.effectiveMappingFingerprint &&
+      boundWork.tuple.effectiveMappingFingerprint === uiTuple.effectiveMappingFingerprint &&
+      boundWork.formPath === new URL(PORTAL_URL).pathname &&
+      boundWork.caseType === "contract",
+    "M64_BROWSER_WORK_BINDING_MISMATCH",
+  );
+  const assertWorkUnchanged = async () => {
+    const current = await readActiveWork();
+    assert(
+      activeWorkIdentity(current) === initialWorkIdentity,
+      "M64_BROWSER_WORK_BINDING_MISMATCH",
+    );
+  };
+  const assertPayerTabActive = async () => {
+    assert((await activeChromeTabId(extensionPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  };
+  await assertWorkUnchanged();
+  await assertPayerTabActive();
+
+  // Native placement is a separate smoke; exercise permission in the built helper document.
+  const originPattern = `${new URL(PORTAL_URL).origin}/*`;
+  await bounded(
+    async () => {
+      try {
+        await extensionPage.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      } catch {
+        throw new BrowserFailure("M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED");
+      }
+    },
+    25_000,
+    "M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED",
+  );
+  assert(extensionPage.url() === nativeSidePanelUrl, "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED");
+  await assertPayerTabActive();
+  await assertWorkUnchanged();
+
+  const permissionCta = extensionPage.locator("#work-portal-access-grant");
+  await permissionCta
     .waitFor({ state: "visible", timeout: 15_000 })
     .catch(() => assert(false, "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE"));
-  const originPattern = `${new URL(PORTAL_URL).origin}/*`;
-  const permissionBefore = await nativePanelPage.evaluate(
+  const permissionCtaReady = await permissionCta.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return (
+      style.display !== "none" &&
+      style.visibility === "visible" &&
+      Number(style.opacity) > 0 &&
+      !element.disabled &&
+      element.getAttribute("aria-disabled") !== "true"
+    );
+  });
+  assert(permissionCtaReady, "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE");
+  const permissionBefore = await extensionPage.evaluate(
     (origin) => chrome.permissions.contains({ origins: [origin] }),
     originPattern,
   );
   assert(permissionBefore === false, "M64_BROWSER_PERMISSION_PREGRANTED");
-  assert((await activeChromeTabId(nativePanelPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
-  await nativePanelPage
-    .locator("#work-portal-access-grant")
+  await assertPayerTabActive();
+  await assertWorkUnchanged();
+
+  await permissionCta
     .click({ timeout: 10_000 })
     .catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
   await poll(
     () =>
-      nativePanelPage.evaluate(
+      extensionPage.evaluate(
         (origin) => chrome.permissions.contains({ origins: [origin] }),
         originPattern,
       ),
@@ -2267,12 +2092,13 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     "work_origin_permission_granted",
     15_000,
   ).catch(() => assert(false, "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE"));
-  const permissionAfter = await nativePanelPage.evaluate(
+  const permissionAfter = await extensionPage.evaluate(
     (origin) => chrome.permissions.contains({ origins: [origin] }),
     originPattern,
   );
   assert(permissionAfter === true, "M64_BROWSER_PERMISSION_CONTAINS_FAILED");
-  assert((await activeChromeTabId(nativePanelPage)) === boundTabId, "M64_BROWSER_ACTIVE_TAB_DRIFT");
+  await assertPayerTabActive();
+  await assertWorkUnchanged();
   return {
     contractValidations: [
       {
@@ -2521,7 +2347,7 @@ async function run() {
   const probe = await panelContractPermissionProbe(extensionPage, extensionId);
   assert(unexpectedRoutes === 0, `M64_BROWSER_DENIED_${firstDeniedCategory ?? "UNKNOWN_HOST"}`);
   safeLog(
-    "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|sidepanel_open=true|active_payer_tab=true|permission_contains=true|fill_not_run=true",
+    "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|native_sidepanel_open=true|active_payer_tab=true|grant_surface=built_extension_helper|permission_contains=true|fill_not_run=true",
   );
   safeLog(
     `M64_RESULT|${Buffer.from(

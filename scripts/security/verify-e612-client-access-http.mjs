@@ -121,9 +121,8 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_PANEL_CONTRACT_CONTEXT_FAILED",
   "M64_BROWSER_PANEL_CONTRACT_LAUNCH_FAILED",
   "M64_BROWSER_ACTIVE_TAB_DRIFT",
+  "M64_BROWSER_EXTENSION_PAGE_RELOAD_FAILED",
   "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED",
-  "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
-  "M64_BROWSER_NATIVE_PANEL_IDENTITY_ONLY",
   "M64_BROWSER_PERMISSION_PREGRANTED",
   "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE",
   "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE",
@@ -312,34 +311,6 @@ const m64OrgWaitDiagnosticUiStates = new Set([
   "sidebar",
   "other",
 ]);
-const m64NativeTargetStates = new Set([
-  "observed",
-  "missing",
-  "ambiguous",
-  "unqualified",
-  "cdp_unavailable",
-  "cdp_unsupported",
-]);
-const m64NativeTargetCounts = new Set(["0", "1", "2_PLUS", "unknown"]);
-const m64NativeTargetQualifications = new Set(["0", "1", "2_PLUS", "unknown"]);
-const m64NativeTargetRouting = new Set(["supported", "unsupported", "unknown"]);
-const m64NativeTargetParentRelations = new Set([
-  "has_parent",
-  "none",
-  "page_parent_is_tab",
-  "same_parent",
-  "unrelated",
-  "unknown",
-]);
-const m64NativeTargetTypes = new Set([
-  "ambiguous",
-  "extra",
-  "none",
-  "other",
-  "page",
-  "tab",
-  "unknown",
-]);
 const fail = (code) => {
   throw new Error(code);
 };
@@ -464,95 +435,6 @@ function reportM64BrowserContractUiRouteDiagnostic(driver, checkpoint) {
   }
   const routesDiagnostic = safeM64ContractUiRoutesDiagnostic(driver.lines);
   if (routesDiagnostic) emit(`E612|M64|BROWSER|CONTRACT_UI_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
-}
-function safeM64NativeTargetDiagnostic(lines) {
-  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|NATIVE_TARGET|"));
-  if (markers.length !== 1) return null;
-  const match =
-    /^M64\|BROWSER\|NATIVE_TARGET\|state=([a-z_]+)\|count=([A-Za-z0-9_]+)\|type=([a-z_]+)\|qualified=([A-Za-z0-9_]+)\|page=([A-Za-z0-9_]+)\|tab=([A-Za-z0-9_]+)\|other=([A-Za-z0-9_]+)\|extra=([A-Za-z0-9_]+)\|parent=([a-z_]+)\|routing=([a-z_]+)$/.exec(
-      markers[0],
-    );
-  if (!match) return null;
-  const [, state, count, type, qualified, page, tab, other, extra, parent, routing] = match;
-  if (
-    !m64NativeTargetStates.has(state) ||
-    !m64NativeTargetCounts.has(count) ||
-    !m64NativeTargetQualifications.has(qualified) ||
-    !m64NativeTargetRouting.has(routing) ||
-    !m64NativeTargetTypes.has(type) ||
-    ![page, tab, other, extra].every((value) => m64NativeTargetCounts.has(value)) ||
-    !m64NativeTargetParentRelations.has(parent)
-  ) {
-    return null;
-  }
-  const histogram = [page, tab, other, extra];
-  const minimumCount = histogram.reduce(
-    (total, value) => total + (value === "2_PLUS" ? 2 : value === "1" ? 1 : 0),
-    0,
-  );
-  const observedBucket = type === "page" ? 0 : type === "tab" ? 1 : type === "other" ? 2 : 3;
-  const singleCandidateHistogram = histogram.every(
-    (value, index) => value === (index === observedBucket ? "1" : "0"),
-  );
-  const validParentRelation =
-    (parent !== "page_parent_is_tab" || (count === "2_PLUS" && page !== "0" && tab !== "0")) &&
-    (parent !== "has_parent" || count === "1") &&
-    (!new Set(["page_parent_is_tab", "same_parent", "unrelated"]).has(parent) ||
-      count === "2_PLUS");
-  const candidateShape =
-    (count === "1" &&
-      ["page", "tab", "other", "extra"].includes(type) &&
-      singleCandidateHistogram) ||
-    (count === "2_PLUS" && type === "ambiguous" && minimumCount >= 2);
-  const consistent =
-    (state === "observed" &&
-      candidateShape &&
-      qualified === "1" &&
-      routing === "supported" &&
-      parent !== "unknown" &&
-      validParentRelation) ||
-    (state === "unqualified" &&
-      candidateShape &&
-      qualified === "0" &&
-      routing === "supported" &&
-      parent !== "unknown" &&
-      validParentRelation) ||
-    (state === "missing" &&
-      count === "0" &&
-      type === "none" &&
-      qualified === "0" &&
-      histogram.every((value) => value === "0") &&
-      parent === "none" &&
-      routing === "supported") ||
-    (state === "ambiguous" &&
-      count === "2_PLUS" &&
-      type === "ambiguous" &&
-      minimumCount >= 2 &&
-      qualified === "2_PLUS" &&
-      routing === "supported" &&
-      parent !== "unknown" &&
-      validParentRelation) ||
-    (state === "cdp_unsupported" &&
-      candidateShape &&
-      qualified === "unknown" &&
-      routing === "unsupported" &&
-      parent !== "unknown" &&
-      validParentRelation) ||
-    (state === "cdp_unavailable" &&
-      count === "unknown" &&
-      type === "unknown" &&
-      qualified === "unknown" &&
-      histogram.every((value) => value === "unknown") &&
-      parent === "unknown" &&
-      routing === "unknown");
-  return consistent
-    ? `state=${state}|count=${count}|type=${type}|qualified=${qualified}|page=${page}|tab=${tab}|other=${other}|extra=${extra}|parent=${parent}|routing=${routing}`
-    : null;
-}
-function reportM64BrowserNativeTargetDiagnostic(driver, checkpoint) {
-  if (checkpoint !== "permission_probe") return;
-  const diagnostic = safeM64NativeTargetDiagnostic(driver.lines);
-  if (diagnostic) emit(`E612|M64|BROWSER|NATIVE_TARGET_DIAGNOSTIC|${diagnostic}`);
 }
 function waitForM64BrowserCompletion(driver, timeoutMs) {
   let timer;
@@ -1106,7 +988,6 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
-    reportM64BrowserNativeTargetDiagnostic(browserSession.browserDriver, checkpoint);
     if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
       emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=5");
       fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
@@ -1116,14 +997,10 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     });
     fail(`E612_M64_BROWSER_DRIVER_FAILED_${knownFailure.replaceAll(/[^A-Z0-9_]/g, "_")}`);
   }
-  reportM64BrowserNativeTargetDiagnostic(
-    browserSession.browserDriver,
-    safeM64DriverCheckpoint(browserSession.browserDriver.lines),
-  );
   const success = result.lines.find(
     (line) =>
       line ===
-      "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|sidepanel_open=true|active_payer_tab=true|permission_contains=true|fill_not_run=true",
+      "M64|BROWSER|PROBE|PASS|contract_ui=true|work_validation=true|native_sidepanel_open=true|active_payer_tab=true|grant_surface=built_extension_helper|permission_contains=true|fill_not_run=true",
   );
   if (!success) fail("E612_M64_BROWSER_PROBE_PASS_MARKER_MISSING");
   const resultLine = result.lines.find((line) => line.startsWith("M64_RESULT|"));
