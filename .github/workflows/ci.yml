@@ -403,6 +403,12 @@ jobs:
       - name: Verify MINT-58 concurrent independent Work step submissions
         run: node scripts/security/verify-mint58-exact-fill-submission-race.mjs
 
+      - name: Verify MINT-60 atomic mapping reset on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint60-atomic-mapping-reset.sql
+
+      - name: Verify MINT-60 reset/capture serialization on disposable PostgreSQL
+        run: node scripts/security/verify-mint60-atomic-mapping-reset-race.mjs
+
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
   # Two specs run (login render, dashboard redirect); three write scenarios are
