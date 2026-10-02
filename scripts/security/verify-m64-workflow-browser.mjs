@@ -554,6 +554,7 @@ let exactValidationNotFound = false;
 const workValidationAttempts = [];
 const workValidationSuccesses = [];
 let extensionIdObserved;
+let providerRosterDenialReported = false;
 let server;
 let context;
 let proxyClosed = false;
@@ -922,6 +923,35 @@ function unexpected(response, category = "UNKNOWN_HOST", reason = null) {
   count(`denied.${category}`, response.statusCode);
   response.setHeader("content-type", "text/plain; charset=utf-8");
   response.end("local verification route unavailable");
+}
+
+function reportDeniedProviderRoster(host, method, pathname, requestTarget, headers) {
+  if (
+    providerRosterDenialReported ||
+    host !== PANEL_HOST ||
+    method !== "GET" ||
+    pathname !== "/api/providers"
+  ) {
+    return;
+  }
+  const extensionOrigin = extensionOriginForM64();
+  const originState =
+    headers.origin === undefined
+      ? "missing"
+      : extensionOrigin !== null && headers.origin === extensionOrigin
+        ? "matching"
+        : "other";
+  const fields = [
+    `target_exact=${requestTarget === PROVIDER_ROSTER_TARGET}`,
+    `origin=${originState}`,
+    `bearer_present=${typeof headers.authorization === "string" && /^Bearer \S+$/.test(headers.authorization)}`,
+    `accept_exact=${headers.accept === "application/json"}`,
+    `org_exact=${headers["x-org-id"] === ORG_ID}`,
+    `cookie_present=${headers.cookie !== undefined}`,
+    `content_type_present=${headers["content-type"] !== undefined}`,
+  ];
+  providerRosterDenialReported = true;
+  safeLog(`M64|BROWSER|PROVIDER_ROSTER_DENIED|${fields.join("|")}`);
 }
 
 function classifyDenied(host, method, pathname) {
@@ -2378,6 +2408,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       provider_name_matches: null,
       selected_provider_exact: null,
       provider_list_contains_work_id: null,
+      provider_list_state: "unknown",
       selected_facility_exact: null,
       main_error_hidden: null,
     };
@@ -2463,6 +2494,16 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
                   : providerRoster.ok === true &&
                     Array.isArray(providerRoster.data) &&
                     providerRoster.data.some((provider) => provider?.id === providerId),
+              provider_list_state:
+                providerRoster == null
+                  ? "unknown"
+                  : providerRoster.ok !== true
+                    ? "failed"
+                    : Array.isArray(providerRoster.data)
+                      ? providerRoster.data.length === 0
+                        ? "empty"
+                        : "nonempty"
+                      : "malformed",
               selected_facility_exact:
                 selectedFacility == null
                   ? null
@@ -2522,6 +2563,11 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     const fields = booleans.map(
       ([name, value]) =>
         `${name}=${value === true ? "true" : value === false ? "false" : "unknown"}`,
+    );
+    fields.splice(
+      fields.findIndex((field) => field.startsWith("selected_facility_exact=")),
+      0,
+      `provider_list_state=${state.provider_list_state}`,
     );
     const routeCounts = [
       ["work_validate_200", "panel.work_validate", 200],
@@ -2883,6 +2929,7 @@ async function run() {
         const route = routeFor(hostHeader, method, pathname, requestTarget, request.headers);
         if (!route) {
           countDeniedSupabaseOptions(hostHeader, method, pathname);
+          reportDeniedProviderRoster(hostHeader, method, pathname, requestTarget, request.headers);
           unexpected(
             response,
             classifyDenied(hostHeader, method, pathname),

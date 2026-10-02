@@ -320,6 +320,7 @@ const m64ContractFillReadinessFields = [
   "provider_name_matches",
   "selected_provider_exact",
   "provider_list_contains_work_id",
+  "provider_list_state",
   "selected_facility_exact",
   "main_error_hidden",
   "work_validate_200",
@@ -366,6 +367,17 @@ const m64ContractFillReadinessBooleanFields = new Set([
   "selected_facility_exact",
   "main_error_hidden",
 ]);
+const m64ContractFillReadinessStatusFields = new Set(["provider_list_state"]);
+const m64ProviderListStates = new Set(["unknown", "failed", "empty", "nonempty", "malformed"]);
+const m64ProviderRosterDenialFields = [
+  "target_exact",
+  "origin",
+  "bearer_present",
+  "accept_exact",
+  "org_exact",
+  "cookie_present",
+  "content_type_present",
+];
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -573,10 +585,15 @@ function safeM64ContractFillReadinessDiagnostic(lines) {
   for (let index = 0; index < m64ContractFillReadinessFields.length; index += 1) {
     const [name, value, ...rest] = parts[index + 3].split("=");
     const isBoolean = m64ContractFillReadinessBooleanFields.has(name);
+    const isStatus = m64ContractFillReadinessStatusFields.has(name);
     if (
       name !== m64ContractFillReadinessFields[index] ||
       rest.length !== 0 ||
-      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+      (isBoolean
+        ? !m64PermissionGrantValues.has(value)
+        : isStatus
+          ? !m64ProviderListStates.has(value)
+          : !m64OrgWaitDiagnosticCounts.has(value))
     ) {
       return null;
     }
@@ -588,6 +605,34 @@ function reportM64BrowserContractFillReadinessDiagnostic(driver, checkpoint) {
   if (checkpoint !== "contract_fill_readiness") return;
   const diagnostic = safeM64ContractFillReadinessDiagnostic(driver.lines);
   if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_READINESS_DIAGNOSTIC|${diagnostic}`);
+  const providerRoster = safeM64ProviderRosterDenialDiagnostic(driver.lines);
+  if (providerRoster) emit(`E612|M64|BROWSER|PROVIDER_ROSTER_DENIED_DIAGNOSTIC|${providerRoster}`);
+}
+function safeM64ProviderRosterDenialDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PROVIDER_ROSTER_DENIED|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ProviderRosterDenialFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "PROVIDER_ROSTER_DENIED"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64ProviderRosterDenialFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const validValue =
+      name === "origin"
+        ? new Set(["missing", "matching", "other"]).has(value)
+        : m64PermissionGrantValues.has(value);
+    if (name !== m64ProviderRosterDenialFields[index] || rest.length !== 0 || !validValue) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
 }
 function safeM64PermissionGrantDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PERMISSION_GRANT|"));
