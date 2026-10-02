@@ -56,6 +56,15 @@ const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
   "HEADER_REQUIRED_MISSING",
   "HEADER_DUPLICATE",
 ]);
+const ORG_WAIT_ROUTE_STATUS_CODES = [200, 401, 403, 404, 502];
+const ORG_WAIT_OPTIONS_BUCKETS = [
+  "auth_token",
+  "auth_other",
+  "rest_memberships",
+  "rest_profiles",
+  "rpc_claim_invites",
+  "other",
+];
 const ACTIVE_WORK_KEY = "minted.activeWork.v2";
 const EXPECTED_BACKGROUND_MARKERS = [
   "/api/work-context/validate",
@@ -398,6 +407,106 @@ function routeTotal(route) {
   return total;
 }
 
+function supabaseOptionsBucket(host, method, pathname, routeName = "") {
+  if (host !== SUPABASE_HOST || method !== "OPTIONS") return null;
+  const knownRouteBuckets = new Map([
+    ["supabase.rest.memberships", "rest_memberships"],
+    ["supabase.rest.profiles", "rest_profiles"],
+    ["supabase.rpc.claim_invites", "rpc_claim_invites"],
+  ]);
+  if (knownRouteBuckets.has(routeName)) return knownRouteBuckets.get(routeName);
+  const cleanPath = pathname.split("?", 1)[0];
+  if (cleanPath.startsWith("/auth/v1/")) {
+    return cleanPath === "/auth/v1/token" ? "auth_token" : "auth_other";
+  }
+  if (cleanPath === "/rest/v1/memberships") return "rest_memberships";
+  if (cleanPath === "/rest/v1/profiles") return "rest_profiles";
+  if (cleanPath === "/rest/v1/rpc/claim_invites") return "rpc_claim_invites";
+  return "other";
+}
+
+function countDeniedSupabaseOptions(host, method, pathname, routeName = "") {
+  const bucket = supabaseOptionsBucket(host, method, pathname, routeName);
+  if (bucket) count(`supabase.options_denied.${bucket}`, 404);
+}
+
+function boundedDiagnosticCount(value) {
+  return value > 8 ? "9_PLUS" : String(value);
+}
+
+function routeStatusDiagnostic(route, label, statuses = ORG_WAIT_ROUTE_STATUS_CODES) {
+  const fields = statuses.map(
+    (status) => `${label}_${status}=${boundedDiagnosticCount(routeCount(route, status))}`,
+  );
+  const known = statuses.reduce((total, status) => total + routeCount(route, status), 0);
+  fields.push(`${label}_other=${boundedDiagnosticCount(Math.max(0, routeTotal(route) - known))}`);
+  return fields;
+}
+
+async function orgWaitUiState(page) {
+  try {
+    const state = await bounded(
+      () =>
+        page.evaluate(() => {
+          const headings = [...document.querySelectorAll("h1")].map((heading) =>
+            heading.textContent?.trim(),
+          );
+          const bodyText = document.body?.textContent ?? "";
+          return {
+            login: Boolean(document.querySelector("#email, #password")),
+            noOrg:
+              headings.includes("Welcome to your Portfolio") &&
+              bodyText.includes("You don't have any organizations yet."),
+            contextLoading: bodyText.includes("Resolving your access context…"),
+            contextError: headings.some((heading) =>
+              [
+                "Access context unavailable",
+                "Client organization is unavailable",
+                "Client access context required",
+              ].includes(heading),
+            ),
+            contextChoose: headings.includes("Choose an access context"),
+            contextClientReady: headings.includes("Client access context ready"),
+            sidebar: Boolean(document.querySelector("aside")),
+            activeOrg: Boolean(
+              document.querySelector('button[aria-label^="Active organization:"]'),
+            ),
+          };
+        }),
+      1_500,
+      "M64_BROWSER_ORG_WAIT_DIAGNOSTIC_TIMEOUT",
+    );
+    if (state.login) return "login";
+    if (state.noOrg) return "no_org";
+    if (state.contextLoading) return "context_loading";
+    if (state.contextError) return "context_error";
+    if (state.contextChoose) return "context_choose";
+    if (state.contextClientReady) return "context_client_ready";
+    if (state.sidebar) return state.activeOrg ? "sidebar" : "other";
+    return "other";
+  } catch {
+    return "other";
+  }
+}
+
+async function reportOrgWaitDiagnostic(page) {
+  const fields = [
+    ...routeStatusDiagnostic("supabase.rest.memberships", "memberships"),
+    ...routeStatusDiagnostic("supabase.rest.profiles", "profiles"),
+    ...routeStatusDiagnostic("supabase.rpc.claim_invites", "claim_invites"),
+  ];
+  for (const bucket of ORG_WAIT_OPTIONS_BUCKETS) {
+    fields.push(
+      `options_${bucket}_404=${boundedDiagnosticCount(
+        routeCount(`supabase.options_denied.${bucket}`, 404),
+      )}`,
+    );
+  }
+  fields.push(...routeStatusDiagnostic("panel.cases", "api_cases", [200, 403, 404]));
+  fields.push(`ui=${await orgWaitUiState(page)}`);
+  safeLog(`M64|BROWSER|ORG_WAIT|${fields.join("|")}`);
+}
+
 function unexpected(response, category = "UNKNOWN_HOST", reason = null) {
   response.statusCode = 404;
   unexpectedRoutes += 1;
@@ -697,6 +806,7 @@ function proxyToLocal(request, response, route, requestUrl, method) {
   const headers = { ...request.headers, host: `${destination.host}:${destination.port}` };
   if (isSupabase) {
     if (headers.apikey !== extensionAnonKey && headers.apikey !== panelBuildAnonKey) {
+      countDeniedSupabaseOptions(SUPABASE_HOST, method, requestUrl, route.name);
       unexpected(response, "SUPABASE_APIKEY_MISMATCH");
       return;
     }
@@ -925,12 +1035,17 @@ async function panelContractPermissionProbe(extensionPage) {
   }
   checkpoint("panel_login_org_wait");
   const activeOrgButton = panelPage.locator('button[aria-label^="Active organization:"]');
-  await poll(
-    () => activeOrgButton.count(),
-    (count) => count === 1,
-    "panel_authenticated_org",
-    20_000,
-  );
+  try {
+    await poll(
+      () => activeOrgButton.count(),
+      (count) => count === 1,
+      "panel_authenticated_org",
+      20_000,
+    );
+  } catch {
+    await reportOrgWaitDiagnostic(panelPage);
+    throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
+  }
   checkpoint("panel_login_org_ready");
 
   checkpoint("contract_ui");
@@ -1180,6 +1295,7 @@ async function run() {
         const requestTarget = request.url ?? "/";
         const route = routeFor(hostHeader, method, pathname, requestTarget, request.headers);
         if (!route) {
+          countDeniedSupabaseOptions(hostHeader, method, pathname);
           unexpected(
             response,
             classifyDenied(hostHeader, method, pathname),
