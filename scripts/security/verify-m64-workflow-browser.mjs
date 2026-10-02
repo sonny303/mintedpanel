@@ -44,6 +44,7 @@ const AUTH_PREFLIGHT_HEADERS = new Set([
   "authorization",
   "content-type",
   "x-client-info",
+  "x-supabase-api-version",
 ]);
 const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
   "AUTH_PATH_OTHER",
@@ -465,7 +466,8 @@ function assertAuthPreflightPolicy() {
   const headers = {
     origin: PANEL_ORIGIN,
     "access-control-request-method": "POST",
-    "access-control-request-headers": "apikey, authorization, content-type, x-client-info",
+    "access-control-request-headers":
+      "apikey, authorization, content-type, x-client-info, x-supabase-api-version",
   };
   const route = (
     candidateHeaders = headers,
