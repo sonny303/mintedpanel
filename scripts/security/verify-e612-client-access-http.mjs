@@ -921,6 +921,8 @@ async function startM64BrowserDriver(extensionBuild) {
       "-C",
       `${root}scripts/security`,
       "verify-m64-workflow-browser.mjs",
+      "e612-m64-fixtures.mjs",
+      "e612-fixtures.mjs",
     ]),
     "/tmp/m64",
   );
