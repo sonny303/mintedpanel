@@ -63,12 +63,43 @@ const options = {
   stdio: ["pipe", "pipe", "pipe"],
 };
 const emit = (line) => process.stdout.write(`${line}\n`);
+const m64BrowserPhases = new Set([
+  "network_inspect",
+  "container_create",
+  "container_inspect",
+  "workspace_create",
+  "copy_driver",
+  "copy_extension",
+  "copy_playwright",
+  "copy_playwright_core",
+  "browser_preflight",
+  "browser_node_version",
+  "browser_driver",
+]);
 const fail = (code) => {
   throw new Error(code);
 };
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = (args, input) =>
   execFileSync("docker", ["--context", context, ...args], { ...options, input });
+function runM64BrowserPhase(phase, operation) {
+  if (!m64BrowserPhases.has(phase)) fail("E612_M64_BROWSER_PHASE_NOT_ALLOWLISTED");
+  emit(`E612|M64|BROWSER|PHASE_START|${phase}`);
+  try {
+    const result = operation();
+    emit(`E612|M64|BROWSER|PHASE_PASS|${phase}`);
+    return result;
+  } catch (error) {
+    const rawExit = error?.status ?? error?.exitCode;
+    const exit = Number.isInteger(rawExit) && rawExit >= 0 && rawExit <= 255 ? rawExit : "unknown";
+    const signal =
+      typeof error?.signal === "string" && /^SIG[A-Z0-9]+$/.test(error.signal)
+        ? error.signal
+        : "none";
+    emit(`E612|M64|BROWSER|PHASE_FAILED|${phase}|exit=${exit}|signal=${signal}`);
+    throw new Error(`E612_M64_BROWSER_PHASE_FAILED_${phase}`);
+  }
+}
 function dockerProcess(args) {
   const child = spawn("docker", ["--context", context, ...args], {
     env,
@@ -276,41 +307,53 @@ function runM64BrowserSmoke(extensionBuild) {
   ).version;
   if (playwrightVersion !== "1.61.1" || playwrightCoreVersion !== playwrightVersion)
     fail("E612_M64_PLAYWRIGHT_PACKAGE_VERSION_MISMATCH");
-  const networkInfo = JSON.parse(docker(["network", "inspect", network]))[0];
-  if (networkInfo.Internal !== true || networkInfo.Labels?.[`com.minted.e612`] !== runId)
+  const networkInfo = runM64BrowserPhase(
+    "network_inspect",
+    () => JSON.parse(docker(["network", "inspect", network]))[0],
+  );
+  if (networkInfo.Internal !== true || networkInfo.Labels?.[`com.minted.e612`] !== runId) {
+    emit(
+      `E612|M64|BROWSER|NETWORK|internal=${networkInfo.Internal === true}|label=${networkInfo.Labels?.[`com.minted.e612`] === runId}`,
+    );
     fail("E612_M64_DOCKER_NETWORK_NOT_INTERNAL");
+  }
   if (platforms.browser !== "linux/amd64") fail("E612_M64_BROWSER_IMAGE_NOT_LINUX_AMD64");
-  docker([
-    "run",
-    "--detach",
-    "--rm",
-    "--name",
-    names.browser,
-    "--label",
-    label,
-    "--network",
-    network,
-    "--network-alias",
-    "browser",
-    "--read-only",
-    "--cap-drop",
-    "ALL",
-    "--cap-add",
-    "NET_BIND_SERVICE",
-    "--security-opt",
-    "no-new-privileges",
-    "--tmpfs",
-    "/tmp:rw,mode=1777",
-    "--tmpfs",
-    "/dev/shm:rw,nosuid,nodev,size=1g",
-    "--env",
-    "HOME=/tmp/m64-home",
-    ids.browser,
-    "sleep",
-    "infinity",
-  ]);
+  runM64BrowserPhase("container_create", () =>
+    docker([
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
+      names.browser,
+      "--label",
+      label,
+      "--network",
+      network,
+      "--network-alias",
+      "browser",
+      "--read-only",
+      "--cap-drop",
+      "ALL",
+      "--cap-add",
+      "NET_BIND_SERVICE",
+      "--security-opt",
+      "no-new-privileges",
+      "--tmpfs",
+      "/tmp:rw,mode=1777",
+      "--tmpfs",
+      "/dev/shm:rw,nosuid,nodev,size=1g",
+      "--env",
+      "HOME=/tmp/m64-home",
+      ids.browser,
+      "sleep",
+      "infinity",
+    ]),
+  );
   created.add("browser");
-  const observed = JSON.parse(docker(["inspect", names.browser]))[0];
+  const observed = runM64BrowserPhase(
+    "container_inspect",
+    () => JSON.parse(docker(["inspect", names.browser]))[0],
+  );
   const browserHostConfig = observed.HostConfig ?? {};
   const browserCapabilities = browserHostConfig.CapAdd ?? [];
   const normalizedCapabilities = browserCapabilities.map((capability) =>
@@ -340,47 +383,65 @@ function runM64BrowserSmoke(extensionBuild) {
     );
     fail("E612_M64_BROWSER_CONTAINER_HARDENING_MISMATCH");
   }
-  docker(["exec", names.browser, "mkdir", "-p", "/tmp/m64/node_modules", "/tmp/m64-home"]);
-  docker([
-    "cp",
-    `${root}scripts/security/verify-m64-workflow-browser.mjs`,
-    `${names.browser}:/tmp/m64/driver.mjs`,
-  ]);
-  docker(["cp", `${extensionRoot}/dist`, `${names.browser}:/tmp/m64/extension`]);
-  docker(["cp", playwrightPath, `${names.browser}:/tmp/m64/node_modules/`]);
-  docker(["cp", playwrightCorePath, `${names.browser}:/tmp/m64/node_modules/`]);
-  docker([
-    "exec",
-    "-w",
-    "/tmp/m64",
-    names.browser,
-    "/bin/sh",
-    "-c",
-    "command -v Xvfb >/dev/null && command -v xvfb-run >/dev/null && node -e \"if(Number(process.versions.node.split('.')[0])<18)process.exit(3);if(require('playwright/package.json').version!=='1.61.1')process.exit(1);if(!require('fs').existsSync(require('playwright').chromium.executablePath()))process.exit(2)\"",
-  ]);
-  const browserNode = docker(["exec", names.browser, "node", "--version"]).trim();
+  runM64BrowserPhase("workspace_create", () =>
+    docker(["exec", names.browser, "mkdir", "-p", "/tmp/m64/node_modules", "/tmp/m64-home"]),
+  );
+  runM64BrowserPhase("copy_driver", () =>
+    docker([
+      "cp",
+      `${root}scripts/security/verify-m64-workflow-browser.mjs`,
+      `${names.browser}:/tmp/m64/driver.mjs`,
+    ]),
+  );
+  runM64BrowserPhase("copy_extension", () =>
+    docker(["cp", `${extensionRoot}/dist`, `${names.browser}:/tmp/m64/extension`]),
+  );
+  runM64BrowserPhase("copy_playwright", () =>
+    docker(["cp", playwrightPath, `${names.browser}:/tmp/m64/node_modules/`]),
+  );
+  runM64BrowserPhase("copy_playwright_core", () =>
+    docker(["cp", playwrightCorePath, `${names.browser}:/tmp/m64/node_modules/`]),
+  );
+  runM64BrowserPhase("browser_preflight", () =>
+    docker([
+      "exec",
+      "-w",
+      "/tmp/m64",
+      names.browser,
+      "/bin/sh",
+      "-c",
+      "command -v Xvfb >/dev/null && command -v xvfb-run >/dev/null && node -e \"if(Number(process.versions.node.split('.')[0])<18)process.exit(3);if(require('playwright/package.json').version!=='1.61.1')process.exit(1);if(!require('fs').existsSync(require('playwright').chromium.executablePath()))process.exit(2)\"",
+    ]),
+  );
+  const browserNode = runM64BrowserPhase("browser_node_version", () =>
+    docker(["exec", names.browser, "node", "--version"]).trim(),
+  );
   emit(
     `M64|BROWSER|PREFLIGHT|image=${ids.browser}|platform=${platforms.browser}|playwright=${playwrightVersion}|node=${browserNode}|xvfb=available|network=internal`,
   );
-  const output = docker([
-    "exec",
-    "-e",
-    `M64_LOCAL_ANON_KEY=${anonKey}`,
-    "-e",
-    `M64_EXPECTED_RUNTIME_ASSETS_SHA=${runtimeAssetsSha}`,
-    names.browser,
-    "xvfb-run",
-    "-a",
-    "node",
-    "/tmp/m64/driver.mjs",
-  ]);
+  const output = runM64BrowserPhase("browser_driver", () =>
+    docker([
+      "exec",
+      "-e",
+      `M64_LOCAL_ANON_KEY=${anonKey}`,
+      "-e",
+      `M64_EXPECTED_RUNTIME_ASSETS_SHA=${runtimeAssetsSha}`,
+      names.browser,
+      "xvfb-run",
+      "-a",
+      "node",
+      "/tmp/m64/driver.mjs",
+    ]),
+  );
   process.stdout.write(output);
   if (
     !output.includes(
       "M64|BROWSER|PASS|goTrue_local=200|panel_orgs_local=200|work_validate_local=404|ack=CONTEXT_STALE|portal_tabs=0",
     )
-  )
+  ) {
+    emit("E612|M64|BROWSER|DRIVER_MARKER|present=false");
     fail("E612_M64_BROWSER_PASS_MARKER_MISSING");
+  }
 }
 let ids;
 let platforms;
