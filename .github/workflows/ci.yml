@@ -213,7 +213,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: sonny303/minted-extension
-          ref: ec388a24a1707364d93461c14a8f6b0b9a94a6fb
+          ref: 494f1e35e560992e1ca472ffbc01711311ae992d
           path: .m64-extension
           persist-credentials: false
 

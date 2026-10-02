@@ -27,8 +27,8 @@ const names = Object.fromEntries(
     `${network}-${kind}`,
   ]),
 );
-const M64_EXTENSION_SHA = "ec388a24a1707364d93461c14a8f6b0b9a94a6fb";
-const M64_EXTENSION_TREE = "175886d40e2a655b6960b35c26a493f86b8dd992";
+const M64_EXTENSION_SHA = "494f1e35e560992e1ca472ffbc01711311ae992d";
+const M64_EXTENSION_TREE = "95aae0fc69e62ca2ff34186da730f0dbf2466dc6";
 const M64_PANEL_BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
 const M64_PANEL_HOST = "mintedpanel.vercel.app";
 const M64_SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
@@ -1151,7 +1151,7 @@ function buildM64Extension() {
     )
     .digest("hex");
   const backgroundSha = createHash("sha256").update(background).digest("hex");
-  if (backgroundSha !== "83215a2c10425451e40068682fc88b76abc08cbb2f376770cedb3070adac7c84")
+  if (backgroundSha !== "da81573daaa459df04ab11222ebc5bd8e383933caff866da8633ef8dd8ebe4e7")
     fail("E612_M64_EXTENSION_BACKGROUND_HASH_MISMATCH");
   emit(
     `M64|ARTIFACT|PASS|candidate_source_commit=${M64_EXTENSION_SHA}|built_commit=${head}|tree=${tree}|runtime_assets_sha256=${runtimeAssetsSha}`,
@@ -1409,18 +1409,46 @@ SET LOCAL client_min_messages = warning;
 DO $m64$
 BEGIN
   IF (SELECT count(*) FROM public.fill_sessions WHERE org_id = '${M64.org}') <> 1
-     OR (SELECT count(*) FROM public.fill_sessions
-          WHERE org_id = '${M64.org}' AND contract_id = '${M64.contract}'
-            AND case_id IS NULL AND contract_sop_assignment_id = '${M64.contractAssignment}'
-            AND portal_id = '${M64.contractPortal}' AND portal_key = 'm64_contract'
-            AND provider_id = '${M64.provider}' AND facility_id = '${M64.facility}'
-            AND sop_template_id = '${M64.contractTemplate}' AND sop_version = 1
-            AND context_version = 1 AND task_index = 0 AND step_index = 0
-            AND case_task_id IS NULL AND case_step_id IS NULL
-            AND launch_receipt_id IS NOT NULL AND mapping_generation = 1
-            AND effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
-            AND step_identity IS NOT NULL AND btrim(step_identity) <> ''
-            AND fill_mode = 'web' AND is_test = false AND event_schema_version = 2) <> 1
+     OR (SELECT count(*) FROM public.fill_sessions AS receipt
+          WHERE receipt.org_id = '${M64.org}' AND receipt.contract_id = '${M64.contract}'
+            AND receipt.case_id IS NULL
+            AND receipt.contract_sop_assignment_id = '${M64.contractAssignment}'
+            AND receipt.portal_id = '${M64.contractPortal}' AND receipt.portal_key = 'm64_contract'
+            AND receipt.provider_id = '${M64.provider}' AND receipt.facility_id = '${M64.facility}'
+            AND receipt.sop_template_id = '${M64.contractTemplate}' AND receipt.sop_version = 1
+            AND receipt.context_version = 1 AND receipt.task_index = 0 AND receipt.step_index = 0
+            AND receipt.case_task_id IS NULL AND receipt.case_step_id IS NULL
+            AND receipt.launch_receipt_id IS NOT NULL AND receipt.mapping_generation = 1
+            AND receipt.effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND receipt.step_identity IS NOT NULL AND btrim(receipt.step_identity) <> ''
+            AND receipt.fill_mode = 'web' AND receipt.is_test = false
+            AND receipt.event_schema_version = 2
+            AND receipt.fields_attempted = 1 AND receipt.fields_verified = 0
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(receipt.field_outcomes) AS outcome(value)
+                JOIN public.portal_field_maps AS field_map
+                  ON field_map.id::text = (outcome.value->>'mapId')
+               WHERE field_map.org_id = '${M64.org}'
+                 AND field_map.portal_key = 'm64_contract'
+                 AND field_map.map_type = 'web'
+                 AND field_map.selector = '#contract-npi'
+                 AND field_map.source = 'token'
+                 AND field_map.field_type = 'text'
+                 AND field_map.token = 'provider.npi'
+                 AND field_map.status = 'approved'
+                 AND field_map.mapping_generation = 1
+                 AND jsonb_typeof(outcome.value) = 'object'
+                 AND outcome.value ?& ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]
+                 AND (outcome.value - ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]) = '{}'::jsonb
+                 AND outcome.value->>'attempted' = 'true'
+                 AND outcome.value->>'outcome' = 'unverified'
+                 AND outcome.value->>'reasonCode' = 'readback_unavailable'
+            )) <> 1
      OR EXISTS (SELECT 1 FROM public.fill_sessions
                  WHERE org_id = '${M64.org}' AND portal_id = '${M64.enrollmentPortal}') THEN
     RAISE EXCEPTION 'M64 Contract receipt or pre-reset isolation failed';
@@ -1556,22 +1584,75 @@ DO $m64$
 BEGIN
   IF (SELECT count(*) FROM public.fill_sessions WHERE org_id = '${M64.org}') <> 2
      OR (SELECT count(*) FROM public.fill_sessions
-          WHERE org_id = '${M64.org}' AND contract_id = '${M64.contract}'
-            AND case_id IS NULL AND portal_id = '${M64.contractPortal}'
-            AND portal_key = 'm64_contract' AND mapping_generation = 1
-            AND contract_sop_assignment_id = '${M64.contractAssignment}'
-            AND launch_receipt_id IS NOT NULL
-            AND effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
-            AND is_test = false AND event_schema_version = 2) <> 1
-     OR (SELECT count(*) FROM public.fill_sessions
-          WHERE org_id = '${M64.org}' AND case_id = '${M64.enrollmentCase}'
-            AND contract_id IS NULL AND portal_id = '${M64.enrollmentPortal}'
-            AND portal_key = 'm64_enrollment' AND mapping_generation = 1
-            AND case_task_id = '${M64.enrollmentTask}'
-            AND case_step_id = '${M64.enrollmentStep1}'
-            AND context_version = 1 AND launch_receipt_id IS NOT NULL
-            AND effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
-            AND is_test = false AND event_schema_version = 2) <> 1 THEN
+          AS receipt
+          WHERE receipt.org_id = '${M64.org}' AND receipt.contract_id = '${M64.contract}'
+            AND receipt.case_id IS NULL AND receipt.portal_id = '${M64.contractPortal}'
+            AND receipt.portal_key = 'm64_contract' AND receipt.mapping_generation = 1
+            AND receipt.contract_sop_assignment_id = '${M64.contractAssignment}'
+            AND receipt.launch_receipt_id IS NOT NULL
+            AND receipt.effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND receipt.is_test = false AND receipt.event_schema_version = 2
+            AND receipt.fields_attempted = 1 AND receipt.fields_verified = 0
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(receipt.field_outcomes) AS outcome(value)
+                JOIN public.portal_field_maps AS field_map
+                  ON field_map.id::text = (outcome.value->>'mapId')
+               WHERE field_map.org_id = '${M64.org}'
+                 AND field_map.portal_key = 'm64_contract'
+                 AND field_map.map_type = 'web'
+                 AND field_map.selector = '#contract-npi'
+                 AND field_map.source = 'token'
+                 AND field_map.field_type = 'text'
+                 AND field_map.token = 'provider.npi'
+                 AND field_map.status = 'approved'
+                 AND field_map.mapping_generation = 1
+                 AND jsonb_typeof(outcome.value) = 'object'
+                 AND outcome.value ?& ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]
+                 AND (outcome.value - ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]) = '{}'::jsonb
+                 AND outcome.value->>'attempted' = 'true'
+                 AND outcome.value->>'outcome' = 'unverified'
+                 AND outcome.value->>'reasonCode' = 'readback_unavailable'
+            )) <> 1
+     OR (SELECT count(*) FROM public.fill_sessions AS receipt
+          WHERE receipt.org_id = '${M64.org}' AND receipt.case_id = '${M64.enrollmentCase}'
+            AND receipt.contract_id IS NULL AND receipt.portal_id = '${M64.enrollmentPortal}'
+            AND receipt.portal_key = 'm64_enrollment' AND receipt.mapping_generation = 1
+            AND receipt.case_task_id = '${M64.enrollmentTask}'
+            AND receipt.case_step_id = '${M64.enrollmentStep1}'
+            AND receipt.context_version = 1 AND receipt.launch_receipt_id IS NOT NULL
+            AND receipt.effective_mapping_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+            AND receipt.is_test = false AND receipt.event_schema_version = 2
+            AND receipt.fields_attempted = 1 AND receipt.fields_verified = 0
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(receipt.field_outcomes) AS outcome(value)
+                JOIN public.portal_field_maps AS field_map
+                  ON field_map.id::text = (outcome.value->>'mapId')
+               WHERE field_map.org_id = '${M64.org}'
+                 AND field_map.portal_key = 'm64_enrollment'
+                 AND field_map.map_type = 'web'
+                 AND field_map.selector = '#enrollment-npi'
+                 AND field_map.source = 'token'
+                 AND field_map.field_type = 'text'
+                 AND field_map.token = 'provider.npi'
+                 AND field_map.status = 'approved'
+                 AND field_map.mapping_generation = 1
+                 AND jsonb_typeof(outcome.value) = 'object'
+                 AND outcome.value ?& ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]
+                 AND (outcome.value - ARRAY[
+                   'mapId', 'targetKey', 'frameKey', 'stepKey', 'attempted', 'outcome', 'reasonCode'
+                 ]) = '{}'::jsonb
+                 AND outcome.value->>'attempted' = 'true'
+                 AND outcome.value->>'outcome' = 'unverified'
+                 AND outcome.value->>'reasonCode' = 'readback_unavailable'
+            )) <> 1 THEN
     RAISE EXCEPTION 'M64 Contract/Enrollment fill receipts are not exact and distinct';
   END IF;
   IF (SELECT count(*) FROM public.touches
