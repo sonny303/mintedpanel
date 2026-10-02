@@ -1595,6 +1595,8 @@ function proxyToLocal(request, response, route, requestUrl, method) {
               portalId: workTuple.portalId,
               portalKey: workTuple.portalKey,
               mappingGeneration: workTuple.mappingGeneration,
+              providerId: workTuple.providerId ?? null,
+              facilityId: workTuple.facilityId ?? null,
               stepIdentity: workTuple.stepIdentity,
               taskId: workTuple.taskId ?? null,
               stepId: workTuple.stepId ?? null,
@@ -1868,6 +1870,12 @@ async function panelContractPermissionProbe(extensionPage) {
     "contract_real_work_validation",
   );
   const validation = workValidationSuccesses.find(({ tuple }) => tuple.ownerKind === "contract");
+  assert(
+    validation != null &&
+      Object.hasOwn(validation.tuple, "providerId") &&
+      Object.hasOwn(validation.tuple, "facilityId"),
+    "M64_BROWSER_VALIDATION_CAPTURE_SCHEMA_INVALID",
+  );
   assert(
     validation?.tuple.ownerId === CONTRACT_ID &&
       validation.tuple.orgId === ORG_ID &&
