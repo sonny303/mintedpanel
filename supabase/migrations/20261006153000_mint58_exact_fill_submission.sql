@@ -398,6 +398,7 @@ DECLARE
   v_portal public.portals%ROWTYPE;
   v_step jsonb;
   v_step_order numeric;
+  v_step_ordinality bigint;
   v_facility_count bigint;
   v_payer_label text;
   v_portal_key text;
