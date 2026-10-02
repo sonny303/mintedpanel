@@ -191,6 +191,16 @@ INSERT INTO public.portal_field_maps(
   ('18000000-0000-4000-a000-000000000064', 'm64_enrollment', 'web', '#enrollment-npi',
    'token', 'text', 'approved', 'MINT-64 synthetic Enrollment map', 'provider.npi', 1);
 
+-- MINT-48 intentionally clears proof on every fresh typed portal INSERT.
+-- Simulate a later current-generation Contract verification update after both
+-- keys have their own current map; only the Contract key receives that proof.
+UPDATE public.portals
+   SET is_verified = true, last_verified_at = now(), proven_at = now()
+ WHERE id = '38000000-0000-4000-a000-000000000064'
+   AND org_id = '18000000-0000-4000-a000-000000000064'
+   AND portal_key = 'm64_contract'
+   AND mapping_generation = 1;
+
 SELECT pg_temp.m64_mark('same_url_typed_configs_have_distinct_keys_and_types',
   (SELECT count(*) = 3
       AND count(DISTINCT portal_key) = 3
