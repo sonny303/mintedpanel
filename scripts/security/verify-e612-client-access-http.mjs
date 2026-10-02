@@ -30,6 +30,9 @@ const M64_EXTENSION_SHA = "72843b665957249591975a1ce0f3b1bdce79e140";
 const M64_PANEL_BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
 const M64_PANEL_HOST = "mintedpanel.vercel.app";
 const M64_SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
+const M64_BROWSER_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
+const M64_BROWSER_STOP_GRACE_MS = 5_000;
+const M64_BROWSER_CLEANUP_TIMEOUT_MS = 10_000;
 const images = {
   db:
     process.env.E612_HTTP_DB_IMAGE ||
@@ -173,6 +176,26 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_BUILT_MARKER_MISSING__api_work_context_validate",
   "M64_BROWSER_BUILT_MARKER_MISSING_SET_ACTIVE_WORK",
   "M64_BROWSER_BUILT_MARKER_MISSING_minted_activeWork_v2",
+  "M64_BROWSER_POLL_READ_TIMEOUT",
+  "M64_BROWSER_CLEANUP_TIMEOUT_CONTEXT",
+  "M64_BROWSER_CLEANUP_TIMEOUT_PROXY",
+  "M64_BROWSER_CLEANUP_ABORT",
+]);
+const m64DriverCheckpoints = new Set([
+  "preflight",
+  "panel_ready",
+  "tls_certificate",
+  "proxy_listen",
+  "chromium_launch",
+  "mv3_worker",
+  "sidepanel",
+  "sign_in",
+  "org_select",
+  "handoff_send",
+  "postconditions",
+  "panel_sign_in",
+  "contract_ui",
+  "permission_probe",
 ]);
 const fail = (code) => {
   throw new Error(code);
@@ -204,6 +227,41 @@ function safeM64DriverFailureMarker(error) {
   return stdout.slice(0, 8192).split(/\r?\n/).includes("M64_BROWSER_DRIVER_STARTED")
     ? "M64_BROWSER_SMOKE_FAILED"
     : "M64_BROWSER_DRIVER_NOT_STARTED";
+}
+function safeM64DriverCheckpoint(lines) {
+  let checkpoint = null;
+  for (const line of lines) {
+    const match = /^M64_BROWSER_CHECKPOINT_([A-Z0-9_]+)$/.exec(line);
+    const candidate = match?.[1]?.toLowerCase();
+    if (candidate && m64DriverCheckpoints.has(candidate)) checkpoint = candidate;
+  }
+  return checkpoint;
+}
+function reportM64BrowserCheckpoint(driver) {
+  const checkpoint = safeM64DriverCheckpoint(driver.lines);
+  if (checkpoint) emit(`E612|M64|BROWSER|DRIVER_CHECKPOINT|last=${checkpoint}`);
+  return checkpoint;
+}
+function waitForM64BrowserCompletion(driver, timeoutMs) {
+  let timer;
+  return Promise.race([
+    driver.completion,
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT")),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+function waitForM64BrowserExit(driver, timeoutMs) {
+  let timer;
+  return Promise.race([
+    driver.closed.then(() => true),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 function runM64BrowserPhase(phase, operation) {
   if (!m64BrowserPhases.has(phase)) fail("E612_M64_BROWSER_PHASE_NOT_ALLOWLISTED");
@@ -261,13 +319,26 @@ function dockerProcess(args) {
   let capturedBytes = 0;
   const maxCapturedBytes = 1024 * 1024;
   const maxLineLength = 128 * 1024;
+  let childFailure;
+  let childClosed = false;
+  let stopTimer;
+  function stop() {
+    if (childClosed) return;
+    if (!child.killed) child.kill("SIGTERM");
+    if (!stopTimer) {
+      stopTimer = setTimeout(() => {
+        if (!childClosed) child.kill("SIGKILL");
+      }, M64_BROWSER_STOP_GRACE_MS);
+      stopTimer.unref();
+    }
+  }
   const safeMarker =
     /^(?:E6(?:12|13|14)\|[A-Z0-9_|.-]+(?:\|[A-Za-z0-9_:=.,/-]+)*|M64\|BROWSER\|[A-Z0-9_|.-]+(?:\|[A-Za-z0-9_:=.,/-]+)*|M64_BROWSER_[A-Z0-9_]+|M64_RESULT\|[A-Za-z0-9_-]{1,120000})$/;
   const captureLine = (line) => {
     const normalized = line.replace(/\r$/, "");
     if (normalized.length > maxLineLength) {
       childFailure ??= new Error("E612_HTTP_CHILD_OUTPUT_LIMIT");
-      child.kill("SIGTERM");
+      stop();
       return;
     }
     if (!safeMarker.test(normalized)) return;
@@ -278,7 +349,7 @@ function dockerProcess(args) {
     capturedBytes += Buffer.byteLength(chunk);
     if (capturedBytes > maxCapturedBytes) {
       childFailure ??= new Error("E612_HTTP_CHILD_OUTPUT_LIMIT");
-      child.kill("SIGTERM");
+      stop();
       return;
     }
     buffer = `${buffer}${chunk}`;
@@ -290,14 +361,16 @@ function dockerProcess(args) {
     }
     if (buffer.length > maxLineLength) {
       childFailure ??= new Error("E612_HTTP_CHILD_OUTPUT_LIMIT");
-      child.kill("SIGTERM");
+      stop();
       buffer = "";
     }
   };
   child.stdout.on("data", (chunk) => notify(String(chunk)));
   child.stderr.on("data", (chunk) => notify(String(chunk)));
-  let childFailure;
-  let childClosed = false;
+  const closed = new Promise((resolve) => {
+    if (childClosed) resolve();
+    else child.once("close", resolve);
+  });
   const completion = new Promise((resolve, reject) => {
     child.once("error", (error) => {
       childFailure ??= error;
@@ -305,6 +378,7 @@ function dockerProcess(args) {
     });
     child.once("close", (code, signal) => {
       childClosed = true;
+      if (stopTimer) clearTimeout(stopTimer);
       if (buffer) captureLine(buffer);
       if (code === 0 && !childFailure) {
         resolve({ code, signal, output, lines });
@@ -373,10 +447,7 @@ function dockerProcess(args) {
       poll();
     });
   };
-  const stop = () => {
-    if (!child.killed) child.kill("SIGTERM");
-  };
-  return { child, completion, lines, waitFor, stop };
+  return { child, closed, completion, lines, waitFor, stop };
 }
 function validateDockerContext() {
   let inspected;
@@ -644,6 +715,7 @@ async function startM64BrowserDriver(extensionBuild) {
     marker = await browserDriver.waitFor(/^M64\|BROWSER\|EXTENSION_ID\|[a-p]{32}$/);
   } catch {
     browserDriver.stop();
+    reportM64BrowserCheckpoint(browserDriver);
     const knownFailure = safeM64DriverFailureMarker({ stdout: browserDriver.lines.join("\n") });
     fail(`E612_M64_BROWSER_DRIVER_START_FAILED_${knownFailure.replaceAll(/[^A-Z0-9_]/g, "_")}`);
   }
@@ -713,8 +785,17 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
   browserSession.browserDriver.child.stdin.write(`M64_PANEL_READY|${ready}\n`);
   let result;
   try {
-    result = await browserSession.browserDriver.completion;
-  } catch {
+    result = await waitForM64BrowserCompletion(
+      browserSession.browserDriver,
+      M64_BROWSER_COMPLETION_TIMEOUT_MS,
+    );
+  } catch (error) {
+    browserSession.browserDriver.stop();
+    reportM64BrowserCheckpoint(browserSession.browserDriver);
+    if (error instanceof Error && error.message === "E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT") {
+      emit("E612|M64|BROWSER|DRIVER_TIMEOUT|minutes=5");
+      fail("E612_M64_BROWSER_DRIVER_COMPLETION_TIMEOUT");
+    }
     const knownFailure = safeM64DriverFailureMarker({
       stdout: browserSession.browserDriver.lines.join("\n"),
     });
@@ -1476,11 +1557,13 @@ try {
   let cleanupFailed = false;
   if (browserSession?.browserDriver) {
     browserSession.browserDriver.stop();
-    try {
-      await browserSession.browserDriver.completion;
-    } catch {
-      // A finished negative/positive browser flow is reported above; teardown
-      // never includes raw driver output.
+    const browserExited = await waitForM64BrowserExit(
+      browserSession.browserDriver,
+      M64_BROWSER_CLEANUP_TIMEOUT_MS,
+    );
+    if (!browserExited) {
+      emit("E612|HTTP|CLEANUP|BROWSER_DRIVER_TIMEOUT");
+      cleanupFailed = true;
     }
   }
   for (const kind of ["browser", "app", "gateway", "storage", "rest", "auth", "db"]) {

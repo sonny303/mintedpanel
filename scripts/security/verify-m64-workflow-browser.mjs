@@ -82,19 +82,58 @@ const STAGES = Object.freeze({
 let currentStage = "preflight";
 safeLog("M64_BROWSER_DRIVER_STARTED");
 
+function checkpoint(stage) {
+  assert(Object.hasOwn(STAGES, stage), "M64_BROWSER_STAGE_INVALID");
+  currentStage = stage;
+  safeLog(`M64_BROWSER_CHECKPOINT_${stage.toUpperCase()}`);
+}
+
 async function poll(read, accept, label, timeoutMs = 20_000) {
   const end = Date.now() + timeoutMs;
   let last;
   while (Date.now() < end) {
+    let readTimer;
     try {
-      last = await read();
+      const remaining = Math.max(1, end - Date.now());
+      last = await Promise.race([
+        Promise.resolve().then(read),
+        new Promise((_, reject) => {
+          readTimer = setTimeout(
+            () => reject(new BrowserFailure("M64_BROWSER_POLL_READ_TIMEOUT")),
+            remaining,
+          );
+        }),
+      ]);
       if (accept(last)) return last;
     } catch (error) {
+      if (error instanceof BrowserFailure && error.message === "M64_BROWSER_POLL_READ_TIMEOUT")
+        throw error;
       last = error;
+    } finally {
+      if (readTimer) clearTimeout(readTimer);
     }
     await delay(100);
   }
   throw new Error(`M64_BROWSER_TIMEOUT_${label}${last instanceof Error ? `_${last.message}` : ""}`);
+}
+
+async function settleWithin(operation, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve()
+        .then(operation)
+        .then(
+          () => true,
+          () => true,
+        ),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function readPanelReady(expectedExtensionId) {
@@ -548,7 +587,7 @@ function activeChromeTabId(extensionPage) {
 }
 
 async function panelContractPermissionProbe(extensionPage) {
-  currentStage = "panel_sign_in";
+  checkpoint("panel_sign_in");
   const panelPage = await context.newPage();
   await panelPage.goto(`${PANEL_ORIGIN}/login`, { waitUntil: "domcontentloaded" });
   await panelPage.locator("#email").fill(SPECIALIST_EMAIL);
@@ -561,7 +600,7 @@ async function panelContractPermissionProbe(extensionPage) {
     "panel_authenticated_org",
   );
 
-  currentStage = "contract_ui";
+  checkpoint("contract_ui");
   const orgAttribute = await activeOrgButton.getAttribute("aria-label");
   if (!orgAttribute?.includes(panelOrgName)) {
     await activeOrgButton.click();
@@ -675,7 +714,7 @@ async function panelContractPermissionProbe(extensionPage) {
     "M64_BROWSER_SYNTHETIC_FORM_SHAPE_INVALID",
   );
 
-  currentStage = "permission_probe";
+  checkpoint("permission_probe");
   await extensionPage.evaluate((expectedTabId) => {
     const button = document.createElement("button");
     button.id = "m64-open-real-sidepanel";
@@ -751,10 +790,10 @@ async function panelContractPermissionProbe(extensionPage) {
 }
 
 async function run() {
-  currentStage = "preflight";
+  checkpoint("preflight");
   await preflight();
 
-  currentStage = "tls_certificate";
+  checkpoint("tls_certificate");
   certDir = mkdtempSync(join(tmpdir(), "m64-browser-tls-"));
   certPath = join(certDir, "cert.pem");
   keyPath = join(certDir, "key.pem");
@@ -789,7 +828,7 @@ async function run() {
   );
   for (const host of certHosts) assert(sanText.includes(host), "M64_BROWSER_TLS_SAN_INCOMPLETE");
 
-  currentStage = "proxy_listen";
+  checkpoint("proxy_listen");
   server = createServer(
     { cert: readFileSync(certPath), key: readFileSync(keyPath) },
     (request, response) => {
@@ -834,7 +873,7 @@ async function run() {
     server.listen(443, "0.0.0.0", resolve);
   });
 
-  currentStage = "chromium_launch";
+  checkpoint("chromium_launch");
   context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     args: [
@@ -850,7 +889,7 @@ async function run() {
       "--disable-dev-shm-usage",
     ],
   });
-  currentStage = "mv3_worker";
+  checkpoint("mv3_worker");
   const worker = await poll(
     () =>
       context.serviceWorkers().find((candidate) => candidate.url().endsWith("/background.js")) ??
@@ -860,9 +899,9 @@ async function run() {
   );
   const extensionId = new URL(worker.url()).hostname;
   safeLog(`M64|BROWSER|EXTENSION_ID|${extensionId}`);
-  currentStage = "panel_ready";
+  checkpoint("panel_ready");
   await readPanelReady(extensionId);
-  currentStage = "sidepanel";
+  checkpoint("sidepanel");
   const extensionPage = await context.newPage();
   await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await poll(
@@ -870,7 +909,7 @@ async function run() {
     (title) => title === "Minted Panel Workbench",
     "extension_sidepanel",
   );
-  currentStage = "sign_in";
+  checkpoint("sign_in");
   const signIn = await extensionPage.evaluate(
     async ({ email, password }) => chrome.runtime.sendMessage({ type: "SIGN_IN", email, password }),
     { email: SPECIALIST_EMAIL, password: ADMIN_PASSWORD },
@@ -881,7 +920,7 @@ async function run() {
       !JSON.stringify(signIn).includes("access_token"),
     "M64_BROWSER_EXTENSION_SIGN_IN_FAILED",
   );
-  currentStage = "org_select";
+  checkpoint("org_select");
   const orgs = await extensionPage.evaluate(() =>
     chrome.runtime.sendMessage({ type: "LIST_MY_ORGS" }),
   );
@@ -895,7 +934,7 @@ async function run() {
   );
   assert(orgSet?.ok === true, "M64_BROWSER_EXTENSION_ORG_SELECTION_FAILED");
 
-  currentStage = "handoff_send";
+  checkpoint("handoff_send");
   const handoffPage = await context.newPage();
   await handoffPage.goto(`https://${PANEL_HOST}/__m64__/handoff`);
   assert(
@@ -933,7 +972,7 @@ async function run() {
     acknowledgement?.ok === false && acknowledgement.code === "CONTEXT_STALE",
     "M64_BROWSER_HANDOFF_ACK_UNEXPECTED",
   );
-  currentStage = "postconditions";
+  checkpoint("postconditions");
   await poll(
     () => metrics.get("panel.work_validate:404") ?? 0,
     (count) => count === 1,
@@ -983,10 +1022,27 @@ try {
   process.stderr.write(`${code ?? STAGES.preflight}\n`);
   process.exitCode = 1;
 } finally {
-  if (context) await context.close().catch(() => {});
+  let cleanupTimedOut = false;
+  if (context) {
+    if (!(await settleWithin(() => context.close(), 5_000))) {
+      safeLog("M64_BROWSER_CLEANUP_TIMEOUT_CONTEXT");
+      cleanupTimedOut = true;
+    }
+  }
   if (server && !proxyClosed) {
     proxyClosed = true;
-    await new Promise((resolve) => server.close(resolve));
+    const proxyClosedInTime = await settleWithin(
+      () =>
+        new Promise((resolve) => {
+          server.close(resolve);
+          server.closeAllConnections?.();
+        }),
+      5_000,
+    );
+    if (!proxyClosedInTime) {
+      safeLog("M64_BROWSER_CLEANUP_TIMEOUT_PROXY");
+      cleanupTimedOut = true;
+    }
   }
   if (certDir) {
     try {
@@ -994,5 +1050,12 @@ try {
     } catch {
       /* Do not expose temporary paths in cleanup errors. */
     }
+  }
+  if (cleanupTimedOut) {
+    await Promise.all([
+      new Promise((resolve) => process.stdout.write("M64_BROWSER_CLEANUP_ABORT\n", resolve)),
+      new Promise((resolve) => process.stderr.write("", resolve)),
+    ]);
+    process.exit(1);
   }
 }
