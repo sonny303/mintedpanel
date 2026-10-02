@@ -413,6 +413,36 @@ const m64EnrollmentFillReadinessFields = [
 const m64EnrollmentFillReadinessBooleanFields = new Set(
   m64EnrollmentFillReadinessFields.slice(0, 18),
 );
+const m64EnrollmentFillReceiptFields = [
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_note_visible",
+  "work_exact",
+  "tab_exact",
+  "enrollment_npi_nonempty",
+  "enrollment_npi_exact",
+  "fill_events_post_seen",
+  "fill_events_post_admitted",
+  "fill_events_post_denied",
+  "fill_events_201",
+  "fill_events_200",
+  "fill_events_400",
+  "fill_events_401",
+  "fill_events_403",
+  "fill_events_409",
+  "fill_events_422",
+  "fill_events_5xx",
+  "fill_events_other",
+  "fill_events_options_seen",
+  "fill_events_options_admitted",
+  "fill_events_options_denied",
+  "work_validate_200",
+  "work_validate_409",
+  "work_validate_5xx",
+  "work_validate_other",
+];
+const m64EnrollmentFillReceiptBooleanFields = new Set(m64EnrollmentFillReceiptFields.slice(0, 8));
 const m64ProviderRosterDenialFields = [
   "target_exact",
   "origin",
@@ -883,6 +913,66 @@ function assertM64EnrollmentFillReadinessDiagnosticPolicy() {
     safeM64EnrollmentFillReadinessDiagnostic([marker, marker]) !== null
   ) {
     fail("E612_M64_ENROLLMENT_FILL_READINESS_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
+}
+function safeM64EnrollmentFillReceiptDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_RECEIPT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentFillReceiptFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_RECEIPT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64EnrollmentFillReceiptFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64EnrollmentFillReceiptBooleanFields.has(name);
+    if (
+      name !== m64EnrollmentFillReceiptFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserEnrollmentFillReceiptDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "enrollment_fill_receipt_wait") return;
+  const diagnostic = safeM64EnrollmentFillReceiptDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentFillReceiptDiagnosticPolicy() {
+  const values = Object.fromEntries(m64EnrollmentFillReceiptFields.map((name) => [name, "0"]));
+  for (const name of m64EnrollmentFillReceiptBooleanFields) values[name] = "true";
+  values.fill_events_201 = "1";
+  values.work_validate_409 = "2";
+  const marker = `M64|BROWSER|ENROLLMENT_FILL_RECEIPT|${m64EnrollmentFillReceiptFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|")}`;
+  const expected = m64EnrollmentFillReceiptFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|");
+  const invalidMarkers = [
+    marker.replace("main_error_visible=true", "main_error_visible=raw"),
+    marker.replace("fill_events_201=1", "fill_events_201=10"),
+    `${marker}|raw=value`,
+    marker.replace(
+      "main_error_visible=true|fill_results_visible=true",
+      "fill_results_visible=true|main_error_visible=true",
+    ),
+  ];
+  if (
+    safeM64EnrollmentFillReceiptDiagnostic([marker]) !== expected ||
+    invalidMarkers.some((invalid) => safeM64EnrollmentFillReceiptDiagnostic([invalid]) !== null) ||
+    safeM64EnrollmentFillReceiptDiagnostic([marker, marker]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
   }
 }
 function safeM64ProviderRosterDenialDiagnostic(lines) {
@@ -1974,6 +2064,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserEnrollmentUiDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserEnrollmentFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
     if (
       error instanceof Error &&
       /^E612_M64_(?:CONTRACT_CHECKPOINT_INVALID|CONTRACT_RESET_KEY_INVALID|CONTRACT_RESET_ASSERTION_FAILED)$/.test(
@@ -2593,6 +2684,7 @@ try {
   assertM64ContractFillSummaryDiagnosticPolicy();
   assertM64EnrollmentUiDiagnosticPolicy();
   assertM64EnrollmentFillReadinessDiagnosticPolicy();
+  assertM64EnrollmentFillReceiptDiagnosticPolicy();
   validateDockerContext();
   stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));

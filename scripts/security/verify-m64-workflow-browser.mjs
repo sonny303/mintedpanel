@@ -66,6 +66,51 @@ const SYNTHETIC_FORM_HTML =
 const SPECIALIST_EMAIL = "specialist@e612.test";
 const ADMIN_PASSWORD = "E612-Local-Password-!234";
 const BUILD_ANON_KEY = "e612-build-synthetic-anon-key";
+const ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS = Object.freeze([
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_note_visible",
+  "work_exact",
+  "tab_exact",
+  "enrollment_npi_nonempty",
+  "enrollment_npi_exact",
+  "fill_events_post_seen",
+  "fill_events_post_admitted",
+  "fill_events_post_denied",
+  "fill_events_201",
+  "fill_events_200",
+  "fill_events_400",
+  "fill_events_401",
+  "fill_events_403",
+  "fill_events_409",
+  "fill_events_422",
+  "fill_events_5xx",
+  "fill_events_other",
+  "fill_events_options_seen",
+  "fill_events_options_admitted",
+  "fill_events_options_denied",
+  "work_validate_200",
+  "work_validate_409",
+  "work_validate_5xx",
+  "work_validate_other",
+]);
+const ENROLLMENT_FILL_RECEIPT_BOOLEAN_FIELDS = new Set(
+  ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.slice(0, 8),
+);
+const ENROLLMENT_FILL_RECEIPT_BOOLEAN_VALUES = new Set(["false", "true", "unknown"]);
+const ENROLLMENT_FILL_RECEIPT_COUNT_VALUES = new Set([
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9_PLUS",
+]);
 const AUTH_PREFLIGHT_TARGET = "/auth/v1/token?grant_type=password";
 const AUTH_PREFLIGHT_HEADERS = new Set([
   "apikey",
@@ -696,6 +741,7 @@ async function preflight() {
   assertAuthPreflightPolicy();
   assertDataPreflightPolicy();
   assertM64ProviderReadPolicy();
+  assertM64EnrollmentFillReceiptDiagnosticPolicy();
 }
 
 function assertStaticPanelFormPolicy() {
@@ -946,6 +992,68 @@ function countDeniedSupabaseOptions(host, method, pathname, routeName = "") {
 
 function boundedDiagnosticCount(value) {
   return value > 8 ? "9_PLUS" : String(value);
+}
+
+function safeM64EnrollmentFillReceiptDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_FILL_RECEIPT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_FILL_RECEIPT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = ENROLLMENT_FILL_RECEIPT_BOOLEAN_FIELDS.has(name);
+    if (
+      name !== ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS[index] ||
+      rest.length !== 0 ||
+      (isBoolean
+        ? !ENROLLMENT_FILL_RECEIPT_BOOLEAN_VALUES.has(value)
+        : !ENROLLMENT_FILL_RECEIPT_COUNT_VALUES.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+
+function assertM64EnrollmentFillReceiptDiagnosticPolicy() {
+  const values = Object.fromEntries(
+    ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.map((name) => [name, "0"]),
+  );
+  for (const name of ENROLLMENT_FILL_RECEIPT_BOOLEAN_FIELDS) values[name] = "true";
+  values.fill_events_201 = "1";
+  values.work_validate_409 = "2";
+  const marker = `M64|BROWSER|ENROLLMENT_FILL_RECEIPT|${ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.map(
+    (name) => `${name}=${values[name]}`,
+  ).join("|")}`;
+  const expected = ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.map(
+    (name) => `${name}=${values[name]}`,
+  ).join("|");
+  const invalidMarkers = [
+    marker.replace("main_error_visible=true", "main_error_visible=raw"),
+    marker.replace("fill_events_201=1", "fill_events_201=10"),
+    `${marker}|raw=value`,
+    marker.replace(
+      "main_error_visible=true|fill_results_visible=true",
+      "fill_results_visible=true|main_error_visible=true",
+    ),
+  ];
+  assert(
+    safeM64EnrollmentFillReceiptDiagnostic([marker]) === expected &&
+      invalidMarkers.every(
+        (invalid) => safeM64EnrollmentFillReceiptDiagnostic([invalid]) === null,
+      ) &&
+      safeM64EnrollmentFillReceiptDiagnostic([marker, marker]) === null,
+    "M64_BROWSER_ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_POLICY_INVALID",
+  );
 }
 
 function routeStatusDiagnostic(route, label, statuses = ORG_WAIT_ROUTE_STATUS_CODES) {
@@ -3348,6 +3456,92 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     );
     safeLog(`M64|BROWSER|CONTRACT_FILL_RECEIPT|${fields.join("|")}`);
   };
+  const emitEnrollmentFillReceiptDiagnostic = async (
+    expectedWork,
+    expectedTabId,
+    targetPage,
+    baseline,
+    counterDeltas,
+  ) => {
+    const inspectWithinLimit = (operation) =>
+      bounded(operation, 5_000, "M64_BROWSER_ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_TIMEOUT").then(
+        (value) => ({ ok: true, value }),
+        () => ({ ok: false, value: null }),
+      );
+    const [uiResult, formResult, workResult, tabResult] = await Promise.all([
+      inspectWithinLimit(() =>
+        extensionPage.evaluate(() => {
+          const isVisible = (element) => {
+            if (!element || element.hidden) return false;
+            const style = getComputedStyle(element);
+            return (
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
+              element.getClientRects().length > 0
+            );
+          };
+          return {
+            mainErrorVisible: isVisible(document.querySelector("#main-error")),
+            fillResultsVisible: isVisible(document.querySelector("#fill-results")),
+            fillSummaryVisible: isVisible(document.querySelector("#fill-summary")),
+            fillNoteVisible: isVisible(document.querySelector("#fill-note")),
+          };
+        }),
+      ),
+      inspectWithinLimit(() =>
+        targetPage.evaluate(() => {
+          const input = document.querySelector("#enrollment-npi");
+          const value = input instanceof HTMLInputElement ? input.value : "";
+          return { nonempty: value.trim().length > 0, exact: value === "9999999995" };
+        }),
+      ),
+      inspectWithinLimit(() => readActiveWork()),
+      inspectWithinLimit(() => activeChromeTabId(extensionPage)),
+    ]);
+    const currentWork = workResult.value;
+    const boolFields = [
+      ["main_error_visible", uiResult.ok ? uiResult.value.mainErrorVisible : null],
+      ["fill_results_visible", uiResult.ok ? uiResult.value.fillResultsVisible : null],
+      ["fill_summary_visible", uiResult.ok ? uiResult.value.fillSummaryVisible : null],
+      ["fill_note_visible", uiResult.ok ? uiResult.value.fillNoteVisible : null],
+      [
+        "work_exact",
+        workResult.ok
+          ? currentWork != null &&
+            activeWorkIdentity(currentWork) === activeWorkIdentity(expectedWork)
+          : null,
+      ],
+      [
+        "tab_exact",
+        tabResult.ok ? tabResult.value === expectedTabId && targetPage.url() === PORTAL_URL : null,
+      ],
+      ["enrollment_npi_nonempty", formResult.ok ? formResult.value.nonempty : null],
+      ["enrollment_npi_exact", formResult.ok ? formResult.value.exact : null],
+    ];
+    const values = {
+      ...Object.fromEntries(
+        boolFields.map(([name, value]) => [
+          name,
+          value === true ? "true" : value === false ? "false" : "unknown",
+        ]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(counterDeltas(baseline)).map(([name, value]) => [
+          name,
+          boundedDiagnosticCount(value),
+        ]),
+      ),
+    };
+    const fields = ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_FIELDS.map(
+      (name) => `${name}=${values[name]}`,
+    );
+    const marker = `M64|BROWSER|ENROLLMENT_FILL_RECEIPT|${fields.join("|")}`;
+    assert(
+      safeM64EnrollmentFillReceiptDiagnostic([marker]) !== null,
+      "M64_BROWSER_ENROLLMENT_FILL_RECEIPT_DIAGNOSTIC_INVALID",
+    );
+    safeLog(marker);
+  };
   const emitContractFillSummaryDiagnostic = async (targetPage) => {
     const read = await bounded(
       () =>
@@ -3474,6 +3668,56 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       throw error;
     }
   };
+  const fillReceiptMetricSnapshot = () => {
+    const fillRoute = "panel.fill_events";
+    const fillStatuses = [201, 200, 400, 401, 403, 409, 422];
+    const fillKnownTotal = fillStatuses.reduce(
+      (total, status) => total + routeCount(fillRoute, status),
+      0,
+    );
+    const fillServerErrors = routeStatusClassCount(
+      fillRoute,
+      (status) => status >= 500 && status <= 599,
+    );
+    const workRoute = "panel.work_validate";
+    const workServerErrors = routeStatusClassCount(
+      workRoute,
+      (status) => status >= 500 && status <= 599,
+    );
+    return {
+      fill_events_post_seen: routeCount("panel.fill_events_post_seen", 0),
+      fill_events_post_admitted: routeCount("panel.fill_events_post_admitted", 0),
+      fill_events_post_denied: routeCount("panel.fill_events_post_denied", 404),
+      fill_events_201: routeCount(fillRoute, 201),
+      fill_events_200: routeCount(fillRoute, 200),
+      fill_events_400: routeCount(fillRoute, 400),
+      fill_events_401: routeCount(fillRoute, 401),
+      fill_events_403: routeCount(fillRoute, 403),
+      fill_events_409: routeCount(fillRoute, 409),
+      fill_events_422: routeCount(fillRoute, 422),
+      fill_events_5xx: fillServerErrors,
+      fill_events_other: Math.max(0, routeTotal(fillRoute) - fillKnownTotal - fillServerErrors),
+      fill_events_options_seen: routeCount("panel.fill_events_options_seen", 0),
+      fill_events_options_admitted: routeCount("panel.fill_events_options_admitted", 0),
+      fill_events_options_denied: routeCount("panel.fill_events_options_denied", 404),
+      work_validate_200: routeCount(workRoute, 200),
+      work_validate_409: routeCount(workRoute, 409),
+      work_validate_5xx: workServerErrors,
+      work_validate_other: Math.max(
+        0,
+        routeTotal(workRoute) -
+          routeCount(workRoute, 200) -
+          routeCount(workRoute, 409) -
+          workServerErrors,
+      ),
+    };
+  };
+  const fillReceiptMetricDeltas = (baseline) => {
+    const current = fillReceiptMetricSnapshot();
+    return Object.fromEntries(
+      Object.keys(current).map((name) => [name, Math.max(0, current[name] - baseline[name])]),
+    );
+  };
   const fillOnBoundWork = async (expectedTabId, targetPage, selectorId, label) => {
     const stage = label === "Contract" ? "contract_fill" : "enrollment_fill";
     checkpoint(stage);
@@ -3487,6 +3731,8 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       targetPage,
     );
     const previousCreated = routeCount("panel.fill_events", 201);
+    const enrollmentReceiptBaseline =
+      stage === "enrollment_fill" ? fillReceiptMetricSnapshot() : null;
     checkpoint(`${stage}_click`);
     await bounded(
       () => fillButton.click({ timeout: 10_000 }),
@@ -3509,6 +3755,14 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
           label === "Contract" ? boundWork : enrollmentWork,
           expectedTabId,
           targetPage,
+        ).catch(() => {});
+      } else if (stage === "enrollment_fill" && enrollmentReceiptBaseline !== null) {
+        await emitEnrollmentFillReceiptDiagnostic(
+          enrollmentWork,
+          expectedTabId,
+          targetPage,
+          enrollmentReceiptBaseline,
+          fillReceiptMetricDeltas,
         ).catch(() => {});
       }
       throw error;
@@ -3818,11 +4072,24 @@ async function run() {
           .pathname;
         const method = String(request.method ?? "GET").toUpperCase();
         const requestTarget = request.url ?? "/";
+        const isFillEventsEndpoint = hostHeader === PANEL_HOST && pathname === "/api/fill-events";
+        if (isFillEventsEndpoint && method === "POST") {
+          count("panel.fill_events_post_seen", 0);
+        }
+        if (isFillEventsEndpoint && method === "OPTIONS") {
+          count("panel.fill_events_options_seen", 0);
+        }
         const route = routeFor(hostHeader, method, pathname, requestTarget, request.headers);
         if (!route) {
           countDeniedSupabaseOptions(hostHeader, method, pathname);
           reportDeniedProviderRoster(hostHeader, method, pathname, requestTarget, request.headers);
           countDeniedEnrollmentProfileTarget(hostHeader, method, pathname, requestTarget);
+          if (isFillEventsEndpoint && method === "POST") {
+            count("panel.fill_events_post_denied", 404);
+          }
+          if (isFillEventsEndpoint && method === "OPTIONS") {
+            count("panel.fill_events_options_denied", 404);
+          }
           unexpected(
             response,
             classifyDenied(hostHeader, method, pathname),
@@ -3852,8 +4119,12 @@ async function run() {
           serveSupabasePreflight(response, route);
           return;
         }
-        if (route.name === "panel.fill_events" && method === "OPTIONS") {
-          count("panel.fill_events_options", 0);
+        if (route.name === "panel.fill_events") {
+          if (method === "POST") count("panel.fill_events_post_admitted", 0);
+          if (method === "OPTIONS") {
+            count("panel.fill_events_options", 0);
+            count("panel.fill_events_options_admitted", 0);
+          }
         }
         proxyToLocal(request, response, route, requestTarget, method);
       } catch {
