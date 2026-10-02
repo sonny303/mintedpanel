@@ -156,6 +156,13 @@ const RPC_PREFLIGHT_HEADERS = new Set([
 ]);
 const SYNTHETIC_USER_FILTER = /^eq\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SYNTHETIC_CASE_CREATOR_FILTER = `in.(${E612.specialist})`;
+// The authenticated /cases shell mounts useCases(); postgrest-js strips
+// selector whitespace from src/services/cases.ts CASE_LIST_COLUMNS.
+const CASE_LIST_SELECT =
+  "id, case_number, provider_id, payer_id, case_type, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_group_provider_id, payer_pipeline_state, created_at, updated_at".replaceAll(
+    " ",
+    "",
+  );
 // postgrest-js 2.117.2 strips unquoted selector whitespace before
 // URLSearchParams serialization; these exact values mirror transmitted queries.
 const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
@@ -194,13 +201,21 @@ const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
       group_id: `eq.${GROUP_ID}`,
     }),
   ]),
-  // The TaskDrawer lookup is enabled only after Open step reaches this task.
-  credential_cases: Object.freeze({
-    select:
-      "*,provider:providers(*),payer:payers(*),mso:msos(*),group:provider_groups(*),facility:facilities(*),credentialing_status:status_configs(*),tasks(*),touches(*),status_history(*),payer_pipeline_history(*),case_status_history(*)",
-    id: `eq.${ENROLLMENT_CASE_ID}`,
-    org_id: `eq.${ORG_ID}`,
-  }),
+  credential_cases: Object.freeze([
+    // The authenticated shell's organization-scoped case list.
+    Object.freeze({
+      select: CASE_LIST_SELECT,
+      org_id: `eq.${ORG_ID}`,
+      order: "created_at.desc",
+    }),
+    // The TaskDrawer lookup is enabled only after Open step reaches this task.
+    Object.freeze({
+      select:
+        "*,provider:providers(*),payer:payers(*),mso:msos(*),group:provider_groups(*),facility:facilities(*),credentialing_status:status_configs(*),tasks(*),touches(*),status_history(*),payer_pipeline_history(*),case_status_history(*)",
+      id: `eq.${ENROLLMENT_CASE_ID}`,
+      org_id: `eq.${ORG_ID}`,
+    }),
+  ]),
   case_facilities: Object.freeze({
     select:
       "id,org_id,case_id,facility_id,is_primary,created_at,created_by,facility:facilities(id,name,street,suite,city,state,zip,is_active)",
@@ -1747,6 +1762,12 @@ function assertDataPreflightPolicy() {
     org_id: `eq.${ORG_ID}`,
   };
   const enrollmentCaseTarget = queryTarget("/rest/v1/credential_cases", enrollmentCaseQuery);
+  const caseListQuery = {
+    select: CASE_LIST_SELECT,
+    org_id: `eq.${ORG_ID}`,
+    order: "created_at.desc",
+  };
+  const caseListTarget = queryTarget("/rest/v1/credential_cases", caseListQuery);
   const caseFacilitiesQuery = {
     select:
       "id,org_id,case_id,facility_id,is_primary,created_at,created_by,facility:facilities(id,name,street,suite,city,state,zip,is_active)",
@@ -1791,6 +1812,8 @@ function assertDataPreflightPolicy() {
       ) &&
       route("/rest/v1/credential_cases", enrollmentCaseTarget, getHeaders)?.name ===
         "supabase.rest.credential_cases_preflight" &&
+      route("/rest/v1/credential_cases", caseListTarget, getHeaders)?.name ===
+        "supabase.rest.credential_cases_preflight" &&
       route("/rest/v1/case_facilities", caseFacilitiesTarget, getHeaders)?.name ===
         "supabase.rest.case_facilities_preflight" &&
       route("/rest/v1/tasks", tasksTarget, getHeaders)?.name === "supabase.rest.tasks_preflight" &&
@@ -1822,6 +1845,23 @@ function assertDataPreflightPolicy() {
         (overrides) => route(`/rest/v1/${table}`, target, { ...getHeaders, ...overrides }) === null,
       ),
     );
+  const wrongCaseListTargets = [
+    caseListTarget.replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
+    queryTarget("/rest/v1/credential_cases", { ...caseListQuery, order: "created_at.asc" }),
+    queryTarget("/rest/v1/credential_cases", { ...caseListQuery, select: "id" }),
+    `${caseListTarget}&unexpected=eq.x`,
+    `${caseListTarget}&org_id=eq.${ORG_ID}`,
+  ];
+  assert(
+    wrongCaseListTargets.every(
+      (target) => route("/rest/v1/credential_cases", target, getHeaders) === null,
+    ) &&
+      strictGetPreflightDenials([["credential_cases", caseListTarget]]) &&
+      routeFor(SUPABASE_HOST, "POST", "/rest/v1/credential_cases", caseListTarget, getHeaders) ===
+        null &&
+      route("/rest/v1/credential_cases/unexpected", caseListTarget, getHeaders) === null,
+    "M64_BROWSER_CASE_LIST_PREFLIGHT_POLICY_INVALID",
+  );
   const wrongTaskTargets = [
     tasksTarget.replace(ENROLLMENT_TASK_ID, "99000000-0000-4000-a000-000000000099"),
     tasksTarget.replace(ORG_ID, "18000000-0000-4000-a000-000000000099"),
