@@ -2300,7 +2300,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     try {
       await poll(() => fillButton.isEnabled(), Boolean, label, 30_000);
     } catch (error) {
-      if (stage === "contract") {
+      if (stage === "contract_fill") {
         await emitContractFillReadinessDiagnostic(expectedWork, expectedTabId, targetPage).catch(
           () => {},
         );
