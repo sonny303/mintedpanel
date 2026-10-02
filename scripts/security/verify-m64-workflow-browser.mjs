@@ -59,9 +59,39 @@ const RPC_PREFLIGHT_HEADERS = new Set([
   "authorization",
   "x-client-info",
 ]);
-const TABLE_SELECTS = Object.freeze({
-  memberships: "org_id,role,organizations(name,lifecycle_state,created_at)",
-  profiles: "full_name",
+const SYNTHETIC_USER_FILTER = /^eq\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// postgrest-js 2.117.2 strips unquoted selector whitespace before
+// URLSearchParams serialization; these exact values mirror transmitted queries.
+const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
+  profiles: Object.freeze({ select: "full_name", id: SYNTHETIC_USER_FILTER }),
+  memberships: Object.freeze({
+    select: "org_id,role,organizations(name,lifecycle_state,created_at)",
+    user_id: SYNTHETIC_USER_FILTER,
+  }),
+  contracts: Object.freeze({
+    select:
+      "id,group_id,payer_id,state,contracting_status_id,effective_date,tentative_effective_date,expiration_date,specialty,notes,created_at,updated_at",
+    org_id: `eq.${ORG_ID}`,
+    order: "created_at.desc",
+  }),
+  provider_groups: Object.freeze({ select: "*", org_id: `eq.${ORG_ID}`, order: "name.asc" }),
+  payers: Object.freeze({
+    select: "*",
+    or: `(org_id.eq.${ORG_ID},org_id.is.null)`,
+    order: "name.asc",
+  }),
+  status_configs: Object.freeze({
+    select: "*",
+    org_id: `eq.${ORG_ID}`,
+    order: "sort_order.asc",
+    track: "eq.contracting",
+  }),
+  facilities: Object.freeze({ select: "*", org_id: `eq.${ORG_ID}`, order: "name.asc" }),
+  payer_network_targets: Object.freeze({
+    select: "*",
+    org_id: `eq.${ORG_ID}`,
+    order: "created_at.asc",
+  }),
 });
 const SUPABASE_REST_READ_TABLES = new Set([
   "profiles",
@@ -715,18 +745,20 @@ function hasExactSyntheticTableQuery(requestTarget, pathname, table) {
   ) {
     return false;
   }
-  const idKey = table === "profiles" ? "id" : "user_id";
+  const expectedQuery = DATA_PREFLIGHT_TABLE_QUERIES[table];
+  if (!expectedQuery) return false;
   const entries = [...parsed.searchParams.entries()];
   if (
-    entries.length !== 2 ||
+    entries.length !== Object.keys(expectedQuery).length ||
     new Set(entries.map(([key]) => key)).size !== entries.length ||
-    parsed.searchParams.get("select") !== TABLE_SELECTS[table]
+    entries.some(([key]) => !Object.hasOwn(expectedQuery, key))
   ) {
     return false;
   }
-  return /^eq\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-    parsed.searchParams.get(idKey) ?? "",
-  );
+  return Object.entries(expectedQuery).every(([key, expected]) => {
+    const actual = parsed.searchParams.get(key) ?? "";
+    return expected instanceof RegExp ? expected.test(actual) : actual === expected;
+  });
 }
 
 function isAllowedDataPreflight(host, method, pathname, requestTarget, headers) {
@@ -739,23 +771,20 @@ function isAllowedDataPreflight(host, method, pathname, requestTarget, headers) 
     return null;
   }
   const requestedMethod = headers["access-control-request-method"];
-  if (
-    (pathname === "/rest/v1/memberships" || pathname === "/rest/v1/profiles") &&
-    requestedMethod === "GET" &&
-    hasExactSyntheticTableQuery(
-      requestTarget,
-      pathname,
-      pathname === "/rest/v1/profiles" ? "profiles" : "memberships",
-    ) &&
-    inspectRequestedDataPreflightHeaders(headers["access-control-request-headers"], "GET")
-  ) {
-    const table = pathname === "/rest/v1/profiles" ? "profiles" : "memberships";
-    return {
-      kind: "preflight",
-      name: `supabase.rest.${table}_preflight`,
-      allowedMethod: "GET",
-      allowedHeaders: TABLE_PREFLIGHT_HEADERS,
-    };
+  const tableMatch = /^\/rest\/v1\/([a-z][a-z0-9_]*)$/.exec(pathname);
+  const table = tableMatch?.[1];
+  if (table && DATA_PREFLIGHT_TABLE_QUERIES[table] && requestedMethod === "GET") {
+    if (
+      hasExactSyntheticTableQuery(requestTarget, pathname, table) &&
+      inspectRequestedDataPreflightHeaders(headers["access-control-request-headers"], "GET")
+    ) {
+      return {
+        kind: "preflight",
+        name: `supabase.rest.${table}_preflight`,
+        allowedMethod: "GET",
+        allowedHeaders: TABLE_PREFLIGHT_HEADERS,
+      };
+    }
   }
   if (
     pathname === "/rest/v1/rpc/claim_invites" &&
@@ -789,6 +818,59 @@ function assertDataPreflightPolicy() {
     "/rest/v1/profiles?select=full_name&id=eq.39000000-0000-4000-a000-000000000065";
   const membershipsTarget =
     "/rest/v1/memberships?select=org_id%2Crole%2Corganizations%28name%2Clifecycle_state%2Ccreated_at%29&user_id=eq.30000000-0000-4000-8000-000000000002";
+  const queryTarget = (path, query) => `${path}?${new URLSearchParams(query).toString()}`;
+  const matrixTargets = [
+    [
+      "contracts",
+      queryTarget("/rest/v1/contracts", {
+        select:
+          "id,group_id,payer_id,state,contracting_status_id,effective_date,tentative_effective_date,expiration_date,specialty,notes,created_at,updated_at",
+        org_id: `eq.${ORG_ID}`,
+        order: "created_at.desc",
+      }),
+    ],
+    [
+      "provider_groups",
+      queryTarget("/rest/v1/provider_groups", {
+        select: "*",
+        org_id: `eq.${ORG_ID}`,
+        order: "name.asc",
+      }),
+    ],
+    [
+      "payers",
+      queryTarget("/rest/v1/payers", {
+        select: "*",
+        or: `(org_id.eq.${ORG_ID},org_id.is.null)`,
+        order: "name.asc",
+      }),
+    ],
+    [
+      "status_configs",
+      queryTarget("/rest/v1/status_configs", {
+        select: "*",
+        org_id: `eq.${ORG_ID}`,
+        order: "sort_order.asc",
+        track: "eq.contracting",
+      }),
+    ],
+    [
+      "facilities",
+      queryTarget("/rest/v1/facilities", {
+        select: "*",
+        org_id: `eq.${ORG_ID}`,
+        order: "name.asc",
+      }),
+    ],
+    [
+      "payer_network_targets",
+      queryTarget("/rest/v1/payer_network_targets", {
+        select: "*",
+        org_id: `eq.${ORG_ID}`,
+        order: "created_at.asc",
+      }),
+    ],
+  ];
   const route = (path, target, headers) =>
     routeFor(SUPABASE_HOST, "OPTIONS", path, target, headers);
   assert(
@@ -796,6 +878,11 @@ function assertDataPreflightPolicy() {
       "supabase.rest.profiles_preflight" &&
       route("/rest/v1/memberships", membershipsTarget, getHeaders)?.name ===
         "supabase.rest.memberships_preflight" &&
+      matrixTargets.every(
+        ([table, target]) =>
+          route(`/rest/v1/${table}`, target, getHeaders)?.name ===
+          `supabase.rest.${table}_preflight`,
+      ) &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites", postHeaders)?.name ===
         "supabase.rpc.claim_invites_preflight",
     "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
@@ -806,6 +893,10 @@ function assertDataPreflightPolicy() {
       route("/rest/v1/profiles", profileTarget, {
         ...getHeaders,
         "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/profiles", profileTarget, {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
       }) === null &&
       route("/rest/v1/profiles", profileTarget, {
         ...getHeaders,
@@ -827,7 +918,31 @@ function assertDataPreflightPolicy() {
         getHeaders,
       ) === null &&
       route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites?x=1", postHeaders) === null &&
-      route("/rest/v1/contracts", "/rest/v1/contracts?select=id", getHeaders) === null,
+      route("/rest/v1/contracts", "/rest/v1/contracts?select=id", getHeaders) === null &&
+      route("/rest/v1/contracts", `${matrixTargets[0][1]}&unexpected=eq.x`, getHeaders) === null &&
+      route("/rest/v1/provider_groups", matrixTargets[1][1], {
+        ...getHeaders,
+        origin: "https://other.test",
+      }) === null &&
+      route("/rest/v1/payers", matrixTargets[2][1], {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/status_configs", matrixTargets[3][1], {
+        ...getHeaders,
+        "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/facilities", matrixTargets[4][1], {
+        ...getHeaders,
+        "access-control-request-headers":
+          "apikey, authorization, x-client-info, accept-profile, apikey",
+      }) === null &&
+      route("/rest/v1/payer_network_targets", matrixTargets[5][1], {
+        ...getHeaders,
+        "access-control-request-headers": undefined,
+      }) === null &&
+      route("/rest/v1/providers", "/rest/v1/providers?select=*&org_id=eq.test", getHeaders) ===
+        null,
     "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
   );
 }
