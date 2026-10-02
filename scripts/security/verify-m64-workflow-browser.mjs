@@ -266,6 +266,17 @@ const CONTRACT_UI_CHECKPOINTS = [
   "contract_ui_active_tab_check",
   "contract_ui_form_shape",
 ];
+const ENROLLMENT_UI_CHECKPOINTS = [
+  "enrollment_ui_case_document",
+  "enrollment_ui_task_row",
+  "enrollment_ui_open_step",
+  "enrollment_ui_task_dialog",
+  "enrollment_ui_launch_ready",
+  "enrollment_ui_launch_click",
+  "enrollment_ui_work_validation",
+  "enrollment_ui_portal_tab",
+  "enrollment_ui_work_binding",
+];
 
 class BrowserFailure extends Error {}
 
@@ -312,6 +323,9 @@ const STAGES = Object.freeze({
   contract_ui: "M64_BROWSER_STAGE_CONTRACT_UI_FAILED",
   ...Object.fromEntries(
     CONTRACT_UI_CHECKPOINTS.map((stage) => [stage, "M64_BROWSER_STAGE_CONTRACT_UI_FAILED"]),
+  ),
+  ...Object.fromEntries(
+    ENROLLMENT_UI_CHECKPOINTS.map((stage) => [stage, "M64_BROWSER_STAGE_ENROLLMENT_UI_FAILED"]),
   ),
   contract_fill: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
   contract_fill_active_tab: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
@@ -555,6 +569,7 @@ const workValidationAttempts = [];
 const workValidationSuccesses = [];
 let extensionIdObserved;
 let providerRosterDenialReported = false;
+let panelPage;
 let server;
 let context;
 let proxyClosed = false;
@@ -938,6 +953,61 @@ function reportOptionsRouteClassDiagnostic(marker) {
 
 function reportContractUiRouteDiagnostic() {
   reportOptionsRouteClassDiagnostic("CONTRACT_UI_ROUTES");
+}
+
+async function enrollmentUiState(page, caseId, taskTitle) {
+  try {
+    return await bounded(
+      () =>
+        page.evaluate(
+          ({ casePath, title }) => {
+            const visible = (element) => {
+              if (!element || element.hidden) return false;
+              const style = getComputedStyle(element);
+              return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                element.getClientRects().length > 0
+              );
+            };
+            const exactVisibleText = (selector, text) =>
+              [...document.querySelectorAll(selector)].some(
+                (element) => visible(element) && element.textContent?.trim() === text,
+              );
+            if (location.pathname !== casePath) return "other";
+            if (exactVisibleText("button", "Work in portal")) return "launch";
+            if ([...document.querySelectorAll('[role="dialog"]')].some(visible)) return "dialog";
+            if (exactVisibleText("button", "Open step")) return "open_step";
+            if (exactVisibleText("body *", title)) return "task_row";
+            return visible(document.querySelector("main")) ? "case_document" : "case_loading";
+          },
+          { casePath: `/cases/${caseId}`, title: taskTitle },
+        ),
+      2_000,
+      "M64_BROWSER_ENROLLMENT_UI_DIAGNOSTIC_TIMEOUT",
+    );
+  } catch {
+    return "unknown";
+  }
+}
+
+async function reportEnrollmentUiDiagnostic(page, caseId, taskTitle) {
+  const fields = [
+    ...routeStatusDiagnostic("supabase.rest.credential_cases", "credential_cases"),
+    ...routeStatusDiagnostic("supabase.rest.case_facilities", "case_facilities"),
+    ...routeStatusDiagnostic("supabase.rest.tasks", "tasks"),
+    `credential_cases_options_404=${boundedDiagnosticCount(
+      routeCount("supabase.options_denied_detail.rest_credential_cases", 404),
+    )}`,
+    `case_facilities_options_404=${boundedDiagnosticCount(
+      routeCount("supabase.options_denied_detail.rest_case_facilities", 404),
+    )}`,
+    `tasks_options_404=${boundedDiagnosticCount(
+      routeCount("supabase.options_denied_detail.rest_tasks", 404),
+    )}`,
+    `ui=${await enrollmentUiState(page, caseId, taskTitle)}`,
+  ];
+  safeLog(`M64|BROWSER|ENROLLMENT_UI|${fields.join("|")}`);
 }
 
 function unexpected(response, category = "UNKNOWN_HOST", reason = null) {
@@ -1959,11 +2029,7 @@ function activeChromeTabId(extensionPage) {
 
 async function panelContractPermissionProbe(extensionPage, extensionId) {
   checkpoint("panel_page_create");
-  const panelPage = await bounded(
-    () => context.newPage(),
-    10_000,
-    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
-  );
+  panelPage = await bounded(() => context.newPage(), 10_000, "M64_BROWSER_PANEL_SIGN_IN_FAILED");
   checkpoint("panel_login_navigation");
   const panelPageCountBefore = routeCount("panel.page", 200);
   const panelAssetCountBefore = routeCount("panel.asset", 200);
@@ -2974,9 +3040,11 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     /^E612 M64 [a-f0-9]{16} Enrollment Steps$/.test(enrollmentTaskTitle),
     "M64_BROWSER_ENROLLMENT_TASK_TITLE_INVALID",
   );
+  checkpoint("enrollment_ui_case_document");
   await panelPage.goto(`${PANEL_ORIGIN}/cases/${ENROLLMENT_CASE_ID}`, {
     waitUntil: "domcontentloaded",
   });
+  checkpoint("enrollment_ui_task_row");
   await poll(
     () => panelPage.getByText(enrollmentTaskTitle, { exact: true }).count(),
     (count) => count === 1,
@@ -2984,6 +3052,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     30_000,
   );
   const openStep = panelPage.getByRole("button", { name: "Open step", exact: true });
+  checkpoint("enrollment_ui_open_step");
   await poll(
     () => openStep.count(),
     (count) => count === 1,
@@ -2991,6 +3060,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   );
   await openStep.click();
   const taskDialog = panelPage.getByRole("dialog");
+  checkpoint("enrollment_ui_task_dialog");
   await taskDialog.getByRole("heading", { name: enrollmentTaskTitle, exact: true }).waitFor({
     state: "visible",
   });
@@ -3002,11 +3072,13 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     name: "Work in portal",
     exact: true,
   });
+  checkpoint("enrollment_ui_launch_ready");
   await poll(() => enrollmentLaunch.isEnabled(), Boolean, "enrollment_work_launch_ready");
   const pagesBeforeEnrollmentLaunch = new Set(context.pages());
   const validationCountBeforeEnrollment = workValidationSuccesses.length;
+  checkpoint("enrollment_ui_launch_click");
   await enrollmentLaunch.click();
-  checkpoint("enrollment_ui");
+  checkpoint("enrollment_ui_work_validation");
   const enrollmentValidation = await poll(
     () =>
       workValidationSuccesses
@@ -3021,6 +3093,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     Boolean,
     "enrollment_exact_work_validation",
   );
+  checkpoint("enrollment_ui_portal_tab");
   const enrollmentPages = await poll(
     () =>
       context
@@ -3043,7 +3116,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       enrollmentPortalPage.url() === PORTAL_URL,
     "M64_BROWSER_ENROLLMENT_WORK_BINDING_MISMATCH",
   );
-  checkpoint("enrollment_ui");
+  checkpoint("enrollment_ui_work_binding");
   const enrollmentWork = await readActiveWork();
   assert(
     enrollmentWork?.boundTabId != null &&
@@ -3372,6 +3445,13 @@ try {
   driverFailed = true;
   if (currentStage === "contract_ui" || CONTRACT_UI_CHECKPOINTS.includes(currentStage)) {
     reportContractUiRouteDiagnostic();
+  }
+  if (currentStage === "enrollment_ui" || ENROLLMENT_UI_CHECKPOINTS.includes(currentStage)) {
+    const taskTitle =
+      typeof panelOrgName === "string"
+        ? panelOrgName.replace(/ Organization$/, " Enrollment Steps")
+        : "";
+    await reportEnrollmentUiDiagnostic(panelPage, ENROLLMENT_CASE_ID, taskTitle).catch(() => {});
   }
   const code =
     currentStage === "panel_login_route_denied" &&

@@ -278,6 +278,15 @@ const m64DriverCheckpoints = new Set([
   "stale_fill",
   "stale_fill_readiness",
   "enrollment_ui",
+  "enrollment_ui_case_document",
+  "enrollment_ui_task_row",
+  "enrollment_ui_open_step",
+  "enrollment_ui_task_dialog",
+  "enrollment_ui_launch_ready",
+  "enrollment_ui_launch_click",
+  "enrollment_ui_work_validation",
+  "enrollment_ui_portal_tab",
+  "enrollment_ui_work_binding",
   "enrollment_fill",
   "enrollment_fill_active_tab",
   "enrollment_fill_readiness",
@@ -512,6 +521,39 @@ const m64OrgWaitDiagnosticUiStates = new Set([
   "sidebar",
   "other",
 ]);
+const m64EnrollmentUiDiagnosticFields = [
+  "credential_cases_200",
+  "credential_cases_401",
+  "credential_cases_403",
+  "credential_cases_404",
+  "credential_cases_502",
+  "credential_cases_other",
+  "case_facilities_200",
+  "case_facilities_401",
+  "case_facilities_403",
+  "case_facilities_404",
+  "case_facilities_502",
+  "case_facilities_other",
+  "tasks_200",
+  "tasks_401",
+  "tasks_403",
+  "tasks_404",
+  "tasks_502",
+  "tasks_other",
+  "credential_cases_options_404",
+  "case_facilities_options_404",
+  "tasks_options_404",
+];
+const m64EnrollmentUiStates = new Set([
+  "case_document",
+  "case_loading",
+  "task_row",
+  "open_step",
+  "dialog",
+  "launch",
+  "other",
+  "unknown",
+]);
 const fail = (code) => {
   throw new Error(code);
 };
@@ -619,6 +661,78 @@ function safeM64OrgWaitRoutesDiagnostic(lines) {
 }
 function safeM64ContractUiRoutesDiagnostic(lines) {
   return safeM64FixedRouteDiagnostic(lines, "CONTRACT_UI_ROUTES");
+}
+function safeM64EnrollmentUiDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ENROLLMENT_UI|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64EnrollmentUiDiagnosticFields.length + 4 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ENROLLMENT_UI"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64EnrollmentUiDiagnosticFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64EnrollmentUiDiagnosticFields[index] ||
+      rest.length !== 0 ||
+      !m64OrgWaitDiagnosticCounts.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  const [uiName, uiValue, ...uiRest] = parts.at(-1).split("=");
+  if (uiName !== "ui" || uiRest.length !== 0 || !m64EnrollmentUiStates.has(uiValue)) {
+    return null;
+  }
+  return [...fields, `ui=${uiValue}`].join("|");
+}
+function reportM64BrowserEnrollmentUiDiagnostic(driver, checkpoint) {
+  if (
+    checkpoint !== "enrollment_ui" &&
+    !(typeof checkpoint === "string" && checkpoint.startsWith("enrollment_ui_"))
+  ) {
+    return;
+  }
+  const diagnostic = safeM64EnrollmentUiDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|ENROLLMENT_UI_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64EnrollmentUiDiagnosticPolicy() {
+  const values = Object.fromEntries(m64EnrollmentUiDiagnosticFields.map((name) => [name, "0"]));
+  values.credential_cases_200 = "1";
+  values.case_facilities_options_404 = "2";
+  const marker = (fields, ui = "task_row") =>
+    `M64|BROWSER|ENROLLMENT_UI|${m64EnrollmentUiDiagnosticFields
+      .map((name) => `${name}=${fields[name]}`)
+      .join("|")}|ui=${ui}`;
+  const valid = marker(values);
+  const expected = `${m64EnrollmentUiDiagnosticFields
+    .map((name) => `${name}=${values[name]}`)
+    .join("|")}|ui=task_row`;
+  if (safeM64EnrollmentUiDiagnostic([valid]) !== expected) {
+    fail("E612_M64_ENROLLMENT_UI_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
+  const invalidMarkers = [
+    marker({ ...values, credential_cases_200: "raw" }),
+    marker(values, "raw_text"),
+    marker({ ...values, case_facilities_options_404: "10" }),
+    `${valid}|extra=value`,
+    valid.replace(
+      "credential_cases_200=1|credential_cases_401=0",
+      "credential_cases_401=0|credential_cases_200=1",
+    ),
+  ];
+  if (
+    invalidMarkers.some((invalid) => safeM64EnrollmentUiDiagnostic([invalid]) !== null) ||
+    safeM64EnrollmentUiDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_ENROLLMENT_UI_DIAGNOSTIC_PARSER_SELF_TEST_FAILED");
+  }
 }
 function reportM64BrowserOrgWaitDiagnostic(driver, checkpoint) {
   if (checkpoint !== "panel_login_org_wait") return;
@@ -1763,6 +1877,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserContractFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillSummaryDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserEnrollmentUiDiagnostic(browserSession.browserDriver, checkpoint);
     if (
       error instanceof Error &&
       /^E612_M64_(?:CONTRACT_CHECKPOINT_INVALID|CONTRACT_RESET_KEY_INVALID|CONTRACT_RESET_ASSERTION_FAILED)$/.test(
@@ -2380,6 +2495,7 @@ let browserSession;
 let stage = "docker_context";
 try {
   assertM64ContractFillSummaryDiagnosticPolicy();
+  assertM64EnrollmentUiDiagnosticPolicy();
   validateDockerContext();
   stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));
