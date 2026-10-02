@@ -68,6 +68,10 @@ function runPsql(sql) {
   return result.stdout.trim();
 }
 
+const portalUpdateWasGranted =
+  runPsql("SELECT has_table_privilege('service_role', 'public.portals', 'UPDATE')::text;") ===
+  "true";
+
 function startPsql(sql, applicationName) {
   const child = spawn(psqlBinary, psqlArgs, {
     env: { ...process.env, PGAPPNAME: applicationName, LC_ALL: "C" },
@@ -170,6 +174,7 @@ const testPolicies = [
   ["profiles_select", "profiles"],
   ["payers_select", "payers"],
   ["portals_select", "portals"],
+  ["portals_update", "portals"],
   ["facilities_select", "case_facilities"],
   ["fills_select", "fill_sessions"],
   ["fills_insert", "fill_sessions"],
@@ -192,6 +197,7 @@ BEGIN;
 DROP TRIGGER IF EXISTS zz_m58_concurrency_sleep ON public.tasks;
 DROP FUNCTION IF EXISTS public.m58_concurrency_sleep();
 ${dropTestPolicies}
+${portalUpdateWasGranted ? "" : "REVOKE UPDATE ON public.portals FROM service_role;"}
 DELETE FROM public.audit_log WHERE org_id = '${ids.org}';
 DELETE FROM public.touches WHERE org_id = '${ids.org}';
 DELETE FROM public.fill_sessions WHERE org_id = '${ids.org}';
@@ -282,6 +288,7 @@ GRANT SELECT ON public.memberships, public.profiles, public.payers, public.porta
   public.credential_cases TO service_role;
 GRANT INSERT ON public.touches, public.audit_log TO service_role;
 GRANT UPDATE ON public.tasks, public.credential_cases TO service_role;
+GRANT UPDATE ON public.portals TO service_role;
 CREATE POLICY m58_race_memberships_select_${policySuffix} ON public.memberships
   FOR SELECT TO service_role USING (org_id = '${ids.org}');
 CREATE POLICY m58_race_profiles_select_${policySuffix} ON public.profiles
@@ -290,6 +297,8 @@ CREATE POLICY m58_race_payers_select_${policySuffix} ON public.payers
   FOR SELECT TO service_role USING (org_id = '${ids.org}');
 CREATE POLICY m58_race_portals_select_${policySuffix} ON public.portals
   FOR SELECT TO service_role USING (org_id = '${ids.org}');
+CREATE POLICY m58_race_portals_update_${policySuffix} ON public.portals
+  FOR UPDATE TO service_role USING (org_id = '${ids.org}') WITH CHECK (org_id = '${ids.org}');
 CREATE POLICY m58_race_facilities_select_${policySuffix} ON public.case_facilities
   FOR SELECT TO service_role USING (org_id = '${ids.org}');
 CREATE POLICY m58_race_fills_select_${policySuffix} ON public.fill_sessions

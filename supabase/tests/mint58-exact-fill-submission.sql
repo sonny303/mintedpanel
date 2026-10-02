@@ -234,6 +234,7 @@ GRANT SELECT ON public.memberships, public.profiles, public.payers, public.porta
   public.credential_cases TO service_role;
 GRANT INSERT ON public.fill_sessions, public.touches, public.audit_log TO service_role;
 GRANT UPDATE ON public.tasks, public.credential_cases TO service_role;
+GRANT UPDATE ON public.portals TO service_role;
 CREATE POLICY m58_test_service_membership_select ON public.memberships
   FOR SELECT TO service_role USING (org_id = '18000000-0000-4000-a000-000000000058');
 CREATE POLICY m58_test_service_profile_select ON public.profiles
@@ -242,6 +243,9 @@ CREATE POLICY m58_test_service_payer_select ON public.payers
   FOR SELECT TO service_role USING (org_id = '18000000-0000-4000-a000-000000000058');
 CREATE POLICY m58_test_service_portal_select ON public.portals
   FOR SELECT TO service_role USING (org_id = '18000000-0000-4000-a000-000000000058');
+CREATE POLICY m58_test_service_portal_update ON public.portals
+  FOR UPDATE TO service_role USING (org_id = '18000000-0000-4000-a000-000000000058')
+  WITH CHECK (org_id = '18000000-0000-4000-a000-000000000058');
 CREATE POLICY m58_test_service_facility_select ON public.case_facilities
   FOR SELECT TO service_role USING (org_id = '18000000-0000-4000-a000-000000000058');
 CREATE POLICY m58_test_service_fill_select ON public.fill_sessions
