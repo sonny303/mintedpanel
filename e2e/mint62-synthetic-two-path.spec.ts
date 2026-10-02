@@ -405,7 +405,8 @@ async function bindTypedSop(
   await expect(exactOption).toBeVisible();
   await expect(page.getByRole("option").filter({ hasText: otherKey })).toHaveCount(0);
   await exactOption.click();
-  await expect(picker).toContainText(selectedKey);
+  const selectedPicker = page.getByRole("combobox").filter({ hasText: selectedKey });
+  await expect(selectedPicker).toBeVisible();
 
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Publish" }).click();
