@@ -880,6 +880,11 @@ SELECT 'E612|RACE|LOCK_READY|pid=' || pg_backend_pid();
 function runAuthBootstrap() {
   docker([
     "cp",
+    `${root}scripts/security/e612-m66-legacy-post-probes.mjs`,
+    `${names.gateway}:/tmp/e612-m66-legacy-post-probes.mjs`,
+  ]);
+  docker([
+    "cp",
     `${root}scripts/security/e612-http-driver.mjs`,
     `${names.gateway}:/tmp/e612-http-driver.mjs`,
   ]);
