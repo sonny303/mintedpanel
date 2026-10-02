@@ -797,6 +797,17 @@ function routeTotal(route) {
   return total;
 }
 
+function routeStatusClassCount(route, predicate) {
+  const prefix = `${route}:`;
+  let total = 0;
+  for (const [key, value] of metrics) {
+    if (!key.startsWith(prefix)) continue;
+    const status = Number(key.slice(prefix.length));
+    if (predicate(status)) total += value;
+  }
+  return total;
+}
+
 function supabaseOptionsBucket(host, method, pathname, routeName = "") {
   if (host !== SUPABASE_HOST || method !== "OPTIONS") return null;
   const knownRouteBuckets = new Map([
@@ -2616,6 +2627,94 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     );
     safeLog(`M64|BROWSER|CONTRACT_FILL_READY|${fields.join("|")}`);
   };
+  const emitContractFillReceiptDiagnostic = async (expectedWork, expectedTabId, targetPage) => {
+    const inspectWithinLimit = (operation) =>
+      bounded(operation, 5_000, "M64_BROWSER_FILL_RECEIPT_DIAGNOSTIC_TIMEOUT").then(
+        (value) => ({ ok: true, value }),
+        () => ({ ok: false, value: null }),
+      );
+    const [uiResult, formResult, workResult, tabResult] = await Promise.all([
+      inspectWithinLimit(() =>
+        extensionPage.evaluate(() => {
+          const isVisible = (element) => {
+            if (!element || element.hidden) return false;
+            const style = getComputedStyle(element);
+            return (
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
+              element.getClientRects().length > 0
+            );
+          };
+          return {
+            mainErrorVisible: isVisible(document.querySelector("#main-error")),
+            fillResultsVisible: isVisible(document.querySelector("#fill-results")),
+            fillSummaryVisible: isVisible(document.querySelector("#fill-summary")),
+            fillButtonEnabled:
+              document.querySelector("#fill-btn") instanceof HTMLButtonElement &&
+              !document.querySelector("#fill-btn").disabled,
+          };
+        }),
+      ),
+      inspectWithinLimit(() =>
+        targetPage.evaluate(() => {
+          const input = document.querySelector("#contract-npi");
+          const value = input instanceof HTMLInputElement ? input.value : "";
+          return { nonempty: value.trim().length > 0, matchesExpected: value === "9999999995" };
+        }),
+      ),
+      inspectWithinLimit(() => readActiveWork()),
+      inspectWithinLimit(() => activeChromeTabId(extensionPage)),
+    ]);
+    const currentWork = workResult.value;
+    const fields = [
+      ["main_error_visible", uiResult.ok ? uiResult.value.mainErrorVisible : null],
+      ["fill_results_visible", uiResult.ok ? uiResult.value.fillResultsVisible : null],
+      ["fill_summary_visible", uiResult.ok ? uiResult.value.fillSummaryVisible : null],
+      ["fill_button_enabled", uiResult.ok ? uiResult.value.fillButtonEnabled : null],
+      ["contract_npi_nonempty", formResult.ok ? formResult.value.nonempty : null],
+      ["contract_npi_matches_expected", formResult.ok ? formResult.value.matchesExpected : null],
+      [
+        "work_exact",
+        workResult.ok
+          ? currentWork != null &&
+            activeWorkIdentity(currentWork) === activeWorkIdentity(expectedWork)
+          : null,
+      ],
+      [
+        "tab_exact",
+        tabResult.ok ? tabResult.value === expectedTabId && targetPage.url() === PORTAL_URL : null,
+      ],
+    ].map(
+      ([name, value]) =>
+        `${name}=${value === true ? "true" : value === false ? "false" : "unknown"}`,
+    );
+    const route = "panel.fill_events";
+    const statuses = [201, 200, 400, 401, 403, 409, 422];
+    const explicitStatusTotal = statuses.reduce(
+      (total, status) => total + routeCount(route, status),
+      0,
+    );
+    const serverErrorTotal = routeStatusClassCount(
+      route,
+      (status) => status >= 500 && status <= 599,
+    );
+    const routeCounts = [
+      ["fill_events_total", routeTotal(route)],
+      ...statuses.map((status) => [`fill_events_${status}`, routeCount(route, status)]),
+      ["fill_events_5xx", serverErrorTotal],
+      [
+        "fill_events_other",
+        Math.max(0, routeTotal(route) - explicitStatusTotal - serverErrorTotal),
+      ],
+      ["fill_events_options", routeTotal("panel.fill_events_options")],
+      ["work_validate_200", routeCount("panel.work_validate", 200)],
+      ["work_validate_409", routeCount("panel.work_validate", 409)],
+    ];
+    fields.push(
+      ...routeCounts.map(([name, countValue]) => `${name}=${boundedDiagnosticCount(countValue)}`),
+    );
+    safeLog(`M64|BROWSER|CONTRACT_FILL_RECEIPT|${fields.join("|")}`);
+  };
   const waitForFillReady = async (label, stage, expectedWork, expectedTabId, targetPage) => {
     checkpoint(`${stage}_readiness`);
     try {
@@ -2651,12 +2750,23 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
         : "M64_BROWSER_ENROLLMENT_FILL_FAILED",
     );
     checkpoint(`${stage}_receipt_wait`);
-    await poll(
-      () => routeCount("panel.fill_events", 201),
-      (count) => count > previousCreated,
-      `${label.toLowerCase()}_fill_receipt_api`,
-      45_000,
-    );
+    try {
+      await poll(
+        () => routeCount("panel.fill_events", 201),
+        (count) => count > previousCreated,
+        `${label.toLowerCase()}_fill_receipt_api`,
+        45_000,
+      );
+    } catch (error) {
+      if (stage === "contract_fill") {
+        await emitContractFillReceiptDiagnostic(
+          label === "Contract" ? boundWork : enrollmentWork,
+          expectedTabId,
+          targetPage,
+        ).catch(() => {});
+      }
+      throw error;
+    }
     const summary = extensionPage.locator("#fill-summary");
     checkpoint(`${stage}_summary_wait`);
     await poll(
@@ -2976,6 +3086,9 @@ async function run() {
         if (route.kind === "preflight") {
           serveSupabasePreflight(response, route);
           return;
+        }
+        if (route.name === "panel.fill_events" && method === "OPTIONS") {
+          count("panel.fill_events_options", 0);
         }
         proxyToLocal(request, response, route, requestTarget, method);
       } catch {

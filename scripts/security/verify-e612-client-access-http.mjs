@@ -379,6 +379,39 @@ const m64ProviderRosterDenialFields = [
   "cookie_present",
   "content_type_present",
 ];
+const m64ContractFillReceiptBooleanFields = new Set([
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_button_enabled",
+  "contract_npi_nonempty",
+  "contract_npi_matches_expected",
+  "work_exact",
+  "tab_exact",
+]);
+const m64ContractFillReceiptFields = [
+  "main_error_visible",
+  "fill_results_visible",
+  "fill_summary_visible",
+  "fill_button_enabled",
+  "contract_npi_nonempty",
+  "contract_npi_matches_expected",
+  "work_exact",
+  "tab_exact",
+  "fill_events_total",
+  "fill_events_201",
+  "fill_events_200",
+  "fill_events_400",
+  "fill_events_401",
+  "fill_events_403",
+  "fill_events_409",
+  "fill_events_422",
+  "fill_events_5xx",
+  "fill_events_other",
+  "fill_events_options",
+  "work_validate_200",
+  "work_validate_409",
+];
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -634,6 +667,38 @@ function safeM64ProviderRosterDenialDiagnostic(lines) {
     fields.push(`${name}=${value}`);
   }
   return fields.join("|");
+}
+function safeM64ContractFillReceiptDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|CONTRACT_FILL_RECEIPT|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ContractFillReceiptFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "CONTRACT_FILL_RECEIPT"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64ContractFillReceiptFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = m64ContractFillReceiptBooleanFields.has(name);
+    if (
+      name !== m64ContractFillReceiptFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserContractFillReceiptDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "contract_fill_receipt_wait") return;
+  const diagnostic = safeM64ContractFillReceiptDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_RECEIPT_DIAGNOSTIC|${diagnostic}`);
 }
 function safeM64PermissionGrantDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PERMISSION_GRANT|"));
@@ -1483,6 +1548,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractFillReceiptDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     if (
       error instanceof Error &&
