@@ -313,6 +313,15 @@ const m64ContractFillReadinessFields = [
   "provider_selected",
   "facility_loaded",
   "facility_selected",
+  "case_work_hidden",
+  "provider_card_hidden",
+  "fill_section_hidden",
+  "case_mode_active",
+  "provider_name_matches",
+  "selected_provider_exact",
+  "provider_list_contains_work_id",
+  "selected_facility_exact",
+  "main_error_hidden",
   "work_validate_200",
   "work_validate_409",
   "fill_events_201",
@@ -320,7 +329,7 @@ const m64ContractFillReadinessFields = [
   "memberships_200",
   "contracts_200",
   "provider_groups_200",
-  "providers_200",
+  "supabase_providers_200",
   "provider_group_assignments_200",
   "provider_facility_assignments_200",
   "facilities_200",
@@ -329,7 +338,34 @@ const m64ContractFillReadinessFields = [
   "portals_200",
   "portal_field_maps_200",
   "fill_sessions_count_200",
+  "panel_provider_roster_200",
+  "panel_provider_roster_preflight_204",
+  "panel_provider_profile_200",
+  "panel_provider_profile_preflight_204",
 ];
+const m64ContractFillReadinessBooleanFields = new Set([
+  "button_present",
+  "button_visible",
+  "button_enabled",
+  "work_exact",
+  "tab_exact",
+  "portal_match",
+  "org_loaded",
+  "org_selected",
+  "provider_loaded",
+  "provider_selected",
+  "facility_loaded",
+  "facility_selected",
+  "case_work_hidden",
+  "provider_card_hidden",
+  "fill_section_hidden",
+  "case_mode_active",
+  "provider_name_matches",
+  "selected_provider_exact",
+  "provider_list_contains_work_id",
+  "selected_facility_exact",
+  "main_error_hidden",
+]);
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -536,7 +572,7 @@ function safeM64ContractFillReadinessDiagnostic(lines) {
   const fields = [];
   for (let index = 0; index < m64ContractFillReadinessFields.length; index += 1) {
     const [name, value, ...rest] = parts[index + 3].split("=");
-    const isBoolean = index < 12;
+    const isBoolean = m64ContractFillReadinessBooleanFields.has(name);
     if (
       name !== m64ContractFillReadinessFields[index] ||
       rest.length !== 0 ||

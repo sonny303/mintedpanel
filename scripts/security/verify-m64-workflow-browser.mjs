@@ -24,10 +24,23 @@ const ORG_NAME_RE = /^E612 M64 [a-f0-9]{16} Organization$/;
 const CONTRACT_ID = "29000000-0000-4000-a000-000000000064";
 const CONTRACT_TEMPLATE_ID = "69000000-0000-4000-a000-000000000064";
 const CONTRACT_ASSIGNMENT_ID = "79000000-0000-4000-a000-000000000064";
+const CONTRACT_PROFILE_STEP_IDENTITY = `${CONTRACT_ID}:${ORG_ID}:${CONTRACT_ASSIGNMENT_ID}:1:${CONTRACT_TEMPLATE_ID}:1:0:0`;
+const PROVIDER_ROSTER_TARGET = "/api/providers?page=1&pageSize=100&sort=last_name&order=asc";
 const PAYER_ID = "28000000-0000-4000-a000-000000000064";
 const GROUP_ID = "49000000-0000-4000-a000-000000000064";
 const PROVIDER_ID = "39000000-0000-4000-a000-000000000065";
 const FACILITY_ID = "78000000-0000-4000-a000-000000000064";
+const CONTRACT_PROFILE_TARGET = (() => {
+  const query = new URLSearchParams();
+  query.set("facilityId", FACILITY_ID);
+  query.set("contractId", CONTRACT_ID);
+  query.set("assignmentId", CONTRACT_ASSIGNMENT_ID);
+  query.set("contextVersion", "1");
+  query.set("sopTemplateId", CONTRACT_TEMPLATE_ID);
+  query.set("sopVersion", "1");
+  query.set("stepIdentity", CONTRACT_PROFILE_STEP_IDENTITY);
+  return `/api/providers/${PROVIDER_ID}/profile?${query.toString()}`;
+})();
 const CONTRACT_PORTAL_ID = "38000000-0000-4000-a000-000000000064";
 const ENROLLMENT_PORTAL_ID = "38000000-0000-4000-a000-000000000065";
 const ENROLLMENT_CASE_ID = "49000000-0000-4000-a000-000000000064";
@@ -618,6 +631,7 @@ async function preflight() {
   assertStaticPanelFormPolicy();
   assertAuthPreflightPolicy();
   assertDataPreflightPolicy();
+  assertM64ProviderReadPolicy();
 }
 
 function assertStaticPanelFormPolicy() {
@@ -647,6 +661,107 @@ function assertStaticPanelFormPolicy() {
       SYNTHETIC_FORM_HTML.includes('id="enrollment-npi"'),
     "M64_BROWSER_STATIC_FORM_SHAPE_INVALID",
   );
+}
+
+function assertM64ProviderReadPolicy() {
+  const previousExtensionId = extensionIdObserved;
+  extensionIdObserved = "abcdefghijklmnopabcdefghijklmnop";
+  const extensionOrigin = extensionOriginForM64();
+  const getHeaders = {
+    origin: extensionOrigin,
+    authorization: "Bearer synthetic-policy-token",
+    accept: "application/json",
+    "x-org-id": ORG_ID,
+  };
+  const preflightHeaders = {
+    origin: extensionOrigin,
+    "access-control-request-method": "GET",
+    "access-control-request-headers": "authorization, x-org-id",
+  };
+  const route = (method, target, headers = {}) =>
+    routeFor(PANEL_HOST, method, new URL(target, PANEL_ORIGIN).pathname, target, headers);
+  try {
+    for (const [target, getName, preflightName] of [
+      [PROVIDER_ROSTER_TARGET, "panel.providers", "panel.providers_preflight"],
+      [CONTRACT_PROFILE_TARGET, "panel.provider_profile", "panel.provider_profile_preflight"],
+    ]) {
+      assert(
+        route("GET", target, getHeaders)?.name === getName,
+        "M64_BROWSER_PROVIDER_READ_POLICY_INVALID",
+      );
+      assert(
+        route("OPTIONS", target, preflightHeaders)?.name === preflightName,
+        "M64_BROWSER_PROVIDER_READ_POLICY_INVALID",
+      );
+      assert(
+        route("HEAD", target, getHeaders) === null && route("POST", target, getHeaders) === null,
+        "M64_BROWSER_PROVIDER_READ_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("GET", `${target}&extra=1`, getHeaders) === null,
+        "M64_BROWSER_PROVIDER_READ_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("OPTIONS", target, { ...preflightHeaders, origin: "https://attacker.invalid" }) ===
+          null,
+        "M64_BROWSER_PROVIDER_PREFLIGHT_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("OPTIONS", target, {
+          ...preflightHeaders,
+          "access-control-request-method": "POST",
+        }) === null,
+        "M64_BROWSER_PROVIDER_PREFLIGHT_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("OPTIONS", target, {
+          ...preflightHeaders,
+          "access-control-request-headers": "authorization, x-org-id, content-type",
+        }) === null,
+        "M64_BROWSER_PROVIDER_PREFLIGHT_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("OPTIONS", target, {
+          ...preflightHeaders,
+          "access-control-request-headers": "authorization, authorization, x-org-id",
+        }) === null,
+        "M64_BROWSER_PROVIDER_PREFLIGHT_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("OPTIONS", target, {
+          ...preflightHeaders,
+          "access-control-request-private-network": "true",
+        }) === null,
+        "M64_BROWSER_PROVIDER_PREFLIGHT_POLICY_TOO_BROAD",
+      );
+      assert(
+        route("GET", target, { ...getHeaders, origin: "https://attacker.invalid" }) === null &&
+          route("GET", target, {
+            ...getHeaders,
+            "x-org-id": "18000000-0000-4000-a000-000000000001",
+          }) === null &&
+          route("GET", target, { ...getHeaders, authorization: "" }) === null &&
+          route("GET", target, { ...getHeaders, accept: "text/plain" }) === null &&
+          route("GET", target, { ...getHeaders, "content-type": "application/json" }) === null,
+        "M64_BROWSER_PROVIDER_GET_POLICY_TOO_BROAD",
+      );
+    }
+    assert(
+      route(
+        "GET",
+        CONTRACT_PROFILE_TARGET.replace(PROVIDER_ID, "39000000-0000-4000-a000-000000000066"),
+        getHeaders,
+      ) === null &&
+        route(
+          "GET",
+          CONTRACT_PROFILE_TARGET.replace("stepIdentity=", "stepIdentity=wrong"),
+          getHeaders,
+        ) === null,
+      "M64_BROWSER_PROVIDER_PROFILE_POLICY_TOO_BROAD",
+    );
+  } finally {
+    extensionIdObserved = previousExtensionId;
+  }
 }
 
 function count(route, status) {
@@ -830,6 +945,72 @@ function classifyDenied(host, method, pathname) {
     return "PORTAL_OTHER";
   }
   return "UNKNOWN_HOST";
+}
+
+function extensionOriginForM64() {
+  return /^[a-p]{32}$/.test(extensionIdObserved ?? "")
+    ? `chrome-extension://${extensionIdObserved}`
+    : null;
+}
+
+function panelProviderReadKind(pathname, requestTarget) {
+  if (pathname === "/api/providers" && requestTarget === PROVIDER_ROSTER_TARGET) return "providers";
+  if (
+    pathname === `/api/providers/${PROVIDER_ID}/profile` &&
+    requestTarget === CONTRACT_PROFILE_TARGET
+  ) {
+    return "provider_profile";
+  }
+  return null;
+}
+
+function hasExactPanelProviderPreflightHeaders(headers) {
+  const extensionOrigin = extensionOriginForM64();
+  const raw = headers["access-control-request-headers"];
+  if (
+    extensionOrigin == null ||
+    headers.origin !== extensionOrigin ||
+    headers["access-control-request-method"] !== "GET" ||
+    headers["access-control-request-private-network"] !== undefined ||
+    typeof raw !== "string" ||
+    raw.trim() === ""
+  ) {
+    return false;
+  }
+  const requested = raw.split(",").map((name) => name.trim().toLowerCase());
+  return (
+    requested.length === 2 &&
+    new Set(requested).size === 2 &&
+    requested.includes("authorization") &&
+    requested.includes("x-org-id")
+  );
+}
+
+function hasExactPanelProviderGetHeaders(headers) {
+  const extensionOrigin = extensionOriginForM64();
+  return (
+    extensionOrigin != null &&
+    headers.origin === extensionOrigin &&
+    typeof headers.authorization === "string" &&
+    /^Bearer \S+$/.test(headers.authorization) &&
+    headers.accept === "application/json" &&
+    headers["x-org-id"] === ORG_ID &&
+    headers["content-type"] === undefined &&
+    headers.cookie === undefined
+  );
+}
+
+function panelProviderReadRoute(host, method, pathname, requestTarget, headers) {
+  if (host !== PANEL_HOST) return null;
+  const readKind = panelProviderReadKind(pathname, requestTarget);
+  if (readKind == null) return null;
+  if (method === "OPTIONS" && hasExactPanelProviderPreflightHeaders(headers)) {
+    return { kind: "app", name: `panel.${readKind}_preflight` };
+  }
+  if (method === "GET" && hasExactPanelProviderGetHeaders(headers)) {
+    return { kind: "app", name: `panel.${readKind}` };
+  }
+  return null;
 }
 
 function inspectRequestedAuthPreflightHeaders(value) {
@@ -1478,6 +1659,8 @@ function classifyAuthPreflightDenialReason(host, method, pathname, requestTarget
 
 function routeFor(host, method, pathname, requestTarget, headers = {}) {
   if (host === PANEL_HOST) {
+    const providerRead = panelProviderReadRoute(host, method, pathname, requestTarget, headers);
+    if (providerRead) return providerRead;
     if (method === "GET" && requestTarget === PORTAL_PATH) {
       return { kind: "static", name: "panel.synthetic_form" };
     }
@@ -2188,17 +2371,30 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       provider_selected: null,
       facility_loaded: null,
       facility_selected: null,
+      case_work_hidden: null,
+      provider_card_hidden: null,
+      fill_section_hidden: null,
+      case_mode_active: null,
+      provider_name_matches: null,
+      selected_provider_exact: null,
+      provider_list_contains_work_id: null,
+      selected_facility_exact: null,
+      main_error_hidden: null,
     };
     const [uiResult, workResult, tabResult] = await Promise.all([
       inspectWithinLimit(() =>
         extensionPage.evaluate(
-          ({ orgId, providerId, facilityId }) => {
+          async ({ orgId, providerId, facilityId }) => {
             const button = document.querySelector("#fill-btn");
             const orgSelect = document.querySelector("#org-select");
             const providerCard = document.querySelector("#provider-card");
             const providerName = document.querySelector("#provider-name");
             const facilitySelect = document.querySelector("#facility-select");
             const portalStatus = document.querySelector("#portal-status");
+            const caseWork = document.querySelector("#case-work");
+            const fillSection = document.querySelector("#fill-section");
+            const modeCase = document.querySelector("#mode-case");
+            const mainError = document.querySelector("#main-error");
             const visible = (element) => {
               if (!element || element.hidden) return false;
               const style = getComputedStyle(element);
@@ -2210,6 +2406,30 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
             };
             const orgOptions = orgSelect ? [...orgSelect.options] : [];
             const facilityOptions = facilitySelect ? [...facilitySelect.options] : [];
+            const readBackground = (request) =>
+              new Promise((resolve) => {
+                const timer = setTimeout(() => resolve(null), 2_000);
+                try {
+                  Promise.resolve(chrome.runtime.sendMessage(request)).then(
+                    (response) => {
+                      clearTimeout(timer);
+                      resolve(response);
+                    },
+                    () => {
+                      clearTimeout(timer);
+                      resolve(null);
+                    },
+                  );
+                } catch {
+                  clearTimeout(timer);
+                  resolve(null);
+                }
+              });
+            const [selectedProvider, providerRoster, selectedFacility] = await Promise.all([
+              readBackground({ type: "GET_SELECTED_PROVIDER" }),
+              readBackground({ type: "LIST_PROVIDERS" }),
+              readBackground({ type: "GET_SELECTED_FACILITY", providerId }),
+            ]);
             return {
               button_present: button !== null,
               button_visible: visible(button),
@@ -2224,6 +2444,30 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
                 providerId === "39000000-0000-4000-a000-000000000065",
               facility_loaded: facilityOptions.some((option) => option.value === facilityId),
               facility_selected: facilitySelect?.value === facilityId,
+              case_work_hidden: caseWork?.hidden,
+              provider_card_hidden: providerCard?.hidden,
+              fill_section_hidden: fillSection?.hidden,
+              case_mode_active:
+                modeCase == null ? null : modeCase.getAttribute("aria-pressed") === "true",
+              provider_name_matches:
+                providerName == null
+                  ? null
+                  : providerName.textContent?.trim() === "Synthetic M64 Provider",
+              selected_provider_exact:
+                selectedProvider == null
+                  ? null
+                  : selectedProvider.ok === true && selectedProvider.data === providerId,
+              provider_list_contains_work_id:
+                providerRoster == null
+                  ? null
+                  : providerRoster.ok === true &&
+                    Array.isArray(providerRoster.data) &&
+                    providerRoster.data.some((provider) => provider?.id === providerId),
+              selected_facility_exact:
+                selectedFacility == null
+                  ? null
+                  : selectedFacility.ok === true && selectedFacility.data === facilityId,
+              main_error_hidden: mainError?.hidden,
             };
           },
           {
@@ -2265,6 +2509,15 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       ["provider_selected", state.provider_selected],
       ["facility_loaded", state.facility_loaded],
       ["facility_selected", state.facility_selected],
+      ["case_work_hidden", state.case_work_hidden],
+      ["provider_card_hidden", state.provider_card_hidden],
+      ["fill_section_hidden", state.fill_section_hidden],
+      ["case_mode_active", state.case_mode_active],
+      ["provider_name_matches", state.provider_name_matches],
+      ["selected_provider_exact", state.selected_provider_exact],
+      ["provider_list_contains_work_id", state.provider_list_contains_work_id],
+      ["selected_facility_exact", state.selected_facility_exact],
+      ["main_error_hidden", state.main_error_hidden],
     ];
     const fields = booleans.map(
       ([name, value]) =>
@@ -2278,7 +2531,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       ["memberships_200", "supabase.rest.memberships", 200],
       ["contracts_200", "supabase.rest.contracts", 200],
       ["provider_groups_200", "supabase.rest.provider_groups", 200],
-      ["providers_200", "supabase.rest.providers", 200],
+      ["supabase_providers_200", "supabase.rest.providers", 200],
       ["provider_group_assignments_200", "supabase.rest.provider_group_assignments", 200],
       ["provider_facility_assignments_200", "supabase.rest.provider_facility_assignments", 200],
       ["facilities_200", "supabase.rest.facilities", 200],
@@ -2287,6 +2540,10 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       ["portals_200", "supabase.rest.portals", 200],
       ["portal_field_maps_200", "supabase.rest.portal_field_maps", 200],
       ["fill_sessions_count_200", "supabase.rest.fill_sessions_count", 200],
+      ["panel_provider_roster_200", "panel.providers", 200],
+      ["panel_provider_roster_preflight_204", "panel.providers_preflight", 204],
+      ["panel_provider_profile_200", "panel.provider_profile", 200],
+      ["panel_provider_profile_preflight_204", "panel.provider_profile_preflight", 204],
     ];
     fields.push(
       ...routeCounts.map(
@@ -2691,6 +2948,8 @@ async function run() {
     "mv3_service_worker",
   );
   const extensionId = new URL(worker.url()).hostname;
+  extensionIdObserved = extensionId;
+  assertM64ProviderReadPolicy();
   safeLog(`M64|BROWSER|EXTENSION_ID|${extensionId}`);
   checkpoint("panel_ready");
   await readPanelReady(extensionId);
