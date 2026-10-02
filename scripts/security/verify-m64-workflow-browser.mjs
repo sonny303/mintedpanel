@@ -45,6 +45,16 @@ const AUTH_PREFLIGHT_HEADERS = new Set([
   "content-type",
   "x-client-info",
 ]);
+const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
+  "AUTH_PATH_OTHER",
+  "TOKEN_TARGET_OTHER",
+  "ORIGIN_OTHER",
+  "REQUEST_METHOD_OTHER",
+  "HEADER_LIST_MISSING",
+  "HEADER_NAME_UNEXPECTED",
+  "HEADER_REQUIRED_MISSING",
+  "HEADER_DUPLICATE",
+]);
 const ACTIVE_WORK_KEY = "minted.activeWork.v2";
 const EXPECTED_BACKGROUND_MARKERS = [
   "/api/work-context/validate",
@@ -288,6 +298,7 @@ const metrics = new Map();
 let unexpectedRoutes = 0;
 let firstDeniedCategory = null;
 let lastDeniedCategory = null;
+let lastDeniedReason = null;
 let exactValidationNotFound = false;
 const workValidationAttempts = [];
 const workValidationSuccesses = [];
@@ -386,11 +397,12 @@ function routeTotal(route) {
   return total;
 }
 
-function unexpected(response, category = "UNKNOWN_HOST") {
+function unexpected(response, category = "UNKNOWN_HOST", reason = null) {
   response.statusCode = 404;
   unexpectedRoutes += 1;
   firstDeniedCategory ??= category;
   lastDeniedCategory = category;
+  lastDeniedReason = AUTH_PREFLIGHT_DENIAL_REASONS.has(reason) ? reason : null;
   count(`denied.${category}`, response.statusCode);
   response.setHeader("content-type", "text/plain; charset=utf-8");
   response.end("local verification route unavailable");
@@ -419,17 +431,22 @@ function classifyDenied(host, method, pathname) {
   return "UNKNOWN_HOST";
 }
 
-function requestedAuthPreflightHeaders(value) {
-  if (typeof value !== "string" || value.length === 0) return null;
+function inspectRequestedAuthPreflightHeaders(value) {
+  if (typeof value !== "string" || value.trim().length === 0) return "HEADER_LIST_MISSING";
   const requested = value.split(",").map((name) => name.trim().toLowerCase());
-  if (
-    requested.some((name) => !name || !AUTH_PREFLIGHT_HEADERS.has(name)) ||
-    new Set(requested).size !== requested.length ||
-    !["apikey", "authorization", "content-type"].every((name) => requested.includes(name))
-  ) {
-    return null;
+  if (requested.some((name) => !name || !AUTH_PREFLIGHT_HEADERS.has(name))) {
+    return "HEADER_NAME_UNEXPECTED";
   }
-  return requested;
+  if (!["apikey", "authorization", "content-type"].every((name) => requested.includes(name))) {
+    return "HEADER_REQUIRED_MISSING";
+  }
+  if (new Set(requested).size !== requested.length) return "HEADER_DUPLICATE";
+  return null;
+}
+
+function requestedAuthPreflightHeaders(value) {
+  if (inspectRequestedAuthPreflightHeaders(value) !== null) return null;
+  return value.split(",").map((name) => name.trim().toLowerCase());
 }
 
 function isAllowedAuthPreflight(host, method, pathname, requestTarget, headers) {
@@ -450,26 +467,87 @@ function assertAuthPreflightPolicy() {
     "access-control-request-method": "POST",
     "access-control-request-headers": "apikey, authorization, content-type, x-client-info",
   };
-  const route = (candidateHeaders = headers, target = AUTH_PREFLIGHT_TARGET) =>
-    routeFor(SUPABASE_HOST, "OPTIONS", "/auth/v1/token", target, candidateHeaders);
+  const route = (
+    candidateHeaders = headers,
+    target = AUTH_PREFLIGHT_TARGET,
+    pathname = "/auth/v1/token",
+  ) => routeFor(SUPABASE_HOST, "OPTIONS", pathname, target, candidateHeaders);
+  const deniedReason = (
+    candidateHeaders = headers,
+    target = AUTH_PREFLIGHT_TARGET,
+    pathname = "/auth/v1/token",
+  ) =>
+    classifyAuthPreflightDenialReason(SUPABASE_HOST, "OPTIONS", pathname, target, candidateHeaders);
   assert(route()?.kind === "preflight", "M64_BROWSER_PREFLIGHT_POLICY_INVALID");
   assert(
-    route({ ...headers, origin: "https://untrusted.invalid" }) === null,
+    route({ ...headers, origin: "https://untrusted.invalid" }) === null &&
+      deniedReason({ ...headers, origin: "https://untrusted.invalid" }) === "ORIGIN_OTHER",
     "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
   );
   assert(
-    route({ ...headers, "access-control-request-method": "PUT" }) === null,
+    route({ ...headers, "access-control-request-method": "PUT" }) === null &&
+      deniedReason({ ...headers, "access-control-request-method": "PUT" }) ===
+        "REQUEST_METHOD_OTHER",
     "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
   );
   assert(
-    route({ ...headers, "access-control-request-headers": "apikey, content-type, x-evil" }) ===
-      null,
+    route({ ...headers, "access-control-request-headers": undefined }) === null &&
+      deniedReason({ ...headers, "access-control-request-headers": undefined }) ===
+        "HEADER_LIST_MISSING",
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route({ ...headers, "access-control-request-headers": "apikey, content-type" }) === null &&
+      deniedReason({ ...headers, "access-control-request-headers": "apikey, content-type" }) ===
+        "HEADER_REQUIRED_MISSING",
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route({
+      ...headers,
+      "access-control-request-headers": "apikey, authorization, content-type, x-evil",
+    }) === null &&
+      deniedReason({
+        ...headers,
+        "access-control-request-headers": "apikey, authorization, content-type, x-evil",
+      }) === "HEADER_NAME_UNEXPECTED",
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route({
+      ...headers,
+      "access-control-request-headers": "apikey, authorization, content-type, apikey",
+    }) === null &&
+      deniedReason({
+        ...headers,
+        "access-control-request-headers": "apikey, authorization, content-type, apikey",
+      }) === "HEADER_DUPLICATE",
     "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
   );
   assert(
     route(headers, "/auth/v1/token?grant_type=refresh_token") === null,
     "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
   );
+  assert(
+    deniedReason(headers, "/auth/v1/token?grant_type=refresh_token") === "TOKEN_TARGET_OTHER",
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route(headers, "/auth/v1/user", "/auth/v1/user") === null &&
+      deniedReason(headers, "/auth/v1/user", "/auth/v1/user") === "AUTH_PATH_OTHER",
+    "M64_BROWSER_PREFLIGHT_POLICY_INVALID",
+  );
+}
+
+function classifyAuthPreflightDenialReason(host, method, pathname, requestTarget, headers) {
+  if (host !== SUPABASE_HOST || method !== "OPTIONS" || !pathname.startsWith("/auth/v1/")) {
+    return null;
+  }
+  if (pathname !== "/auth/v1/token") return "AUTH_PATH_OTHER";
+  if (requestTarget !== AUTH_PREFLIGHT_TARGET) return "TOKEN_TARGET_OTHER";
+  if (headers.origin !== PANEL_ORIGIN) return "ORIGIN_OTHER";
+  if (headers["access-control-request-method"] !== "POST") return "REQUEST_METHOD_OTHER";
+  return inspectRequestedAuthPreflightHeaders(headers["access-control-request-headers"]);
 }
 
 function routeFor(host, method, pathname, requestTarget, headers = {}) {
@@ -535,8 +613,8 @@ function routeFor(host, method, pathname, requestTarget, headers = {}) {
     }
     const authMethods = new Map([
       ["/auth/v1/token", new Set(["POST"])],
-      ["/auth/v1/user", new Set(["GET", "OPTIONS"])],
-      ["/auth/v1/logout", new Set(["POST", "OPTIONS"])],
+      ["/auth/v1/user", new Set(["GET"])],
+      ["/auth/v1/logout", new Set(["POST"])],
     ]);
     const allowedAuth = authMethods.get(pathname);
     if (allowedAuth?.has(method)) {
@@ -1100,7 +1178,17 @@ async function run() {
         const requestTarget = request.url ?? "/";
         const route = routeFor(hostHeader, method, pathname, requestTarget, request.headers);
         if (!route) {
-          unexpected(response, classifyDenied(hostHeader, method, pathname));
+          unexpected(
+            response,
+            classifyDenied(hostHeader, method, pathname),
+            classifyAuthPreflightDenialReason(
+              hostHeader,
+              method,
+              pathname,
+              requestTarget,
+              request.headers,
+            ),
+          );
           return;
         }
         if (route.kind === "static") {
@@ -1277,11 +1365,15 @@ try {
 } catch (error) {
   driverFailed = true;
   const code =
-    currentStage === "panel_login_route_denied" && lastDeniedCategory
-      ? `M64_BROWSER_DENIED_${lastDeniedCategory}`
-      : error instanceof BrowserFailure
-        ? error.message
-        : STAGES[currentStage];
+    currentStage === "panel_login_route_denied" &&
+    lastDeniedCategory === "SUPABASE_OPTIONS_AUTH" &&
+    lastDeniedReason
+      ? `M64_BROWSER_DENIED_SUPABASE_OPTIONS_AUTH_REASON_${lastDeniedReason}`
+      : currentStage === "panel_login_route_denied" && lastDeniedCategory
+        ? `M64_BROWSER_DENIED_${lastDeniedCategory}`
+        : error instanceof BrowserFailure
+          ? error.message
+          : STAGES[currentStage];
   await new Promise((resolve) => process.stderr.write(`${code ?? STAGES.preflight}\n`, resolve));
   process.exitCode = 1;
 } finally {
