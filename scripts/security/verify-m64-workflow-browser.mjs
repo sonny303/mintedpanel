@@ -68,7 +68,22 @@ const STAGES = Object.freeze({
   org_select: "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
   handoff_send: "M64_BROWSER_STAGE_HANDOFF_SEND_FAILED",
   postconditions: "M64_BROWSER_STAGE_POSTCONDITIONS_FAILED",
-  panel_sign_in: "M64_BROWSER_STAGE_PANEL_SIGN_IN_FAILED",
+  panel_page_create: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_navigation: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_dom: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_assets: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_form: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_credentials: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_submit: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_submit_no_request: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_route_denied: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_auth_response: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_auth_non_200: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_access_context: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_access_context_missing: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_access_context_non_200: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_org_wait: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  panel_login_org_ready: "M64_BROWSER_PANEL_SIGN_IN_FAILED",
   contract_ui: "M64_BROWSER_STAGE_CONTRACT_UI_FAILED",
   contract_fill: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
   enrollment_ui: "M64_BROWSER_STAGE_ENROLLMENT_UI_FAILED",
@@ -129,6 +144,20 @@ async function settleWithin(operation, timeoutMs) {
         ),
       new Promise((resolve) => {
         timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function bounded(operation, timeoutMs, failureCode) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new BrowserFailure(failureCode)), timeoutMs);
       }),
     ]);
   } finally {
@@ -333,6 +362,18 @@ async function preflight() {
 function count(route, status) {
   const key = `${route}:${status}`;
   metrics.set(key, (metrics.get(key) ?? 0) + 1);
+}
+
+function routeCount(route, status) {
+  return metrics.get(`${route}:${status}`) ?? 0;
+}
+
+function routeTotal(route) {
+  let total = 0;
+  for (const [key, value] of metrics) {
+    if (key.startsWith(`${route}:`)) total += value;
+  }
+  return total;
 }
 
 function unexpected(response, category = "UNKNOWN_HOST") {
@@ -587,18 +628,146 @@ function activeChromeTabId(extensionPage) {
 }
 
 async function panelContractPermissionProbe(extensionPage) {
-  checkpoint("panel_sign_in");
-  const panelPage = await context.newPage();
-  await panelPage.goto(`${PANEL_ORIGIN}/login`, { waitUntil: "domcontentloaded" });
-  await panelPage.locator("#email").fill(SPECIALIST_EMAIL);
-  await panelPage.locator("#password").fill(ADMIN_PASSWORD);
-  await panelPage.getByRole("button", { name: /^Sign in$/ }).click();
+  checkpoint("panel_page_create");
+  const panelPage = await bounded(
+    () => context.newPage(),
+    10_000,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  checkpoint("panel_login_navigation");
+  const panelPageCountBefore = routeCount("panel.page", 200);
+  const panelAssetCountBefore = routeCount("panel.asset", 200);
+  const loginResponse = await bounded(
+    () =>
+      panelPage.goto(`${PANEL_ORIGIN}/login`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      }),
+    25_000,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  assert(
+    loginResponse?.status() === 200 && panelPage.url() === `${PANEL_ORIGIN}/login`,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+
+  checkpoint("panel_login_dom");
+  await poll(
+    () => routeCount("panel.page", 200),
+    (count) => count > panelPageCountBefore,
+    "panel_login_page_response",
+    10_000,
+  );
+  checkpoint("panel_login_assets");
+  await poll(
+    () => routeCount("panel.asset", 200),
+    (count) => count > panelAssetCountBefore,
+    "panel_login_client_asset_response",
+    15_000,
+  );
+  checkpoint("panel_login_form");
+  const emailInput = panelPage.locator("#email");
+  const passwordInput = panelPage.locator("#password");
+  const signInButton = panelPage.getByRole("button", { name: /^Sign in$/, exact: true });
+  await poll(
+    async () => ({
+      emailVisible: await emailInput.isVisible(),
+      passwordVisible: await passwordInput.isVisible(),
+      buttonVisible: await signInButton.isVisible(),
+      buttonEnabled: await signInButton.isEnabled(),
+    }),
+    (state) =>
+      state.emailVisible && state.passwordVisible && state.buttonVisible && state.buttonEnabled,
+    "panel_login_form_ready",
+    15_000,
+  );
+  checkpoint("panel_login_credentials");
+  await bounded(
+    () => emailInput.fill(SPECIALIST_EMAIL, { timeout: 10_000 }),
+    12_000,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  assert(
+    (await bounded(
+      () => emailInput.inputValue({ timeout: 5_000 }),
+      6_000,
+      "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+    )) === SPECIALIST_EMAIL,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  await bounded(
+    () => passwordInput.fill(ADMIN_PASSWORD, { timeout: 10_000 }),
+    12_000,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  assert(
+    (await bounded(
+      () => passwordInput.inputValue({ timeout: 5_000 }),
+      6_000,
+      "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+    )) === ADMIN_PASSWORD,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  const authRequestsBefore = routeTotal("supabase.auth_token");
+  const authSuccessesBefore = routeCount("supabase.auth_token", 200);
+  const accessRequestsBefore = routeTotal("panel.access_context");
+  const accessSuccessesBefore = routeCount("panel.access_context", 200);
+  const deniedBefore = unexpectedRoutes;
+  checkpoint("panel_login_submit");
+  await bounded(
+    () => signInButton.click({ timeout: 15_000 }),
+    20_000,
+    "M64_BROWSER_PANEL_SIGN_IN_FAILED",
+  );
+  checkpoint("panel_login_auth_response");
+  try {
+    await poll(
+      () => routeTotal("supabase.auth_token"),
+      (count) => count > authRequestsBefore,
+      "panel_login_auth_response",
+      20_000,
+    );
+  } catch {
+    checkpoint(
+      unexpectedRoutes > deniedBefore
+        ? "panel_login_route_denied"
+        : "panel_login_submit_no_request",
+    );
+    throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
+  }
+  if (routeCount("supabase.auth_token", 200) === authSuccessesBefore) {
+    checkpoint("panel_login_auth_non_200");
+    throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
+  }
+  checkpoint("panel_login_access_context");
+  try {
+    await poll(
+      () => routeTotal("panel.access_context"),
+      (count) => count > accessRequestsBefore,
+      "panel_login_access_context_response",
+      20_000,
+    );
+  } catch {
+    checkpoint(
+      unexpectedRoutes > deniedBefore
+        ? "panel_login_route_denied"
+        : "panel_login_access_context_missing",
+    );
+    throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
+  }
+  if (routeCount("panel.access_context", 200) === accessSuccessesBefore) {
+    checkpoint("panel_login_access_context_non_200");
+    throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
+  }
+  checkpoint("panel_login_org_wait");
   const activeOrgButton = panelPage.locator('button[aria-label^="Active organization:"]');
   await poll(
     () => activeOrgButton.count(),
     (count) => count === 1,
     "panel_authenticated_org",
+    20_000,
   );
+  checkpoint("panel_login_org_ready");
 
   checkpoint("contract_ui");
   const orgAttribute = await activeOrgButton.getAttribute("aria-label");
