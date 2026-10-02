@@ -806,7 +806,11 @@ export async function handleValidateWorkContext(
     const status = result.kind === "not_found" ? 404 : result.kind === "mismatch" ? 422 : 409;
     return workContextFailure(status, result.kind, result.message);
   }
-  const response = ok(result.data);
+  // The shared generation pin is for the server-side immutable fill receipt;
+  // it is derived from the same resolver snapshot and is not part of the M56
+  // validator/Extension wire contract.
+  const { sharedMappingGeneration: _sharedMappingGeneration, ...wireData } = result.data;
+  const response = ok(wireData);
   response.headers.set("cache-control", "no-store, max-age=0");
   response.headers.set("pragma", "no-cache");
   return response;

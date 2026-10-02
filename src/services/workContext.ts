@@ -265,6 +265,7 @@ async function validateWorkContextWithReceiptContext(
       formUrl: configuration.formUrl,
       requiresExplicitSelection: true,
       mappingGeneration: configuration.mappingGeneration!,
+      sharedMappingGeneration: configuration.sharedMappingGeneration,
       effectiveMappingFingerprint: configuration.effectiveMappingFingerprint,
       effectiveWebMaps,
     },

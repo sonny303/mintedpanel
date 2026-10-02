@@ -1876,6 +1876,8 @@ export interface FillSession {
   contextVersion?: number | null;
   launchReceiptId?: string | null;
   mappingGeneration?: number | null;
+  /** Server-derived MINT-60 pin for org Work layered over a shared portal. */
+  sharedMappingGeneration?: number | null;
   effectiveMappingFingerprint?: string | null;
   providerId: string | null;
   portalKey: string;

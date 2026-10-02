@@ -110,15 +110,7 @@ export async function resetPortalMapping(
   ) {
     throw new Error("The form mapping generation is invalid. Refresh Form setup.");
   }
-  const rpc = supabase.rpc.bind(supabase) as unknown as (
-    name: "reset_portal_mapping",
-    args: {
-      p_portal_id: string;
-      p_expected_mapping_generation: number;
-      p_idempotency_key: string;
-    },
-  ) => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
-  const { data, error } = await rpc("reset_portal_mapping", {
+  const { data, error } = await supabase.rpc("reset_portal_mapping", {
     p_portal_id: input.portalId,
     p_expected_mapping_generation: input.expectedMappingGeneration,
     p_idempotency_key: input.idempotencyKey,

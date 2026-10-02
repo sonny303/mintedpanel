@@ -181,6 +181,7 @@ describe("exact effective portal maps", () => {
       caseType: "enrollment",
       requiresExplicitSelection: true,
       mappingGeneration: 3,
+      sharedMappingGeneration: 4,
       activeFieldCount: 2,
       isReady: true,
       isVerified: true,
@@ -221,6 +222,30 @@ describe("exact effective portal maps", () => {
       { portalKey: fixture.key },
     );
     expect(visible).toEqual([]);
+  });
+
+  it("pins shared generation only when an org configuration has a shared base", async () => {
+    const orgOnly = portal("org-only", "org-a", "org-only-key", 7, {
+      case_type: "enrollment",
+      requires_explicit_selection: true,
+    });
+    const orgMap = map("org-only-map", "org-a", "org-only-key", "#field", {
+      mapping_generation: 7,
+      shared_base_generation: null,
+    });
+    const withoutShared = await resolveEffectivePortalMaps(
+      { db: fakeDb([orgOnly], [orgMap]).db, orgId: "org-a" },
+      { portalKey: "org-only-key", mapType: "web" },
+    );
+    expect(withoutShared.sharedMappingGeneration).toBeNull();
+    expect(withoutShared.isReady).toBe(true);
+
+    const fixture = generationFixture();
+    const withShared = await resolveEffectivePortalMaps(
+      { db: fakeDb(fixture.configs, fixture.maps).db, orgId: "org-a" },
+      { portalKey: fixture.key, mapType: "web" },
+    );
+    expect(withShared.sharedMappingGeneration).toBe(4);
   });
 
   it("blocks legacy maps for the whole key when a global sibling is explicit but Panel can resolve the org config", async () => {
