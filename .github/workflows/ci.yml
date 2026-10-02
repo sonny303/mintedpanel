@@ -429,6 +429,9 @@ jobs:
       - name: Verify MINT-64 integrated typed SOP owner isolation on disposable PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint64-panel-integration.sql
 
+      - name: Verify MINT-66 rollback retention on disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint66-client-rollback.sql
+
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
   # Two specs run (login render, dashboard redirect); three write scenarios are
