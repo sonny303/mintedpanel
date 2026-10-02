@@ -85,6 +85,7 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_BACKGROUND_HASH_MISMATCH",
   "M64_BROWSER_BUILT_ANON_KEY_NOT_UNIQUE",
   "M64_BROWSER_CHROMIUM_BINARY_MISSING",
+  "M64_BROWSER_DRIVER_NOT_STARTED",
   "M64_BROWSER_EXPECTED_ASSET_HASH_MISSING",
   "M64_BROWSER_EXTENSION_DIST_MISSING",
   "M64_BROWSER_EXTENSION_ORG_LOOKUP_FAILED",
@@ -106,10 +107,23 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_PROXY_DENIED_UNEXPECTED_ROUTE",
   "M64_BROWSER_RUNTIME_ASSET_HASH_MISMATCH",
   "M64_BROWSER_SMOKE_FAILED",
+  "M64_BROWSER_STAGE_CHROMIUM_LAUNCH_FAILED",
+  "M64_BROWSER_STAGE_HANDOFF_SEND_FAILED",
+  "M64_BROWSER_STAGE_MV3_WORKER_FAILED",
+  "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
+  "M64_BROWSER_STAGE_POSTCONDITIONS_FAILED",
+  "M64_BROWSER_STAGE_PREFLIGHT_FAILED",
+  "M64_BROWSER_STAGE_PROXY_LISTEN_FAILED",
+  "M64_BROWSER_STAGE_SIDEPANEL_FAILED",
+  "M64_BROWSER_STAGE_SIGN_IN_FAILED",
+  "M64_BROWSER_STAGE_TLS_CERTIFICATE_FAILED",
   "M64_BROWSER_SUPABASE_HOST_PERMISSION_MISSING",
   "M64_BROWSER_SUPABASE_ORIGIN_DRIFT",
   "M64_BROWSER_TLS_SAN_INCOMPLETE",
   "M64_BROWSER_UNKNOWN_FAILURE",
+  "M64_BROWSER_BUILT_MARKER_MISSING__api_work_context_validate",
+  "M64_BROWSER_BUILT_MARKER_MISSING_SET_ACTIVE_WORK",
+  "M64_BROWSER_BUILT_MARKER_MISSING_minted_activeWork_v2",
 ]);
 const fail = (code) => {
   throw new Error(code);
@@ -118,6 +132,11 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = (args, input) =>
   execFileSync("docker", ["--context", context, ...args], { ...options, input });
 function safeM64DriverFailureMarker(error) {
+  const stdout = Buffer.isBuffer(error?.stdout)
+    ? error.stdout.toString("utf8")
+    : typeof error?.stdout === "string"
+      ? error.stdout
+      : "";
   const stderr = Buffer.isBuffer(error?.stderr)
     ? error.stderr.toString("utf8")
     : typeof error?.stderr === "string"
@@ -128,7 +147,9 @@ function safeM64DriverFailureMarker(error) {
     const match = /^(?:Error: )?(M64_BROWSER_[A-Za-z0-9_]+)$/.exec(line.trimEnd());
     if (match && m64DriverFailureMarkers.has(match[1])) return match[1];
   }
-  return "M64_BROWSER_SMOKE_FAILED";
+  return stdout.slice(0, 8192).split(/\r?\n/).includes("M64_BROWSER_DRIVER_STARTED")
+    ? "M64_BROWSER_SMOKE_FAILED"
+    : "M64_BROWSER_DRIVER_NOT_STARTED";
 }
 function runM64BrowserPhase(phase, operation) {
   if (!m64BrowserPhases.has(phase)) fail("E612_M64_BROWSER_PHASE_NOT_ALLOWLISTED");

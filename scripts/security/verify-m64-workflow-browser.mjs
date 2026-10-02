@@ -11,9 +11,6 @@ import { createServer } from "node:https";
 import { setTimeout as delay } from "node:timers/promises";
 
 const require = createRequire(import.meta.url);
-const playwright = require("playwright");
-const playwrightPackage = require("playwright/package.json");
-const { chromium } = playwright;
 const PLAYWRIGHT_VERSION = "1.61.1";
 const PANEL_HOST = "mintedpanel.vercel.app";
 const SUPABASE_HOST = "fkvuhfsqcmujywzgczmc.supabase.co";
@@ -28,13 +25,31 @@ const EXPECTED_BACKGROUND_MARKERS = [
   "SET_ACTIVE_WORK",
 ];
 
+class BrowserFailure extends Error {}
+
 function assert(condition, code) {
-  if (!condition) throw new Error(code);
+  if (!condition) throw new BrowserFailure(code);
 }
 
 function safeLog(value) {
   process.stdout.write(`${value}\n`);
 }
+
+const STAGES = Object.freeze({
+  preflight: "M64_BROWSER_STAGE_PREFLIGHT_FAILED",
+  tls_certificate: "M64_BROWSER_STAGE_TLS_CERTIFICATE_FAILED",
+  proxy_listen: "M64_BROWSER_STAGE_PROXY_LISTEN_FAILED",
+  chromium_launch: "M64_BROWSER_STAGE_CHROMIUM_LAUNCH_FAILED",
+  mv3_worker: "M64_BROWSER_STAGE_MV3_WORKER_FAILED",
+  sidepanel: "M64_BROWSER_STAGE_SIDEPANEL_FAILED",
+  sign_in: "M64_BROWSER_STAGE_SIGN_IN_FAILED",
+  org_select: "M64_BROWSER_STAGE_ORG_SELECT_FAILED",
+  handoff_send: "M64_BROWSER_STAGE_HANDOFF_SEND_FAILED",
+  postconditions: "M64_BROWSER_STAGE_POSTCONDITIONS_FAILED",
+});
+
+let currentStage = "preflight";
+safeLog("M64_BROWSER_DRIVER_STARTED");
 
 async function poll(read, accept, label, timeoutMs = 20_000) {
   const end = Date.now() + timeoutMs;
@@ -87,71 +102,15 @@ function jsonEnvelope(responseBody) {
 const extensionRoot = "/tmp/m64/extension";
 const backgroundPath = join(extensionRoot, "background.js");
 const manifestPath = join(extensionRoot, "manifest.json");
-const localAnonKey = process.env.M64_LOCAL_ANON_KEY;
-const expectedRuntimeAssetsSha256 = process.env.M64_EXPECTED_RUNTIME_ASSETS_SHA;
-assert(localAnonKey?.split(".").length === 3, "M64_BROWSER_LOCAL_ANON_KEY_MISSING");
-assert(
-  /^[a-f0-9]{64}$/.test(expectedRuntimeAssetsSha256 ?? ""),
-  "M64_BROWSER_EXPECTED_ASSET_HASH_MISSING",
-);
-assert(playwrightPackage.version === PLAYWRIGHT_VERSION, "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH");
-assert(
-  existsSync(backgroundPath) && existsSync(manifestPath),
-  "M64_BROWSER_EXTENSION_DIST_MISSING",
-);
-assert(existsSync(chromium.executablePath()), "M64_BROWSER_CHROMIUM_BINARY_MISSING");
-
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const background = readFileSync(backgroundPath, "utf8");
-const backgroundSha256 = createHash("sha256").update(background).digest("hex");
-assert(
-  backgroundSha256 === "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549",
-  "M64_BROWSER_BACKGROUND_HASH_MISMATCH",
-);
-const javascriptFiles = listFiles(extensionRoot).filter((file) => file.endsWith(".js"));
-const javascriptAssets = javascriptFiles.map((file) => [
-  file,
-  readFileSync(join(extensionRoot, file), "utf8"),
-]);
-const allJavascript = javascriptAssets.map(([, source]) => source).join("\n");
-const extensionAnonKey = extractAnonKey(allJavascript);
-const runtimeAssetsSha256 = createHash("sha256")
-  .update(
-    javascriptAssets
-      .map(([file, source]) => `${file}\0${createHash("sha256").update(source).digest("hex")}\n`)
-      .join(""),
-  )
-  .digest("hex");
-assert(
-  runtimeAssetsSha256 === expectedRuntimeAssetsSha256,
-  "M64_BROWSER_RUNTIME_ASSET_HASH_MISMATCH",
-);
-assert(manifest.manifest_version === 3, "M64_BROWSER_NOT_MV3");
-assert(
-  manifest.host_permissions?.includes(`https://${PANEL_HOST}/*`),
-  "M64_BROWSER_PANEL_HOST_PERMISSION_MISSING",
-);
-assert(
-  manifest.host_permissions?.includes(`https://${SUPABASE_HOST}/*`),
-  "M64_BROWSER_SUPABASE_HOST_PERMISSION_MISSING",
-);
-assert(
-  manifest.externally_connectable?.matches?.includes(`https://${PANEL_HOST}/*`),
-  "M64_BROWSER_HANDOFF_ORIGIN_NOT_ALLOWLISTED",
-);
-for (const marker of EXPECTED_BACKGROUND_MARKERS) {
-  assert(
-    background.includes(marker),
-    `M64_BROWSER_BUILT_MARKER_MISSING_${marker.replaceAll(/[^A-Za-z0-9]+/g, "_")}`,
-  );
-}
-assert(allJavascript.includes(`https://${PANEL_HOST}`), "M64_BROWSER_PANEL_ORIGIN_DRIFT");
-assert(allJavascript.includes(`https://${SUPABASE_HOST}`), "M64_BROWSER_SUPABASE_ORIGIN_DRIFT");
-
-const certDir = mkdtempSync(join(tmpdir(), "m64-browser-tls-"));
-const certPath = join(certDir, "cert.pem");
-const keyPath = join(certDir, "key.pem");
-const profileDir = join(certDir, "chrome-profile");
+let chromium;
+let extensionAnonKey;
+let runtimeAssetsSha256;
+let localAnonKey;
+let expectedRuntimeAssetsSha256;
+let certDir;
+let certPath;
+let keyPath;
+let profileDir;
 const certHosts = [PANEL_HOST, SUPABASE_HOST, PORTAL_HOST];
 const metrics = new Map();
 let unexpectedRoutes = 0;
@@ -159,6 +118,72 @@ let exactValidationNotFound = false;
 let server;
 let context;
 let proxyClosed = false;
+
+async function preflight() {
+  localAnonKey = process.env.M64_LOCAL_ANON_KEY;
+  expectedRuntimeAssetsSha256 = process.env.M64_EXPECTED_RUNTIME_ASSETS_SHA;
+  assert(localAnonKey?.split(".").length === 3, "M64_BROWSER_LOCAL_ANON_KEY_MISSING");
+  assert(
+    /^[a-f0-9]{64}$/.test(expectedRuntimeAssetsSha256 ?? ""),
+    "M64_BROWSER_EXPECTED_ASSET_HASH_MISSING",
+  );
+  const playwright = require("playwright");
+  const playwrightPackage = require("playwright/package.json");
+  chromium = playwright.chromium;
+  assert(playwrightPackage.version === PLAYWRIGHT_VERSION, "M64_BROWSER_PLAYWRIGHT_VERSION_MISMATCH");
+  assert(
+    existsSync(backgroundPath) && existsSync(manifestPath),
+    "M64_BROWSER_EXTENSION_DIST_MISSING",
+  );
+  assert(existsSync(chromium.executablePath()), "M64_BROWSER_CHROMIUM_BINARY_MISSING");
+
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const background = readFileSync(backgroundPath, "utf8");
+  const backgroundSha256 = createHash("sha256").update(background).digest("hex");
+  assert(
+    backgroundSha256 === "903b0e80aef0575a2af03e0cbdad81c3edd410cf1d5bba9413526a5e53d76549",
+    "M64_BROWSER_BACKGROUND_HASH_MISMATCH",
+  );
+  const javascriptFiles = listFiles(extensionRoot).filter((file) => file.endsWith(".js"));
+  const javascriptAssets = javascriptFiles.map((file) => [
+    file,
+    readFileSync(join(extensionRoot, file), "utf8"),
+  ]);
+  const allJavascript = javascriptAssets.map(([, source]) => source).join("\n");
+  extensionAnonKey = extractAnonKey(allJavascript);
+  runtimeAssetsSha256 = createHash("sha256")
+    .update(
+      javascriptAssets
+        .map(([file, source]) => `${file}\0${createHash("sha256").update(source).digest("hex")}\n`)
+        .join(""),
+    )
+    .digest("hex");
+  assert(
+    runtimeAssetsSha256 === expectedRuntimeAssetsSha256,
+    "M64_BROWSER_RUNTIME_ASSET_HASH_MISMATCH",
+  );
+  assert(manifest.manifest_version === 3, "M64_BROWSER_NOT_MV3");
+  assert(
+    manifest.host_permissions?.includes(`https://${PANEL_HOST}/*`),
+    "M64_BROWSER_PANEL_HOST_PERMISSION_MISSING",
+  );
+  assert(
+    manifest.host_permissions?.includes(`https://${SUPABASE_HOST}/*`),
+    "M64_BROWSER_SUPABASE_HOST_PERMISSION_MISSING",
+  );
+  assert(
+    manifest.externally_connectable?.matches?.includes(`https://${PANEL_HOST}/*`),
+    "M64_BROWSER_HANDOFF_ORIGIN_NOT_ALLOWLISTED",
+  );
+  for (const marker of EXPECTED_BACKGROUND_MARKERS) {
+    assert(
+      background.includes(marker),
+      `M64_BROWSER_BUILT_MARKER_MISSING_${marker.replaceAll(/[^A-Za-z0-9]+/g, "_")}`,
+    );
+  }
+  assert(allJavascript.includes(`https://${PANEL_HOST}`), "M64_BROWSER_PANEL_ORIGIN_DRIFT");
+  assert(allJavascript.includes(`https://${SUPABASE_HOST}`), "M64_BROWSER_SUPABASE_ORIGIN_DRIFT");
+}
 
 function count(route, status) {
   const key = `${route}:${status}`;
@@ -272,6 +297,14 @@ function proxyToLocal(request, response, route, requestUrl, method) {
 }
 
 async function run() {
+  currentStage = "preflight";
+  await preflight();
+
+  currentStage = "tls_certificate";
+  certDir = mkdtempSync(join(tmpdir(), "m64-browser-tls-"));
+  certPath = join(certDir, "cert.pem");
+  keyPath = join(certDir, "key.pem");
+  profileDir = join(certDir, "chrome-profile");
   execFileSync(
     "openssl",
     [
@@ -302,25 +335,30 @@ async function run() {
   );
   for (const host of certHosts) assert(sanText.includes(host), "M64_BROWSER_TLS_SAN_INCOMPLETE");
 
+  currentStage = "proxy_listen";
   server = createServer(
     { cert: readFileSync(certPath), key: readFileSync(keyPath) },
     (request, response) => {
-      const hostHeader = String(request.headers.host ?? "")
-        .toLowerCase()
-        .replace(/:\d+$/, "");
-      const pathname = new URL(request.url ?? "/", `https://${hostHeader || PANEL_HOST}`).pathname;
-      const method = String(request.method ?? "GET").toUpperCase();
-      const route = routeFor(hostHeader, method, pathname);
-      if (!route) {
-        unexpected(response);
-        return;
+      try {
+        const hostHeader = String(request.headers.host ?? "")
+          .toLowerCase()
+          .replace(/:\d+$/, "");
+        const pathname = new URL(request.url ?? "/", `https://${hostHeader || PANEL_HOST}`).pathname;
+        const method = String(request.method ?? "GET").toUpperCase();
+        const route = routeFor(hostHeader, method, pathname);
+        if (!route) {
+          unexpected(response);
+          return;
+        }
+        if (route.kind === "static") {
+          count(route.name, 200);
+          serveStatic(response, route);
+          return;
+        }
+        proxyToLocal(request, response, route, request.url ?? "/", method);
+      } catch {
+        if (!response.headersSent && !response.writableEnded) unexpected(response);
       }
-      if (route.kind === "static") {
-        count(route.name, 200);
-        serveStatic(response, route);
-        return;
-      }
-      proxyToLocal(request, response, route, request.url ?? "/", method);
     },
   );
   await new Promise((resolve, reject) => {
@@ -328,6 +366,7 @@ async function run() {
     server.listen(443, "0.0.0.0", resolve);
   });
 
+  currentStage = "chromium_launch";
   context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     args: [
@@ -343,6 +382,7 @@ async function run() {
       "--disable-dev-shm-usage",
     ],
   });
+  currentStage = "mv3_worker";
   const worker = await poll(
     () =>
       context.serviceWorkers().find((candidate) => candidate.url().endsWith("/background.js")) ??
@@ -351,6 +391,7 @@ async function run() {
     "mv3_service_worker",
   );
   const extensionId = new URL(worker.url()).hostname;
+  currentStage = "sidepanel";
   const extensionPage = await context.newPage();
   await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await poll(
@@ -358,6 +399,7 @@ async function run() {
     (title) => title === "Minted Panel Workbench",
     "extension_sidepanel",
   );
+  currentStage = "sign_in";
   const signIn = await extensionPage.evaluate(
     async ({ email, password }) => chrome.runtime.sendMessage({ type: "SIGN_IN", email, password }),
     { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
@@ -368,6 +410,7 @@ async function run() {
       !JSON.stringify(signIn).includes("access_token"),
     "M64_BROWSER_EXTENSION_SIGN_IN_FAILED",
   );
+  currentStage = "org_select";
   const orgs = await extensionPage.evaluate(() =>
     chrome.runtime.sendMessage({ type: "LIST_MY_ORGS" }),
   );
@@ -381,6 +424,7 @@ async function run() {
   );
   assert(orgSet?.ok === true, "M64_BROWSER_EXTENSION_ORG_SELECTION_FAILED");
 
+  currentStage = "handoff_send";
   const handoffPage = await context.newPage();
   await handoffPage.goto(`https://${PANEL_HOST}/__m64__/handoff`);
   assert(
@@ -418,6 +462,7 @@ async function run() {
     acknowledgement?.ok === false && acknowledgement.code === "CONTEXT_STALE",
     "M64_BROWSER_HANDOFF_ACK_UNEXPECTED",
   );
+  currentStage = "postconditions";
   await poll(
     () => metrics.get("panel.work_validate:404") ?? 0,
     (count) => count === 1,
@@ -451,10 +496,8 @@ async function run() {
 try {
   await run();
 } catch (error) {
-  const message = error instanceof Error ? error.message : "M64_BROWSER_UNKNOWN_FAILURE";
-  process.stderr.write(
-    `${/^M64_BROWSER_[A-Za-z0-9_]+$/.test(message) ? message : "M64_BROWSER_SMOKE_FAILED"}\n`,
-  );
+  const code = error instanceof BrowserFailure ? error.message : STAGES[currentStage];
+  process.stderr.write(`${code ?? STAGES.preflight}\n`);
   process.exitCode = 1;
 } finally {
   if (context) await context.close().catch(() => {});
@@ -462,5 +505,11 @@ try {
     proxyClosed = true;
     await new Promise((resolve) => server.close(resolve));
   }
-  rmSync(certDir, { recursive: true, force: true });
+  if (certDir) {
+    try {
+      rmSync(certDir, { recursive: true, force: true });
+    } catch {
+      /* Do not expose temporary paths in cleanup errors. */
+    }
+  }
 }
