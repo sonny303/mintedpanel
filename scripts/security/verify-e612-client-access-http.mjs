@@ -252,6 +252,31 @@ const m64OrgWaitDiagnosticFields = [
   "api_cases_404",
   "api_cases_other",
 ];
+const m64OrgWaitRoutesDiagnosticFields = [
+  "options_other_rest_organizations_404",
+  "options_other_rest_contracts_404",
+  "options_other_rest_status_configs_404",
+  "options_other_rest_provider_groups_404",
+  "options_other_rest_payers_404",
+  "options_other_rest_payer_network_targets_404",
+  "options_other_rest_facilities_404",
+  "options_other_rest_contract_sop_assignments_404",
+  "options_other_rest_sop_templates_404",
+  "options_other_rest_sop_template_versions_404",
+  "options_other_rest_portals_404",
+  "options_other_rest_portal_field_maps_404",
+  "options_other_rest_credential_cases_404",
+  "options_other_rest_tasks_404",
+  "options_other_rest_case_facilities_404",
+  "options_other_rest_touches_404",
+  "options_other_rest_provider_group_assignments_404",
+  "options_other_rest_provider_facility_assignments_404",
+  "options_other_rest_providers_404",
+  "options_other_rpc_reset_portal_mapping_404",
+  "options_other_rest_unknown_404",
+  "options_other_rpc_unknown_404",
+  "options_other_unknown_route_404",
+];
 const m64OrgWaitDiagnosticCounts = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9_PLUS"]);
 const m64OrgWaitDiagnosticUiStates = new Set([
   "login",
@@ -338,10 +363,38 @@ function safeM64OrgWaitDiagnostic(lines) {
   }
   return [...fields, `ui=${uiValue}`].join("|");
 }
+function safeM64OrgWaitRoutesDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ORG_WAIT_ROUTES|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64OrgWaitRoutesDiagnosticFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "ORG_WAIT_ROUTES"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64OrgWaitRoutesDiagnosticFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    if (
+      name !== m64OrgWaitRoutesDiagnosticFields[index] ||
+      rest.length !== 0 ||
+      !m64OrgWaitDiagnosticCounts.has(value)
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
 function reportM64BrowserOrgWaitDiagnostic(driver, checkpoint) {
   if (checkpoint !== "panel_login_org_wait") return;
   const diagnostic = safeM64OrgWaitDiagnostic(driver.lines);
   if (diagnostic) emit(`E612|M64|BROWSER|ORG_WAIT_DIAGNOSTIC|${diagnostic}`);
+  const routesDiagnostic = safeM64OrgWaitRoutesDiagnostic(driver.lines);
+  if (routesDiagnostic) emit(`E612|M64|BROWSER|ORG_WAIT_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
 }
 function waitForM64BrowserCompletion(driver, timeoutMs) {
   let timer;

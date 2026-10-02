@@ -63,6 +63,29 @@ const TABLE_SELECTS = Object.freeze({
   memberships: "org_id,role,organizations(name,lifecycle_state,created_at)",
   profiles: "full_name",
 });
+const SUPABASE_REST_READ_TABLES = new Set([
+  "profiles",
+  "memberships",
+  "organizations",
+  "contracts",
+  "status_configs",
+  "provider_groups",
+  "payers",
+  "payer_network_targets",
+  "facilities",
+  "contract_sop_assignments",
+  "sop_templates",
+  "sop_template_versions",
+  "portals",
+  "portal_field_maps",
+  "credential_cases",
+  "tasks",
+  "case_facilities",
+  "touches",
+  "provider_group_assignments",
+  "provider_facility_assignments",
+  "providers",
+]);
 const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
   "AUTH_PATH_OTHER",
   "TOKEN_TARGET_OTHER",
@@ -80,6 +103,31 @@ const ORG_WAIT_OPTIONS_BUCKETS = [
   "rest_memberships",
   "rest_profiles",
   "rpc_claim_invites",
+  "other",
+];
+const ORG_WAIT_OPTION_DETAIL_BUCKETS = [
+  "rest_organizations",
+  "rest_contracts",
+  "rest_status_configs",
+  "rest_provider_groups",
+  "rest_payers",
+  "rest_payer_network_targets",
+  "rest_facilities",
+  "rest_contract_sop_assignments",
+  "rest_sop_templates",
+  "rest_sop_template_versions",
+  "rest_portals",
+  "rest_portal_field_maps",
+  "rest_credential_cases",
+  "rest_tasks",
+  "rest_case_facilities",
+  "rest_touches",
+  "rest_provider_group_assignments",
+  "rest_provider_facility_assignments",
+  "rest_providers",
+  "rpc_reset_portal_mapping",
+  "rest_unknown",
+  "rpc_unknown",
   "other",
 ];
 const ACTIVE_WORK_KEY = "minted.activeWork.v2";
@@ -443,9 +491,25 @@ function supabaseOptionsBucket(host, method, pathname, routeName = "") {
   return "other";
 }
 
+function supabaseOptionsDetailBucket(host, method, pathname, routeName = "") {
+  if (supabaseOptionsBucket(host, method, pathname, routeName) !== "other") return null;
+  const cleanPath = pathname.split("?", 1)[0];
+  const tableMatch = /^\/rest\/v1\/([a-z][a-z0-9_]*)$/.exec(cleanPath);
+  if (tableMatch) {
+    return SUPABASE_REST_READ_TABLES.has(tableMatch[1]) ? `rest_${tableMatch[1]}` : "rest_unknown";
+  }
+  const rpcMatch = /^\/rest\/v1\/rpc\/([a-z][a-z0-9_]*)$/.exec(cleanPath);
+  if (rpcMatch) {
+    return rpcMatch[1] === "reset_portal_mapping" ? "rpc_reset_portal_mapping" : "rpc_unknown";
+  }
+  return "other";
+}
+
 function countDeniedSupabaseOptions(host, method, pathname, routeName = "") {
   const bucket = supabaseOptionsBucket(host, method, pathname, routeName);
   if (bucket) count(`supabase.options_denied.${bucket}`, 404);
+  const detail = supabaseOptionsDetailBucket(host, method, pathname, routeName);
+  if (detail) count(`supabase.options_denied_detail.${detail}`, 404);
 }
 
 function boundedDiagnosticCount(value) {
@@ -523,6 +587,14 @@ async function reportOrgWaitDiagnostic(page) {
   fields.push(...routeStatusDiagnostic("panel.cases", "api_cases", [200, 403, 404]));
   fields.push(`ui=${await orgWaitUiState(page)}`);
   safeLog(`M64|BROWSER|ORG_WAIT|${fields.join("|")}`);
+  const detailFields = ORG_WAIT_OPTION_DETAIL_BUCKETS.map((bucket) => {
+    const field =
+      bucket === "other" ? "options_other_unknown_route_404" : `options_other_${bucket}_404`;
+    return `${field}=${boundedDiagnosticCount(
+      routeCount(`supabase.options_denied_detail.${bucket}`, 404),
+    )}`;
+  });
+  safeLog(`M64|BROWSER|ORG_WAIT_ROUTES|${detailFields.join("|")}`);
 }
 
 function unexpected(response, category = "UNKNOWN_HOST", reason = null) {
@@ -902,31 +974,12 @@ function routeFor(host, method, pathname, requestTarget, headers = {}) {
         name: pathname.endsWith("/token") ? "supabase.auth_token" : "supabase.auth",
       };
     }
-    const restReads = new Set([
-      "profiles",
-      "memberships",
-      "organizations",
-      "contracts",
-      "status_configs",
-      "provider_groups",
-      "payers",
-      "payer_network_targets",
-      "facilities",
-      "contract_sop_assignments",
-      "sop_templates",
-      "sop_template_versions",
-      "portals",
-      "portal_field_maps",
-      "credential_cases",
-      "tasks",
-      "case_facilities",
-      "touches",
-      "provider_group_assignments",
-      "provider_facility_assignments",
-      "providers",
-    ]);
     const tableMatch = /^\/rest\/v1\/([a-z][a-z0-9_]*)$/.exec(pathname);
-    if (tableMatch && restReads.has(tableMatch[1]) && ["GET", "HEAD"].includes(method)) {
+    if (
+      tableMatch &&
+      SUPABASE_REST_READ_TABLES.has(tableMatch[1]) &&
+      ["GET", "HEAD"].includes(method)
+    ) {
       return { kind: "gateway", name: `supabase.rest.${tableMatch[1]}` };
     }
     const rpcMatch = /^\/rest\/v1\/rpc\/(claim_invites|reset_portal_mapping)$/.exec(pathname);
@@ -1205,7 +1258,7 @@ async function panelContractPermissionProbe(extensionPage) {
     throw new BrowserFailure("M64_BROWSER_PANEL_SIGN_IN_FAILED");
   }
   checkpoint("panel_login_org_wait");
-  const activeOrgButton = panelPage.locator('button[aria-label^="Active organization:"]');
+  const activeOrgButton = panelPage.locator('button[aria-label^="Active organization:"]:visible');
   try {
     await poll(
       () => activeOrgButton.count(),
@@ -1221,7 +1274,7 @@ async function panelContractPermissionProbe(extensionPage) {
 
   checkpoint("contract_ui");
   const orgAttribute = await activeOrgButton.getAttribute("aria-label");
-  if (!orgAttribute?.includes(panelOrgName)) {
+  if (orgAttribute !== `Active organization: ${panelOrgName}. Switch organization`) {
     await activeOrgButton.click();
     await panelPage.getByRole("menuitem", { name: panelOrgName, exact: true }).click();
     await poll(
