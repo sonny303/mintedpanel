@@ -222,6 +222,16 @@ COMMIT;
 try {
   runPsql(`
 BEGIN;
+-- The M51 typed-fill trigger validates the authenticated service-role actor.
+-- These claims are transaction-local so seed receipts satisfy that boundary
+-- without changing the database role or leaking into later psql sessions.
+SELECT pg_catalog.set_config('request.jwt.claim.sub', ${quote(ids.actor)}, true);
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  ${quote(JSON.stringify({ sub: ids.actor, role: "service_role" }))},
+  true
+);
 INSERT INTO auth.users (id, email, raw_user_meta_data)
 VALUES ('${ids.actor}', 'm58-race-${ids.actor}@example.invalid', '{}'::jsonb);
 INSERT INTO public.profiles (id, full_name, email)
