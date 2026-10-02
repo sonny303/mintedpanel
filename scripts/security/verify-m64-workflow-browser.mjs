@@ -46,6 +46,23 @@ const AUTH_PREFLIGHT_HEADERS = new Set([
   "x-client-info",
   "x-supabase-api-version",
 ]);
+const TABLE_PREFLIGHT_HEADERS = new Set([
+  "accept-profile",
+  "apikey",
+  "authorization",
+  "x-client-info",
+]);
+const RPC_PREFLIGHT_HEADERS = new Set([
+  "content-profile",
+  "content-type",
+  "apikey",
+  "authorization",
+  "x-client-info",
+]);
+const TABLE_SELECTS = Object.freeze({
+  memberships: "org_id, role, organizations(name, lifecycle_state, created_at)",
+  profiles: "full_name",
+});
 const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
   "AUTH_PATH_OTHER",
   "TOKEN_TARGET_OTHER",
@@ -388,6 +405,7 @@ async function preflight() {
   assert(allJavascript.includes(`https://${PANEL_HOST}`), "M64_BROWSER_PANEL_ORIGIN_DRIFT");
   assert(allJavascript.includes(`https://${SUPABASE_HOST}`), "M64_BROWSER_SUPABASE_ORIGIN_DRIFT");
   assertAuthPreflightPolicy();
+  assertDataPreflightPolicy();
 }
 
 function count(route, status) {
@@ -559,6 +577,149 @@ function requestedAuthPreflightHeaders(value) {
   return value.split(",").map((name) => name.trim().toLowerCase());
 }
 
+function inspectRequestedDataPreflightHeaders(value, method) {
+  if (typeof value !== "string" || value.trim().length === 0) return false;
+  const allowed = method === "GET" ? TABLE_PREFLIGHT_HEADERS : RPC_PREFLIGHT_HEADERS;
+  const required =
+    method === "GET"
+      ? ["accept-profile", "apikey", "authorization", "x-client-info"]
+      : ["apikey", "authorization", "content-profile", "content-type", "x-client-info"];
+  const requested = value.split(",").map((name) => name.trim().toLowerCase());
+  return (
+    requested.every((name) => name && allowed.has(name)) &&
+    new Set(requested).size === requested.length &&
+    required.every((name) => requested.includes(name))
+  );
+}
+
+function hasExactSyntheticTableQuery(requestTarget, pathname, table) {
+  let parsed;
+  try {
+    parsed = new URL(requestTarget, SUPABASE_ORIGIN);
+  } catch {
+    return false;
+  }
+  if (
+    !requestTarget.startsWith("/") ||
+    requestTarget.startsWith("//") ||
+    parsed.origin !== SUPABASE_ORIGIN ||
+    parsed.pathname !== pathname ||
+    parsed.hash
+  ) {
+    return false;
+  }
+  const idKey = table === "profiles" ? "id" : "user_id";
+  const entries = [...parsed.searchParams.entries()];
+  if (
+    entries.length !== 2 ||
+    new Set(entries.map(([key]) => key)).size !== entries.length ||
+    parsed.searchParams.get("select") !== TABLE_SELECTS[table]
+  ) {
+    return false;
+  }
+  return /^eq\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+    parsed.searchParams.get(idKey) ?? "",
+  );
+}
+
+function isAllowedDataPreflight(host, method, pathname, requestTarget, headers) {
+  if (
+    host !== SUPABASE_HOST ||
+    method !== "OPTIONS" ||
+    headers.origin !== PANEL_ORIGIN ||
+    headers["access-control-request-private-network"] !== undefined
+  ) {
+    return null;
+  }
+  const requestedMethod = headers["access-control-request-method"];
+  if (
+    (pathname === "/rest/v1/memberships" || pathname === "/rest/v1/profiles") &&
+    requestedMethod === "GET" &&
+    hasExactSyntheticTableQuery(
+      requestTarget,
+      pathname,
+      pathname === "/rest/v1/profiles" ? "profiles" : "memberships",
+    ) &&
+    inspectRequestedDataPreflightHeaders(headers["access-control-request-headers"], "GET")
+  ) {
+    const table = pathname === "/rest/v1/profiles" ? "profiles" : "memberships";
+    return {
+      kind: "preflight",
+      name: `supabase.rest.${table}_preflight`,
+      allowedMethod: "GET",
+      allowedHeaders: TABLE_PREFLIGHT_HEADERS,
+    };
+  }
+  if (
+    pathname === "/rest/v1/rpc/claim_invites" &&
+    requestTarget === pathname &&
+    requestedMethod === "POST" &&
+    inspectRequestedDataPreflightHeaders(headers["access-control-request-headers"], "POST")
+  ) {
+    return {
+      kind: "preflight",
+      name: "supabase.rpc.claim_invites_preflight",
+      allowedMethod: "POST",
+      allowedHeaders: RPC_PREFLIGHT_HEADERS,
+    };
+  }
+  return null;
+}
+
+function assertDataPreflightPolicy() {
+  const getHeaders = {
+    origin: PANEL_ORIGIN,
+    "access-control-request-method": "GET",
+    "access-control-request-headers": "apikey, authorization, x-client-info, accept-profile",
+  };
+  const postHeaders = {
+    origin: PANEL_ORIGIN,
+    "access-control-request-method": "POST",
+    "access-control-request-headers":
+      "apikey, authorization, x-client-info, content-profile, content-type",
+  };
+  const profileTarget =
+    "/rest/v1/profiles?select=full_name&id=eq.39000000-0000-4000-a000-000000000065";
+  const membershipsTarget =
+    "/rest/v1/memberships?select=org_id%2C+role%2C+organizations%28name%2C+lifecycle_state%2C+created_at%29&user_id=eq.39000000-0000-4000-a000-000000000065";
+  const route = (path, target, headers) =>
+    routeFor(SUPABASE_HOST, "OPTIONS", path, target, headers);
+  assert(
+    route("/rest/v1/profiles", profileTarget, getHeaders)?.name ===
+      "supabase.rest.profiles_preflight" &&
+      route("/rest/v1/memberships", membershipsTarget, getHeaders)?.name ===
+        "supabase.rest.memberships_preflight" &&
+      route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites", postHeaders)?.name ===
+        "supabase.rpc.claim_invites_preflight",
+    "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
+  );
+  assert(
+    route("/rest/v1/profiles", profileTarget, { ...getHeaders, origin: "https://other.test" }) ===
+      null &&
+      route("/rest/v1/profiles", profileTarget, {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/profiles", profileTarget, {
+        ...getHeaders,
+        "access-control-request-headers": undefined,
+      }) === null &&
+      route("/rest/v1/profiles", `${profileTarget}&id=eq.invalid`, getHeaders) === null &&
+      route("/rest/v1/profiles", profileTarget, {
+        ...getHeaders,
+        "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/profiles", profileTarget, {
+        ...getHeaders,
+        "access-control-request-headers":
+          "apikey, authorization, x-client-info, apikey, accept-profile",
+      }) === null &&
+      route("/rest/v1/rpc/claim_invites", "/rest/v1/rpc/claim_invites?x=1", postHeaders) === null &&
+      route("/rest/v1/contracts", "/rest/v1/contracts?select=id", getHeaders) === null,
+    "M64_BROWSER_DATA_PREFLIGHT_POLICY_INVALID",
+  );
+}
+
 function isAllowedAuthPreflight(host, method, pathname, requestTarget, headers) {
   return (
     host === SUPABASE_HOST &&
@@ -722,6 +883,8 @@ function routeFor(host, method, pathname, requestTarget, headers = {}) {
     if (isAllowedAuthPreflight(host, method, pathname, requestTarget, headers)) {
       return { kind: "preflight", name: "supabase.auth_token_preflight" };
     }
+    const dataPreflight = isAllowedDataPreflight(host, method, pathname, requestTarget, headers);
+    if (dataPreflight) return dataPreflight;
     const authMethods = new Map([
       ["/auth/v1/token", new Set(["POST"])],
       ["/auth/v1/user", new Set(["GET"])],
@@ -758,11 +921,11 @@ function routeFor(host, method, pathname, requestTarget, headers = {}) {
       "providers",
     ]);
     const tableMatch = /^\/rest\/v1\/([a-z][a-z0-9_]*)$/.exec(pathname);
-    if (tableMatch && restReads.has(tableMatch[1]) && ["GET", "HEAD", "OPTIONS"].includes(method)) {
+    if (tableMatch && restReads.has(tableMatch[1]) && ["GET", "HEAD"].includes(method)) {
       return { kind: "gateway", name: `supabase.rest.${tableMatch[1]}` };
     }
     const rpcMatch = /^\/rest\/v1\/rpc\/(claim_invites|reset_portal_mapping)$/.exec(pathname);
-    if (rpcMatch && (method === "POST" || method === "OPTIONS")) {
+    if (rpcMatch && method === "POST") {
       return { kind: "gateway", name: `supabase.rpc.${rpcMatch[1]}` };
     }
     return null;
@@ -788,11 +951,14 @@ function serveStatic(response, route) {
   );
 }
 
-function serveAuthPreflight(response, route) {
+function serveSupabasePreflight(response, route) {
   response.statusCode = 204;
   response.setHeader("access-control-allow-origin", PANEL_ORIGIN);
-  response.setHeader("access-control-allow-methods", "POST");
-  response.setHeader("access-control-allow-headers", [...AUTH_PREFLIGHT_HEADERS].join(", "));
+  response.setHeader("access-control-allow-methods", route.allowedMethod ?? "POST");
+  response.setHeader(
+    "access-control-allow-headers",
+    [...(route.allowedHeaders ?? AUTH_PREFLIGHT_HEADERS)].join(", "),
+  );
   response.setHeader("access-control-max-age", "0");
   response.setHeader("cache-control", "no-store");
   response.setHeader("vary", "Origin");
@@ -1322,7 +1488,7 @@ async function run() {
           return;
         }
         if (route.kind === "preflight") {
-          serveAuthPreflight(response, route);
+          serveSupabasePreflight(response, route);
           return;
         }
         proxyToLocal(request, response, route, requestTarget, method);
