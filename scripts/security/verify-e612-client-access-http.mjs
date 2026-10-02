@@ -268,9 +268,20 @@ const m64DriverCheckpoints = new Set([
   "contract_ui_active_tab_check",
   "contract_ui_form_shape",
   "contract_fill",
+  "contract_fill_active_tab",
+  "contract_fill_readiness",
+  "contract_fill_click",
+  "contract_fill_receipt_wait",
+  "contract_fill_summary_wait",
   "stale_fill",
+  "stale_fill_readiness",
   "enrollment_ui",
   "enrollment_fill",
+  "enrollment_fill_active_tab",
+  "enrollment_fill_readiness",
+  "enrollment_fill_click",
+  "enrollment_fill_receipt_wait",
+  "enrollment_fill_summary_wait",
   "submission",
   "permission_probe",
   "permission_cta_click",
@@ -289,6 +300,36 @@ const m64PermissionGrantFields = [
   "permission_removed",
 ];
 const m64PermissionGrantValues = new Set(["false", "true", "unknown"]);
+const m64ContractFillReadinessFields = [
+  "button_present",
+  "button_visible",
+  "button_enabled",
+  "work_exact",
+  "tab_exact",
+  "portal_match",
+  "org_loaded",
+  "org_selected",
+  "provider_loaded",
+  "provider_selected",
+  "facility_loaded",
+  "facility_selected",
+  "work_validate_200",
+  "work_validate_409",
+  "fill_events_201",
+  "profiles_200",
+  "memberships_200",
+  "contracts_200",
+  "provider_groups_200",
+  "providers_200",
+  "provider_group_assignments_200",
+  "provider_facility_assignments_200",
+  "facilities_200",
+  "contract_sop_assignments_200",
+  "sop_template_versions_200",
+  "portals_200",
+  "portal_field_maps_200",
+  "fill_sessions_count_200",
+];
 const m64OrgWaitDiagnosticFields = [
   "memberships_200",
   "memberships_401",
@@ -479,6 +520,38 @@ function reportM64BrowserContractUiRouteDiagnostic(driver, checkpoint) {
   }
   const routesDiagnostic = safeM64ContractUiRoutesDiagnostic(driver.lines);
   if (routesDiagnostic) emit(`E612|M64|BROWSER|CONTRACT_UI_ROUTES_DIAGNOSTIC|${routesDiagnostic}`);
+}
+function safeM64ContractFillReadinessDiagnostic(lines) {
+  const markers = lines.filter((line) => line.startsWith("M64|BROWSER|CONTRACT_FILL_READY|"));
+  if (markers.length !== 1) return null;
+  const parts = markers[0].split("|");
+  if (
+    parts.length !== m64ContractFillReadinessFields.length + 3 ||
+    parts[0] !== "M64" ||
+    parts[1] !== "BROWSER" ||
+    parts[2] !== "CONTRACT_FILL_READY"
+  ) {
+    return null;
+  }
+  const fields = [];
+  for (let index = 0; index < m64ContractFillReadinessFields.length; index += 1) {
+    const [name, value, ...rest] = parts[index + 3].split("=");
+    const isBoolean = index < 12;
+    if (
+      name !== m64ContractFillReadinessFields[index] ||
+      rest.length !== 0 ||
+      (isBoolean ? !m64PermissionGrantValues.has(value) : !m64OrgWaitDiagnosticCounts.has(value))
+    ) {
+      return null;
+    }
+    fields.push(`${name}=${value}`);
+  }
+  return fields.join("|");
+}
+function reportM64BrowserContractFillReadinessDiagnostic(driver, checkpoint) {
+  if (checkpoint !== "contract_fill_readiness") return;
+  const diagnostic = safeM64ContractFillReadinessDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|CONTRACT_FILL_READINESS_DIAGNOSTIC|${diagnostic}`);
 }
 function safeM64PermissionGrantDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|PERMISSION_GRANT|"));
@@ -1327,6 +1400,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
     const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
+    reportM64BrowserContractFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserPermissionGrantDiagnostic(browserSession.browserDriver, checkpoint);
     if (
       error instanceof Error &&

@@ -301,12 +301,23 @@ const STAGES = Object.freeze({
     CONTRACT_UI_CHECKPOINTS.map((stage) => [stage, "M64_BROWSER_STAGE_CONTRACT_UI_FAILED"]),
   ),
   contract_fill: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  contract_fill_active_tab: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  contract_fill_readiness: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  contract_fill_click: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  contract_fill_receipt_wait: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
+  contract_fill_summary_wait: "M64_BROWSER_STAGE_CONTRACT_FILL_FAILED",
   enrollment_ui: "M64_BROWSER_STAGE_ENROLLMENT_UI_FAILED",
   enrollment_fill: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  enrollment_fill_active_tab: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  enrollment_fill_readiness: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  enrollment_fill_click: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  enrollment_fill_receipt_wait: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
+  enrollment_fill_summary_wait: "M64_BROWSER_STAGE_ENROLLMENT_FILL_FAILED",
   submission: "M64_BROWSER_STAGE_HUMAN_SUBMISSION_FAILED",
   second_enrollment_fill: "M64_BROWSER_STAGE_SECOND_ENROLLMENT_FILL_FAILED",
   reset: "M64_BROWSER_STAGE_MAPPING_RESET_FAILED",
   stale_fill: "M64_BROWSER_STAGE_STALE_FILL_FAILED",
+  stale_fill_readiness: "M64_BROWSER_STAGE_STALE_FILL_FAILED",
 });
 
 let currentStage = "preflight";
@@ -2160,14 +2171,157 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
 
   const fillButton = extensionPage.locator("#fill-btn");
   const mainError = extensionPage.locator("#main-error");
-  const waitForFillReady = async (label) => {
-    await poll(() => fillButton.isEnabled(), Boolean, label, 30_000);
+  const emitContractFillReadinessDiagnostic = async (expectedWork, expectedTabId, targetPage) => {
+    const inspectWithinLimit = (operation) =>
+      bounded(operation, 5_000, "M64_BROWSER_FILL_READINESS_DIAGNOSTIC_TIMEOUT").then(
+        (value) => ({ ok: true, value }),
+        () => ({ ok: false, value: null }),
+      );
+    const unknownState = {
+      button_present: null,
+      button_visible: null,
+      button_enabled: null,
+      portal_detected: null,
+      org_loaded: null,
+      org_selected: null,
+      provider_loaded: null,
+      provider_selected: null,
+      facility_loaded: null,
+      facility_selected: null,
+    };
+    const [uiResult, workResult, tabResult] = await Promise.all([
+      inspectWithinLimit(() =>
+        extensionPage.evaluate(
+          ({ orgId, providerId, facilityId }) => {
+            const button = document.querySelector("#fill-btn");
+            const orgSelect = document.querySelector("#org-select");
+            const providerCard = document.querySelector("#provider-card");
+            const providerName = document.querySelector("#provider-name");
+            const facilitySelect = document.querySelector("#facility-select");
+            const portalStatus = document.querySelector("#portal-status");
+            const visible = (element) => {
+              if (!element || element.hidden) return false;
+              const style = getComputedStyle(element);
+              return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                element.getClientRects().length > 0
+              );
+            };
+            const orgOptions = orgSelect ? [...orgSelect.options] : [];
+            const facilityOptions = facilitySelect ? [...facilitySelect.options] : [];
+            return {
+              button_present: button !== null,
+              button_visible: visible(button),
+              button_enabled: button instanceof HTMLButtonElement ? !button.disabled : false,
+              portal_detected: portalStatus?.classList.contains("detected") === true,
+              org_loaded: orgOptions.some((option) => option.value === orgId),
+              org_selected: orgSelect?.value === orgId,
+              provider_loaded: visible(providerCard) && Boolean(providerName?.textContent?.trim()),
+              provider_selected:
+                visible(providerCard) &&
+                providerName?.textContent?.trim() === "Synthetic M64 Provider" &&
+                providerId === "39000000-0000-4000-a000-000000000065",
+              facility_loaded: facilityOptions.some((option) => option.value === facilityId),
+              facility_selected: facilitySelect?.value === facilityId,
+            };
+          },
+          {
+            orgId: ORG_ID,
+            providerId: expectedWork?.tuple?.providerId ?? "",
+            facilityId: FACILITY_ID,
+          },
+        ),
+      ),
+      inspectWithinLimit(() => readActiveWork()),
+      inspectWithinLimit(() => activeChromeTabId(extensionPage)),
+    ]);
+    const currentWork = workResult.value;
+    const activeTabId = tabResult.value;
+    const workExact = workResult.ok
+      ? currentWork != null && activeWorkIdentity(currentWork) === activeWorkIdentity(expectedWork)
+      : null;
+    const tabExact = tabResult.ok
+      ? activeTabId === expectedTabId && targetPage.url() === PORTAL_URL
+      : null;
+    const portalMatch =
+      uiResult.ok && workResult.ok
+        ? uiResult.value.portal_detected === true &&
+          targetPage.url() === PORTAL_URL &&
+          currentWork?.tuple?.portalId === expectedWork?.tuple?.portalId &&
+          currentWork?.tuple?.portalKey === expectedWork?.tuple?.portalKey
+        : null;
+    const state = { ...unknownState, ...(uiResult.value ?? {}) };
+    const booleans = [
+      ["button_present", state.button_present],
+      ["button_visible", state.button_visible],
+      ["button_enabled", state.button_enabled],
+      ["work_exact", workExact],
+      ["tab_exact", tabExact],
+      ["portal_match", portalMatch],
+      ["org_loaded", state.org_loaded],
+      ["org_selected", state.org_selected],
+      ["provider_loaded", state.provider_loaded],
+      ["provider_selected", state.provider_selected],
+      ["facility_loaded", state.facility_loaded],
+      ["facility_selected", state.facility_selected],
+    ];
+    const fields = booleans.map(
+      ([name, value]) =>
+        `${name}=${value === true ? "true" : value === false ? "false" : "unknown"}`,
+    );
+    const routeCounts = [
+      ["work_validate_200", "panel.work_validate", 200],
+      ["work_validate_409", "panel.work_validate", 409],
+      ["fill_events_201", "panel.fill_events", 201],
+      ["profiles_200", "supabase.rest.profiles", 200],
+      ["memberships_200", "supabase.rest.memberships", 200],
+      ["contracts_200", "supabase.rest.contracts", 200],
+      ["provider_groups_200", "supabase.rest.provider_groups", 200],
+      ["providers_200", "supabase.rest.providers", 200],
+      ["provider_group_assignments_200", "supabase.rest.provider_group_assignments", 200],
+      ["provider_facility_assignments_200", "supabase.rest.provider_facility_assignments", 200],
+      ["facilities_200", "supabase.rest.facilities", 200],
+      ["contract_sop_assignments_200", "supabase.rest.contract_sop_assignments", 200],
+      ["sop_template_versions_200", "supabase.rest.sop_template_versions", 200],
+      ["portals_200", "supabase.rest.portals", 200],
+      ["portal_field_maps_200", "supabase.rest.portal_field_maps", 200],
+      ["fill_sessions_count_200", "supabase.rest.fill_sessions_count", 200],
+    ];
+    fields.push(
+      ...routeCounts.map(
+        ([name, route, status]) => `${name}=${boundedDiagnosticCount(routeCount(route, status))}`,
+      ),
+    );
+    safeLog(`M64|BROWSER|CONTRACT_FILL_READY|${fields.join("|")}`);
+  };
+  const waitForFillReady = async (label, stage, expectedWork, expectedTabId, targetPage) => {
+    checkpoint(`${stage}_readiness`);
+    try {
+      await poll(() => fillButton.isEnabled(), Boolean, label, 30_000);
+    } catch (error) {
+      if (stage === "contract") {
+        await emitContractFillReadinessDiagnostic(expectedWork, expectedTabId, targetPage).catch(
+          () => {},
+        );
+      }
+      throw error;
+    }
   };
   const fillOnBoundWork = async (expectedTabId, targetPage, selectorId, label) => {
-    checkpoint(label === "Contract" ? "contract_fill" : "enrollment_fill");
+    const stage = label === "Contract" ? "contract_fill" : "enrollment_fill";
+    checkpoint(stage);
+    checkpoint(`${stage}_active_tab`);
     await assertPayerTabActive(expectedTabId);
-    await waitForFillReady(`${label.toLowerCase()}_fill_button`);
+    await waitForFillReady(
+      `${label.toLowerCase()}_fill_button`,
+      stage,
+      label === "Contract" ? boundWork : enrollmentWork,
+      expectedTabId,
+      targetPage,
+    );
     const previousCreated = routeCount("panel.fill_events", 201);
+    checkpoint(`${stage}_click`);
     await bounded(
       () => fillButton.click({ timeout: 10_000 }),
       15_000,
@@ -2175,6 +2329,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
         ? "M64_BROWSER_CONTRACT_FILL_FAILED"
         : "M64_BROWSER_ENROLLMENT_FILL_FAILED",
     );
+    checkpoint(`${stage}_receipt_wait`);
     await poll(
       () => routeCount("panel.fill_events", 201),
       (count) => count > previousCreated,
@@ -2182,6 +2337,7 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       45_000,
     );
     const summary = extensionPage.locator("#fill-summary");
+    checkpoint(`${stage}_summary_wait`);
     await poll(
       async () => ({
         resultsVisible: await extensionPage.locator("#fill-results").isVisible(),
@@ -2221,7 +2377,13 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
   checkpoint("stale_fill");
   await assertWorkRecord(boundWork, contractEvidence, "contract");
   await assertPayerTabActive(boundWork.boundTabId);
-  await waitForFillReady("stale_contract_fill_button");
+  await waitForFillReady(
+    "stale_contract_fill_button",
+    "stale_fill",
+    boundWork,
+    boundWork.boundTabId,
+    portalPage,
+  );
   const staleValidationBefore = routeCount("panel.work_validate", 409);
   const fillEventsBefore = routeTotal("panel.fill_events");
   const staleFormBefore = {
