@@ -306,6 +306,13 @@ const SUPABASE_REST_READ_TABLES = new Set([
   "provider_facility_assignments",
   "providers",
 ]);
+const DENIED_SUPABASE_DIAGNOSTIC_TABLES = new Set([
+  ...SUPABASE_REST_READ_TABLES,
+  "denial_reason_codes",
+  "state_licenses",
+  "group_insurance_policies",
+  "fill_sessions",
+]);
 const AUTH_PREFLIGHT_DENIAL_REASONS = new Set([
   "AUTH_PATH_OTHER",
   "TOKEN_TARGET_OTHER",
@@ -1315,6 +1322,36 @@ function classifyDenied(host, method, pathname) {
     return "PORTAL_OTHER";
   }
   return "UNKNOWN_HOST";
+}
+
+function firstDeniedSupabaseMarker(method, pathname, requestTarget, headers) {
+  const allowedMethods = new Set(["GET", "HEAD", "POST", "PATCH", "OPTIONS", "DELETE"]);
+  const methodBucket = allowedMethods.has(method) ? method : "OTHER";
+  const requested = String(headers["access-control-request-method"] ?? "").toUpperCase();
+  const requestedBucket = !requested ? "NONE" : allowedMethods.has(requested) ? requested : "OTHER";
+  let endpoint = "other";
+  let queryMatch = "unconfigured";
+  const table = /^\/rest\/v1\/([a-z][a-z0-9_]*)$/.exec(pathname)?.[1];
+  if (table) {
+    endpoint = DENIED_SUPABASE_DIAGNOSTIC_TABLES.has(table) ? `rest_${table}` : "rest_other";
+    if (DATA_PREFLIGHT_TABLE_QUERIES[table]) {
+      queryMatch = hasExactSyntheticTableQuery(requestTarget, pathname, table)
+        ? "exact"
+        : "mismatch";
+    }
+  } else if (pathname.startsWith("/rest/v1/rpc/")) {
+    endpoint =
+      pathname === "/rest/v1/rpc/claim_invites"
+        ? "rpc_claim_invites"
+        : pathname === "/rest/v1/rpc/reset_portal_mapping"
+          ? "rpc_reset_portal_mapping"
+          : "rpc_other";
+    queryMatch = requestTarget === pathname ? "exact" : "mismatch";
+  } else if (pathname.startsWith("/auth/v1/")) {
+    endpoint = "auth_other";
+    queryMatch = requestTarget === pathname ? "exact" : "mismatch";
+  }
+  return `M64|BROWSER|FIRST_DENIED_SUPABASE|checkpoint=${currentStage}|method=${methodBucket}|requested=${requestedBucket}|endpoint=${endpoint}|query=${queryMatch}`;
 }
 
 function extensionOriginForM64() {
@@ -4143,6 +4180,10 @@ async function run() {
         }
         const route = routeFor(hostHeader, method, pathname, requestTarget, request.headers);
         if (!route) {
+          const deniedCategory = classifyDenied(hostHeader, method, pathname);
+          if (unexpectedRoutes === 0 && deniedCategory === "SUPABASE_OTHER") {
+            safeLog(firstDeniedSupabaseMarker(method, pathname, requestTarget, request.headers));
+          }
           countDeniedSupabaseOptions(hostHeader, method, pathname);
           reportDeniedProviderRoster(hostHeader, method, pathname, requestTarget, request.headers);
           countDeniedEnrollmentProfileTarget(hostHeader, method, pathname, requestTarget);
@@ -4154,7 +4195,7 @@ async function run() {
           }
           unexpected(
             response,
-            classifyDenied(hostHeader, method, pathname),
+            deniedCategory,
             classifyAuthPreflightDenialReason(
               hostHeader,
               method,

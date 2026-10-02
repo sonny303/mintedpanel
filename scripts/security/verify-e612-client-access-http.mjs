@@ -299,6 +299,50 @@ const m64DriverCheckpoints = new Set([
   "permission_cta_clicked",
   "permission_grant_wait",
 ]);
+const m64DeniedSupabaseEndpoints = new Set([
+  ...[
+    "profiles",
+    "memberships",
+    "organizations",
+    "contracts",
+    "status_configs",
+    "provider_groups",
+    "payers",
+    "payer_network_targets",
+    "facilities",
+    "contract_sop_assignments",
+    "sop_templates",
+    "sop_template_versions",
+    "portals",
+    "portal_field_maps",
+    "credential_cases",
+    "tasks",
+    "case_facilities",
+    "touches",
+    "provider_group_assignments",
+    "provider_facility_assignments",
+    "providers",
+    "denial_reason_codes",
+    "state_licenses",
+    "group_insurance_policies",
+    "fill_sessions",
+  ].map((table) => `rest_${table}`),
+  "rest_other",
+  "rpc_claim_invites",
+  "rpc_reset_portal_mapping",
+  "rpc_other",
+  "auth_other",
+  "other",
+]);
+const m64DeniedSupabaseMethods = new Set([
+  "GET",
+  "HEAD",
+  "POST",
+  "PATCH",
+  "OPTIONS",
+  "DELETE",
+  "OTHER",
+]);
 const m64PermissionGrantFields = [
   "active_payer_tab",
   "work_identity",
@@ -696,6 +740,49 @@ function reportM64BrowserCheckpoint(driver) {
   const checkpoint = safeM64DriverCheckpoint(driver.lines);
   if (checkpoint) emit(`E612|M64|BROWSER|DRIVER_CHECKPOINT|last=${checkpoint}`);
   return checkpoint;
+}
+function safeM64FirstDeniedSupabaseDiagnostic(lines) {
+  const prefix = "M64|BROWSER|FIRST_DENIED_SUPABASE|";
+  const markers = lines.filter((line) => line.startsWith(prefix));
+  if (markers.length !== 1) return null;
+  const match =
+    /^M64\|BROWSER\|FIRST_DENIED_SUPABASE\|checkpoint=([a-z0-9_]+)\|method=([A-Z]+)\|requested=([A-Z]+)\|endpoint=([a-z0-9_]+)\|query=(exact|mismatch|unconfigured)$/.exec(
+      markers[0],
+    );
+  if (
+    !match ||
+    !m64DriverCheckpoints.has(match[1]) ||
+    !m64DeniedSupabaseMethods.has(match[2]) ||
+    !(m64DeniedSupabaseMethods.has(match[3]) || match[3] === "NONE") ||
+    !m64DeniedSupabaseEndpoints.has(match[4])
+  ) {
+    return null;
+  }
+  return markers[0].slice(prefix.length);
+}
+function reportM64FirstDeniedSupabaseDiagnostic(driver) {
+  const diagnostic = safeM64FirstDeniedSupabaseDiagnostic(driver.lines);
+  if (diagnostic) emit(`E612|M64|BROWSER|FIRST_DENIED_SUPABASE_DIAGNOSTIC|${diagnostic}`);
+}
+function assertM64FirstDeniedSupabaseDiagnosticPolicy() {
+  const valid =
+    "M64|BROWSER|FIRST_DENIED_SUPABASE|checkpoint=enrollment_ui_case_document|method=OPTIONS|requested=GET|endpoint=rest_memberships|query=mismatch";
+  if (safeM64FirstDeniedSupabaseDiagnostic([valid]) !== valid.split("|").slice(3).join("|")) {
+    fail("E612_M64_FIRST_DENIED_SUPABASE_DIAGNOSTIC_POLICY_INVALID");
+  }
+  const invalid = [
+    valid.replace("endpoint=rest_memberships", "endpoint=rest_unknown_table"),
+    valid.replace("method=OPTIONS", "method=TRACE"),
+    valid.replace("query=mismatch", "query=raw"),
+    valid.replace("checkpoint=enrollment_ui_case_document", "checkpoint=unknown"),
+    `${valid}|url=/rest/v1/memberships`,
+  ];
+  if (
+    invalid.some((marker) => safeM64FirstDeniedSupabaseDiagnostic([marker]) !== null) ||
+    safeM64FirstDeniedSupabaseDiagnostic([valid, valid]) !== null
+  ) {
+    fail("E612_M64_FIRST_DENIED_SUPABASE_DIAGNOSTIC_POLICY_INVALID");
+  }
 }
 function safeM64OrgWaitDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|ORG_WAIT|"));
@@ -2197,6 +2284,7 @@ async function finishM64BrowserSmoke(browserSession, panelBuild) {
   } catch (error) {
     browserSession.browserDriver.stop();
     const checkpoint = reportM64BrowserCheckpoint(browserSession.browserDriver);
+    reportM64FirstDeniedSupabaseDiagnostic(browserSession.browserDriver);
     reportM64BrowserOrgWaitDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractUiRouteDiagnostic(browserSession.browserDriver, checkpoint);
     reportM64BrowserContractFillReadinessDiagnostic(browserSession.browserDriver, checkpoint);
@@ -2828,6 +2916,7 @@ try {
   assertM64EnrollmentUiDiagnosticPolicy();
   assertM64EnrollmentFillReadinessDiagnosticPolicy();
   assertM64EnrollmentFillReceiptDiagnosticPolicy();
+  assertM64FirstDeniedSupabaseDiagnosticPolicy();
   validateDockerContext();
   stage = "pinned_images";
   ids = Object.fromEntries(Object.entries(images).map(([kind, image]) => [kind, imageId(image)]));
