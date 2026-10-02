@@ -28,15 +28,34 @@ interface Captured {
   payload?: Record<string, unknown>;
 }
 
-function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
+function makeFakeDb(
+  results: Array<{ data: unknown; error?: unknown }>,
+  options: { firstPortalRows?: Array<Record<string, unknown>> } = {},
+) {
   const captures: Captured[] = [];
   let cursor = 0;
+  let firstPortalRows = options.firstPortalRows;
   const take = () => results[Math.min(cursor++, results.length - 1)] ?? { data: null };
 
   const db = {
     from(table: string) {
       const cap: Captured = { table, filters: [], orders: [] };
       captures.push(cap);
+      const useFirstPortalRows = table === "portals" && firstPortalRows !== undefined;
+      const portalRows = useFirstPortalRows ? firstPortalRows : undefined;
+      if (useFirstPortalRows) firstPortalRows = undefined;
+      const takeForQuery = () => {
+        if (portalRows === undefined) return take();
+        const requestedKey = cap.filters.find(([column]) => column === "portal_key")?.[1];
+        const scope = cap.or?.match(/^org_id\.is\.null,org_id\.eq\.(.+)$/)?.[1];
+        return {
+          data: portalRows.filter(
+            (row) =>
+              (requestedKey === undefined || row.portal_key === requestedKey) &&
+              (row.org_id == null || (scope != null && row.org_id === scope)),
+          ),
+        };
+      };
       const builder: Record<string, unknown> = {
         select(cols: string) {
           cap.selectCols = cols;
@@ -72,10 +91,10 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
         limit() {
           return builder;
         },
-        single: () => Promise.resolve(take()),
-        maybeSingle: () => Promise.resolve(take()),
+        single: () => Promise.resolve(takeForQuery()),
+        maybeSingle: () => Promise.resolve(takeForQuery()),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
-          Promise.resolve(take()).then(res, rej),
+          Promise.resolve(takeForQuery()).then(res, rej),
       };
       return builder;
     },
@@ -330,6 +349,10 @@ describe("proposeFieldMap — propose-only write", () => {
     ...ctxWith(db),
     writeAudit,
   });
+  const proposalDb = (
+    results: Array<{ data: unknown; error?: unknown }>,
+    portalRows: Array<Record<string, unknown>> = [portalDbRow],
+  ) => makeFakeDb(results, { firstPortalRows: portalRows });
   const input = { portal_key: "Availity", selector: " #npi ", field_label: "NPI Number:" };
 
   function inserted(captures: Captured[]) {
@@ -346,8 +369,119 @@ describe("proposeFieldMap — propose-only write", () => {
     token: null,
   };
 
+  it("rejects a URL-only re-observation before an existing token map can be returned", async () => {
+    const existingTokenMap = { ...dbRow, token: "provider.npi" };
+    const explicitPortal = {
+      ...portalDbRow,
+      id: "explicit-config",
+      org_id: "org-1",
+      case_type: "contract",
+      requires_explicit_selection: true,
+    };
+    const { db, captures } = proposalDb([{ data: [existingTokenMap] }], [explicitPortal]);
+
+    const result = await proposeFieldMap(proposeCtx(db), input);
+
+    expect(result).toEqual({
+      kind: "rejected",
+      status: 409,
+      message: "This form configuration requires expected_mapping_generation.",
+    });
+    expect(JSON.stringify(result)).not.toContain("provider.npi");
+    expect(captures.map((capture) => capture.table)).toEqual(["portals"]);
+    expect(captures[0]).toMatchObject({
+      selectCols: "case_type, requires_explicit_selection, mapping_generation",
+      or: "org_id.is.null,org_id.eq.org-1",
+      filters: [["portal_key", "availity"]],
+    });
+  });
+
+  it.each([
+    ["typed", { case_type: "contract", requires_explicit_selection: false, mapping_generation: 1 }],
+    [
+      "explicit-selection",
+      { case_type: null, requires_explicit_selection: true, mapping_generation: 1 },
+    ],
+    [
+      "reset generation two",
+      { case_type: null, requires_explicit_selection: false, mapping_generation: 2 },
+    ],
+  ])("rejects a new selector without a generation token for %s config", async (_name, state) => {
+    const typedPortal = { ...portalDbRow, ...state, org_id: "org-1" };
+    const { db, captures } = proposalDb([], [typedPortal]);
+
+    const result = await proposeFieldMap(proposeCtx(db), { ...input, selector: "#new-field" });
+
+    expect(result).toMatchObject({ kind: "rejected", status: 409 });
+    expect(captures.map((capture) => capture.table)).toEqual(["portals"]);
+    expect(captures.some((capture) => capture.op === "insert")).toBe(false);
+  });
+
+  it.each([
+    [
+      "a global explicit row beside an org legacy row",
+      [
+        { ...portalDbRow, org_id: null, requires_explicit_selection: true },
+        { ...portalDbRow, id: "org-legacy", org_id: "org-1", requires_explicit_selection: false },
+      ],
+    ],
+    [
+      "an org typed row beside a global legacy row",
+      [
+        { ...portalDbRow, org_id: null },
+        { ...portalDbRow, id: "org-typed", org_id: "org-1", case_type: "enrollment" },
+      ],
+    ],
+  ])("blocks mixed visible tiers when %s", async (_name, portalRows) => {
+    const { db, captures } = proposalDb([{ data: [dbRow] }], portalRows);
+
+    const result = await proposeFieldMap(proposeCtx(db), input);
+
+    expect(result).toMatchObject({ kind: "rejected", status: 409 });
+    expect(captures.map((capture) => capture.table)).toEqual(["portals"]);
+  });
+
+  it("does not let another organization's private typed row block this org's generation-one legacy key", async () => {
+    const ownLegacy = {
+      ...portalDbRow,
+      id: "org-legacy",
+      org_id: "org-1",
+    };
+    const foreignExplicit = {
+      ...portalDbRow,
+      id: "foreign-explicit",
+      org_id: "org-2",
+      case_type: "contract",
+      requires_explicit_selection: true,
+    };
+    const { db, captures } = proposalDb(
+      [{ data: [] }, { data: proposedRow }],
+      [ownLegacy, foreignExplicit],
+    );
+
+    const result = await proposeFieldMap(proposeCtx(db), input);
+
+    expect(result.kind).toBe("created");
+    expect(captures[0]?.or).toBe("org_id.is.null,org_id.eq.org-1");
+    expect(captures[0]?.filters).toContainEqual(["portal_key", "availity"]);
+    expect(inserted(captures)?.org_id).toBe("org-1");
+  });
+
+  it("allows URL-only proposals for a genuine generation-one untyped legacy config", async () => {
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }], [portalDbRow]);
+
+    const result = await proposeFieldMap(proposeCtx(db), input);
+
+    expect(result.kind).toBe("created");
+    expect(inserted(captures)).toMatchObject({
+      portal_key: "availity",
+      status: "proposed",
+      token: null,
+    });
+  });
+
   it("forces status/source/token regardless of what the body asks for", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), {
       ...input,
       // A client trying to mint an approved token mapping.
@@ -371,7 +505,7 @@ describe("proposeFieldMap — propose-only write", () => {
   // not Postgres, so it cannot enforce a CHECK; this asserts the payload
   // instead. Keep `notes` non-empty here or the route is dead on arrival.
   it("stamps the note the schema requires for a source 'manual' row", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), input);
     const payload = inserted(captures);
     expect(payload?.source).toBe("manual");
@@ -386,7 +520,8 @@ describe("proposeFieldMap — propose-only write", () => {
       data: null,
       error: { message: "portal_selector_collision: review the existing selector" },
     });
-    const db = { rpc } as unknown as SupabaseClient<Database>;
+    const from = vi.fn();
+    const db = { rpc, from } as unknown as SupabaseClient<Database>;
     const result = await proposeFieldMap(proposeCtx(db), {
       ...input,
       expected_mapping_generation: 3,
@@ -400,6 +535,7 @@ describe("proposeFieldMap — propose-only write", () => {
         p_capture: expect.objectContaining({ portal_key: "availity", selector: "#npi" }),
       }),
     );
+    expect(from).not.toHaveBeenCalled();
     expect(result).toMatchObject({ kind: "rejected", status: 409 });
     if (result.kind !== "rejected") throw new Error("expected a rejected result");
     expect(result.message).toContain("portal_selector_collision");
@@ -453,14 +589,14 @@ describe("proposeFieldMap — propose-only write", () => {
   });
 
   it("always writes the caller's org, never a global row or a body-supplied org", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), { ...input, org_id: null } as never);
     const payload = inserted(captures);
     expect(payload?.org_id).toBe("org-1");
   });
 
   it("normalizes the portal key and field label at the write boundary", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), input);
     const payload = inserted(captures);
     // Folded so the SOP-step -> portal join stays a literal compare, and the
@@ -487,7 +623,7 @@ describe("proposeFieldMap — propose-only write", () => {
       shared_base_generation: null,
       status: "approved",
     });
-    const { db, captures } = makeFakeDb([
+    const { db, captures } = proposalDb([
       { data: [] },
       { data: proposedRow },
       { data: [registryConfig("stale_other", 4), registryConfig("current_other", 2)] },
@@ -512,14 +648,14 @@ describe("proposeFieldMap — propose-only write", () => {
   });
 
   it("returns the existing row without inserting when the selector is already known", async () => {
-    const { db, captures } = makeFakeDb([{ data: [dbRow] }]);
+    const { db, captures } = proposalDb([{ data: [dbRow] }]);
     const result = await proposeFieldMap(proposeCtx(db), input);
     expect(result.kind).toBe("existing");
     expect(captures.some((c) => c.op === "insert")).toBe(false);
   });
 
   it("writes a non-empty option list on first sighting", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), {
       ...input,
       field_type: "select",
@@ -536,7 +672,7 @@ describe("proposeFieldMap — propose-only write", () => {
   });
 
   it("ignores an empty option list on insert so 'never captured' stays null", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), { ...input, control_options: [] });
     expect(inserted(captures)?.control_options).toBeNull();
   });
@@ -547,7 +683,7 @@ describe("proposeFieldMap — propose-only write", () => {
       ...own,
       control_options: [{ value: "KS", label: "Kansas" }],
     };
-    const { db, captures } = makeFakeDb([{ data: [own] }, { data: refreshed }]);
+    const { db, captures } = proposalDb([{ data: [own] }, { data: refreshed }]);
     const result = await proposeFieldMap(proposeCtx(db), {
       ...input,
       field_type: "select",
@@ -566,14 +702,14 @@ describe("proposeFieldMap — propose-only write", () => {
       org_id: "org-1",
       control_options: [{ value: "KS", label: "Kansas" }],
     };
-    const { db, captures } = makeFakeDb([{ data: [own] }]);
+    const { db, captures } = proposalDb([{ data: [own] }]);
     const result = await proposeFieldMap(proposeCtx(db), { ...input, control_options: [] });
     expect(result.kind).toBe("existing");
     expect(captures.some((c) => c.op === "update")).toBe(false);
   });
 
   it("leaves a GLOBAL hit unchanged even when a vocabulary is offered", async () => {
-    const { db, captures } = makeFakeDb([{ data: [{ ...dbRow, org_id: null }] }]);
+    const { db, captures } = proposalDb([{ data: [{ ...dbRow, org_id: null }] }]);
     await proposeFieldMap(proposeCtx(db), {
       ...input,
       control_options: [{ value: "KS", label: "Kansas" }],
@@ -584,16 +720,16 @@ describe("proposeFieldMap — propose-only write", () => {
 
   it("treats a GLOBAL row as already-covered (the shared catalog is authoritative)", async () => {
     // dbRow is org_id null — a global catalog entry for this very selector.
-    const { db, captures } = makeFakeDb([{ data: [{ ...dbRow, org_id: null }] }]);
+    const { db, captures } = proposalDb([{ data: [{ ...dbRow, org_id: null }] }]);
     const result = await proposeFieldMap(proposeCtx(db), input);
     expect(result.kind).toBe("existing");
     expect(captures.some((c) => c.op === "insert")).toBe(false);
   });
 
   it("scopes the dedupe lookup to global + own org", async () => {
-    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db, captures } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db), input);
-    const lookup = captures[0];
+    const lookup = captures.find((capture) => capture.table === "portal_field_maps")!;
     expect(lookup.or).toBe("org_id.is.null,org_id.eq.org-1");
     expect(lookup.filters).toContainEqual(["portal_key", "availity"]);
     expect(lookup.filters).toContainEqual(["selector", "#npi"]);
@@ -601,7 +737,7 @@ describe("proposeFieldMap — propose-only write", () => {
 
   it("audits a created proposal without echoing a token", async () => {
     const writeAudit = audit();
-    const { db } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    const { db } = proposalDb([{ data: [] }, { data: proposedRow }]);
     await proposeFieldMap(proposeCtx(db, writeAudit), input);
     expect(writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -615,7 +751,7 @@ describe("proposeFieldMap — propose-only write", () => {
 
   it("does not audit when nothing was written", async () => {
     const writeAudit = audit();
-    const { db } = makeFakeDb([{ data: [dbRow] }]);
+    const { db } = proposalDb([{ data: [dbRow] }]);
     await proposeFieldMap(proposeCtx(db, writeAudit), input);
     expect(writeAudit).not.toHaveBeenCalled();
   });
