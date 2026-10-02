@@ -123,6 +123,7 @@ const m64DriverFailureMarkers = new Set([
   "M64_BROWSER_ACTIVE_TAB_DRIFT",
   "M64_BROWSER_ACTUAL_SIDEPANEL_OPEN_FAILED",
   "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
+  "M64_BROWSER_NATIVE_PANEL_IDENTITY_ONLY",
   "M64_BROWSER_PERMISSION_PREGRANTED",
   "M64_BROWSER_PERMISSION_CTA_UNAVAILABLE",
   "M64_BROWSER_PERMISSION_CONSENT_UNAVAILABLE",
@@ -311,8 +312,17 @@ const m64OrgWaitDiagnosticUiStates = new Set([
   "sidebar",
   "other",
 ]);
-const m64NativeTargetStates = new Set(["observed", "missing", "ambiguous", "cdp_unavailable"]);
+const m64NativeTargetStates = new Set([
+  "observed",
+  "missing",
+  "ambiguous",
+  "unqualified",
+  "cdp_unavailable",
+  "cdp_unsupported",
+]);
 const m64NativeTargetCounts = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64NativeTargetQualifications = new Set(["0", "1", "2_PLUS", "unknown"]);
+const m64NativeTargetRouting = new Set(["supported", "unsupported", "unknown"]);
 const m64NativeTargetParentRelations = new Set([
   "has_parent",
   "none",
@@ -459,14 +469,16 @@ function safeM64NativeTargetDiagnostic(lines) {
   const markers = lines.filter((line) => line.startsWith("M64|BROWSER|NATIVE_TARGET|"));
   if (markers.length !== 1) return null;
   const match =
-    /^M64\|BROWSER\|NATIVE_TARGET\|state=([a-z_]+)\|count=([A-Za-z0-9_]+)\|type=([a-z_]+)\|page=([A-Za-z0-9_]+)\|tab=([A-Za-z0-9_]+)\|other=([A-Za-z0-9_]+)\|extra=([A-Za-z0-9_]+)\|parent=([a-z_]+)$/.exec(
+    /^M64\|BROWSER\|NATIVE_TARGET\|state=([a-z_]+)\|count=([A-Za-z0-9_]+)\|type=([a-z_]+)\|qualified=([A-Za-z0-9_]+)\|page=([A-Za-z0-9_]+)\|tab=([A-Za-z0-9_]+)\|other=([A-Za-z0-9_]+)\|extra=([A-Za-z0-9_]+)\|parent=([a-z_]+)\|routing=([a-z_]+)$/.exec(
       markers[0],
     );
   if (!match) return null;
-  const [, state, count, type, page, tab, other, extra, parent] = match;
+  const [, state, count, type, qualified, page, tab, other, extra, parent, routing] = match;
   if (
     !m64NativeTargetStates.has(state) ||
     !m64NativeTargetCounts.has(count) ||
+    !m64NativeTargetQualifications.has(qualified) ||
+    !m64NativeTargetRouting.has(routing) ||
     !m64NativeTargetTypes.has(type) ||
     ![page, tab, other, extra].every((value) => m64NativeTargetCounts.has(value)) ||
     !m64NativeTargetParentRelations.has(parent)
@@ -479,40 +491,62 @@ function safeM64NativeTargetDiagnostic(lines) {
     0,
   );
   const observedBucket = type === "page" ? 0 : type === "tab" ? 1 : type === "other" ? 2 : 3;
-  const validObservedHistogram = histogram.every(
+  const singleCandidateHistogram = histogram.every(
     (value, index) => value === (index === observedBucket ? "1" : "0"),
   );
   const validParentRelation =
-    (parent !== "page_parent_is_tab" || (page !== "0" && tab !== "0")) &&
+    (parent !== "page_parent_is_tab" || (count === "2_PLUS" && page !== "0" && tab !== "0")) &&
     (parent !== "has_parent" || count === "1") &&
     (!new Set(["page_parent_is_tab", "same_parent", "unrelated"]).has(parent) ||
       count === "2_PLUS");
+  const candidateShape =
+    (count === "1" &&
+      ["page", "tab", "other", "extra"].includes(type) &&
+      singleCandidateHistogram) ||
+    (count === "2_PLUS" && type === "ambiguous" && minimumCount >= 2);
   const consistent =
     (state === "observed" &&
-      count === "1" &&
-      type !== "none" &&
-      type !== "ambiguous" &&
-      type !== "unknown" &&
-      validObservedHistogram &&
-      (parent === "none" || parent === "has_parent")) ||
+      candidateShape &&
+      qualified === "1" &&
+      routing === "supported" &&
+      parent !== "unknown" &&
+      validParentRelation) ||
+    (state === "unqualified" &&
+      candidateShape &&
+      qualified === "0" &&
+      routing === "supported" &&
+      parent !== "unknown" &&
+      validParentRelation) ||
     (state === "missing" &&
       count === "0" &&
       type === "none" &&
+      qualified === "0" &&
       histogram.every((value) => value === "0") &&
-      parent === "none") ||
+      parent === "none" &&
+      routing === "supported") ||
     (state === "ambiguous" &&
       count === "2_PLUS" &&
       type === "ambiguous" &&
       minimumCount >= 2 &&
+      qualified === "2_PLUS" &&
+      routing === "supported" &&
+      parent !== "unknown" &&
+      validParentRelation) ||
+    (state === "cdp_unsupported" &&
+      candidateShape &&
+      qualified === "unknown" &&
+      routing === "unsupported" &&
       parent !== "unknown" &&
       validParentRelation) ||
     (state === "cdp_unavailable" &&
       count === "unknown" &&
       type === "unknown" &&
+      qualified === "unknown" &&
       histogram.every((value) => value === "unknown") &&
-      parent === "unknown");
+      parent === "unknown" &&
+      routing === "unknown");
   return consistent
-    ? `state=${state}|count=${count}|type=${type}|page=${page}|tab=${tab}|other=${other}|extra=${extra}|parent=${parent}`
+    ? `state=${state}|count=${count}|type=${type}|qualified=${qualified}|page=${page}|tab=${tab}|other=${other}|extra=${extra}|parent=${parent}|routing=${routing}`
     : null;
 }
 function reportM64BrowserNativeTargetDiagnostic(driver, checkpoint) {

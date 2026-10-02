@@ -1631,6 +1631,21 @@ function activeChromeTabId(extensionPage) {
   );
 }
 
+function matchingNativeTargetRuntimeResponse(event, expectedSessionId, expectedRequestId) {
+  if (event?.sessionId !== expectedSessionId || typeof event?.message !== "string") return null;
+  let response;
+  try {
+    response = JSON.parse(event.message);
+  } catch {
+    return null;
+  }
+  if (response?.id !== expectedRequestId) return null;
+  return {
+    exception: Boolean(response.error || response.result?.exceptionDetails),
+    value: response.result?.result?.value,
+  };
+}
+
 async function panelContractPermissionProbe(extensionPage, extensionId) {
   checkpoint("panel_page_create");
   const panelPage = await bounded(
@@ -1949,10 +1964,15 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     }
     return "unrelated";
   };
-  const logNativeTargetDiagnostic = (state, targets = null) => {
+  const logNativeTargetDiagnostic = (
+    state,
+    targets = null,
+    qualifiedCount = null,
+    routing = "supported",
+  ) => {
     if (state === "cdp_unavailable") {
       safeLog(
-        "M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown|page=unknown|tab=unknown|other=unknown|extra=unknown|parent=unknown",
+        "M64|BROWSER|NATIVE_TARGET|state=cdp_unavailable|count=unknown|type=unknown|qualified=unknown|page=unknown|tab=unknown|other=unknown|extra=unknown|parent=unknown|routing=unknown",
       );
       return;
     }
@@ -1963,14 +1983,13 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
       else if (target.type === "other") counts.other += 1;
       else counts.extra += 1;
     }
-    const type =
-      state === "observed"
+    const type = !targets?.length
+      ? "none"
+      : targets.length === 1
         ? nativeTargetType(targets[0].type)
-        : state === "ambiguous"
-          ? "ambiguous"
-          : "none";
+        : "ambiguous";
     safeLog(
-      `M64|BROWSER|NATIVE_TARGET|state=${state}|count=${nativeTargetCount(targets?.length ?? 0)}|type=${type}|page=${nativeTargetCount(counts.page)}|tab=${nativeTargetCount(counts.tab)}|other=${nativeTargetCount(counts.other)}|extra=${nativeTargetCount(counts.extra)}|parent=${nativeTargetParent(targets ?? [])}`,
+      `M64|BROWSER|NATIVE_TARGET|state=${state}|count=${nativeTargetCount(targets?.length ?? 0)}|type=${type}|qualified=${qualifiedCount === null ? "unknown" : nativeTargetCount(qualifiedCount)}|page=${nativeTargetCount(counts.page)}|tab=${nativeTargetCount(counts.tab)}|other=${nativeTargetCount(counts.other)}|extra=${nativeTargetCount(counts.extra)}|parent=${nativeTargetParent(targets ?? [])}|routing=${routing}`,
     );
   };
   const browser = context.browser();
@@ -2061,14 +2080,151 @@ async function panelContractPermissionProbe(extensionPage, extensionId) {
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
   if (!sawNativeTarget || nativeTargets.length === 0) {
-    logNativeTargetDiagnostic("missing", []);
+    logNativeTargetDiagnostic("missing", [], 0);
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
-  if (nativeTargets.length > 1) {
-    logNativeTargetDiagnostic("ambiguous", nativeTargets);
+  let nextTargetRuntimeId = 1;
+  const evaluateReadOnlyTarget = async (targetId) => {
+    let sessionId;
+    let unsupported = false;
+    let checks;
+    try {
+      const attached = await bounded(
+        () => browserCdp.send("Target.attachToTarget", { targetId, flatten: false }),
+        5_000,
+        "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
+      );
+      sessionId = attached?.sessionId;
+      if (typeof sessionId !== "string")
+        throw new BrowserFailure("M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
+
+      const requestId = nextTargetRuntimeId++;
+      const deadline = Date.now() + 5_000;
+      const originPattern = `${new URL(PORTAL_URL).origin}/*`;
+      const expression = `(async () => {
+        const expectedUrl = ${JSON.stringify(nativeSidePanelUrl)};
+        const originPattern = ${JSON.stringify(originPattern)};
+        const expectedTabId = ${JSON.stringify(boundTabId)};
+        const isVisible = (element) => {
+          if (!element) return false;
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return style.display !== "none" && style.visibility === "visible" && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+        };
+        const ctaDeadline = Date.now() + 3000;
+        while (Date.now() < ctaDeadline && !isVisible(document.querySelector("#work-portal-access-grant"))) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        const cta = document.querySelector("#work-portal-access-grant");
+        const rect = cta?.getBoundingClientRect();
+        const style = cta ? getComputedStyle(cta) : null;
+        const rectValues = rect ? [rect.left, rect.top, rect.right, rect.bottom, rect.width, rect.height] : [];
+        const finiteRect = rectValues.length === 6 && rectValues.every(Number.isFinite);
+        const ctaVisible = Boolean(cta && style && style.display !== "none" && style.visibility === "visible" && Number(style.opacity) > 0);
+        const ctaEnabled = Boolean(cta && !cta.disabled && cta.getAttribute("aria-disabled") !== "true");
+        const ctaInViewport = Boolean(ctaVisible && finiteRect && rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight);
+        const centerX = rect ? rect.left + rect.width / 2 : -1;
+        const centerY = rect ? rect.top + rect.height / 2 : -1;
+        const topElement = ctaInViewport ? document.elementFromPoint(centerX, centerY) : null;
+        const ctaTopmost = Boolean(cta && topElement && (topElement === cta || cta.contains(topElement)));
+        const urlMatches = location.href === expectedUrl;
+        const activeTabMatches = await new Promise((resolve) => chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => resolve(!chrome.runtime.lastError && tabs?.[0]?.id === expectedTabId)));
+        const permissionAbsent = !(await chrome.permissions.contains({ origins: [originPattern] }));
+        return { urlMatches, ctaVisible, ctaEnabled, ctaInViewport, ctaTopmost, activeTabMatches, permissionAbsent };
+      })()`;
+      let resolveResponse;
+      const responsePromise = new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
+      const onTargetMessage = (event) => {
+        const response = matchingNativeTargetRuntimeResponse(event, sessionId, requestId);
+        if (response) resolveResponse(response);
+      };
+      browserCdp.on("Target.receivedMessageFromTarget", onTargetMessage);
+      try {
+        const message = JSON.stringify({
+          id: requestId,
+          method: "Runtime.evaluate",
+          params: { expression, returnByValue: true, awaitPromise: true, userGesture: false },
+        });
+        await bounded(
+          () =>
+            browserCdp.send("Target.sendMessageToTarget", {
+              sessionId,
+              message,
+            }),
+          Math.max(1, deadline - Date.now()),
+          "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
+        );
+        const response = await bounded(
+          () => responsePromise,
+          Math.max(1, deadline - Date.now()),
+          "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
+        );
+        const names = [
+          "urlMatches",
+          "ctaVisible",
+          "ctaEnabled",
+          "ctaInViewport",
+          "ctaTopmost",
+          "activeTabMatches",
+          "permissionAbsent",
+        ];
+        if (
+          response.exception ||
+          !response.value ||
+          names.some((name) => typeof response.value[name] !== "boolean")
+        ) {
+          unsupported = true;
+        } else {
+          checks = response.value;
+        }
+      } finally {
+        browserCdp.off("Target.receivedMessageFromTarget", onTargetMessage);
+      }
+    } catch {
+      unsupported = true;
+    } finally {
+      if (sessionId) {
+        try {
+          await bounded(
+            () => browserCdp.send("Target.detachFromTarget", { sessionId }),
+            5_000,
+            "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE",
+          );
+        } catch {
+          unsupported = true;
+        }
+      }
+    }
+    if (unsupported || !checks) return { supported: false, qualified: false };
+    return {
+      supported: true,
+      qualified: Object.values(checks).every((value) => value === true),
+    };
+  };
+  const targetResults = [];
+  let targetRoutingUnsupported = false;
+  for (const target of nativeTargets) {
+    const result = await evaluateReadOnlyTarget(target.targetId);
+    if (!result.supported) targetRoutingUnsupported = true;
+    targetResults.push(result);
+  }
+  if (targetRoutingUnsupported) {
+    logNativeTargetDiagnostic("cdp_unsupported", nativeTargets, null, "unsupported");
     assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
   }
-  logNativeTargetDiagnostic("observed", nativeTargets);
+  const qualifiedCount = targetResults.filter((target) => target.qualified).length;
+  if (qualifiedCount === 0) {
+    logNativeTargetDiagnostic("unqualified", nativeTargets, qualifiedCount);
+    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
+  }
+  if (qualifiedCount > 1) {
+    logNativeTargetDiagnostic("ambiguous", nativeTargets, qualifiedCount);
+    assert(false, "M64_BROWSER_NATIVE_PANEL_NOT_OBSERVABLE");
+  }
+  logNativeTargetDiagnostic("observed", nativeTargets, qualifiedCount);
+  assert(false, "M64_BROWSER_NATIVE_PANEL_IDENTITY_ONLY");
   let nativePanelPages;
   try {
     nativePanelPages = await poll(
