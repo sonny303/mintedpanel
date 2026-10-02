@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createServer } from "node:https";
 import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
+import { E612 } from "./e612-fixtures.mjs";
 import { M64 } from "./e612-m64-fixtures.mjs";
 
 const require = createRequire(import.meta.url);
@@ -80,10 +81,14 @@ const RPC_PREFLIGHT_HEADERS = new Set([
   "x-client-info",
 ]);
 const SYNTHETIC_USER_FILTER = /^eq\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SYNTHETIC_CASE_CREATOR_FILTER = `in.(${E612.specialist})`;
 // postgrest-js 2.117.2 strips unquoted selector whitespace before
 // URLSearchParams serialization; these exact values mirror transmitted queries.
 const DATA_PREFLIGHT_TABLE_QUERIES = Object.freeze({
-  profiles: Object.freeze({ select: "full_name", id: SYNTHETIC_USER_FILTER }),
+  profiles: Object.freeze([
+    Object.freeze({ select: "full_name", id: SYNTHETIC_USER_FILTER }),
+    Object.freeze({ select: "id,full_name,email", id: SYNTHETIC_CASE_CREATOR_FILTER }),
+  ]),
   memberships: Object.freeze({
     select: "org_id,role,organizations(name,lifecycle_state,created_at)",
     user_id: SYNTHETIC_USER_FILTER,
@@ -1306,6 +1311,10 @@ function assertDataPreflightPolicy() {
   const membershipsTarget =
     "/rest/v1/memberships?select=org_id%2Crole%2Corganizations%28name%2Clifecycle_state%2Ccreated_at%29&user_id=eq.30000000-0000-4000-8000-000000000002";
   const queryTarget = (path, query) => `${path}?${new URLSearchParams(query).toString()}`;
+  const caseCreatorProfileTarget = queryTarget("/rest/v1/profiles", {
+    select: "id,full_name,email",
+    id: SYNTHETIC_CASE_CREATOR_FILTER,
+  });
   const contractProviderTargets = [
     [
       "contract_sop_assignments",
@@ -1462,6 +1471,8 @@ function assertDataPreflightPolicy() {
   assert(
     route("/rest/v1/profiles", profileTarget, getHeaders)?.name ===
       "supabase.rest.profiles_preflight" &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, getHeaders)?.name ===
+        "supabase.rest.profiles_preflight" &&
       route("/rest/v1/memberships", membershipsTarget, getHeaders)?.name ===
         "supabase.rest.memberships_preflight" &&
       contractProviderTargets.every(
@@ -1508,6 +1519,53 @@ function assertDataPreflightPolicy() {
         "access-control-request-headers": undefined,
       }) === null &&
       route("/rest/v1/profiles", `${profileTarget}&id=eq.invalid`, getHeaders) === null &&
+      route(
+        "/rest/v1/profiles",
+        caseCreatorProfileTarget.replace(E612.specialist, E612.admin),
+        getHeaders,
+      ) === null &&
+      route(
+        "/rest/v1/profiles",
+        `${caseCreatorProfileTarget}&id=${encodeURIComponent(SYNTHETIC_CASE_CREATOR_FILTER)}`,
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/profiles", `${caseCreatorProfileTarget}&unexpected=eq.x`, getHeaders) ===
+        null &&
+      route(
+        "/rest/v1/profiles",
+        queryTarget("/rest/v1/profiles", {
+          select: "full_name",
+          id: SYNTHETIC_CASE_CREATOR_FILTER,
+        }),
+        getHeaders,
+      ) === null &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, {
+        ...getHeaders,
+        origin: "https://other.test",
+      }) === null &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, {
+        ...getHeaders,
+        "access-control-request-method": "POST",
+      }) === null &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, {
+        ...getHeaders,
+        "access-control-request-private-network": "true",
+      }) === null &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, {
+        ...getHeaders,
+        "access-control-request-headers": undefined,
+      }) === null &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, {
+        ...getHeaders,
+        "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
+      }) === null &&
+      route("/rest/v1/profiles", caseCreatorProfileTarget, {
+        ...getHeaders,
+        "access-control-request-headers":
+          "apikey, authorization, x-client-info, apikey, accept-profile",
+      }) === null &&
+      routeFor(SUPABASE_HOST, "POST", "/rest/v1/profiles", caseCreatorProfileTarget, getHeaders) ===
+        null &&
       route("/rest/v1/profiles", profileTarget, {
         ...getHeaders,
         "access-control-request-headers": `${getHeaders["access-control-request-headers"]}, x-unknown`,
