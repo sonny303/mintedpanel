@@ -46,7 +46,12 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION pg_temp.m60_expect_message(text, text) TO authenticated;
-CREATE FUNCTION pg_temp.m60_tuple(p_fill_id uuid, p_context_version integer, p_generation integer)
+CREATE FUNCTION pg_temp.m60_tuple(
+  p_fill_id uuid,
+  p_context_version integer,
+  p_mapping_generation integer,
+  p_shared_generation integer
+)
 RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
   SELECT jsonb_build_object(
     'launchReceiptId', p_fill_id,
@@ -58,8 +63,8 @@ RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
     'sopVersion', 1,
     'portalId', '38000000-0000-4000-a000-000000000061'::uuid,
     'portalKey', 'm60_shared',
-    'mappingGeneration', p_generation,
-    'effectiveMappingFingerprint', 'sha256:' || repeat(CASE WHEN p_generation = 1 THEN 'a' ELSE 'b' END, 64),
+    'mappingGeneration', p_mapping_generation,
+    'effectiveMappingFingerprint', 'sha256:' || repeat(CASE WHEN p_shared_generation = 1 THEN 'a' ELSE 'b' END, 64),
     'providerId', '48000000-0000-4000-a000-000000000060'::uuid,
     'facilityId', NULL,
     'stepIdentity', '58000000-0000-4000-a000-000000000065:99000000-0000-4000-a000-000000000065:69000000-0000-4000-a000-000000000060:1:89000000-0000-4000-a000-000000000065',
@@ -67,7 +72,7 @@ RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
     'stepId', '89000000-0000-4000-a000-000000000065'::uuid
   );
 $$;
-CREATE FUNCTION pg_temp.m60_seed_fill(p_fill_id uuid, p_context_version integer, p_generation integer)
+CREATE FUNCTION pg_temp.m60_seed_fill(p_fill_id uuid, p_context_version integer, p_shared_generation integer)
 RETURNS void LANGUAGE sql AS $$
   INSERT INTO public.fill_sessions(
     id, org_id, case_id, case_task_id, case_step_id, step_identity,
@@ -83,7 +88,8 @@ RETURNS void LANGUAGE sql AS $$
     '89000000-0000-4000-a000-000000000065',
     '58000000-0000-4000-a000-000000000065:99000000-0000-4000-a000-000000000065:69000000-0000-4000-a000-000000000060:1:89000000-0000-4000-a000-000000000065',
     '69000000-0000-4000-a000-000000000060', 1, p_context_version, p_fill_id,
-    1, p_generation, 'sha256:' || repeat(CASE WHEN p_generation = 1 THEN 'a' ELSE 'b' END, 64),
+    1, p_shared_generation,
+    'sha256:' || repeat(CASE WHEN p_shared_generation = 1 THEN 'a' ELSE 'b' END, 64),
     '38000000-0000-4000-a000-000000000061',
     '48000000-0000-4000-a000-000000000060', 'm60_shared', 'web', 0, '[]'::jsonb,
     false, 2, 0, 0, 0, '[]'::jsonb, '39000000-0000-4000-a000-000000000060'
@@ -112,7 +118,13 @@ RETURNS void LANGUAGE sql AS $$
     '39000000-0000-4000-a000-000000000060'
   );
 $$;
-CREATE FUNCTION pg_temp.m60_call(p_touch_id uuid, p_fill_id uuid, p_context_version integer, p_generation integer)
+CREATE FUNCTION pg_temp.m60_call(
+  p_touch_id uuid,
+  p_fill_id uuid,
+  p_context_version integer,
+  p_mapping_generation integer,
+  p_shared_generation integer
+)
 RETURNS jsonb LANGUAGE sql AS $$
   SELECT public.record_typed_enrollment_submission(
     '18000000-0000-4000-a000-000000000060'::uuid,
@@ -120,7 +132,7 @@ RETURNS jsonb LANGUAGE sql AS $$
     '58000000-0000-4000-a000-000000000065'::uuid,
     p_touch_id,
     p_fill_id,
-    pg_temp.m60_tuple(p_fill_id, p_context_version, p_generation),
+    pg_temp.m60_tuple(p_fill_id, p_context_version, p_mapping_generation, p_shared_generation),
     '{"note":null,"payerReferenceId":null,"wipNote":null,"pdfFilename":null}'::jsonb
   );
 $$;
@@ -476,10 +488,10 @@ CREATE POLICY m60_test_service_audit_insert ON public.audit_log
 GRANT ALL ON m60_results TO service_role;
 GRANT EXECUTE ON FUNCTION pg_temp.m60_mark(text, boolean) TO service_role;
 GRANT EXECUTE ON FUNCTION pg_temp.m60_expect_state(text, text) TO service_role;
-GRANT EXECUTE ON FUNCTION pg_temp.m60_tuple(uuid, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION pg_temp.m60_tuple(uuid, integer, integer, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION pg_temp.m60_seed_fill(uuid, integer, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION pg_temp.m60_seed_contract_fill(uuid, integer) TO service_role;
-GRANT EXECUTE ON FUNCTION pg_temp.m60_call(uuid, uuid, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION pg_temp.m60_call(uuid, uuid, integer, integer, integer) TO service_role;
 SELECT set_config('request.jwt.claim.sub', '39000000-0000-4000-a000-000000000060', true);
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 SELECT set_config(
@@ -517,8 +529,16 @@ SELECT * FROM public.form_mapping_reset_events WHERE false;
 CREATE TEMP TABLE m60_org_receipt AS
 SELECT * FROM public.form_mapping_reset_events WHERE false;
 CREATE TEMP TABLE m60_recaptured_map(id uuid);
+CREATE TEMP TABLE m60_portal_proof_baseline AS
+SELECT id, mapping_generation, is_verified, last_verified_at, proven_at
+  FROM public.portals
+ WHERE id IN (
+   '38000000-0000-4000-a000-000000000062',
+   '38000000-0000-4000-a000-000000000064'
+ );
+CREATE TEMP TABLE m60_submission_results(name text PRIMARY KEY, result jsonb NOT NULL);
 GRANT ALL ON m60_first_receipt, m60_org_receipt TO authenticated;
-GRANT ALL ON m60_recaptured_map TO service_role;
+GRANT ALL ON m60_recaptured_map, m60_submission_results TO service_role;
 
 SELECT pg_temp.m60_mark('replay_fixture_is_legacy_mutable_portal',
   (SELECT case_type IS NULL AND NOT requires_explicit_selection
@@ -607,11 +627,21 @@ UPDATE public.portals
  WHERE id = '38000000-0000-4000-a000-000000000060';
 
 SELECT pg_temp.m60_mark('same_url_sibling_and_historical_records_are_untouched',
-  (SELECT mapping_generation = 1 AND is_verified AND proven_at IS NOT NULL
+  (SELECT mapping_generation = 1
      FROM public.portals WHERE id = '38000000-0000-4000-a000-000000000062')
   AND (SELECT count(*) = 1 FROM public.portal_field_maps
         WHERE org_id IS NULL AND portal_key = 'm60_sibling'
           AND mapping_generation = 1)
+  AND NOT EXISTS (
+    SELECT 1
+      FROM m60_portal_proof_baseline AS snapshot
+      JOIN public.portals AS portal USING (id)
+     WHERE portal.mapping_generation IS DISTINCT FROM snapshot.mapping_generation
+        OR portal.is_verified IS DISTINCT FROM snapshot.is_verified
+        OR portal.last_verified_at IS DISTINCT FROM snapshot.last_verified_at
+        OR portal.proven_at IS DISTINCT FROM snapshot.proven_at
+  )
+  AND (SELECT count(*) = 2 FROM m60_portal_proof_baseline)
   AND (SELECT count(*) = 1 FROM public.fill_sessions
         WHERE id = '78000000-0000-4000-a000-000000000060'
           AND shared_mapping_generation IS NULL)
@@ -641,12 +671,14 @@ SELECT pg_temp.m60_mark('new_fill_with_pre_reset_shared_pin_is_rejected',
     '40001',
     $$SELECT pg_temp.m60_seed_fill('78000000-0000-4000-a000-000000000066', 2, 1)$$
   ));
+INSERT INTO m60_submission_results(name, result)
+SELECT 'pre_reset_receipt', pg_temp.m60_call(
+  'aa000000-0000-4000-a000-000000000065',
+  '78000000-0000-4000-a000-000000000065', 1, 1, 1
+);
 SELECT pg_temp.m60_mark('pre_reset_receipt_cannot_submit_after_shared_reset',
   (SELECT result->>'kind' = 'rejected' AND result->>'status' = '409'
-     FROM (SELECT pg_temp.m60_call(
-       'aa000000-0000-4000-a000-000000000065',
-       '78000000-0000-4000-a000-000000000065', 1, 1
-     ) AS result) AS attempted)
+     FROM m60_submission_results WHERE name = 'pre_reset_receipt')
   AND NOT EXISTS (SELECT 1 FROM public.touches
                    WHERE id = 'aa000000-0000-4000-a000-000000000065')
   AND (SELECT sop_content->0->>'isCompleted' = 'false'
@@ -672,12 +704,14 @@ SELECT pg_temp.m60_mark('current_generation_recapture_is_server_pinned',
      FROM public.fill_sessions WHERE id = '78000000-0000-4000-a000-000000000067')
   AND (SELECT mapping_generation = 1 FROM public.portals
         WHERE id = '38000000-0000-4000-a000-000000000061'));
+INSERT INTO m60_submission_results(name, result)
+SELECT 'current_generation_receipt', pg_temp.m60_call(
+  'aa000000-0000-4000-a000-000000000066',
+  '78000000-0000-4000-a000-000000000067', 2, 1, 2
+);
 SELECT pg_temp.m60_mark('generation_two_receipt_can_submit_and_complete_selected_step',
   (SELECT result->>'kind' = 'created'
-     FROM (SELECT pg_temp.m60_call(
-       'aa000000-0000-4000-a000-000000000066',
-       '78000000-0000-4000-a000-000000000067', 2, 2
-     ) AS result) AS attempted)
+     FROM m60_submission_results WHERE name = 'current_generation_receipt')
   AND EXISTS (SELECT 1 FROM public.touches
                WHERE id = 'aa000000-0000-4000-a000-000000000066'
                  AND fill_session_id = '78000000-0000-4000-a000-000000000067')
@@ -804,9 +838,16 @@ RESET ROLE;
 DROP TRIGGER mint60_inject_receipt_failure ON public.form_mapping_reset_events;
 DROP FUNCTION public.mint60_inject_receipt_failure();
 SELECT pg_temp.m60_mark('failure_target_stays_at_old_generation_and_proof',
-  (SELECT mapping_generation = 1 AND is_verified
-          AND last_verified_at IS NOT NULL AND proven_at IS NOT NULL
-     FROM public.portals WHERE id = '38000000-0000-4000-a000-000000000064')
+  EXISTS (
+    SELECT 1
+      FROM m60_portal_proof_baseline AS snapshot
+      JOIN public.portals AS portal USING (id)
+     WHERE portal.id = '38000000-0000-4000-a000-000000000064'
+       AND portal.mapping_generation IS NOT DISTINCT FROM snapshot.mapping_generation
+       AND portal.is_verified IS NOT DISTINCT FROM snapshot.is_verified
+       AND portal.last_verified_at IS NOT DISTINCT FROM snapshot.last_verified_at
+       AND portal.proven_at IS NOT DISTINCT FROM snapshot.proven_at
+  )
   AND NOT EXISTS (
     SELECT 1 FROM public.form_mapping_reset_events
      WHERE portal_id = '38000000-0000-4000-a000-000000000064'
