@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
 import { M64, m64FixtureSql } from "./e612-m64-fixtures.mjs";
 import { profileHttpFixtureSql } from "./e612-profile-http-fixtures.mjs";
+import { m66LegacyPostFixtureSql } from "./e612-m66-legacy-post-probes.mjs";
 import { e614HttpStreamFixtureSql } from "./e614-http-stream-fixtures.mjs";
 import { buildManifest, writeManifest } from "./e612-build-manifest.mjs";
 
@@ -1768,6 +1769,11 @@ function runInternalDriver() {
     `${root}scripts/security/e612-profile-http-probes.mjs`,
     `${names.gateway}:/tmp/e612-profile-http-probes.mjs`,
   ]);
+  docker([
+    "cp",
+    `${root}scripts/security/e612-m66-legacy-post-probes.mjs`,
+    `${names.gateway}:/tmp/e612-m66-legacy-post-probes.mjs`,
+  ]);
   try {
     const expiredToken = jwt({
       sub: E612.clientActive,
@@ -1796,6 +1802,12 @@ function runInternalDriver() {
     if (!output.includes("E613|HTTP|PASS")) fail("E613_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E614|HTTP|PASS")) fail("E614_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E612|PROFILE|PASS")) fail("E612_PROFILE_PROBE_PASS_MARKER_MISSING");
+    if (
+      !output.includes(
+        "M66|HTTP|PASS|legacy_post_blocked=3|state_unchanged=true|legacy_create=201|replay=200|audit=1",
+      )
+    )
+      fail("M66_HTTP_LEGACY_POST_PASS_MARKER_MISSING");
   } catch (error) {
     if (error.stdout) process.stdout.write(String(error.stdout));
     fail("E612_HTTP_DRIVER_FAILED");
@@ -1924,6 +1936,11 @@ SELECT 'E612|RACE|LOCK_READY|pid=' || pg_backend_pid();
 }
 
 function runAuthBootstrap() {
+  docker([
+    "cp",
+    `${root}scripts/security/e612-m66-legacy-post-probes.mjs`,
+    `${names.gateway}:/tmp/e612-m66-legacy-post-probes.mjs`,
+  ]);
   docker([
     "cp",
     `${root}scripts/security/e612-http-driver.mjs`,
@@ -2067,6 +2084,14 @@ ON CONFLICT (id) DO NOTHING;
     emit("E612|M64|FIXTURE|PASS|persistent=true|receipts_preseeded=false|touches_preseeded=false");
   } catch {
     fail("E612_M64_FIXTURE_SEED_FAILED");
+  }
+  try {
+    dbExec(m66LegacyPostFixtureSql({ orgId: E612.orgA, adminId: E612.admin }));
+    emit("M66|HTTP|FIXTURE|PASS|typed=1|reset_generation=2|legacy=1");
+  } catch (error) {
+    const state = String(error?.stderr ?? "").match(/(?:ERROR|SQLSTATE)[: ]+([A-Z0-9]{5})/i)?.[1];
+    emit(`M66|HTTP|FIXTURE|FAILED|sqlstate=${state ?? "unknown"}`);
+    fail("E612_HTTP_SEED_FAILED_m66");
   }
 }
 
