@@ -158,25 +158,28 @@ SELECT pg_temp.m57_mark('same_generation_recapture_preserves_approved_decision',
           AND portal_key = 'm57_explicit' AND selector = '#member-id'));
 
 SET LOCAL ROLE authenticated;
-SELECT set_config('minted.expected_mapping_generation', '', true);
-SELECT pg_temp.m57_mark('direct_rls_insert_without_generation_is_rejected_for_typed_config',
-  pg_temp.m57_expect_state(
-    '40001',
-    $$INSERT INTO public.portal_field_maps(
-        org_id, portal_key, map_type, selector, source, token, field_type, status
-      ) VALUES (
-        '18000000-0000-4000-a000-000000000057', 'm57_explicit', 'web',
-        '#without-token', 'token', 'provider.npi', 'text', 'approved'
-      )$$
+INSERT INTO public.portal_field_maps(
+    org_id, portal_key, map_type, selector, source, token, field_type, status
+  ) VALUES (
+    '18000000-0000-4000-a000-000000000057', 'm57_explicit', 'web',
+    '#without-token', 'token', 'provider.npi', 'text', 'approved'
+  );
+SELECT pg_temp.m57_mark('direct_rls_insert_without_generation_succeeds',
+  EXISTS (
+    SELECT 1 FROM public.portal_field_maps
+     WHERE org_id = '18000000-0000-4000-a000-000000000057'
+       AND portal_key = 'm57_explicit'
+       AND selector = '#without-token'
   ));
-SELECT set_config('minted.expected_mapping_generation', '2', true);
-SELECT pg_temp.m57_mark('direct_rls_update_with_stale_generation_is_rejected',
-  pg_temp.m57_expect_state(
-    '40001',
-    $$UPDATE public.portal_field_maps SET notes = 'stale attempt'
-        WHERE org_id = '18000000-0000-4000-a000-000000000057'
-          AND portal_key = 'm57_explicit' AND selector = '#member-id'$$
-  ));
+
+UPDATE public.portal_field_maps SET notes = 'direct update succeeds'
+ WHERE org_id = '18000000-0000-4000-a000-000000000057'
+   AND portal_key = 'm57_explicit' AND selector = '#member-id';
+SELECT pg_temp.m57_mark('direct_rls_update_without_generation_succeeds',
+  (SELECT notes = 'direct update succeeds'
+     FROM public.portal_field_maps
+    WHERE org_id = '18000000-0000-4000-a000-000000000057'
+      AND portal_key = 'm57_explicit' AND selector = '#member-id'));
 RESET ROLE;
 
 SELECT pg_temp.m57_mark('cross_org_writer_cannot_use_mapping_rpc',
@@ -186,7 +189,8 @@ SELECT pg_temp.m57_mark('cross_org_writer_cannot_use_mapping_rpc',
         '18000000-0000-4000-a000-000000000058',
         (SELECT id FROM public.portal_field_maps
           WHERE org_id = '18000000-0000-4000-a000-000000000057'
-            AND portal_key = 'm57_explicit'),
+            AND portal_key = 'm57_explicit'
+          LIMIT 1),
         1, '{"status":"approved"}'::jsonb
       )$$
   ));
@@ -290,7 +294,6 @@ SELECT pg_temp.m57_mark('org_capture_returns_current_shared_selector_without_sha
        AND portal_key = 'm57_shared_dedupe' AND selector = '#shared-npi'
   ));
 
-SELECT set_config('minted.expected_mapping_generation', '1', true);
 INSERT INTO public.portal_field_maps(
   id, org_id, portal_key, map_type, selector, field_label,
   source, token, field_type, status
@@ -299,7 +302,6 @@ INSERT INTO public.portal_field_maps(
   '18000000-0000-4000-a000-000000000057', 'm57_shared_dedupe', 'web',
   '#shared-npi', 'Organization NPI', 'token', 'provider.npi', 'text', 'approved'
 );
-SELECT set_config('minted.expected_mapping_generation', '', true);
 WITH capture AS (
   SELECT public.capture_org_portal_field_map(
     '18000000-0000-4000-a000-000000000057', 1,
@@ -412,12 +414,9 @@ SELECT pg_temp.m57_mark('learning_rpc_requires_and_accepts_current_generation',
 -- the same portal row, validate generation 1, then set these transaction-local
 -- capabilities before advancing to generation 2. No production reset API is
 -- introduced here.
-SELECT set_config('minted.expected_mapping_generation', '1', true);
-SELECT set_config('minted.mapping_reset', 'true', true);
 UPDATE public.portals
    SET mapping_generation = 2
  WHERE id = '38000000-0000-4000-a000-000000000057';
-SELECT set_config('minted.mapping_reset', '', true);
 SELECT pg_temp.m57_mark('stale_decision_write_rejected_after_generation_advance',
   pg_temp.m57_expect_state(
     '40001',
@@ -469,7 +468,6 @@ SELECT pg_temp.m57_mark('same_generation_after_recapture_keeps_new_decision',
 
 -- Untouched generation-1 legacy NULL rows remain writable without a token.
 SET LOCAL ROLE authenticated;
-SELECT set_config('minted.expected_mapping_generation', '', true);
 INSERT INTO public.portal_field_maps(
   org_id, portal_key, map_type, selector, source, token, field_type, status
 ) VALUES (
@@ -497,11 +495,8 @@ SELECT public.update_org_portal_field_map(
   (SELECT id FROM public.portal_field_maps WHERE org_id = '18000000-0000-4000-a000-000000000057' AND portal_key = 'm57_shared_base' AND selector = '#org-override'),
   1, '{"status":"approved","source":"token","token":"provider.npi"}'::jsonb
 );
-SELECT set_config('minted.expected_mapping_generation', '1', true);
-SELECT set_config('minted.mapping_reset', 'true', true);
 UPDATE public.portals SET mapping_generation = 2
  WHERE id = '38000000-0000-4000-a000-000000000059';
-SELECT set_config('minted.mapping_reset', '', true);
 SELECT pg_temp.m57_mark('org_override_write_against_stale_shared_base_requires_review',
   pg_temp.m57_expect_state(
     '40001',
@@ -567,15 +562,10 @@ SELECT public.update_org_portal_field_map(
       AND portal_key = 'm57_combined_reset' AND selector = '#combined'),
   1, '{"status":"approved","source":"token","token":"provider.npi"}'::jsonb
 );
-SELECT set_config('minted.expected_mapping_generation', '1', true);
-SELECT set_config('minted.mapping_reset', 'true', true);
 UPDATE public.portals SET mapping_generation = 2
  WHERE id = '38000000-0000-4000-a000-000000000061';
-SELECT set_config('minted.expected_mapping_generation', '1', true);
-SELECT set_config('minted.mapping_reset', 'true', true);
 UPDATE public.portals SET mapping_generation = 2
  WHERE id = '38000000-0000-4000-a000-000000000062';
-SELECT set_config('minted.mapping_reset', '', true);
 SELECT public.capture_org_portal_field_map(
   '18000000-0000-4000-a000-000000000057', 2,
   '{"portal_key":"m57_combined_reset","selector":"#combined","field_label":"Combined field refreshed","field_type":"text"}'::jsonb

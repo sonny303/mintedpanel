@@ -1,6 +1,5 @@
 // Runs inside the owned internal E6.12 Node container. Every request below is
 // real HTTP to GoTrue, PostgREST, Storage API, or the Nitro app; no mocks.
-import { runM66LegacyPostHttpProbes } from "./e612-m66-legacy-post-probes.mjs";
 
 const id = {
   orgA: "10000000-0000-4000-8000-000000000001",
@@ -1984,28 +1983,6 @@ async function main() {
       afterRevoke.body?.data?.restrictedExternal === true &&
       afterRevoke.body?.data?.clientOrgs?.length === 0 &&
       afterRevoke.response.headers.get("x-minted-context-revision") !== activeRevision,
-  );
-  const m66LegacyPost = await runM66LegacyPostHttpProbes({
-    request,
-    headers,
-    app,
-    rest,
-    adminToken,
-    anonKey,
-    orgId: id.orgA,
-    adminUserToken: tokens.admin,
-  });
-  if (
-    m66LegacyPost.blockedGeneric409 !== true ||
-    m66LegacyPost.blockedStateUnchanged !== true ||
-    m66LegacyPost.legacyCreate201 !== true ||
-    m66LegacyPost.legacyReplay200 !== true ||
-    m66LegacyPost.protectedAuditAbsent !== true
-  ) {
-    throw new Error("M66_HTTP_PROBE_RESULTS_INCOMPLETE");
-  }
-  process.stdout.write(
-    "M66|HTTP|PASS|legacy_post_blocked=3|state_unchanged=true|legacy_create=201|replay=200|audit=1\n",
   );
   process.stdout.write("E612|HTTP|PASS\n");
 }

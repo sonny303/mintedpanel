@@ -502,7 +502,7 @@ await expectSqlFailure(
     2,
     { role: "authenticated", userId: ids.actorA },
   ),
-  "mapping_generation_change_requires_reset",
+  "mapping_generation_change_requires_definer",
   "ordinary portal generation bump without reset marker",
 );
 await expectSqlFailure(

@@ -397,9 +397,7 @@ WHERE portal_key = '${ids.portalKey}' AND selector IN ('#tier-org-match','#tier-
   // the new generations and current shared base; stale same-tier selectors
   // remain stored for review because the per-tier unique index still owns them.
   await runPsql(`
--- Seed pre-reset rows in their historical generation. Only this test fixture
--- bypasses the map write guard; production writes must carry the generation.
-ALTER TABLE public.portal_field_maps DISABLE TRIGGER portal_field_maps_generation_write_guard;
+-- Seed pre-reset rows in their historical generation.
 INSERT INTO public.portal_field_maps
   (org_id, portal_key, map_type, selector, source, token, field_type, status, mapping_generation)
 VALUES
@@ -407,7 +405,6 @@ VALUES
   ('${ids.orgId}', '${ids.generationPortalKey}', 'web', '#stale-org-generation', 'token', 'provider.npi', 'text', 'approved', 2),
   ('${ids.orgId}', '${ids.generationPortalKey}', 'web', '#stale-org-base', 'token', 'provider.npi', 'text', 'approved', 4),
   ('${ids.orgId}', '${ids.siblingPortalKey}', 'web', '#sibling-only', 'token', 'provider.npi', 'text', 'approved', 1);
-ALTER TABLE public.portal_field_maps ENABLE TRIGGER portal_field_maps_generation_write_guard;
 
 -- A test-only trusted reset simulation; production generations remain guarded.
 SELECT set_config('minted.mapping_reset', 'true', false);
