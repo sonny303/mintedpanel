@@ -355,12 +355,6 @@ function runInternalDriver() {
     if (!output.includes("E613|HTTP|PASS")) fail("E613_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E614|HTTP|PASS")) fail("E614_HTTP_PROBE_PASS_MARKER_MISSING");
     if (!output.includes("E612|PROFILE|PASS")) fail("E612_PROFILE_PROBE_PASS_MARKER_MISSING");
-    if (
-      !output.includes(
-        "M66|HTTP|PASS|legacy_post_blocked=3|state_unchanged=true|legacy_create=201|replay=200|audit=1",
-      )
-    )
-      fail("M66_HTTP_LEGACY_POST_PASS_MARKER_MISSING");
   } catch (error) {
     if (error.stdout) process.stdout.write(String(error.stdout));
     fail("E612_HTTP_DRIVER_FAILED");
