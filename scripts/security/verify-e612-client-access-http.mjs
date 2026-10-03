@@ -327,11 +327,6 @@ function runInternalDriver() {
     `${root}scripts/security/e612-profile-http-probes.mjs`,
     `${names.gateway}:/tmp/e612-profile-http-probes.mjs`,
   ]);
-  docker([
-    "cp",
-    `${root}scripts/security/e612-m66-legacy-post-probes.mjs`,
-    `${names.gateway}:/tmp/e612-m66-legacy-post-probes.mjs`,
-  ]);
   try {
     const expiredToken = jwt({
       sub: E612.clientActive,
@@ -565,8 +560,9 @@ function applyMigrations() {
   for (const name of files) {
     try {
       dbExec(readFileSync(`${root}supabase/migrations/${name}`, "utf8"));
-    } catch {
-      fail(`E612_HTTP_MIGRATION_FAILED_${name}`);
+    } catch (err) {
+      process.stderr.write(`Migration failed: ${name}\n${err?.stderr || err?.message || err}\n`);
+      fail(`E612_HTTP_MIGRATION_FAILED_${name.replaceAll(/[^A-Za-z0-9_-]/g, "_")}`);
     }
   }
   emit(`E612|HTTP|MIGRATIONS|${files.length}`);
@@ -886,6 +882,8 @@ try {
   process.stderr.write(`${code}\n`);
   if (code === "E612_HTTP_VERIFICATION_FAILED") {
     process.stderr.write(`E612|HTTP|STAGE_FAILED|${stage}\n`);
+    process.stderr.write(`E612|HTTP|ERROR|${error?.stack || error?.message || error}\n`);
+    if (error?.stderr) process.stderr.write(`E612|HTTP|STDERR|${error.stderr}\n`);
   }
   process.exitCode = 1;
 } finally {

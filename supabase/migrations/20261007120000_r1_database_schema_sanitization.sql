@@ -648,6 +648,7 @@ DECLARE
   v_key text;
   v_map public.portal_field_maps%ROWTYPE;
   v_portal public.portals%ROWTYPE;
+  v_shared_generation integer;
 BEGIN
   IF auth.uid() IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.memberships membership
@@ -692,6 +693,15 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'field_map_not_found';
   END IF;
 
+  IF p_org_id IS NOT NULL THEN
+    SELECT mapping_generation INTO v_shared_generation
+      FROM public.portals
+     WHERE org_id IS NULL AND portal_key = v_key;
+    IF FOUND AND v_map.shared_base_generation IS DISTINCT FROM v_shared_generation THEN
+      RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_override_base_review_required';
+    END IF;
+  END IF;
+
   UPDATE public.portal_field_maps
      SET status = CASE WHEN p_patch ? 'status' THEN p_patch->>'status' ELSE status END,
          source = CASE WHEN p_patch ? 'source' THEN p_patch->>'source' ELSE source END,
@@ -728,6 +738,7 @@ DECLARE
   v_id uuid;
   v_key text := lower(btrim(coalesce(p_portal_key, '')));
   v_portal public.portals%ROWTYPE;
+  v_shared_generation integer;
 BEGIN
   IF auth.uid() IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.memberships membership
@@ -759,6 +770,12 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_generation_stale';
   END IF;
 
+  IF p_org_id IS NOT NULL THEN
+    SELECT mapping_generation INTO v_shared_generation
+      FROM public.portals
+     WHERE org_id IS NULL AND portal_key = v_key;
+  END IF;
+
   FOR v_entry IN SELECT value FROM jsonb_array_elements(p_entries)
   LOOP
     v_id := nullif(v_entry->>'id', '')::uuid;
@@ -766,6 +783,17 @@ BEGIN
        OR v_entry->'patch' - ARRAY['status','source','token','hardcoded_value','transform','notes'] <> '{}'::jsonb THEN
       RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'invalid_field_map_batch_entry';
     END IF;
+
+    IF p_org_id IS NOT NULL AND v_shared_generation IS NOT NULL THEN
+      IF EXISTS (
+        SELECT 1 FROM public.portal_field_maps
+         WHERE id = v_id AND org_id = p_org_id AND portal_key = v_key
+           AND shared_base_generation IS DISTINCT FROM v_shared_generation
+      ) THEN
+        RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_override_base_review_required';
+      END IF;
+    END IF;
+
     UPDATE public.portal_field_maps
        SET status = CASE WHEN v_entry->'patch' ? 'status' THEN v_entry->'patch'->>'status' ELSE status END,
            source = CASE WHEN v_entry->'patch' ? 'source' THEN v_entry->'patch'->>'source' ELSE source END,
@@ -847,9 +875,9 @@ BEGIN
   SELECT * INTO v_portal FROM public.portals WHERE id = p_id AND org_id = p_org_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'portal_configuration_not_found'; END IF;
 
-  IF p_expected_mapping_generation IS NOT NULL AND p_expected_mapping_generation IS DISTINCT FROM v_portal.mapping_generation THEN
-    RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_generation_stale';
-  END IF;
+  PERFORM public.assert_portal_mapping_generation_for_write(
+    v_portal.portal_key, p_org_id, p_expected_mapping_generation
+  );
 
   UPDATE public.portals
      SET name = CASE WHEN p_patch ? 'name' THEN p_patch->>'name' ELSE name END,
@@ -1183,6 +1211,7 @@ REVOKE ALL ON FUNCTION public.validate_case_fill_context()
   FROM PUBLIC, anon, authenticated, service_role;
 
 -- 3.4 Create clean domain trigger trg_validate_case_fill_context
+DROP TRIGGER IF EXISTS trg_validate_case_fill_context ON public.fill_sessions;
 CREATE TRIGGER trg_validate_case_fill_context
   BEFORE INSERT ON public.fill_sessions
   FOR EACH ROW EXECUTE FUNCTION public.validate_case_fill_context();
@@ -1323,59 +1352,125 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 422, 'message', 'Typed submission tuple or payload is malformed');
   END IF;
 
-  v_note := nullif(pg_catalog.btrim(coalesce(p_payload->>'note', '')), '');
-  v_payer_reference := nullif(pg_catalog.btrim(coalesce(p_payload->>'payerReferenceId', '')), '');
-  v_wip_note := nullif(pg_catalog.btrim(coalesce(p_payload->>'wipNote', '')), '');
-  v_pdf_filename := nullif(pg_catalog.btrim(coalesce(p_payload->>'pdfFilename', '')), '');
-
-  SELECT touch_row.* INTO v_existing
-    FROM public.touches AS touch_row
-   WHERE touch_row.id = p_touch_id
-   FOR SHARE;
-  IF FOUND THEN
-    IF v_existing.org_id IS DISTINCT FROM p_org_id
-       OR v_existing.case_id IS DISTINCT FROM p_case_id
-       OR v_existing.coordinator_id IS DISTINCT FROM p_actor_id
-       OR v_existing.entry_type IS DISTINCT FROM 'touchpoint'
-       OR v_existing.outcome IS DISTINCT FROM 'submitted'
-       OR v_existing.fill_session_id IS DISTINCT FROM p_fill_session_id THEN
-      RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Touch id already exists for a different submission');
-    END IF;
-    RETURN pg_catalog.jsonb_build_object('kind', 'created', 'touch', pg_catalog.to_jsonb(v_existing));
+  -- Validate the complete scalar tuple before any uuid/integer casts below.
+  -- The extension parser is strict too, but this invoker RPC is an independent
+  -- database boundary and malformed input must remain a typed 422, not a 22P02.
+  IF p_work_context->>'ownerKind' IS DISTINCT FROM 'case'
+     OR jsonb_typeof(p_work_context->'launchReceiptId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'launchReceiptId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'orgId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'orgId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'ownerId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'ownerId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'sopTemplateId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'sopTemplateId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'portalId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'portalId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'providerId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'providerId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'taskId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'taskId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'stepId') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'stepId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     OR jsonb_typeof(p_work_context->'facilityId') NOT IN ('null', 'string')
+     OR (jsonb_typeof(p_work_context->'facilityId') = 'string'
+         AND (p_work_context->>'facilityId') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+     OR jsonb_typeof(p_work_context->'contextVersion') IS DISTINCT FROM 'number'
+     OR (p_work_context->>'contextVersion') !~ '^[1-9][0-9]{0,9}$'
+     OR (p_work_context->>'contextVersion')::numeric > 2147483647
+     OR jsonb_typeof(p_work_context->'sopVersion') IS DISTINCT FROM 'number'
+     OR (p_work_context->>'sopVersion') !~ '^[1-9][0-9]{0,9}$'
+     OR (p_work_context->>'sopVersion')::numeric > 2147483647
+     OR jsonb_typeof(p_work_context->'mappingGeneration') IS DISTINCT FROM 'number'
+     OR (p_work_context->>'mappingGeneration') !~ '^[1-9][0-9]{0,9}$'
+     OR (p_work_context->>'mappingGeneration')::numeric > 2147483647
+     OR jsonb_typeof(p_work_context->'portalKey') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'portalKey') !~ '^[a-z0-9][a-z0-9._-]{0,99}$'
+     OR jsonb_typeof(p_work_context->'effectiveMappingFingerprint') IS DISTINCT FROM 'string'
+     OR (p_work_context->>'effectiveMappingFingerprint') !~ '^sha256:[0-9a-f]{64}$'
+     OR jsonb_typeof(p_work_context->'stepIdentity') IS DISTINCT FROM 'string'
+     OR pg_catalog.char_length(p_work_context->>'stepIdentity') NOT BETWEEN 1 AND 512
+     OR jsonb_typeof(p_payload->'note') NOT IN ('null', 'string')
+     OR jsonb_typeof(p_payload->'payerReferenceId') NOT IN ('null', 'string')
+     OR jsonb_typeof(p_payload->'wipNote') NOT IN ('null', 'string')
+     OR jsonb_typeof(p_payload->'pdfFilename') NOT IN ('null', 'string') THEN
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 422, 'message', 'Typed submission tuple or payload is invalid');
   END IF;
 
-  SELECT task_row.*
-    INTO v_task
+  v_portal_key := p_work_context->>'portalKey';
+  v_note := NULLIF(pg_catalog.btrim(p_payload->>'note'), '');
+  v_payer_reference := NULLIF(pg_catalog.btrim(p_payload->>'payerReferenceId'), '');
+  v_wip_note := NULLIF(pg_catalog.btrim(p_payload->>'wipNote'), '');
+  v_pdf_filename := NULLIF(pg_catalog.btrim(p_payload->>'pdfFilename'), '');
+  IF pg_catalog.jsonb_typeof(p_work_context->'facilityId') NOT IN ('null', 'string')
+     OR pg_catalog.jsonb_typeof(p_payload->'note') NOT IN ('null', 'string')
+     OR pg_catalog.jsonb_typeof(p_payload->'payerReferenceId') NOT IN ('null', 'string')
+     OR pg_catalog.jsonb_typeof(p_payload->'wipNote') NOT IN ('null', 'string')
+     OR pg_catalog.jsonb_typeof(p_payload->'pdfFilename') NOT IN ('null', 'string')
+     OR v_portal_key IS NULL OR pg_catalog.btrim(v_portal_key) = ''
+     OR pg_catalog.char_length(v_note) > 2000
+     OR pg_catalog.char_length(v_payer_reference) > 250
+     OR pg_catalog.char_length(v_wip_note) > 2000
+     OR pg_catalog.char_length(v_pdf_filename) > 250 THEN
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 422, 'message', 'Typed submission payload is invalid');
+  END IF;
+
+  v_payload_fingerprint := pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(
+      pg_catalog.jsonb_build_object('workContext', p_work_context, 'payload', p_payload)::text,
+      'UTF8'
+    )),
+    'hex'
+  );
+
+  -- Serialize same-key requests before lookup. UUID hash collisions only add
+  -- harmless waiting; the primary key remains the authoritative uniqueness.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_touch_id::text, 0)
+  );
+  SELECT touch.* INTO v_existing
+    FROM public.touches AS touch
+   WHERE touch.id = p_touch_id;
+  IF FOUND THEN
+    IF v_existing.org_id = p_org_id
+       AND v_existing.case_id = p_case_id
+       AND v_existing.task_id = (p_work_context->>'taskId')::uuid
+       AND v_existing.fill_session_id = p_fill_session_id
+       AND v_existing.submission_request_fingerprint = v_payload_fingerprint
+       AND EXISTS (
+         SELECT 1 FROM public.fill_sessions AS session
+          WHERE session.id = v_existing.fill_session_id
+            AND session.org_id = p_org_id
+            AND session.case_id = p_case_id
+            AND session.case_task_id = (p_work_context->>'taskId')::uuid
+            AND session.case_step_id = (p_work_context->>'stepId')::uuid
+            AND session.step_identity = p_work_context->>'stepIdentity'
+            AND session.launch_receipt_id = (p_work_context->>'launchReceiptId')::uuid
+            AND session.context_version = (p_work_context->>'contextVersion')::integer
+            AND session.sop_template_id = (p_work_context->>'sopTemplateId')::uuid
+            AND session.sop_version = (p_work_context->>'sopVersion')::integer
+            AND session.portal_id = (p_work_context->>'portalId')::uuid
+            AND session.portal_key = v_portal_key
+            AND session.mapping_generation = (p_work_context->>'mappingGeneration')::integer
+            AND session.effective_mapping_fingerprint = p_work_context->>'effectiveMappingFingerprint'
+            AND session.provider_id = (p_work_context->>'providerId')::uuid
+            AND session.facility_id IS NOT DISTINCT FROM NULLIF(p_work_context->>'facilityId', '')::uuid
+       ) THEN
+      RETURN pg_catalog.jsonb_build_object('kind', 'duplicate', 'touch', pg_catalog.to_jsonb(v_existing));
+    END IF;
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Idempotency id already used');
+  END IF;
+
+  -- New submissions must be current. Lock order is task → case → portal, the
+  -- same order used by complete_sop_task_step and the fill-receipt guard.
+  SELECT task_row.* INTO v_task
     FROM public.tasks AS task_row
    WHERE task_row.id = (p_work_context->>'taskId')::uuid
-     AND task_row.org_id = p_org_id
-     AND task_row.case_id = p_case_id
-   FOR SHARE;
+      AND task_row.org_id = p_org_id
+      AND task_row.case_id = p_case_id
+   FOR UPDATE;
   IF NOT FOUND THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 404, 'message', 'Case task not found');
-  END IF;
-
-  SELECT case_row.*
-    INTO v_case
-    FROM public.credential_cases AS case_row
-   WHERE case_row.id = p_case_id
-     AND case_row.org_id = p_org_id
-   FOR SHARE;
-  IF NOT FOUND THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 404, 'message', 'Case not found');
-  END IF;
-
-  IF v_case.context_version IS DISTINCT FROM (p_work_context->>'contextVersion')::integer
-     OR v_case.provider_id IS DISTINCT FROM (p_work_context->>'providerId')::uuid
-     OR v_case.case_type NOT IN ('enrollment', 'recredentialing')
-     OR v_case.case_type IS NULL
-     OR v_case.case_status NOT IN ('in_progress', 'submitted', 'in_review', 'action_required')
-     OR v_case.case_status IS NULL
-     OR v_task.provider_id IS DISTINCT FROM (p_work_context->>'providerId')::uuid
-     OR v_task.sop_template_id IS DISTINCT FROM (p_work_context->>'sopTemplateId')::uuid
-     OR v_task.sop_version IS DISTINCT FROM (p_work_context->>'sopVersion')::integer
-     OR v_task.execution_type IS DISTINCT FROM 'extension_fill' THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Case context is stale');
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 404, 'message', 'Case work task not found');
   END IF;
 
   IF EXISTS (
@@ -1396,21 +1491,57 @@ BEGIN
             AND nullif(pg_catalog.btrim(prior_step.step->'payerForm'->>'removedAt'), '') IS NOT NULL
        )
   ) THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Case task is no longer current');
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment Work task is no longer current');
+  END IF;
+
+  SELECT case_row.* INTO v_case
+    FROM public.credential_cases AS case_row
+   WHERE case_row.id = p_case_id
+     AND case_row.org_id = p_org_id
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 404, 'message', 'Case not found');
+  END IF;
+
+  IF v_case.case_type IS DISTINCT FROM 'enrollment'
+     OR NOT (
+       v_case.context_version::bigint = (p_work_context->>'contextVersion')::bigint
+       OR (
+         v_case.context_version::bigint = (p_work_context->>'contextVersion')::bigint + 1
+         AND v_case.case_status = 'in_progress'
+         AND EXISTS (
+           SELECT 1 FROM public.fill_sessions AS started_fill
+            WHERE started_fill.id = p_fill_session_id
+              AND started_fill.org_id = p_org_id
+              AND started_fill.case_id = p_case_id
+              AND started_fill.case_task_id = (p_work_context->>'taskId')::uuid
+              AND started_fill.case_step_id = (p_work_context->>'stepId')::uuid
+              AND started_fill.context_version = (p_work_context->>'contextVersion')::integer
+              AND started_fill.did_auto_start_case = true
+         )
+       )
+     )
+     OR v_case.provider_id IS DISTINCT FROM (p_work_context->>'providerId')::uuid
+     OR v_case.case_status NOT IN ('not_started', 'in_progress', 'submitted', 'in_review', 'action_required')
+     OR v_case.case_status IS NULL
+     OR v_task.sop_template_id IS DISTINCT FROM (p_work_context->>'sopTemplateId')::uuid
+     OR v_task.sop_version IS DISTINCT FROM (p_work_context->>'sopVersion')::integer
+     OR v_task.execution_type IS DISTINCT FROM 'extension_fill'
+     OR v_task.provider_id IS DISTINCT FROM v_case.provider_id THEN
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment Work context is stale or mismatched');
   END IF;
 
   SELECT count(*) INTO v_facility_count
     FROM public.case_facilities AS cf
-   WHERE cf.case_id = p_case_id
-     AND cf.org_id = p_org_id;
-  IF (p_work_context->>'facilityId' IS NULL AND v_facility_count <> 0)
-     OR (p_work_context->>'facilityId' IS NOT NULL AND NOT EXISTS (
+   WHERE cf.case_id = p_case_id AND cf.org_id = p_org_id;
+  IF (p_work_context->'facilityId' = 'null'::jsonb AND v_facility_count <> 0)
+     OR (p_work_context->'facilityId' <> 'null'::jsonb AND NOT EXISTS (
        SELECT 1 FROM public.case_facilities AS cf
         WHERE cf.case_id = p_case_id
           AND cf.org_id = p_org_id
           AND cf.facility_id = (p_work_context->>'facilityId')::uuid
      )) THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Facility context is stale');
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment facility context is stale');
   END IF;
 
   SELECT item.step,
@@ -1424,16 +1555,13 @@ BEGIN
            THEN v_task.sop_content ELSE '[]'::jsonb END
     ) WITH ORDINALITY AS item(step, ordinality)
    WHERE item.step->>'id' = p_work_context->>'stepId'
-   ORDER BY item.ordinality
-   LIMIT 1;
-  IF NOT FOUND
-     OR v_step->>'stepType' IS DISTINCT FROM 'online_form'
+   ORDER BY item.ordinality LIMIT 1;
+  IF NOT FOUND OR v_step->>'stepType' IS DISTINCT FROM 'online_form'
      OR v_step->>'isCompleted' = 'true'
-     OR pg_catalog.lower(pg_catalog.btrim(v_step->>'portalKey'))
-          IS DISTINCT FROM pg_catalog.lower(pg_catalog.btrim(p_work_context->>'portalKey'))
+     OR pg_catalog.lower(pg_catalog.btrim(v_step->>'portalKey')) IS DISTINCT FROM v_portal_key
      OR p_work_context->>'stepIdentity' IS DISTINCT FROM (
-       p_case_id::text || ':' || (p_work_context->>'taskId') || ':' ||
-       (p_work_context->>'sopTemplateId') || ':' || (p_work_context->>'sopVersion') || ':' ||
+       p_case_id::text || ':' || v_task.id::text || ':' ||
+       v_task.sop_template_id::text || ':' || v_task.sop_version::text || ':' ||
        (p_work_context->>'stepId')
      )
      OR EXISTS (
@@ -1459,76 +1587,58 @@ BEGIN
         )
         AND prior.step->>'isCompleted' IS DISTINCT FROM 'true'
      ) THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Step is stale or completed');
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment SOP step is stale or already complete');
   END IF;
 
-  SELECT portal_row.*
-    INTO v_portal
+  SELECT portal_row.* INTO v_portal
     FROM public.portals AS portal_row
    WHERE portal_row.id = (p_work_context->>'portalId')::uuid
      AND (portal_row.org_id = p_org_id OR portal_row.org_id IS NULL)
    FOR SHARE;
   IF NOT FOUND
-     OR pg_catalog.lower(pg_catalog.btrim(portal_row.portal_key))
-          IS DISTINCT FROM pg_catalog.lower(pg_catalog.btrim(p_work_context->>'portalKey'))
-     OR v_portal.case_type IS DISTINCT FROM v_case.case_type
+     OR pg_catalog.lower(pg_catalog.btrim(v_portal.portal_key)) IS DISTINCT FROM v_portal_key
+     OR v_portal.case_type IS DISTINCT FROM 'enrollment'
      OR v_portal.payer_id IS DISTINCT FROM v_case.payer_id
      OR v_portal.mapping_generation IS DISTINCT FROM (p_work_context->>'mappingGeneration')::integer
      OR v_portal.form_url IS NULL THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Portal configuration is stale');
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment portal configuration is stale');
   END IF;
-
   IF v_portal.org_id IS NULL AND EXISTS (
     SELECT 1 FROM public.portals AS org_portal
      WHERE org_portal.org_id = p_org_id
-       AND pg_catalog.lower(pg_catalog.btrim(org_portal.portal_key)) =
-           pg_catalog.lower(pg_catalog.btrim(v_portal.portal_key))
+       AND pg_catalog.lower(pg_catalog.btrim(org_portal.portal_key)) = v_portal_key
   ) THEN
-    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Portal configuration is stale');
+    RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment portal configuration is stale');
   END IF;
 
+  -- The selected org config is already locked above. Lock its exact-key shared base
+  -- before the receipt and MINT-19 completion, matching the M58 fill guard order.
   IF v_portal.org_id IS NOT NULL THEN
     SELECT shared_portal.* INTO v_shared_portal
       FROM public.portals AS shared_portal
      WHERE shared_portal.org_id IS NULL
-       AND pg_catalog.lower(pg_catalog.btrim(shared_portal.portal_key)) =
-           pg_catalog.lower(pg_catalog.btrim(v_portal.portal_key))
+       AND pg_catalog.lower(pg_catalog.btrim(shared_portal.portal_key)) = v_portal_key
      FOR SHARE;
     v_has_shared_portal := FOUND;
   END IF;
 
-  v_portal_key := v_portal.portal_key;
-  v_payload_fingerprint := pg_catalog.encode(
-    pg_catalog.digest(
-      p_work_context->>'launchReceiptId' || ':' ||
-      p_fill_session_id::text || ':' ||
-      v_portal_key || ':' ||
-      (p_work_context->>'mappingGeneration') || ':' ||
-      coalesce(p_payload->>'payerReferenceId', '') || ':' ||
-      coalesce(p_payload->>'wipNote', '') || ':' ||
-      coalesce(p_payload->>'pdfFilename', '') || ':' ||
-      coalesce(p_payload->>'note', ''),
-      'sha256'
-    ),
-    'hex'
-  );
-
-  SELECT session.*
-    INTO v_session
+  SELECT session.* INTO v_session
     FROM public.fill_sessions AS session
    WHERE session.id = p_fill_session_id
      AND session.org_id = p_org_id
      AND session.case_id = p_case_id
-     AND session.case_task_id = (p_work_context->>'taskId')::uuid
+     AND session.case_task_id = v_task.id
      AND session.case_step_id = (p_work_context->>'stepId')::uuid
      AND session.step_identity = p_work_context->>'stepIdentity'
+     AND session.launch_receipt_id = (p_work_context->>'launchReceiptId')::uuid
+     AND session.context_version = (p_work_context->>'contextVersion')::integer
      AND session.sop_template_id = (p_work_context->>'sopTemplateId')::uuid
      AND session.sop_version = (p_work_context->>'sopVersion')::integer
      AND session.portal_id = v_portal.id
-     AND session.context_version = (p_work_context->>'contextVersion')::integer
+     AND session.portal_key = v_portal_key
      AND session.mapping_generation = v_portal.mapping_generation
+     AND session.mapping_generation = (p_work_context->>'mappingGeneration')::integer
      AND session.effective_mapping_fingerprint = p_work_context->>'effectiveMappingFingerprint'
-     AND session.launch_receipt_id = (p_work_context->>'launchReceiptId')::uuid
      AND session.provider_id = v_case.provider_id
      AND session.facility_id IS NOT DISTINCT FROM NULLIF(p_work_context->>'facilityId', '')::uuid
      AND session.fill_mode = 'web'
@@ -1539,7 +1649,9 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'The fill receipt does not match this Enrollment step');
   END IF;
 
-  -- Updated to call public.has_current_approved_web_map
+  -- MINT-60: the immutable receipt pins the shared generation from the same
+  -- M52 resolver snapshot used before insert. A reset that won the shared-row
+  -- lock makes a new submission stale before MINT-19 can complete the step.
   IF v_portal.org_id IS NOT NULL THEN
     IF v_has_shared_portal THEN
       IF v_session.shared_mapping_generation IS DISTINCT FROM v_shared_portal.mapping_generation
@@ -1551,6 +1663,8 @@ BEGIN
          ) THEN
         RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment shared mapping context is stale');
       END IF;
+    -- Org-only configurations remain protected by the selected org
+    -- generation lock/check; the shared pin applies only when a base exists.
     ELSIF v_session.shared_mapping_generation IS NOT NULL THEN
       RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment shared mapping context is stale');
     END IF;
@@ -1558,6 +1672,8 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'Enrollment shared mapping context is stale');
   END IF;
 
+  -- MINT-19 reports blocked/invalid steps as JSON instead of raising. Inspect
+  -- that result before any submission touch or case-side effect is written.
   v_completion := public.complete_sop_task_step(
     p_org_id, v_task.id, (p_work_context->>'stepId'), p_actor_id, 'extension'
   );
@@ -1664,7 +1780,7 @@ GRANT EXECUTE ON FUNCTION public.record_typed_enrollment_submission(
 -- ============================================================================
 
 ALTER TABLE public.fill_sessions
-  DROP CONSTRAINT fill_sessions_contract_context_check,
+  DROP CONSTRAINT IF EXISTS fill_sessions_contract_context_check,
   ADD CONSTRAINT fill_sessions_contract_context_check CHECK (
     -- Branch 1: Unclassified legacy
     (

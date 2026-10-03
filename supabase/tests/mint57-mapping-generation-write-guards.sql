@@ -189,7 +189,8 @@ SELECT pg_temp.m57_mark('cross_org_writer_cannot_use_mapping_rpc',
         '18000000-0000-4000-a000-000000000058',
         (SELECT id FROM public.portal_field_maps
           WHERE org_id = '18000000-0000-4000-a000-000000000057'
-            AND portal_key = 'm57_explicit'),
+            AND portal_key = 'm57_explicit'
+          LIMIT 1),
         1, '{"status":"approved"}'::jsonb
       )$$
   ));
