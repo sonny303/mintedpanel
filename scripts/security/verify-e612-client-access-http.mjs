@@ -20,10 +20,7 @@ const runId = randomUUID().replaceAll("-", "").slice(0, 16);
 const label = `com.minted.e612=${runId}`;
 const network = `minted-e612-http-${runId}`;
 const names = Object.fromEntries(
-  ["db", "auth", "rest", "storage", "gateway", "app"].map((kind) => [
-    kind,
-    `${network}-${kind}`,
-  ]),
+  ["db", "auth", "rest", "storage", "gateway", "app"].map((kind) => [kind, `${network}-${kind}`]),
 );
 const images = {
   db:
@@ -198,8 +195,6 @@ const imagePlatform = (image) => {
   if (!/^linux\/(amd64|arm64)$/.test(platform)) fail("E612_HTTP_IMAGE_PLATFORM_UNKNOWN");
   return platform;
 };
-
-
 
 let ids;
 let platforms;

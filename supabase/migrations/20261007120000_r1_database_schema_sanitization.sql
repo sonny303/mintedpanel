@@ -23,9 +23,112 @@ DROP TRIGGER IF EXISTS portals_generation_write_guard ON public.portals;
 DROP FUNCTION IF EXISTS public.guard_portal_field_map_generation_write();
 DROP FUNCTION IF EXISTS public.guard_portal_configuration_generation_write();
 
--- Drop internal generation write assertion helpers that mutate session GUCs
-DROP FUNCTION IF EXISTS public.assert_portal_mapping_generation_for_write(text, uuid, integer);
-DROP FUNCTION IF EXISTS public.assert_legacy_pdf_mapping_generation_for_write(text, integer);
+-- Sanitize generation write assertion helpers by stripping all session GUC mutations (set_config/current_setting)
+CREATE OR REPLACE FUNCTION public.assert_portal_mapping_generation_for_write(
+  p_portal_key text,
+  p_org_id uuid,
+  p_expected_mapping_generation integer
+)
+RETURNS public.portals
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_row public.portals%ROWTYPE;
+  v_shared public.portals%ROWTYPE;
+  v_key text := lower(btrim(coalesce(p_portal_key, '')));
+BEGIN
+  IF v_key = '' THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'portal_key_required';
+  END IF;
+
+  IF p_org_id IS NOT NULL THEN
+    SELECT * INTO v_row
+      FROM public.portals
+     WHERE org_id = p_org_id AND portal_key = v_key
+     FOR UPDATE;
+  END IF;
+  IF NOT FOUND THEN
+    SELECT * INTO v_row
+      FROM public.portals
+     WHERE org_id IS NULL AND portal_key = v_key
+     FOR UPDATE;
+  END IF;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'portal_configuration_not_found';
+  END IF;
+
+  IF p_org_id IS NOT NULL THEN
+    SELECT * INTO v_shared
+      FROM public.portals
+     WHERE org_id IS NULL AND portal_key = v_key
+     FOR UPDATE;
+  END IF;
+
+  IF p_expected_mapping_generation IS NULL THEN
+    IF v_row.mapping_generation <> 1
+       OR v_row.requires_explicit_selection
+       OR v_row.case_type IS NOT NULL
+       OR EXISTS (
+         SELECT 1 FROM public.form_mapping_reset_events event
+          WHERE event.portal_id = v_row.id
+       ) THEN
+      RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_generation_token_required';
+    END IF;
+  ELSIF p_expected_mapping_generation IS DISTINCT FROM v_row.mapping_generation THEN
+    RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_generation_stale';
+  END IF;
+
+  RETURN v_row;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.assert_portal_mapping_generation_for_write(text, uuid, integer)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.assert_portal_mapping_generation_for_write(text, uuid, integer)
+  TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.assert_legacy_pdf_mapping_generation_for_write(
+  p_portal_key text,
+  p_expected_mapping_generation integer
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_key text := lower(btrim(coalesce(p_portal_key, '')));
+  v_family_text text;
+  v_family_id uuid;
+BEGIN
+  IF v_key !~ '^payer-form:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'portal_configuration_not_found';
+  END IF;
+  IF p_expected_mapping_generation IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_generation_token_required';
+  ELSIF p_expected_mapping_generation <> 1 THEN
+    RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'mapping_generation_stale';
+  END IF;
+
+  v_family_text := substr(v_key, length('payer-form:') + 1);
+  v_family_id := v_family_text::uuid;
+  PERFORM 1 FROM public.payer_forms
+   WHERE family_id = v_family_id AND retired_at IS NULL
+   ORDER BY version DESC
+   LIMIT 1
+   FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'payer_form_configuration_not_found';
+  END IF;
+
+  RETURN 1;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.assert_legacy_pdf_mapping_generation_for_write(text, integer)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.assert_legacy_pdf_mapping_generation_for_write(text, integer)
+  TO authenticated, service_role;
 
 
 -- ============================================================================
