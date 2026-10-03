@@ -165,10 +165,8 @@ async function cleanup() {
     ALTER TABLE public.fill_sessions ENABLE TRIGGER trg_fill_sessions_prevent_v2_mutation;
     DELETE FROM public.tasks WHERE org_id = '${ids.org}';
     DELETE FROM public.credential_cases WHERE org_id = '${ids.org}';
-    ALTER TABLE public.portal_field_maps DISABLE TRIGGER portal_field_maps_generation_write_guard;
     DELETE FROM public.portal_field_maps
      WHERE portal_key IN ('${portalKey}', '${workPortalKey}');
-    ALTER TABLE public.portal_field_maps ENABLE TRIGGER portal_field_maps_generation_write_guard;
     DELETE FROM public.portals
      WHERE id IN ('${ids.portal}', '${ids.workGlobalPortal}', '${ids.workOrgPortal}');
     DELETE FROM public.sop_template_versions WHERE template_id = '${ids.template}';
