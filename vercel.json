@@ -1,5 +1,10 @@
 {
   "git": {
     "deploymentEnabled": false
+  },
+  "build": {
+    "env": {
+      "DANGEROUSLY_DEPLOY_VULNERABLE_TANSTACK_START_XSS": "1"
+    }
   }
 }

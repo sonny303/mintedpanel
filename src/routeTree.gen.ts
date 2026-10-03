@@ -9,203 +9,103 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WorkRouteImport } from './routes/work'
-import { Route as WelcomeRouteImport } from './routes/welcome'
-import { Route as SoonRouteImport } from './routes/soon'
-import { Route as ScopeRouteImport } from './routes/scope'
-import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as ProvidersRouteImport } from './routes/providers'
-import { Route as ProgressRouteImport } from './routes/progress'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as PortfolioRouteImport } from './routes/portfolio'
-import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
-import { Route as OutcomesRouteImport } from './routes/outcomes'
-import { Route as OrgDetailRouteImport } from './routes/org-detail'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as LaunchesRouteImport } from './routes/launches'
-import { Route as HomeRouteImport } from './routes/home'
-import { Route as GetStartedRouteImport } from './routes/get-started'
-import { Route as GenerationRouteImport } from './routes/generation'
-import { Route as FixItRouteImport } from './routes/fix-it'
-import { Route as ContactRouteImport } from './routes/contact'
-import { Route as ClientProgressRouteImport } from './routes/client-progress'
-import { Route as CasesRouteImport } from './routes/cases'
-import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
-import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
-import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
-import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
-import { Route as GroupsIndexRouteImport } from './routes/groups.index'
-import { Route as CasesIndexRouteImport } from './routes/cases.index'
-import { Route as TasksIdRouteImport } from './routes/tasks.$id'
-import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
-import { Route as ShareTokenRouteImport } from './routes/share.$token'
-import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
-import { Route as ReportingLocationsPerGroupRouteImport } from './routes/reporting.locations-per-group'
-import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
-import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launches'
-import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
-import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
-import { Route as ReportingEnrollmentExplorerRouteImport } from './routes/reporting.enrollment-explorer'
-import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
-import { Route as ReportingContractsMatrixRouteImport } from './routes/reporting.contracts-matrix'
-import { Route as ReportingBillingReadinessRouteImport } from './routes/reporting.billing-readiness'
-import { Route as ReportingAuditLogRouteImport } from './routes/reporting.audit-log'
-import { Route as ProvidersNewRouteImport } from './routes/providers.new'
-import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
-import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
-import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
-import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
-import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId'
-import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
-import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
-import { Route as DevGlobalSearchRouteImport } from './routes/dev.global-search'
-import { Route as CasesIdRouteImport } from './routes/cases.$id'
-import { Route as CaptureTokenRouteImport } from './routes/capture.$token'
-import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
-import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
-import { Route as AdminSopsRouteImport } from './routes/admin.sops'
-import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
-import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
-import { Route as AdminPayersRouteImport } from './routes/admin.payers'
-import { Route as AdminPayerAdminRouteImport } from './routes/admin.payer-admin'
-import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
-import { Route as AdminImportRouteImport } from './routes/admin.import'
+import { Route as AccountRouteImport } from './routes/account'
+import { Route as CasesRouteImport } from './routes/cases'
+import { Route as ClientProgressRouteImport } from './routes/client-progress'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as FixItRouteImport } from './routes/fix-it'
+import { Route as GenerationRouteImport } from './routes/generation'
+import { Route as GetStartedRouteImport } from './routes/get-started'
+import { Route as HomeRouteImport } from './routes/home'
+import { Route as LaunchesRouteImport } from './routes/launches'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as OrgDetailRouteImport } from './routes/org-detail'
+import { Route as OutcomesRouteImport } from './routes/outcomes'
+import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ProgressRouteImport } from './routes/progress'
+import { Route as ProvidersRouteImport } from './routes/providers'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as ScopeRouteImport } from './routes/scope'
+import { Route as SoonRouteImport } from './routes/soon'
+import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as WorkRouteImport } from './routes/work'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
-import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
-import { Route as GroupsGroupIdIndexRouteImport } from './routes/groups.$groupId.index'
-import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
-import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
-import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
+import { Route as AdminImportRouteImport } from './routes/admin.import'
+import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
+import { Route as AdminPayerAdminRouteImport } from './routes/admin.payer-admin'
+import { Route as AdminPayersRouteImport } from './routes/admin.payers'
+import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminSopsRouteImport } from './routes/admin.sops'
+import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
+import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
+import { Route as CaptureTokenRouteImport } from './routes/capture.$token'
+import { Route as CasesIndexRouteImport } from './routes/cases.index'
+import { Route as CasesIdRouteImport } from './routes/cases.$id'
+import { Route as DevGlobalSearchRouteImport } from './routes/dev.global-search'
+import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
+import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
+import { Route as GroupsIndexRouteImport } from './routes/groups.index'
+import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId'
+import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
+import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
+import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
+import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
+import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
+import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
+import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
+import { Route as ProvidersNewRouteImport } from './routes/providers.new'
+import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
+import { Route as ReportingAuditLogRouteImport } from './routes/reporting.audit-log'
+import { Route as ReportingBillingReadinessRouteImport } from './routes/reporting.billing-readiness'
+import { Route as ReportingContractsMatrixRouteImport } from './routes/reporting.contracts-matrix'
+import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
+import { Route as ReportingEnrollmentExplorerRouteImport } from './routes/reporting.enrollment-explorer'
+import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
+import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
+import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launches'
+import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
+import { Route as ReportingLocationsPerGroupRouteImport } from './routes/reporting.locations-per-group'
+import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
+import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
+import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as AdminPayerAdminIndexRouteImport } from './routes/admin.payer-admin.index'
-import { Route as ReportingRostersTemplatesRouteImport } from './routes/reporting.rosters.templates'
-import { Route as ReportingRostersHistoryRouteImport } from './routes/reporting.rosters.history'
-import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
-import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
-import { Route as GroupsGroupIdPayerNetworkRouteImport } from './routes/groups.$groupId.payer-network'
-import { Route as GroupsGroupIdFacilitiesRouteImport } from './routes/groups.$groupId.facilities'
-import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
-import { Route as ClientInvitesClaimTokenRouteImport } from './routes/client-invites.claim.$token'
-import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
-import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
-import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
-import { Route as AdminPayersNewRouteImport } from './routes/admin.payers_.new'
-import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
-import { Route as AdminPayerAdminSetupRouteImport } from './routes/admin.payer-admin.setup'
 import { Route as AdminPayerAdminCatalogRouteImport } from './routes/admin.payer-admin.catalog'
-import { Route as ReportingRostersValidationIdRouteImport } from './routes/reporting.rosters.validation.$id'
-import { Route as ReportingRostersMappingIdRouteImport } from './routes/reporting.rosters.mapping.$id'
-import { Route as ReportingRostersExportIdRouteImport } from './routes/reporting.rosters.export.$id'
-import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
-import { Route as AdminPayersIdEditRouteImport } from './routes/admin.payers_.$id.edit'
-import { Route as AdminPayerAdminSetupPayerIdRouteImport } from './routes/admin.payer-admin.setup_.$payerId'
-import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
+import { Route as AdminPayerAdminSetupRouteImport } from './routes/admin.payer-admin.setup'
+import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
+import { Route as AdminPayersNewRouteImport } from './routes/admin.payers_.new'
+import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
+import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
+import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
+import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
+import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
+import { Route as ClientInvitesClaimTokenRouteImport } from './routes/client-invites.claim.$token'
+import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
+import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
+import { Route as GroupsGroupIdIndexRouteImport } from './routes/groups.$groupId.index'
+import { Route as GroupsGroupIdFacilitiesRouteImport } from './routes/groups.$groupId.facilities'
+import { Route as GroupsGroupIdPayerNetworkRouteImport } from './routes/groups.$groupId.payer-network'
+import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
+import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
+import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
+import { Route as ReportingRostersHistoryRouteImport } from './routes/reporting.rosters.history'
+import { Route as ReportingRostersTemplatesRouteImport } from './routes/reporting.rosters.templates'
 import { Route as AdminPayerAdminCatalogPayerIdRouteImport } from './routes/admin.payer-admin.catalog_.$payerId'
+import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
+import { Route as AdminPayerAdminSetupPayerIdRouteImport } from './routes/admin.payer-admin.setup_.$payerId'
+import { Route as AdminPayersIdEditRouteImport } from './routes/admin.payers_.$id.edit'
+import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
+import { Route as ReportingRostersExportIdRouteImport } from './routes/reporting.rosters.export.$id'
+import { Route as ReportingRostersMappingIdRouteImport } from './routes/reporting.rosters.mapping.$id'
+import { Route as ReportingRostersValidationIdRouteImport } from './routes/reporting.rosters.validation.$id'
 
-const WorkRoute = WorkRouteImport.update({
-  id: '/work',
-  path: '/work',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WelcomeRoute = WelcomeRouteImport.update({
-  id: '/welcome',
-  path: '/welcome',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SoonRoute = SoonRouteImport.update({
-  id: '/soon',
-  path: '/soon',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ScopeRoute = ScopeRouteImport.update({
-  id: '/scope',
-  path: '/scope',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportsRoute = ReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProvidersRoute = ProvidersRouteImport.update({
-  id: '/providers',
-  path: '/providers',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProgressRoute = ProgressRouteImport.update({
-  id: '/progress',
-  path: '/progress',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PortfolioRoute = PortfolioRouteImport.update({
-  id: '/portfolio',
-  path: '/portfolio',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PayerDirectoryRoute = PayerDirectoryRouteImport.update({
-  id: '/payer-directory',
-  path: '/payer-directory',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OutcomesRoute = OutcomesRouteImport.update({
-  id: '/outcomes',
-  path: '/outcomes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrgDetailRoute = OrgDetailRouteImport.update({
-  id: '/org-detail',
-  path: '/org-detail',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LaunchesRoute = LaunchesRouteImport.update({
-  id: '/launches',
-  path: '/launches',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HomeRoute = HomeRouteImport.update({
-  id: '/home',
-  path: '/home',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GetStartedRoute = GetStartedRouteImport.update({
-  id: '/get-started',
-  path: '/get-started',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GenerationRoute = GenerationRouteImport.update({
-  id: '/generation',
-  path: '/generation',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FixItRoute = FixItRouteImport.update({
-  id: '/fix-it',
-  path: '/fix-it',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ContactRoute = ContactRouteImport.update({
-  id: '/contact',
-  path: '/contact',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClientProgressRoute = ClientProgressRouteImport.update({
-  id: '/client-progress',
-  path: '/client-progress',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CasesRoute = CasesRouteImport.update({
-  id: '/cases',
-  path: '/cases',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -213,34 +113,164 @@ const AccountRoute = AccountRouteImport.update({
   path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const CasesRoute = CasesRouteImport.update({
+  id: '/cases',
+  path: '/cases',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReportingIndexRoute = ReportingIndexRouteImport.update({
-  id: '/reporting/',
-  path: '/reporting/',
+const ClientProgressRoute = ClientProgressRouteImport.update({
+  id: '/client-progress',
+  path: '/client-progress',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ProvidersRoute,
-} as any)
-const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
-  id: '/onboarding/',
-  path: '/onboarding/',
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => LaunchesRoute,
+const FixItRoute = FixItRouteImport.update({
+  id: '/fix-it',
+  path: '/fix-it',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const GroupsIndexRoute = GroupsIndexRouteImport.update({
-  id: '/groups/',
-  path: '/groups/',
+const GenerationRoute = GenerationRouteImport.update({
+  id: '/generation',
+  path: '/generation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GetStartedRoute = GetStartedRouteImport.update({
+  id: '/get-started',
+  path: '/get-started',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaunchesRoute = LaunchesRouteImport.update({
+  id: '/launches',
+  path: '/launches',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgDetailRoute = OrgDetailRouteImport.update({
+  id: '/org-detail',
+  path: '/org-detail',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OutcomesRoute = OutcomesRouteImport.update({
+  id: '/outcomes',
+  path: '/outcomes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayerDirectoryRoute = PayerDirectoryRouteImport.update({
+  id: '/payer-directory',
+  path: '/payer-directory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgressRoute = ProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersRoute = ProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScopeRoute = ScopeRouteImport.update({
+  id: '/scope',
+  path: '/scope',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoonRoute = SoonRouteImport.update({
+  id: '/soon',
+  path: '/soon',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkRoute = WorkRouteImport.update({
+  id: '/work',
+  path: '/work',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/admin/audit',
+  path: '/admin/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminImportRoute = AdminImportRouteImport.update({
+  id: '/admin/import',
+  path: '/admin/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMsoRoutingRoute = AdminMsoRoutingRouteImport.update({
+  id: '/admin/mso-routing',
+  path: '/admin/mso-routing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPayerAdminRoute = AdminPayerAdminRouteImport.update({
+  id: '/admin/payer-admin',
+  path: '/admin/payer-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPayersRoute = AdminPayersRouteImport.update({
+  id: '/admin/payers',
+  path: '/admin/payers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPortalsRoute = AdminPortalsRouteImport.update({
+  id: '/admin/portals',
+  path: '/admin/portals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSopsRoute = AdminSopsRouteImport.update({
+  id: '/admin/sops',
+  path: '/admin/sops',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminStatusesRoute = AdminStatusesRouteImport.update({
+  id: '/admin/statuses',
+  path: '/admin/statuses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
+  id: '/admin/templates',
+  path: '/admin/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CaptureTokenRoute = CaptureTokenRouteImport.update({
+  id: '/capture/$token',
+  path: '/capture/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CasesIndexRoute = CasesIndexRouteImport.update({
@@ -248,46 +278,107 @@ const CasesIndexRoute = CasesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CasesRoute,
 } as any)
-const TasksIdRoute = TasksIdRouteImport.update({
-  id: '/tasks/$id',
-  path: '/tasks/$id',
+const CasesIdRoute = CasesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => CasesRoute,
+} as any)
+const DevGlobalSearchRoute = DevGlobalSearchRouteImport.update({
+  id: '/dev/global-search',
+  path: '/dev/global-search',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SsnIntakeTokenRoute = SsnIntakeTokenRouteImport.update({
-  id: '/ssn-intake/$token',
-  path: '/ssn-intake/$token',
+const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
+  id: '/dev/primitives',
+  path: '/dev/primitives',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ShareTokenRoute = ShareTokenRouteImport.update({
-  id: '/share/$token',
-  path: '/share/$token',
+const GenerationRunsRoute = GenerationRunsRouteImport.update({
+  id: '/generation_/runs',
+  path: '/generation/runs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
-  id: '/reporting/portfolio',
-  path: '/reporting/portfolio',
+const GroupsIndexRoute = GroupsIndexRouteImport.update({
+  id: '/groups/',
+  path: '/groups/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReportingLocationsPerGroupRoute =
-  ReportingLocationsPerGroupRouteImport.update({
-    id: '/reporting/locations-per-group',
-    path: '/reporting/locations-per-group',
+const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
+  id: '/groups/$groupId',
+  path: '/groups/$groupId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportRunIdRoute = ImportRunIdRouteImport.update({
+  id: '/import/$runId',
+  path: '/import/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LaunchesRoute,
+} as any)
+const LaunchesIdRoute = LaunchesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => LaunchesRoute,
+} as any)
+const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
+  id: '/onboarding/',
+  path: '/onboarding/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingWizardRoute = OnboardingWizardRouteImport.update({
+  id: '/onboarding/wizard',
+  path: '/onboarding/wizard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const ProvidersIdRoute = ProvidersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const ProvidersNewRoute = ProvidersNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const ReportingIndexRoute = ReportingIndexRouteImport.update({
+  id: '/reporting/',
+  path: '/reporting/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingAuditLogRoute = ReportingAuditLogRouteImport.update({
+  id: '/reporting/audit-log',
+  path: '/reporting/audit-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingBillingReadinessRoute =
+  ReportingBillingReadinessRouteImport.update({
+    id: '/reporting/billing-readiness',
+    path: '/reporting/billing-readiness',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ReportingLeadsRoute = ReportingLeadsRouteImport.update({
-  id: '/reporting/leads',
-  path: '/reporting/leads',
+const ReportingContractsMatrixRoute =
+  ReportingContractsMatrixRouteImport.update({
+    id: '/reporting/contracts-matrix',
+    path: '/reporting/contracts-matrix',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
+  id: '/reporting/denials',
+  path: '/reporting/denials',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReportingLaunchesRoute = ReportingLaunchesRouteImport.update({
-  id: '/reporting/launches',
-  path: '/reporting/launches',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportingFacilitiesWithoutProvidersRoute =
-  ReportingFacilitiesWithoutProvidersRouteImport.update({
-    id: '/reporting/facilities-without-providers',
-    path: '/reporting/facilities-without-providers',
+const ReportingEnrollmentExplorerRoute =
+  ReportingEnrollmentExplorerRouteImport.update({
+    id: '/reporting/enrollment-explorer',
+    path: '/reporting/enrollment-explorer',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ReportingExpiringCredentialsRoute =
@@ -296,239 +387,51 @@ const ReportingExpiringCredentialsRoute =
     path: '/reporting/expiring-credentials',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ReportingEnrollmentExplorerRoute =
-  ReportingEnrollmentExplorerRouteImport.update({
-    id: '/reporting/enrollment-explorer',
-    path: '/reporting/enrollment-explorer',
+const ReportingFacilitiesWithoutProvidersRoute =
+  ReportingFacilitiesWithoutProvidersRouteImport.update({
+    id: '/reporting/facilities-without-providers',
+    path: '/reporting/facilities-without-providers',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
-  id: '/reporting/denials',
-  path: '/reporting/denials',
+const ReportingLaunchesRoute = ReportingLaunchesRouteImport.update({
+  id: '/reporting/launches',
+  path: '/reporting/launches',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReportingContractsMatrixRoute =
-  ReportingContractsMatrixRouteImport.update({
-    id: '/reporting/contracts-matrix',
-    path: '/reporting/contracts-matrix',
+const ReportingLeadsRoute = ReportingLeadsRouteImport.update({
+  id: '/reporting/leads',
+  path: '/reporting/leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingLocationsPerGroupRoute =
+  ReportingLocationsPerGroupRouteImport.update({
+    id: '/reporting/locations-per-group',
+    path: '/reporting/locations-per-group',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ReportingBillingReadinessRoute =
-  ReportingBillingReadinessRouteImport.update({
-    id: '/reporting/billing-readiness',
-    path: '/reporting/billing-readiness',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ReportingAuditLogRoute = ReportingAuditLogRouteImport.update({
-  id: '/reporting/audit-log',
-  path: '/reporting/audit-log',
+const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
+  id: '/reporting/portfolio',
+  path: '/reporting/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProvidersNewRoute = ProvidersNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => ProvidersRoute,
-} as any)
-const ProvidersIdRoute = ProvidersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ProvidersRoute,
-} as any)
-const OnboardingWizardRoute = OnboardingWizardRouteImport.update({
-  id: '/onboarding/wizard',
-  path: '/onboarding/wizard',
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LaunchesIdRoute = LaunchesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => LaunchesRoute,
-} as any)
-const ImportRunIdRoute = ImportRunIdRouteImport.update({
-  id: '/import/$runId',
-  path: '/import/$runId',
+const SsnIntakeTokenRoute = SsnIntakeTokenRouteImport.update({
+  id: '/ssn-intake/$token',
+  path: '/ssn-intake/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
-  id: '/groups/$groupId',
-  path: '/groups/$groupId',
+const TasksIdRoute = TasksIdRouteImport.update({
+  id: '/tasks/$id',
+  path: '/tasks/$id',
   getParentRoute: () => rootRouteImport,
-} as any)
-const GenerationRunsRoute = GenerationRunsRouteImport.update({
-  id: '/generation_/runs',
-  path: '/generation/runs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
-  id: '/dev/primitives',
-  path: '/dev/primitives',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevGlobalSearchRoute = DevGlobalSearchRouteImport.update({
-  id: '/dev/global-search',
-  path: '/dev/global-search',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CasesIdRoute = CasesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => CasesRoute,
-} as any)
-const CaptureTokenRoute = CaptureTokenRouteImport.update({
-  id: '/capture/$token',
-  path: '/capture/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
-  id: '/admin/templates',
-  path: '/admin/templates',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminStatusesRoute = AdminStatusesRouteImport.update({
-  id: '/admin/statuses',
-  path: '/admin/statuses',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminSopsRoute = AdminSopsRouteImport.update({
-  id: '/admin/sops',
-  path: '/admin/sops',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminSettingsRoute = AdminSettingsRouteImport.update({
-  id: '/admin/settings',
-  path: '/admin/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminPortalsRoute = AdminPortalsRouteImport.update({
-  id: '/admin/portals',
-  path: '/admin/portals',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminPayersRoute = AdminPayersRouteImport.update({
-  id: '/admin/payers',
-  path: '/admin/payers',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminPayerAdminRoute = AdminPayerAdminRouteImport.update({
-  id: '/admin/payer-admin',
-  path: '/admin/payer-admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminMsoRoutingRoute = AdminMsoRoutingRouteImport.update({
-  id: '/admin/mso-routing',
-  path: '/admin/mso-routing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminImportRoute = AdminImportRouteImport.update({
-  id: '/admin/import',
-  path: '/admin/import',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminAuditRoute = AdminAuditRouteImport.update({
-  id: '/admin/audit',
-  path: '/admin/audit',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ProvidersIdRoute,
-} as any)
-const GroupsGroupIdIndexRoute = GroupsGroupIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => GroupsGroupIdRoute,
-} as any)
-const GenerationRunsIndexRoute = GenerationRunsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => GenerationRunsRoute,
-} as any)
-const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AdminTemplatesRoute,
-} as any)
-const AdminSopsIndexRoute = AdminSopsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AdminSopsRoute,
 } as any)
 const AdminPayerAdminIndexRoute = AdminPayerAdminIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AdminPayerAdminRoute,
-} as any)
-const ReportingRostersTemplatesRoute =
-  ReportingRostersTemplatesRouteImport.update({
-    id: '/reporting/rosters/templates',
-    path: '/reporting/rosters/templates',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ReportingRostersHistoryRoute = ReportingRostersHistoryRouteImport.update({
-  id: '/reporting/rosters/history',
-  path: '/reporting/rosters/history',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
-  id: '/edit',
-  path: '/edit',
-  getParentRoute: () => ProvidersIdRoute,
-} as any)
-const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
-  id: '/portals/$portalKey/train',
-  path: '/portals/$portalKey/train',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GroupsGroupIdPayerNetworkRoute =
-  GroupsGroupIdPayerNetworkRouteImport.update({
-    id: '/payer-network',
-    path: '/payer-network',
-    getParentRoute: () => GroupsGroupIdRoute,
-  } as any)
-const GroupsGroupIdFacilitiesRoute = GroupsGroupIdFacilitiesRouteImport.update({
-  id: '/facilities',
-  path: '/facilities',
-  getParentRoute: () => GroupsGroupIdRoute,
-} as any)
-const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
-  id: '/$runId',
-  path: '/$runId',
-  getParentRoute: () => GenerationRunsRoute,
-} as any)
-const ClientInvitesClaimTokenRoute = ClientInvitesClaimTokenRouteImport.update({
-  id: '/client-invites/claim/$token',
-  path: '/client-invites/claim/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => AdminTemplatesRoute,
-} as any)
-const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AdminTemplatesRoute,
-} as any)
-const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AdminSopsRoute,
-} as any)
-const AdminPayersNewRoute = AdminPayersNewRouteImport.update({
-  id: '/admin/payers_/new',
-  path: '/admin/payers/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminPayerAdminSopsRoute = AdminPayerAdminSopsRouteImport.update({
-  id: '/sops',
-  path: '/sops',
-  getParentRoute: () => AdminPayerAdminRoute,
-} as any)
-const AdminPayerAdminSetupRoute = AdminPayerAdminSetupRouteImport.update({
-  id: '/setup',
-  path: '/setup',
   getParentRoute: () => AdminPayerAdminRoute,
 } as any)
 const AdminPayerAdminCatalogRoute = AdminPayerAdminCatalogRouteImport.update({
@@ -536,38 +439,107 @@ const AdminPayerAdminCatalogRoute = AdminPayerAdminCatalogRouteImport.update({
   path: '/catalog',
   getParentRoute: () => AdminPayerAdminRoute,
 } as any)
-const ReportingRostersValidationIdRoute =
-  ReportingRostersValidationIdRouteImport.update({
-    id: '/reporting/rosters/validation/$id',
-    path: '/reporting/rosters/validation/$id',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ReportingRostersMappingIdRoute =
-  ReportingRostersMappingIdRouteImport.update({
-    id: '/reporting/rosters/mapping/$id',
-    path: '/reporting/rosters/mapping/$id',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ReportingRostersExportIdRoute =
-  ReportingRostersExportIdRouteImport.update({
-    id: '/reporting/rosters/export/$id',
-    path: '/reporting/rosters/export/$id',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
-  id: '/admin/payers_/$id/scorecard',
-  path: '/admin/payers/$id/scorecard',
+const AdminPayerAdminSetupRoute = AdminPayerAdminSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AdminPayerAdminRoute,
+} as any)
+const AdminPayerAdminSopsRoute = AdminPayerAdminSopsRouteImport.update({
+  id: '/sops',
+  path: '/sops',
+  getParentRoute: () => AdminPayerAdminRoute,
+} as any)
+const AdminPayersNewRoute = AdminPayersNewRouteImport.update({
+  id: '/admin/payers_/new',
+  path: '/admin/payers/new',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminPayersIdEditRoute = AdminPayersIdEditRouteImport.update({
-  id: '/admin/payers_/$id/edit',
-  path: '/admin/payers/$id/edit',
+const AdminSopsIndexRoute = AdminSopsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminSopsRoute,
+} as any)
+const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminSopsRoute,
+} as any)
+const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminTemplatesRoute,
+} as any)
+const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminTemplatesRoute,
+} as any)
+const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminTemplatesRoute,
+} as any)
+const ClientInvitesClaimTokenRoute = ClientInvitesClaimTokenRouteImport.update({
+  id: '/client-invites/claim/$token',
+  path: '/client-invites/claim/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminPayerAdminSetupPayerIdRoute =
-  AdminPayerAdminSetupPayerIdRouteImport.update({
-    id: '/setup_/$payerId',
-    path: '/setup/$payerId',
+const GenerationRunsIndexRoute = GenerationRunsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GenerationRunsRoute,
+} as any)
+const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => GenerationRunsRoute,
+} as any)
+const GroupsGroupIdIndexRoute = GroupsGroupIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GroupsGroupIdRoute,
+} as any)
+const GroupsGroupIdFacilitiesRoute = GroupsGroupIdFacilitiesRouteImport.update({
+  id: '/facilities',
+  path: '/facilities',
+  getParentRoute: () => GroupsGroupIdRoute,
+} as any)
+const GroupsGroupIdPayerNetworkRoute =
+  GroupsGroupIdPayerNetworkRouteImport.update({
+    id: '/payer-network',
+    path: '/payer-network',
+    getParentRoute: () => GroupsGroupIdRoute,
+  } as any)
+const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
+  id: '/portals/$portalKey/train',
+  path: '/portals/$portalKey/train',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProvidersIdRoute,
+} as any)
+const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => ProvidersIdRoute,
+} as any)
+const ReportingRostersHistoryRoute = ReportingRostersHistoryRouteImport.update({
+  id: '/reporting/rosters/history',
+  path: '/reporting/rosters/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingRostersTemplatesRoute =
+  ReportingRostersTemplatesRouteImport.update({
+    id: '/reporting/rosters/templates',
+    path: '/reporting/rosters/templates',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminPayerAdminCatalogPayerIdRoute =
+  AdminPayerAdminCatalogPayerIdRouteImport.update({
+    id: '/catalog_/$payerId',
+    path: '/catalog/$payerId',
     getParentRoute: () => AdminPayerAdminRoute,
   } as any)
 const AdminPayerAdminFormsPayerIdRoute =
@@ -576,11 +548,39 @@ const AdminPayerAdminFormsPayerIdRoute =
     path: '/forms/$payerId',
     getParentRoute: () => AdminPayerAdminRoute,
   } as any)
-const AdminPayerAdminCatalogPayerIdRoute =
-  AdminPayerAdminCatalogPayerIdRouteImport.update({
-    id: '/catalog_/$payerId',
-    path: '/catalog/$payerId',
+const AdminPayerAdminSetupPayerIdRoute =
+  AdminPayerAdminSetupPayerIdRouteImport.update({
+    id: '/setup_/$payerId',
+    path: '/setup/$payerId',
     getParentRoute: () => AdminPayerAdminRoute,
+  } as any)
+const AdminPayersIdEditRoute = AdminPayersIdEditRouteImport.update({
+  id: '/admin/payers_/$id/edit',
+  path: '/admin/payers/$id/edit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
+  id: '/admin/payers_/$id/scorecard',
+  path: '/admin/payers/$id/scorecard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingRostersExportIdRoute =
+  ReportingRostersExportIdRouteImport.update({
+    id: '/reporting/rosters/export/$id',
+    path: '/reporting/rosters/export/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingRostersMappingIdRoute =
+  ReportingRostersMappingIdRouteImport.update({
+    id: '/reporting/rosters/mapping/$id',
+    path: '/reporting/rosters/mapping/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingRostersValidationIdRoute =
+  ReportingRostersValidationIdRouteImport.update({
+    id: '/reporting/rosters/validation/$id',
+    path: '/reporting/rosters/validation/$id',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -1211,151 +1211,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/work': {
-      id: '/work'
-      path: '/work'
-      fullPath: '/work'
-      preLoaderRoute: typeof WorkRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/welcome': {
-      id: '/welcome'
-      path: '/welcome'
-      fullPath: '/welcome'
-      preLoaderRoute: typeof WelcomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/soon': {
-      id: '/soon'
-      path: '/soon'
-      fullPath: '/soon'
-      preLoaderRoute: typeof SoonRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/scope': {
-      id: '/scope'
-      path: '/scope'
-      fullPath: '/scope'
-      preLoaderRoute: typeof ScopeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reports': {
-      id: '/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof ReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/providers': {
-      id: '/providers'
-      path: '/providers'
-      fullPath: '/providers'
-      preLoaderRoute: typeof ProvidersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/progress': {
-      id: '/progress'
-      path: '/progress'
-      fullPath: '/progress'
-      preLoaderRoute: typeof ProgressRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/portfolio': {
-      id: '/portfolio'
-      path: '/portfolio'
-      fullPath: '/portfolio'
-      preLoaderRoute: typeof PortfolioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/payer-directory': {
-      id: '/payer-directory'
-      path: '/payer-directory'
-      fullPath: '/payer-directory'
-      preLoaderRoute: typeof PayerDirectoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/outcomes': {
-      id: '/outcomes'
-      path: '/outcomes'
-      fullPath: '/outcomes'
-      preLoaderRoute: typeof OutcomesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/org-detail': {
-      id: '/org-detail'
-      path: '/org-detail'
-      fullPath: '/org-detail'
-      preLoaderRoute: typeof OrgDetailRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/launches': {
-      id: '/launches'
-      path: '/launches'
-      fullPath: '/launches'
-      preLoaderRoute: typeof LaunchesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/home': {
-      id: '/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof HomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/get-started': {
-      id: '/get-started'
-      path: '/get-started'
-      fullPath: '/get-started'
-      preLoaderRoute: typeof GetStartedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/generation': {
-      id: '/generation'
-      path: '/generation'
-      fullPath: '/generation'
-      preLoaderRoute: typeof GenerationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/fix-it': {
-      id: '/fix-it'
-      path: '/fix-it'
-      fullPath: '/fix-it'
-      preLoaderRoute: typeof FixItRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/contact': {
-      id: '/contact'
-      path: '/contact'
-      fullPath: '/contact'
-      preLoaderRoute: typeof ContactRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/client-progress': {
-      id: '/client-progress'
-      path: '/client-progress'
-      fullPath: '/client-progress'
-      preLoaderRoute: typeof ClientProgressRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cases': {
-      id: '/cases'
-      path: '/cases'
-      fullPath: '/cases'
-      preLoaderRoute: typeof CasesRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -1365,291 +1225,151 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/cases': {
+      id: '/cases'
+      path: '/cases'
+      fullPath: '/cases'
+      preLoaderRoute: typeof CasesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/': {
-      id: '/reporting/'
-      path: '/reporting'
-      fullPath: '/reporting/'
-      preLoaderRoute: typeof ReportingIndexRouteImport
+    '/client-progress': {
+      id: '/client-progress'
+      path: '/client-progress'
+      fullPath: '/client-progress'
+      preLoaderRoute: typeof ClientProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/providers/': {
-      id: '/providers/'
-      path: '/'
-      fullPath: '/providers/'
-      preLoaderRoute: typeof ProvidersIndexRouteImport
-      parentRoute: typeof ProvidersRoute
-    }
-    '/onboarding/': {
-      id: '/onboarding/'
-      path: '/onboarding'
-      fullPath: '/onboarding/'
-      preLoaderRoute: typeof OnboardingIndexRouteImport
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/launches/': {
-      id: '/launches/'
-      path: '/'
-      fullPath: '/launches/'
-      preLoaderRoute: typeof LaunchesIndexRouteImport
-      parentRoute: typeof LaunchesRoute
-    }
-    '/groups/': {
-      id: '/groups/'
-      path: '/groups'
-      fullPath: '/groups/'
-      preLoaderRoute: typeof GroupsIndexRouteImport
+    '/fix-it': {
+      id: '/fix-it'
+      path: '/fix-it'
+      fullPath: '/fix-it'
+      preLoaderRoute: typeof FixItRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/cases/': {
-      id: '/cases/'
-      path: '/'
-      fullPath: '/cases/'
-      preLoaderRoute: typeof CasesIndexRouteImport
-      parentRoute: typeof CasesRoute
-    }
-    '/tasks/$id': {
-      id: '/tasks/$id'
-      path: '/tasks/$id'
-      fullPath: '/tasks/$id'
-      preLoaderRoute: typeof TasksIdRouteImport
+    '/generation': {
+      id: '/generation'
+      path: '/generation'
+      fullPath: '/generation'
+      preLoaderRoute: typeof GenerationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/ssn-intake/$token': {
-      id: '/ssn-intake/$token'
-      path: '/ssn-intake/$token'
-      fullPath: '/ssn-intake/$token'
-      preLoaderRoute: typeof SsnIntakeTokenRouteImport
+    '/get-started': {
+      id: '/get-started'
+      path: '/get-started'
+      fullPath: '/get-started'
+      preLoaderRoute: typeof GetStartedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/share/$token': {
-      id: '/share/$token'
-      path: '/share/$token'
-      fullPath: '/share/$token'
-      preLoaderRoute: typeof ShareTokenRouteImport
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/portfolio': {
-      id: '/reporting/portfolio'
-      path: '/reporting/portfolio'
-      fullPath: '/reporting/portfolio'
-      preLoaderRoute: typeof ReportingPortfolioRouteImport
+    '/launches': {
+      id: '/launches'
+      path: '/launches'
+      fullPath: '/launches'
+      preLoaderRoute: typeof LaunchesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/locations-per-group': {
-      id: '/reporting/locations-per-group'
-      path: '/reporting/locations-per-group'
-      fullPath: '/reporting/locations-per-group'
-      preLoaderRoute: typeof ReportingLocationsPerGroupRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/leads': {
-      id: '/reporting/leads'
-      path: '/reporting/leads'
-      fullPath: '/reporting/leads'
-      preLoaderRoute: typeof ReportingLeadsRouteImport
+    '/org-detail': {
+      id: '/org-detail'
+      path: '/org-detail'
+      fullPath: '/org-detail'
+      preLoaderRoute: typeof OrgDetailRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/launches': {
-      id: '/reporting/launches'
-      path: '/reporting/launches'
-      fullPath: '/reporting/launches'
-      preLoaderRoute: typeof ReportingLaunchesRouteImport
+    '/outcomes': {
+      id: '/outcomes'
+      path: '/outcomes'
+      fullPath: '/outcomes'
+      preLoaderRoute: typeof OutcomesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/facilities-without-providers': {
-      id: '/reporting/facilities-without-providers'
-      path: '/reporting/facilities-without-providers'
-      fullPath: '/reporting/facilities-without-providers'
-      preLoaderRoute: typeof ReportingFacilitiesWithoutProvidersRouteImport
+    '/payer-directory': {
+      id: '/payer-directory'
+      path: '/payer-directory'
+      fullPath: '/payer-directory'
+      preLoaderRoute: typeof PayerDirectoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/expiring-credentials': {
-      id: '/reporting/expiring-credentials'
-      path: '/reporting/expiring-credentials'
-      fullPath: '/reporting/expiring-credentials'
-      preLoaderRoute: typeof ReportingExpiringCredentialsRouteImport
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/enrollment-explorer': {
-      id: '/reporting/enrollment-explorer'
-      path: '/reporting/enrollment-explorer'
-      fullPath: '/reporting/enrollment-explorer'
-      preLoaderRoute: typeof ReportingEnrollmentExplorerRouteImport
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/denials': {
-      id: '/reporting/denials'
-      path: '/reporting/denials'
-      fullPath: '/reporting/denials'
-      preLoaderRoute: typeof ReportingDenialsRouteImport
+    '/progress': {
+      id: '/progress'
+      path: '/progress'
+      fullPath: '/progress'
+      preLoaderRoute: typeof ProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/contracts-matrix': {
-      id: '/reporting/contracts-matrix'
-      path: '/reporting/contracts-matrix'
-      fullPath: '/reporting/contracts-matrix'
-      preLoaderRoute: typeof ReportingContractsMatrixRouteImport
+    '/providers': {
+      id: '/providers'
+      path: '/providers'
+      fullPath: '/providers'
+      preLoaderRoute: typeof ProvidersRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/billing-readiness': {
-      id: '/reporting/billing-readiness'
-      path: '/reporting/billing-readiness'
-      fullPath: '/reporting/billing-readiness'
-      preLoaderRoute: typeof ReportingBillingReadinessRouteImport
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/audit-log': {
-      id: '/reporting/audit-log'
-      path: '/reporting/audit-log'
-      fullPath: '/reporting/audit-log'
-      preLoaderRoute: typeof ReportingAuditLogRouteImport
+    '/scope': {
+      id: '/scope'
+      path: '/scope'
+      fullPath: '/scope'
+      preLoaderRoute: typeof ScopeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/providers/new': {
-      id: '/providers/new'
-      path: '/new'
-      fullPath: '/providers/new'
-      preLoaderRoute: typeof ProvidersNewRouteImport
-      parentRoute: typeof ProvidersRoute
-    }
-    '/providers/$id': {
-      id: '/providers/$id'
-      path: '/$id'
-      fullPath: '/providers/$id'
-      preLoaderRoute: typeof ProvidersIdRouteImport
-      parentRoute: typeof ProvidersRoute
-    }
-    '/onboarding/wizard': {
-      id: '/onboarding/wizard'
-      path: '/onboarding/wizard'
-      fullPath: '/onboarding/wizard'
-      preLoaderRoute: typeof OnboardingWizardRouteImport
+    '/soon': {
+      id: '/soon'
+      path: '/soon'
+      fullPath: '/soon'
+      preLoaderRoute: typeof SoonRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/launches/$id': {
-      id: '/launches/$id'
-      path: '/$id'
-      fullPath: '/launches/$id'
-      preLoaderRoute: typeof LaunchesIdRouteImport
-      parentRoute: typeof LaunchesRoute
-    }
-    '/import/$runId': {
-      id: '/import/$runId'
-      path: '/import/$runId'
-      fullPath: '/import/$runId'
-      preLoaderRoute: typeof ImportRunIdRouteImport
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/groups/$groupId': {
-      id: '/groups/$groupId'
-      path: '/groups/$groupId'
-      fullPath: '/groups/$groupId'
-      preLoaderRoute: typeof GroupsGroupIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/generation_/runs': {
-      id: '/generation_/runs'
-      path: '/generation/runs'
-      fullPath: '/generation/runs'
-      preLoaderRoute: typeof GenerationRunsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/primitives': {
-      id: '/dev/primitives'
-      path: '/dev/primitives'
-      fullPath: '/dev/primitives'
-      preLoaderRoute: typeof DevPrimitivesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/global-search': {
-      id: '/dev/global-search'
-      path: '/dev/global-search'
-      fullPath: '/dev/global-search'
-      preLoaderRoute: typeof DevGlobalSearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cases/$id': {
-      id: '/cases/$id'
-      path: '/$id'
-      fullPath: '/cases/$id'
-      preLoaderRoute: typeof CasesIdRouteImport
-      parentRoute: typeof CasesRoute
-    }
-    '/capture/$token': {
-      id: '/capture/$token'
-      path: '/capture/$token'
-      fullPath: '/capture/$token'
-      preLoaderRoute: typeof CaptureTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/templates': {
-      id: '/admin/templates'
-      path: '/admin/templates'
-      fullPath: '/admin/templates'
-      preLoaderRoute: typeof AdminTemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/statuses': {
-      id: '/admin/statuses'
-      path: '/admin/statuses'
-      fullPath: '/admin/statuses'
-      preLoaderRoute: typeof AdminStatusesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/sops': {
-      id: '/admin/sops'
-      path: '/admin/sops'
-      fullPath: '/admin/sops'
-      preLoaderRoute: typeof AdminSopsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/settings': {
-      id: '/admin/settings'
-      path: '/admin/settings'
-      fullPath: '/admin/settings'
-      preLoaderRoute: typeof AdminSettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/portals': {
-      id: '/admin/portals'
-      path: '/admin/portals'
-      fullPath: '/admin/portals'
-      preLoaderRoute: typeof AdminPortalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/payers': {
-      id: '/admin/payers'
-      path: '/admin/payers'
-      fullPath: '/admin/payers'
-      preLoaderRoute: typeof AdminPayersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/payer-admin': {
-      id: '/admin/payer-admin'
-      path: '/admin/payer-admin'
-      fullPath: '/admin/payer-admin'
-      preLoaderRoute: typeof AdminPayerAdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/mso-routing': {
-      id: '/admin/mso-routing'
-      path: '/admin/mso-routing'
-      fullPath: '/admin/mso-routing'
-      preLoaderRoute: typeof AdminMsoRoutingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/import': {
-      id: '/admin/import'
-      path: '/admin/import'
-      fullPath: '/admin/import'
-      preLoaderRoute: typeof AdminImportRouteImport
+    '/work': {
+      id: '/work'
+      path: '/work'
+      fullPath: '/work'
+      preLoaderRoute: typeof WorkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/audit': {
@@ -1659,144 +1379,291 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/providers/$id/': {
-      id: '/providers/$id/'
-      path: '/'
-      fullPath: '/providers/$id/'
-      preLoaderRoute: typeof ProvidersIdIndexRouteImport
-      parentRoute: typeof ProvidersIdRoute
+    '/admin/import': {
+      id: '/admin/import'
+      path: '/admin/import'
+      fullPath: '/admin/import'
+      preLoaderRoute: typeof AdminImportRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/groups/$groupId/': {
-      id: '/groups/$groupId/'
-      path: '/'
-      fullPath: '/groups/$groupId/'
-      preLoaderRoute: typeof GroupsGroupIdIndexRouteImport
-      parentRoute: typeof GroupsGroupIdRoute
+    '/admin/mso-routing': {
+      id: '/admin/mso-routing'
+      path: '/admin/mso-routing'
+      fullPath: '/admin/mso-routing'
+      preLoaderRoute: typeof AdminMsoRoutingRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/generation_/runs/': {
-      id: '/generation_/runs/'
-      path: '/'
-      fullPath: '/generation/runs/'
-      preLoaderRoute: typeof GenerationRunsIndexRouteImport
-      parentRoute: typeof GenerationRunsRoute
+    '/admin/payer-admin': {
+      id: '/admin/payer-admin'
+      path: '/admin/payer-admin'
+      fullPath: '/admin/payer-admin'
+      preLoaderRoute: typeof AdminPayerAdminRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/templates/': {
-      id: '/admin/templates/'
-      path: '/'
-      fullPath: '/admin/templates/'
-      preLoaderRoute: typeof AdminTemplatesIndexRouteImport
-      parentRoute: typeof AdminTemplatesRoute
+    '/admin/payers': {
+      id: '/admin/payers'
+      path: '/admin/payers'
+      fullPath: '/admin/payers'
+      preLoaderRoute: typeof AdminPayersRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/sops/': {
-      id: '/admin/sops/'
+    '/admin/portals': {
+      id: '/admin/portals'
+      path: '/admin/portals'
+      fullPath: '/admin/portals'
+      preLoaderRoute: typeof AdminPortalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/sops': {
+      id: '/admin/sops'
+      path: '/admin/sops'
+      fullPath: '/admin/sops'
+      preLoaderRoute: typeof AdminSopsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/statuses': {
+      id: '/admin/statuses'
+      path: '/admin/statuses'
+      fullPath: '/admin/statuses'
+      preLoaderRoute: typeof AdminStatusesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/templates': {
+      id: '/admin/templates'
+      path: '/admin/templates'
+      fullPath: '/admin/templates'
+      preLoaderRoute: typeof AdminTemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/capture/$token': {
+      id: '/capture/$token'
+      path: '/capture/$token'
+      fullPath: '/capture/$token'
+      preLoaderRoute: typeof CaptureTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cases/': {
+      id: '/cases/'
       path: '/'
-      fullPath: '/admin/sops/'
-      preLoaderRoute: typeof AdminSopsIndexRouteImport
-      parentRoute: typeof AdminSopsRoute
+      fullPath: '/cases/'
+      preLoaderRoute: typeof CasesIndexRouteImport
+      parentRoute: typeof CasesRoute
+    }
+    '/cases/$id': {
+      id: '/cases/$id'
+      path: '/$id'
+      fullPath: '/cases/$id'
+      preLoaderRoute: typeof CasesIdRouteImport
+      parentRoute: typeof CasesRoute
+    }
+    '/dev/global-search': {
+      id: '/dev/global-search'
+      path: '/dev/global-search'
+      fullPath: '/dev/global-search'
+      preLoaderRoute: typeof DevGlobalSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/primitives': {
+      id: '/dev/primitives'
+      path: '/dev/primitives'
+      fullPath: '/dev/primitives'
+      preLoaderRoute: typeof DevPrimitivesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/generation_/runs': {
+      id: '/generation_/runs'
+      path: '/generation/runs'
+      fullPath: '/generation/runs'
+      preLoaderRoute: typeof GenerationRunsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/': {
+      id: '/groups/'
+      path: '/groups'
+      fullPath: '/groups/'
+      preLoaderRoute: typeof GroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/$groupId': {
+      id: '/groups/$groupId'
+      path: '/groups/$groupId'
+      fullPath: '/groups/$groupId'
+      preLoaderRoute: typeof GroupsGroupIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/import/$runId': {
+      id: '/import/$runId'
+      path: '/import/$runId'
+      fullPath: '/import/$runId'
+      preLoaderRoute: typeof ImportRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/launches/': {
+      id: '/launches/'
+      path: '/'
+      fullPath: '/launches/'
+      preLoaderRoute: typeof LaunchesIndexRouteImport
+      parentRoute: typeof LaunchesRoute
+    }
+    '/launches/$id': {
+      id: '/launches/$id'
+      path: '/$id'
+      fullPath: '/launches/$id'
+      preLoaderRoute: typeof LaunchesIdRouteImport
+      parentRoute: typeof LaunchesRoute
+    }
+    '/onboarding/': {
+      id: '/onboarding/'
+      path: '/onboarding'
+      fullPath: '/onboarding/'
+      preLoaderRoute: typeof OnboardingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding/wizard': {
+      id: '/onboarding/wizard'
+      path: '/onboarding/wizard'
+      fullPath: '/onboarding/wizard'
+      preLoaderRoute: typeof OnboardingWizardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers/': {
+      id: '/providers/'
+      path: '/'
+      fullPath: '/providers/'
+      preLoaderRoute: typeof ProvidersIndexRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/providers/$id': {
+      id: '/providers/$id'
+      path: '/$id'
+      fullPath: '/providers/$id'
+      preLoaderRoute: typeof ProvidersIdRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/providers/new': {
+      id: '/providers/new'
+      path: '/new'
+      fullPath: '/providers/new'
+      preLoaderRoute: typeof ProvidersNewRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/reporting/': {
+      id: '/reporting/'
+      path: '/reporting'
+      fullPath: '/reporting/'
+      preLoaderRoute: typeof ReportingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/audit-log': {
+      id: '/reporting/audit-log'
+      path: '/reporting/audit-log'
+      fullPath: '/reporting/audit-log'
+      preLoaderRoute: typeof ReportingAuditLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/billing-readiness': {
+      id: '/reporting/billing-readiness'
+      path: '/reporting/billing-readiness'
+      fullPath: '/reporting/billing-readiness'
+      preLoaderRoute: typeof ReportingBillingReadinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/contracts-matrix': {
+      id: '/reporting/contracts-matrix'
+      path: '/reporting/contracts-matrix'
+      fullPath: '/reporting/contracts-matrix'
+      preLoaderRoute: typeof ReportingContractsMatrixRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/denials': {
+      id: '/reporting/denials'
+      path: '/reporting/denials'
+      fullPath: '/reporting/denials'
+      preLoaderRoute: typeof ReportingDenialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/enrollment-explorer': {
+      id: '/reporting/enrollment-explorer'
+      path: '/reporting/enrollment-explorer'
+      fullPath: '/reporting/enrollment-explorer'
+      preLoaderRoute: typeof ReportingEnrollmentExplorerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/expiring-credentials': {
+      id: '/reporting/expiring-credentials'
+      path: '/reporting/expiring-credentials'
+      fullPath: '/reporting/expiring-credentials'
+      preLoaderRoute: typeof ReportingExpiringCredentialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/facilities-without-providers': {
+      id: '/reporting/facilities-without-providers'
+      path: '/reporting/facilities-without-providers'
+      fullPath: '/reporting/facilities-without-providers'
+      preLoaderRoute: typeof ReportingFacilitiesWithoutProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/launches': {
+      id: '/reporting/launches'
+      path: '/reporting/launches'
+      fullPath: '/reporting/launches'
+      preLoaderRoute: typeof ReportingLaunchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/leads': {
+      id: '/reporting/leads'
+      path: '/reporting/leads'
+      fullPath: '/reporting/leads'
+      preLoaderRoute: typeof ReportingLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/locations-per-group': {
+      id: '/reporting/locations-per-group'
+      path: '/reporting/locations-per-group'
+      fullPath: '/reporting/locations-per-group'
+      preLoaderRoute: typeof ReportingLocationsPerGroupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/portfolio': {
+      id: '/reporting/portfolio'
+      path: '/reporting/portfolio'
+      fullPath: '/reporting/portfolio'
+      preLoaderRoute: typeof ReportingPortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ssn-intake/$token': {
+      id: '/ssn-intake/$token'
+      path: '/ssn-intake/$token'
+      fullPath: '/ssn-intake/$token'
+      preLoaderRoute: typeof SsnIntakeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tasks/$id': {
+      id: '/tasks/$id'
+      path: '/tasks/$id'
+      fullPath: '/tasks/$id'
+      preLoaderRoute: typeof TasksIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/payer-admin/': {
       id: '/admin/payer-admin/'
       path: '/'
       fullPath: '/admin/payer-admin/'
       preLoaderRoute: typeof AdminPayerAdminIndexRouteImport
-      parentRoute: typeof AdminPayerAdminRoute
-    }
-    '/reporting/rosters/templates': {
-      id: '/reporting/rosters/templates'
-      path: '/reporting/rosters/templates'
-      fullPath: '/reporting/rosters/templates'
-      preLoaderRoute: typeof ReportingRostersTemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reporting/rosters/history': {
-      id: '/reporting/rosters/history'
-      path: '/reporting/rosters/history'
-      fullPath: '/reporting/rosters/history'
-      preLoaderRoute: typeof ReportingRostersHistoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/providers/$id/edit': {
-      id: '/providers/$id/edit'
-      path: '/edit'
-      fullPath: '/providers/$id/edit'
-      preLoaderRoute: typeof ProvidersIdEditRouteImport
-      parentRoute: typeof ProvidersIdRoute
-    }
-    '/portals/$portalKey/train': {
-      id: '/portals/$portalKey/train'
-      path: '/portals/$portalKey/train'
-      fullPath: '/portals/$portalKey/train'
-      preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/groups/$groupId/payer-network': {
-      id: '/groups/$groupId/payer-network'
-      path: '/payer-network'
-      fullPath: '/groups/$groupId/payer-network'
-      preLoaderRoute: typeof GroupsGroupIdPayerNetworkRouteImport
-      parentRoute: typeof GroupsGroupIdRoute
-    }
-    '/groups/$groupId/facilities': {
-      id: '/groups/$groupId/facilities'
-      path: '/facilities'
-      fullPath: '/groups/$groupId/facilities'
-      preLoaderRoute: typeof GroupsGroupIdFacilitiesRouteImport
-      parentRoute: typeof GroupsGroupIdRoute
-    }
-    '/generation_/runs/$runId': {
-      id: '/generation_/runs/$runId'
-      path: '/$runId'
-      fullPath: '/generation/runs/$runId'
-      preLoaderRoute: typeof GenerationRunsRunIdRouteImport
-      parentRoute: typeof GenerationRunsRoute
-    }
-    '/client-invites/claim/$token': {
-      id: '/client-invites/claim/$token'
-      path: '/client-invites/claim/$token'
-      fullPath: '/client-invites/claim/$token'
-      preLoaderRoute: typeof ClientInvitesClaimTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/templates/new': {
-      id: '/admin/templates/new'
-      path: '/new'
-      fullPath: '/admin/templates/new'
-      preLoaderRoute: typeof AdminTemplatesNewRouteImport
-      parentRoute: typeof AdminTemplatesRoute
-    }
-    '/admin/templates/$id': {
-      id: '/admin/templates/$id'
-      path: '/$id'
-      fullPath: '/admin/templates/$id'
-      preLoaderRoute: typeof AdminTemplatesIdRouteImport
-      parentRoute: typeof AdminTemplatesRoute
-    }
-    '/admin/sops/$id': {
-      id: '/admin/sops/$id'
-      path: '/$id'
-      fullPath: '/admin/sops/$id'
-      preLoaderRoute: typeof AdminSopsIdRouteImport
-      parentRoute: typeof AdminSopsRoute
-    }
-    '/admin/payers_/new': {
-      id: '/admin/payers_/new'
-      path: '/admin/payers/new'
-      fullPath: '/admin/payers/new'
-      preLoaderRoute: typeof AdminPayersNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/payer-admin/sops': {
-      id: '/admin/payer-admin/sops'
-      path: '/sops'
-      fullPath: '/admin/payer-admin/sops'
-      preLoaderRoute: typeof AdminPayerAdminSopsRouteImport
-      parentRoute: typeof AdminPayerAdminRoute
-    }
-    '/admin/payer-admin/setup': {
-      id: '/admin/payer-admin/setup'
-      path: '/setup'
-      fullPath: '/admin/payer-admin/setup'
-      preLoaderRoute: typeof AdminPayerAdminSetupRouteImport
       parentRoute: typeof AdminPayerAdminRoute
     }
     '/admin/payer-admin/catalog': {
@@ -1806,46 +1673,144 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayerAdminCatalogRouteImport
       parentRoute: typeof AdminPayerAdminRoute
     }
-    '/reporting/rosters/validation/$id': {
-      id: '/reporting/rosters/validation/$id'
-      path: '/reporting/rosters/validation/$id'
-      fullPath: '/reporting/rosters/validation/$id'
-      preLoaderRoute: typeof ReportingRostersValidationIdRouteImport
+    '/admin/payer-admin/setup': {
+      id: '/admin/payer-admin/setup'
+      path: '/setup'
+      fullPath: '/admin/payer-admin/setup'
+      preLoaderRoute: typeof AdminPayerAdminSetupRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
+    '/admin/payer-admin/sops': {
+      id: '/admin/payer-admin/sops'
+      path: '/sops'
+      fullPath: '/admin/payer-admin/sops'
+      preLoaderRoute: typeof AdminPayerAdminSopsRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
+    '/admin/payers_/new': {
+      id: '/admin/payers_/new'
+      path: '/admin/payers/new'
+      fullPath: '/admin/payers/new'
+      preLoaderRoute: typeof AdminPayersNewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/rosters/mapping/$id': {
-      id: '/reporting/rosters/mapping/$id'
-      path: '/reporting/rosters/mapping/$id'
-      fullPath: '/reporting/rosters/mapping/$id'
-      preLoaderRoute: typeof ReportingRostersMappingIdRouteImport
+    '/admin/sops/': {
+      id: '/admin/sops/'
+      path: '/'
+      fullPath: '/admin/sops/'
+      preLoaderRoute: typeof AdminSopsIndexRouteImport
+      parentRoute: typeof AdminSopsRoute
+    }
+    '/admin/sops/$id': {
+      id: '/admin/sops/$id'
+      path: '/$id'
+      fullPath: '/admin/sops/$id'
+      preLoaderRoute: typeof AdminSopsIdRouteImport
+      parentRoute: typeof AdminSopsRoute
+    }
+    '/admin/templates/': {
+      id: '/admin/templates/'
+      path: '/'
+      fullPath: '/admin/templates/'
+      preLoaderRoute: typeof AdminTemplatesIndexRouteImport
+      parentRoute: typeof AdminTemplatesRoute
+    }
+    '/admin/templates/$id': {
+      id: '/admin/templates/$id'
+      path: '/$id'
+      fullPath: '/admin/templates/$id'
+      preLoaderRoute: typeof AdminTemplatesIdRouteImport
+      parentRoute: typeof AdminTemplatesRoute
+    }
+    '/admin/templates/new': {
+      id: '/admin/templates/new'
+      path: '/new'
+      fullPath: '/admin/templates/new'
+      preLoaderRoute: typeof AdminTemplatesNewRouteImport
+      parentRoute: typeof AdminTemplatesRoute
+    }
+    '/client-invites/claim/$token': {
+      id: '/client-invites/claim/$token'
+      path: '/client-invites/claim/$token'
+      fullPath: '/client-invites/claim/$token'
+      preLoaderRoute: typeof ClientInvitesClaimTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reporting/rosters/export/$id': {
-      id: '/reporting/rosters/export/$id'
-      path: '/reporting/rosters/export/$id'
-      fullPath: '/reporting/rosters/export/$id'
-      preLoaderRoute: typeof ReportingRostersExportIdRouteImport
+    '/generation_/runs/': {
+      id: '/generation_/runs/'
+      path: '/'
+      fullPath: '/generation/runs/'
+      preLoaderRoute: typeof GenerationRunsIndexRouteImport
+      parentRoute: typeof GenerationRunsRoute
+    }
+    '/generation_/runs/$runId': {
+      id: '/generation_/runs/$runId'
+      path: '/$runId'
+      fullPath: '/generation/runs/$runId'
+      preLoaderRoute: typeof GenerationRunsRunIdRouteImport
+      parentRoute: typeof GenerationRunsRoute
+    }
+    '/groups/$groupId/': {
+      id: '/groups/$groupId/'
+      path: '/'
+      fullPath: '/groups/$groupId/'
+      preLoaderRoute: typeof GroupsGroupIdIndexRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
+    '/groups/$groupId/facilities': {
+      id: '/groups/$groupId/facilities'
+      path: '/facilities'
+      fullPath: '/groups/$groupId/facilities'
+      preLoaderRoute: typeof GroupsGroupIdFacilitiesRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
+    '/groups/$groupId/payer-network': {
+      id: '/groups/$groupId/payer-network'
+      path: '/payer-network'
+      fullPath: '/groups/$groupId/payer-network'
+      preLoaderRoute: typeof GroupsGroupIdPayerNetworkRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
+    '/portals/$portalKey/train': {
+      id: '/portals/$portalKey/train'
+      path: '/portals/$portalKey/train'
+      fullPath: '/portals/$portalKey/train'
+      preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/payers_/$id/scorecard': {
-      id: '/admin/payers_/$id/scorecard'
-      path: '/admin/payers/$id/scorecard'
-      fullPath: '/admin/payers/$id/scorecard'
-      preLoaderRoute: typeof AdminPayersIdScorecardRouteImport
+    '/providers/$id/': {
+      id: '/providers/$id/'
+      path: '/'
+      fullPath: '/providers/$id/'
+      preLoaderRoute: typeof ProvidersIdIndexRouteImport
+      parentRoute: typeof ProvidersIdRoute
+    }
+    '/providers/$id/edit': {
+      id: '/providers/$id/edit'
+      path: '/edit'
+      fullPath: '/providers/$id/edit'
+      preLoaderRoute: typeof ProvidersIdEditRouteImport
+      parentRoute: typeof ProvidersIdRoute
+    }
+    '/reporting/rosters/history': {
+      id: '/reporting/rosters/history'
+      path: '/reporting/rosters/history'
+      fullPath: '/reporting/rosters/history'
+      preLoaderRoute: typeof ReportingRostersHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/payers_/$id/edit': {
-      id: '/admin/payers_/$id/edit'
-      path: '/admin/payers/$id/edit'
-      fullPath: '/admin/payers/$id/edit'
-      preLoaderRoute: typeof AdminPayersIdEditRouteImport
+    '/reporting/rosters/templates': {
+      id: '/reporting/rosters/templates'
+      path: '/reporting/rosters/templates'
+      fullPath: '/reporting/rosters/templates'
+      preLoaderRoute: typeof ReportingRostersTemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/payer-admin/setup_/$payerId': {
-      id: '/admin/payer-admin/setup_/$payerId'
-      path: '/setup/$payerId'
-      fullPath: '/admin/payer-admin/setup/$payerId'
-      preLoaderRoute: typeof AdminPayerAdminSetupPayerIdRouteImport
+    '/admin/payer-admin/catalog_/$payerId': {
+      id: '/admin/payer-admin/catalog_/$payerId'
+      path: '/catalog/$payerId'
+      fullPath: '/admin/payer-admin/catalog/$payerId'
+      preLoaderRoute: typeof AdminPayerAdminCatalogPayerIdRouteImport
       parentRoute: typeof AdminPayerAdminRoute
     }
     '/admin/payer-admin/forms/$payerId': {
@@ -1855,12 +1820,47 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayerAdminFormsPayerIdRouteImport
       parentRoute: typeof AdminPayerAdminRoute
     }
-    '/admin/payer-admin/catalog_/$payerId': {
-      id: '/admin/payer-admin/catalog_/$payerId'
-      path: '/catalog/$payerId'
-      fullPath: '/admin/payer-admin/catalog/$payerId'
-      preLoaderRoute: typeof AdminPayerAdminCatalogPayerIdRouteImport
+    '/admin/payer-admin/setup_/$payerId': {
+      id: '/admin/payer-admin/setup_/$payerId'
+      path: '/setup/$payerId'
+      fullPath: '/admin/payer-admin/setup/$payerId'
+      preLoaderRoute: typeof AdminPayerAdminSetupPayerIdRouteImport
       parentRoute: typeof AdminPayerAdminRoute
+    }
+    '/admin/payers_/$id/edit': {
+      id: '/admin/payers_/$id/edit'
+      path: '/admin/payers/$id/edit'
+      fullPath: '/admin/payers/$id/edit'
+      preLoaderRoute: typeof AdminPayersIdEditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/payers_/$id/scorecard': {
+      id: '/admin/payers_/$id/scorecard'
+      path: '/admin/payers/$id/scorecard'
+      fullPath: '/admin/payers/$id/scorecard'
+      preLoaderRoute: typeof AdminPayersIdScorecardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/rosters/export/$id': {
+      id: '/reporting/rosters/export/$id'
+      path: '/reporting/rosters/export/$id'
+      fullPath: '/reporting/rosters/export/$id'
+      preLoaderRoute: typeof ReportingRostersExportIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/rosters/mapping/$id': {
+      id: '/reporting/rosters/mapping/$id'
+      path: '/reporting/rosters/mapping/$id'
+      fullPath: '/reporting/rosters/mapping/$id'
+      preLoaderRoute: typeof ReportingRostersMappingIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/rosters/validation/$id': {
+      id: '/reporting/rosters/validation/$id'
+      path: '/reporting/rosters/validation/$id'
+      fullPath: '/reporting/rosters/validation/$id'
+      preLoaderRoute: typeof ReportingRostersValidationIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
