@@ -2,7 +2,7 @@
 // keyed by a CLIENT-generated idempotency id that becomes the row's primary
 // key — a duplicate POST returns the existing row instead of inserting twice.
 //
-// Isolation contract: case/provider/task ownership is validated against the
+// Isolation contract: case/contract/provider/task ownership is validated against the
 // caller's resolved org BEFORE anything is written; org_id and performed_by
 // come from the authenticated context only, never the request body.
 //
@@ -19,6 +19,12 @@ import {
   type FillEventV2FieldOutcome,
   type FillEventV2Metadata,
 } from "@/types/fillEventV2";
+import {
+  parseWorkContextTuple,
+  type WorkContextTuple,
+  type WorkContextValidationRequest,
+} from "@/lib/workContext";
+import { validateWorkContext } from "@/services/workContext";
 
 export interface FillSessionServiceCtx {
   db: SupabaseClient<Database>;
@@ -31,6 +37,26 @@ export interface FillEventInput {
   // Client-generated idempotency id (UUID); becomes fill_sessions.id.
   id: string;
   caseId?: string | null;
+  /** Matrix owner for a real Contract form receipt. */
+  contractId?: string | null;
+  contractSopAssignmentId?: string | null;
+  /** Exact M56 owner/step/configuration tuple for typed Work v2 fills. */
+  workContext?: unknown;
+  sopTemplateId?: string | null;
+  sopVersion?: number | null;
+  /** Contract SOP indexes; case Work uses caseTaskId/caseStepId instead. */
+  taskIndex?: number | null;
+  stepIndex?: number | null;
+  caseTaskId?: string | null;
+  caseStepId?: string | null;
+  stepIdentity?: string | null;
+  facilityId?: string | null;
+  /** Exact org-over-global form configuration selected by MINT-52. */
+  portalId?: string | null;
+  contextVersion?: number | null;
+  launchReceiptId?: string | null;
+  mappingGeneration?: number | null;
+  effectiveMappingFingerprint?: string | null;
   providerId?: string | null;
   portalKey: string;
   fillMode?: FillMode;
@@ -56,7 +82,7 @@ export type RecordFillEventResult =
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
 
 const FILL_SESSION_COLUMNS =
-  "id, org_id, case_id, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
+  "id, org_id, case_id, contract_id, contract_sop_assignment_id, sop_template_id, sop_version, task_index, step_index, case_task_id, case_step_id, step_identity, facility_id, portal_id, context_version, launch_receipt_id, mapping_generation, shared_mapping_generation, effective_mapping_fingerprint, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test, event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 const FILL_EVENT_V2_COLUMNS =
   "event_schema_version, fields_attempted, fields_verified, fields_rejected, field_outcomes";
 
@@ -86,6 +112,9 @@ function toFillSession(row: Record<string, unknown>): FillSession {
   session.fieldsSkipped = (row.fields_skipped ?? null) as FillSession["fieldsSkipped"];
   session.docsAttached = row.docs_attached ?? null;
   session.isTest = Boolean(row.is_test);
+  session.caseTaskId = (row.case_task_id as string | null | undefined) ?? null;
+  session.caseStepId = (row.case_step_id as string | null | undefined) ?? null;
+  session.stepIdentity = (row.step_identity as string | null | undefined) ?? null;
   session.eventSchemaVersion =
     row.event_schema_version == null ? null : (row.event_schema_version as 1 | 2);
   session.fieldsAttempted = (row.fields_attempted ?? null) as number | null;
@@ -120,7 +149,22 @@ function sameStoredFill(
     : sanitizeLegacyFieldsSkipped(input.fieldsSkipped);
   const commonMatches =
     row.org_id === ctx.orgId &&
-    row.case_id === input.caseId &&
+    (row.case_id ?? null) === (input.caseId ?? null) &&
+    (row.contract_id ?? null) === (input.contractId ?? null) &&
+    (row.contract_sop_assignment_id ?? null) === (input.contractSopAssignmentId ?? null) &&
+    (row.sop_template_id ?? null) === (input.sopTemplateId ?? null) &&
+    (row.sop_version ?? null) === (input.sopVersion ?? null) &&
+    (row.task_index ?? null) === (input.taskIndex ?? null) &&
+    (row.step_index ?? null) === (input.stepIndex ?? null) &&
+    (row.case_task_id ?? null) === (input.caseTaskId ?? null) &&
+    (row.case_step_id ?? null) === (input.caseStepId ?? null) &&
+    (row.step_identity ?? null) === (input.stepIdentity ?? null) &&
+    (row.facility_id ?? null) === (input.facilityId ?? null) &&
+    (row.portal_id ?? null) === (input.portalId ?? null) &&
+    (row.context_version ?? null) === (input.contextVersion ?? null) &&
+    (row.launch_receipt_id ?? null) === (input.launchReceiptId ?? null) &&
+    (row.mapping_generation ?? null) === (input.mappingGeneration ?? null) &&
+    (row.effective_mapping_fingerprint ?? null) === (input.effectiveMappingFingerprint ?? null) &&
     (row.provider_id ?? null) === (input.providerId ?? null) &&
     row.portal_key === input.portalKey &&
     row.fill_mode === (input.fillMode ?? "web") &&
@@ -154,6 +198,178 @@ function sameStoredFill(
   );
 }
 
+function hasOwn(input: FillEventInput, key: keyof FillEventInput): boolean {
+  return Object.prototype.hasOwnProperty.call(input, key);
+}
+
+function matchesWorkAlias(
+  input: FillEventInput,
+  key: keyof FillEventInput,
+  expected: unknown,
+): boolean {
+  return !hasOwn(input, key) || input[key] === expected;
+}
+
+function workContextRequest(tuple: WorkContextTuple): WorkContextValidationRequest {
+  return { protocolVersion: 2, ...tuple } as WorkContextValidationRequest;
+}
+
+function sameWorkContextAliases(
+  input: FillEventInput,
+  tuple: WorkContextTuple,
+  ctx: FillSessionServiceCtx,
+): boolean {
+  const body = input as unknown as Record<string, unknown>;
+  const aliases: Array<[string, unknown]> = [
+    ["orgId", ctx.orgId],
+    ["org_id", ctx.orgId],
+    ["performedBy", ctx.userId],
+    ["performed_by", ctx.userId],
+    ["ownerKind", tuple.ownerKind],
+    ["ownerId", tuple.ownerId],
+    ["assignmentId", tuple.ownerKind === "contract" ? tuple.assignmentId : null],
+    ["assignment_id", tuple.ownerKind === "contract" ? tuple.assignmentId : null],
+    ["taskIndex", tuple.ownerKind === "contract" ? tuple.taskIndex : null],
+    ["task_index", tuple.ownerKind === "contract" ? tuple.taskIndex : null],
+    ["stepIndex", tuple.ownerKind === "contract" ? tuple.stepIndex : null],
+    ["step_index", tuple.ownerKind === "contract" ? tuple.stepIndex : null],
+    ["sopTemplateId", tuple.sopTemplateId],
+    ["sop_template_id", tuple.sopTemplateId],
+    ["sopVersion", tuple.sopVersion],
+    ["sop_version", tuple.sopVersion],
+    ["portalId", tuple.portalId],
+    ["portal_id", tuple.portalId],
+    ["portalKey", tuple.portalKey],
+    ["portal_key", tuple.portalKey],
+    ["providerId", tuple.providerId],
+    ["provider_id", tuple.providerId],
+    ["facilityId", tuple.facilityId],
+    ["facility_id", tuple.facilityId],
+    ["contextVersion", tuple.contextVersion],
+    ["context_version", tuple.contextVersion],
+    ["launchReceiptId", tuple.launchReceiptId],
+    ["launch_receipt_id", tuple.launchReceiptId],
+    ["mappingGeneration", tuple.mappingGeneration],
+    ["mapping_generation", tuple.mappingGeneration],
+    ["effectiveMappingFingerprint", tuple.effectiveMappingFingerprint],
+    ["effective_mapping_fingerprint", tuple.effectiveMappingFingerprint],
+    ["stepIdentity", tuple.stepIdentity],
+    ["step_identity", tuple.stepIdentity],
+    ["fillMode", "web"],
+    ["fill_mode", "web"],
+    ["isTest", false],
+    ["is_test", false],
+    ["schemaVersion", 2],
+    ["schema_version", 2],
+    ["event_schema_version", 2],
+  ];
+  const aliasesMatch = aliases.every(
+    ([key, expected]) => !Object.prototype.hasOwnProperty.call(body, key) || body[key] === expected,
+  );
+  if (!aliasesMatch) return false;
+  if (tuple.ownerKind === "case") {
+    return (
+      matchesWorkAlias(input, "caseId", tuple.ownerId) &&
+      (!Object.prototype.hasOwnProperty.call(body, "case_id") || body.case_id === tuple.ownerId) &&
+      input.contractId == null &&
+      input.contractSopAssignmentId == null &&
+      body.contract_id == null &&
+      body.contract_sop_assignment_id == null &&
+      input.taskIndex == null &&
+      input.stepIndex == null &&
+      matchesWorkAlias(input, "caseTaskId", tuple.taskId) &&
+      (!Object.prototype.hasOwnProperty.call(body, "case_task_id") ||
+        body.case_task_id === tuple.taskId) &&
+      matchesWorkAlias(input, "caseStepId", tuple.stepId) &&
+      (!Object.prototype.hasOwnProperty.call(body, "case_step_id") ||
+        body.case_step_id === tuple.stepId) &&
+      matchesWorkAlias(input, "stepIdentity", tuple.stepIdentity) &&
+      body.task_index == null &&
+      body.step_index == null &&
+      input.taskId == null &&
+      body.taskId == null &&
+      body.task_id == null
+    );
+  }
+  return (
+    input.caseId == null &&
+    body.case_id == null &&
+    matchesWorkAlias(input, "contractId", tuple.ownerId) &&
+    (!Object.prototype.hasOwnProperty.call(body, "contract_id") ||
+      body.contract_id === tuple.ownerId) &&
+    matchesWorkAlias(input, "contractSopAssignmentId", tuple.assignmentId) &&
+    (!Object.prototype.hasOwnProperty.call(body, "contract_sop_assignment_id") ||
+      body.contract_sop_assignment_id === tuple.assignmentId) &&
+    matchesWorkAlias(input, "taskIndex", tuple.taskIndex) &&
+    matchesWorkAlias(input, "stepIndex", tuple.stepIndex) &&
+    matchesWorkAlias(input, "stepIdentity", tuple.stepIdentity) &&
+    body.case_task_id == null &&
+    body.case_step_id == null &&
+    input.caseTaskId == null &&
+    input.caseStepId == null &&
+    input.taskId == null &&
+    body.task_id == null
+  );
+}
+
+function applyWorkContext(input: FillEventInput, tuple: WorkContextTuple): FillEventInput {
+  if (tuple.ownerKind === "case") {
+    return {
+      ...input,
+      caseId: tuple.ownerId,
+      contractId: null,
+      contractSopAssignmentId: null,
+      sopTemplateId: tuple.sopTemplateId,
+      sopVersion: tuple.sopVersion,
+      taskIndex: null,
+      stepIndex: null,
+      caseTaskId: tuple.taskId,
+      caseStepId: tuple.stepId,
+      stepIdentity: tuple.stepIdentity,
+      facilityId: tuple.facilityId,
+      portalId: tuple.portalId,
+      contextVersion: tuple.contextVersion,
+      launchReceiptId: tuple.launchReceiptId,
+      mappingGeneration: tuple.mappingGeneration,
+      effectiveMappingFingerprint: tuple.effectiveMappingFingerprint,
+      providerId: tuple.providerId,
+      portalKey: tuple.portalKey,
+      fillMode: input.fillMode ?? "web",
+    };
+  }
+  return {
+    ...input,
+    caseId: null,
+    contractId: tuple.ownerId,
+    contractSopAssignmentId: tuple.assignmentId,
+    sopTemplateId: tuple.sopTemplateId,
+    sopVersion: tuple.sopVersion,
+    taskIndex: tuple.taskIndex,
+    stepIndex: tuple.stepIndex,
+    caseTaskId: null,
+    caseStepId: null,
+    stepIdentity: tuple.stepIdentity,
+    facilityId: tuple.facilityId,
+    portalId: tuple.portalId,
+    contextVersion: tuple.contextVersion,
+    launchReceiptId: tuple.launchReceiptId,
+    mappingGeneration: tuple.mappingGeneration,
+    effectiveMappingFingerprint: tuple.effectiveMappingFingerprint,
+    providerId: tuple.providerId,
+    portalKey: tuple.portalKey,
+    fillMode: input.fillMode ?? "web",
+  };
+}
+
+function workContextFailure(result: Awaited<ReturnType<typeof validateWorkContext>>): Rejected {
+  if (result.kind === "ok") throw new Error("Cannot reject a valid Work context");
+  if (result.kind === "not_found") return reject(404, "Work context not found");
+  if (result.kind === "stale" || result.kind === "not_ready") {
+    return reject(409, result.message);
+  }
+  return reject(422, result.message);
+}
+
 function getV2Metadata(input: FillEventInput): FillEventV2Metadata | null {
   const value = {
     schemaVersion: input.schemaVersion,
@@ -170,7 +386,7 @@ function getV2Metadata(input: FillEventInput): FillEventV2Metadata | null {
 // from a row that doesn't exist.
 async function belongsToOrg(
   ctx: FillSessionServiceCtx,
-  table: "credential_cases" | "providers" | "tasks",
+  table: "credential_cases" | "providers" | "tasks" | "contracts",
   id: string,
 ): Promise<boolean> {
   const { data, error } = await ctx.db
@@ -181,6 +397,113 @@ async function belongsToOrg(
     .maybeSingle();
   if (error) throw error;
   return data != null;
+}
+
+async function belongsToContractAssignment(
+  ctx: FillSessionServiceCtx,
+  input: FillEventInput,
+): Promise<boolean> {
+  if (!input.contractId || !input.contractSopAssignmentId) return false;
+  const { data: contract, error: contractError } = await ctx.db
+    .from("contracts")
+    .select("id, group_id, payer_id, state")
+    .eq("id", input.contractId)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (contractError) throw contractError;
+  if (!contract?.group_id || !contract.payer_id) return false;
+
+  const { data: assignment, error: assignmentError } = await ctx.db
+    .from("contract_sop_assignments")
+    .select("id, sop_template_id, sop_version, context_version")
+    .eq("id", input.contractSopAssignmentId)
+    .eq("contract_id", contract.id)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (
+    !assignment ||
+    assignment.sop_template_id !== input.sopTemplateId ||
+    assignment.sop_version !== input.sopVersion ||
+    assignment.context_version !== input.contextVersion
+  ) {
+    return false;
+  }
+
+  const { data: provider, error: providerError } = await ctx.db
+    .from("providers")
+    .select("id, status")
+    .eq("id", input.providerId as string)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (providerError) throw providerError;
+  if (!provider || provider.status === "terminated") return false;
+
+  const { data: providerGroup, error: providerGroupError } = await ctx.db
+    .from("provider_group_assignments")
+    .select("id, start_date, end_date")
+    .eq("org_id", ctx.orgId)
+    .eq("group_id", contract.group_id)
+    .eq("provider_id", input.providerId as string)
+    .maybeSingle();
+  if (providerGroupError) throw providerGroupError;
+  const today = new Date().toISOString().slice(0, 10);
+  if (
+    !providerGroup ||
+    (providerGroup.start_date != null && providerGroup.start_date > today) ||
+    (providerGroup.end_date != null && providerGroup.end_date < today)
+  ) {
+    return false;
+  }
+
+  if (input.facilityId) {
+    const { data: facility, error: facilityError } = await ctx.db
+      .from("facilities")
+      .select("id")
+      .eq("id", input.facilityId)
+      .eq("org_id", ctx.orgId)
+      .eq("group_id", contract.group_id)
+      .ilike("state", contract.state)
+      .maybeSingle();
+    if (facilityError) throw facilityError;
+    if (!facility) return false;
+  }
+
+  const portalKey = input.portalKey.trim().toLowerCase();
+  const { data: portal, error: portalError } = await ctx.db
+    .from("portals")
+    .select(
+      "id, org_id, portal_key, payer_id, case_type, requires_explicit_selection, mapping_generation",
+    )
+    .eq("id", input.portalId as string)
+    .maybeSingle();
+  if (portalError) throw portalError;
+  if (
+    !portal ||
+    (portal.org_id !== ctx.orgId && portal.org_id !== null) ||
+    portal.portal_key.trim().toLowerCase() !== portalKey ||
+    portal.payer_id !== contract.payer_id ||
+    portal.case_type !== "contract" ||
+    !portal.requires_explicit_selection ||
+    portal.mapping_generation !== input.mappingGeneration
+  ) {
+    return false;
+  }
+  if (portal.org_id === null) {
+    const { data: orgConfigs, error: orgOverrideError } = await ctx.db
+      .from("portals")
+      .select("id, portal_key")
+      .eq("org_id", ctx.orgId);
+    if (orgOverrideError) throw orgOverrideError;
+    if (
+      (orgConfigs ?? []).some(
+        (orgConfig) => orgConfig.portal_key.trim().toLowerCase() === portalKey,
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function completeTaskForFill(ctx: FillSessionServiceCtx, taskId: string): Promise<void> {
@@ -216,6 +539,26 @@ export async function recordFillEvent(
   ctx: FillSessionServiceCtx,
   input: FillEventInput,
 ): Promise<RecordFillEventResult> {
+  const rawInput = input as unknown as Record<string, unknown>;
+  if (
+    Object.prototype.hasOwnProperty.call(rawInput, "sharedMappingGeneration") ||
+    Object.prototype.hasOwnProperty.call(rawInput, "shared_mapping_generation")
+  ) {
+    return reject(422, "The shared mapping generation is server-derived");
+  }
+  let workTuple: WorkContextTuple | null = null;
+  let sharedMappingGeneration: number | null = null;
+  if (hasOwn(input, "workContext")) {
+    const parsed = parseWorkContextTuple(input.workContext);
+    if (!parsed.ok) return reject(422, parsed.message);
+    workTuple = parsed.tuple;
+    if (!sameWorkContextAliases(input, workTuple, ctx)) {
+      return reject(422, "Flat fill fields conflict with the exact Work context");
+    }
+    if (workTuple.orgId !== ctx.orgId) return reject(404, "Work context not found");
+    input = applyWorkContext(input, workTuple);
+  }
+
   // ---- shape validation (nothing has touched the DB yet) ----
   if (!UUID_RE.test(input.id ?? "")) {
     return reject(422, "id must be a client-generated UUID (the idempotency key)");
@@ -223,10 +566,104 @@ export async function recordFillEvent(
   if (input.caseId != null && !UUID_RE.test(input.caseId)) {
     return reject(422, "caseId must be a UUID");
   }
+  const ownerContextIds = [
+    input.contractId,
+    input.contractSopAssignmentId,
+    input.sopTemplateId,
+    input.portalId,
+    input.facilityId,
+    input.launchReceiptId,
+    input.caseTaskId,
+    input.caseStepId,
+  ];
+  if (ownerContextIds.some((value) => value != null && !UUID_RE.test(value))) {
+    return reject(422, "Work owner context IDs must be UUIDs");
+  }
+  const isContractReceipt = input.contractId != null;
+  const isTypedCaseReceipt = workTuple?.ownerKind === "case";
+  const isTypedWorkReceipt = workTuple !== null;
+  const hasUnownedContext =
+    (input.contractSopAssignmentId != null && !isContractReceipt) ||
+    ((input.sopTemplateId != null ||
+      input.sopVersion != null ||
+      input.taskIndex != null ||
+      input.stepIndex != null ||
+      input.portalId != null ||
+      input.contextVersion != null ||
+      input.launchReceiptId != null ||
+      input.mappingGeneration != null ||
+      input.effectiveMappingFingerprint != null ||
+      input.facilityId != null) &&
+      !isContractReceipt &&
+      !isTypedCaseReceipt) ||
+    ((input.caseTaskId != null || input.caseStepId != null || input.stepIdentity != null) &&
+      !isTypedCaseReceipt &&
+      !isContractReceipt);
+  if (hasUnownedContext) {
+    return reject(422, "Work context requires an exact case or Contract owner tuple");
+  }
+  if (isContractReceipt) {
+    if (
+      input.caseId != null ||
+      !input.providerId ||
+      !input.contractSopAssignmentId ||
+      !input.sopTemplateId ||
+      !input.portalId ||
+      !Number.isInteger(input.sopVersion) ||
+      (input.sopVersion ?? 0) < 1 ||
+      !Number.isInteger(input.taskIndex) ||
+      (input.taskIndex ?? -1) < 0 ||
+      !Number.isInteger(input.stepIndex) ||
+      (input.stepIndex ?? -1) < 0 ||
+      !Number.isInteger(input.contextVersion) ||
+      (input.contextVersion ?? 0) < 1 ||
+      !input.launchReceiptId ||
+      !Number.isInteger(input.mappingGeneration) ||
+      (input.mappingGeneration ?? 0) < 1 ||
+      typeof input.effectiveMappingFingerprint !== "string" ||
+      input.effectiveMappingFingerprint.trim() === "" ||
+      (input.fillMode !== undefined && input.fillMode !== "web") ||
+      input.isTest === true ||
+      input.taskId != null ||
+      input.schemaVersion !== 2 ||
+      (isTypedWorkReceipt && !input.stepIdentity)
+    ) {
+      return reject(
+        422,
+        "Contract fills require a real V2 receipt with exact SOP step and portal configuration context",
+      );
+    }
+  }
+  if (isTypedCaseReceipt) {
+    if (
+      !input.caseId ||
+      !input.caseTaskId ||
+      !input.caseStepId ||
+      !input.stepIdentity ||
+      !input.sopTemplateId ||
+      !input.portalId ||
+      !Number.isInteger(input.sopVersion) ||
+      (input.sopVersion ?? 0) < 1 ||
+      !Number.isInteger(input.contextVersion) ||
+      (input.contextVersion ?? 0) < 1 ||
+      !input.launchReceiptId ||
+      !Number.isInteger(input.mappingGeneration) ||
+      (input.mappingGeneration ?? 0) < 1 ||
+      typeof input.effectiveMappingFingerprint !== "string" ||
+      input.effectiveMappingFingerprint.trim() === "" ||
+      input.effectiveMappingFingerprint.length > 256 ||
+      input.fillMode !== "web" ||
+      input.isTest === true ||
+      input.taskId != null ||
+      input.schemaVersion !== 2
+    ) {
+      return reject(422, "Case Work fills require a real V2 receipt with the exact selected step");
+    }
+  }
   if (input.providerId != null && !UUID_RE.test(input.providerId)) {
     return reject(422, "providerId must be a UUID");
   }
-  if (!input.caseId && !input.providerId) {
+  if (!input.caseId && !input.providerId && !isContractReceipt) {
     return reject(422, "At least one of caseId or providerId is required");
   }
   if (input.taskId != null && !UUID_RE.test(input.taskId)) {
@@ -279,19 +716,9 @@ export async function recordFillEvent(
     return reject(422, "completedAt must be an ISO timestamp");
   }
 
-  // ---- org validation, all BEFORE any write (the isolation contract) ----
-  if (input.caseId != null && !(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
-    return reject(404, "Case not found");
-  }
-  if (input.providerId != null && !(await belongsToOrg(ctx, "providers", input.providerId))) {
-    return reject(404, "Provider not found");
-  }
-  if (input.taskId != null && !(await belongsToOrg(ctx, "tasks", input.taskId))) {
-    return reject(404, "Task not found");
-  }
-
-  // V1 retains historical retry/task behavior. V2 compares the immutable
-  // stored event because its audit is committed atomically by the database.
+  // V2 Work retries are checked against their immutable receipt before any
+  // mutable owner/SOP/configuration validation. A completed step or later map
+  // reset does not turn an exact historical retry into a stale launch.
   const replay = async (row: Record<string, unknown>): Promise<RecordFillEventResult> => {
     const storedIsV2 = row.event_schema_version === 2;
     const incomingIsV2 = v2Metadata !== null;
@@ -305,21 +732,91 @@ export async function recordFillEvent(
     return { kind: "duplicate", session: toFillSession(row) };
   };
 
+  let typedReplayChecked = false;
+  if (isTypedWorkReceipt && v2Metadata) {
+    const { data: existing, error: existingErr } = await ctx.db
+      .from("fill_sessions")
+      .select(FILL_SESSION_COLUMNS)
+      .eq("id", input.id)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (existing) return replay(existing as Record<string, unknown>);
+
+    // A primary-key collision from another org is deliberately reported as a
+    // generic idempotency conflict without revealing its row or organization.
+    const { data: collision, error: collisionErr } = await ctx.db
+      .from("fill_sessions")
+      .select("id")
+      .eq("id", input.id)
+      .maybeSingle();
+    if (collisionErr) throw collisionErr;
+    if (collision) return reject(409, "Idempotency id already used");
+    typedReplayChecked = true;
+  }
+
+  // Work-v2 carries a correlation tuple, not authorization. Recheck it against
+  // the live owner, selected SOP step, portal scope, generation and fingerprint
+  // before creating the immutable fill receipt.
+  if (workTuple) {
+    const validation = await validateWorkContext(
+      { db: ctx.db, orgId: ctx.orgId },
+      workContextRequest(workTuple),
+    );
+    if (validation.kind !== "ok") return workContextFailure(validation);
+    sharedMappingGeneration = validation.data.sharedMappingGeneration;
+  }
+
+  // ---- org validation, all BEFORE any write (the isolation contract) ----
+  if (input.caseId != null && !(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
+    return reject(404, "Case not found");
+  }
+  if (isContractReceipt && !(await belongsToOrg(ctx, "contracts", input.contractId as string))) {
+    return reject(404, "Contract not found");
+  }
+  if (input.providerId != null && !(await belongsToOrg(ctx, "providers", input.providerId))) {
+    return reject(404, "Provider not found");
+  }
+  if (isContractReceipt && !(await belongsToContractAssignment(ctx, input))) {
+    return reject(404, "Contract assignment or launch context not found");
+  }
+  if (input.taskId != null && !(await belongsToOrg(ctx, "tasks", input.taskId))) {
+    return reject(404, "Task not found");
+  }
+
   // ---- idempotency: same id in THIS org = a replay; return the stored row ----
-  const { data: existing, error: existingErr } = await ctx.db
-    .from("fill_sessions")
-    .select(FILL_SESSION_COLUMNS)
-    .eq("id", input.id)
-    .eq("org_id", ctx.orgId)
-    .maybeSingle();
-  if (existingErr) throw existingErr;
-  if (existing) return replay(existing);
+  if (!typedReplayChecked) {
+    const { data: existing, error: existingErr } = await ctx.db
+      .from("fill_sessions")
+      .select(FILL_SESSION_COLUMNS)
+      .eq("id", input.id)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (existing) return replay(existing as Record<string, unknown>);
+  }
 
   // ---- insert; org + performer come from the authenticated ctx only ----
   const row: Record<string, unknown> = {
     id: input.id,
     org_id: ctx.orgId,
     case_id: input.caseId ?? null,
+    contract_id: input.contractId ?? null,
+    contract_sop_assignment_id: input.contractSopAssignmentId ?? null,
+    sop_template_id: input.sopTemplateId ?? null,
+    sop_version: input.sopVersion ?? null,
+    task_index: input.taskIndex ?? null,
+    step_index: input.stepIndex ?? null,
+    case_task_id: input.caseTaskId ?? null,
+    case_step_id: input.caseStepId ?? null,
+    step_identity: input.stepIdentity ?? null,
+    facility_id: input.facilityId ?? null,
+    portal_id: input.portalId ?? null,
+    context_version: input.contextVersion ?? null,
+    launch_receipt_id: input.launchReceiptId ?? null,
+    mapping_generation: input.mappingGeneration ?? null,
+    shared_mapping_generation: isTypedWorkReceipt ? sharedMappingGeneration : null,
+    effective_mapping_fingerprint: input.effectiveMappingFingerprint ?? null,
     provider_id: input.providerId ?? null,
     portal_key: input.portalKey,
     fill_mode: fillMode,

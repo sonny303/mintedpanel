@@ -42,6 +42,20 @@ function runGate(baseUrl) {
         // Assertion 13 (task-ownership isolation) fixtures — always set here so
         // the mock run exercises it; optional in the real gate.
         KANSAS_CASE_ID: FIXTURES.KANSAS_CASE_ID,
+        KANSAS_CONTRACT_ID: FIXTURES.KANSAS_CONTRACT_ID,
+        SOUTHPARK_CONTRACT_ID: FIXTURES.SOUTHPARK_CONTRACT_ID,
+        KANSAS_WORK_TASK_ID: FIXTURES.KANSAS_TASK_ID,
+        KANSAS_WORK_STEP_ID: FIXTURES.KANSAS_WORK_STEP_ID,
+        KANSAS_WORK_TEMPLATE_ID: FIXTURES.KANSAS_WORK_TEMPLATE_ID,
+        KANSAS_WORK_PORTAL_ID: FIXTURES.KANSAS_WORK_PORTAL_ID,
+        KANSAS_WORK_PORTAL_KEY: FIXTURES.EXPLICIT_SELECTION_PORTAL_KEY,
+        KANSAS_WORK_PAYER_ID: FIXTURES.KANSAS_WORK_PAYER_ID,
+        KANSAS_WORK_FINGERPRINT: FIXTURES.KANSAS_WORK_FINGERPRINT,
+        KANSAS_CONTRACT_ASSIGNMENT_ID: "b7a90000-0000-4000-a000-0000000000c3",
+        KANSAS_CONTRACT_TEMPLATE_ID: "b7a90000-0000-4000-a000-0000000000c4",
+        KANSAS_CONTRACT_PORTAL_ID: FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_ID,
+        KANSAS_CONTRACT_PORTAL_KEY: FIXTURES.KANSAS_CONTRACT_WORK_PORTAL_KEY,
+        KANSAS_CONTRACT_FINGERPRINT: FIXTURES.KANSAS_CONTRACT_WORK_FINGERPRINT,
         SOUTHPARK_TASK_ID: FIXTURES.SOUTHPARK_TASK_ID,
         // Assertions 17/17b (E4.5 signed document download) — always set here;
         // optional in the real gate until the operator seeds fixture documents.
@@ -95,13 +109,14 @@ const EXPECTED_FAILS = {
   learning: ["20b", "20c"],
   profile: ["6"],
   caseprofile: ["6b"],
-  fillevents: ["7", "7b"],
+  fillevents: ["7", "7b", "7c", "7d"],
   cases: ["8b", "8d"],
   // The case-search leak surfaces a cross-org case row in ?q= results (15b).
   casesearch: ["15b"],
-  touches: ["9", "9b"],
+  touches: ["9", "9b", "9c", "9d"],
   tasks: ["13"],
   casecontext: ["14b"],
+  contractcontext: ["14d", "6d"],
   // The leaked extra membership row breaks both the exact-count shape check
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],

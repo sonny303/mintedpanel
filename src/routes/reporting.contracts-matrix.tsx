@@ -5,10 +5,16 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { GroupContractsMatrix } from "@/components/reports/GroupContractsMatrix";
 
 export const Route = createFileRoute("/reporting/contracts-matrix")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    groupId: typeof search.groupId === "string" ? search.groupId : undefined,
+    payerId: typeof search.payerId === "string" ? search.payerId : undefined,
+    state: typeof search.state === "string" ? search.state.toUpperCase() : undefined,
+  }),
   component: GroupContractsMatrixPage,
 });
 
 function GroupContractsMatrixPage() {
+  const search = Route.useSearch();
   return (
     <div className="space-y-4">
       <Link
@@ -22,7 +28,7 @@ function GroupContractsMatrixPage() {
         title="Group Contracts Matrix"
         description="Payer × state contract execution, tentative/confirmed effective dates, and cross-payer dependencies per provider group."
       />
-      <GroupContractsMatrix />
+      <GroupContractsMatrix initialContext={search} />
     </div>
   );
 }

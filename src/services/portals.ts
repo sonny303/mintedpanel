@@ -12,6 +12,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import type { CaseType } from "@/lib/caseTypes";
 import {
   isListableRegistryPortal,
   isListableBrowserPortal,
@@ -23,10 +24,11 @@ import {
   portalDisplayName,
   withHiddenPortalPrefix,
 } from "@/lib/portalRetirement";
-import type { Portal } from "@/types";
+import type { FormMappingResetEvent, Portal } from "@/types";
+import { listEffectivePortalMapResolutions } from "@/services/portalFieldMaps";
 
 const PORTAL_COLUMNS =
-  "id, org_id, portal_key, name, payer_id, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
+  "id, org_id, portal_key, name, payer_id, form_url, case_type, requires_explicit_selection, mapping_generation, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
 
 // The /api projection adds the payer's DISPLAY NAME. E6.9's Train-forms module
 // groups portals by payer, and the extension has no payer endpoint of its own —
@@ -51,7 +53,11 @@ function unpackPortalRow(row: EmbeddedPortalRow): {
 } {
   const { payers, ...portal } = row;
   return {
-    portal: { ...portal, payerName: payers?.name ?? null },
+    portal: {
+      ...portal,
+      requiresExplicitSelection: portal.requiresExplicitSelection ?? false,
+      payerName: payers?.name ?? null,
+    },
     payer: payers ?? null,
   };
 }
@@ -59,6 +65,81 @@ function unpackPortalRow(row: EmbeddedPortalRow): {
 export interface PortalServiceCtx {
   db: SupabaseClient<Database>;
   orgId: string;
+}
+
+export interface PortalMappingResetInput {
+  portalId: string;
+  expectedMappingGeneration: number;
+  idempotencyKey: string;
+}
+
+/** Count every saved map row for this exact owner/key/current generation.
+ * `count: "exact", head: true` avoids a page-limited row fetch and returns no
+ * field selectors or provider values to the confirmation UI. */
+export async function countCurrentPortalMappingRows(portal: Portal): Promise<number> {
+  const activeOrgId = requireActiveOrg();
+  const generation = portal.mappingGeneration ?? 1;
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    throw new Error("The form mapping generation is invalid. Refresh Form setup.");
+  }
+  if (portal.orgId !== null && portal.orgId !== activeOrgId) {
+    throw new Error("This organization configuration is outside the active organization.");
+  }
+
+  let query = supabase
+    .from("portal_field_maps")
+    .select("id", { count: "exact", head: true })
+    .eq("portal_key", portal.portalKey)
+    .eq("mapping_generation", generation);
+  query = portal.orgId === null ? query.is("org_id", null) : query.eq("org_id", portal.orgId);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** Atomically reset only the exact registry row selected by the editor. The
+ * database derives actor, owner scope, organization and authorization from
+ * the authenticated session and locked portal row. */
+export async function resetPortalMapping(
+  input: PortalMappingResetInput,
+): Promise<FormMappingResetEvent> {
+  requireActiveOrg();
+  if (
+    !Number.isSafeInteger(input.expectedMappingGeneration) ||
+    input.expectedMappingGeneration < 1
+  ) {
+    throw new Error("The form mapping generation is invalid. Refresh Form setup.");
+  }
+  const { data, error } = await supabase.rpc("reset_portal_mapping", {
+    p_portal_id: input.portalId,
+    p_expected_mapping_generation: input.expectedMappingGeneration,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) {
+    if (error.message.includes("mapping_generation_stale")) {
+      throw new Error("This mapping changed since confirmation. Refresh Form setup and try again.");
+    }
+    if (error.message.includes("mapping_reset_idempotency_conflict")) {
+      throw new Error(
+        "This reset request no longer matches the selected mapping. Refresh and confirm again.",
+      );
+    }
+    if (error.message.includes("org_mapping_has_shared_fallback")) {
+      throw new Error(
+        "A shared mapping is available for this key. Clear the organization override separately.",
+      );
+    }
+    if (error.code === "42501") {
+      throw new Error("You no longer have permission to reset this form mapping.");
+    }
+    throw error;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(
+      "The reset completed without a valid receipt. Refresh Form setup before continuing.",
+    );
+  }
+  return camelizeRow<FormMappingResetEvent>(data as Record<string, unknown>);
 }
 
 /** GET /api/portals — the registry the extension matches the current tab
@@ -78,7 +159,10 @@ export interface PortalServiceCtx {
  * role gate: billing may read, matching the field-maps route. */
 /** A registry row as the extension sees it: the portal plus its payer's
  * display name (see PORTAL_API_COLUMNS). */
-export type PortalApiRow = Portal & { payerName: string | null };
+export type PortalApiRow = Portal & {
+  payerName: string | null;
+  requiresExplicitSelection: boolean;
+};
 
 export async function listPortalsForApi(
   ctx: PortalServiceCtx,
@@ -101,11 +185,17 @@ export async function listPortalsForApi(
   // D6.4: own-org rows pass through untouched; global rows must point at a
   // live catalog payer, so Work-case recognition can't match a page to a
   // portal whose payer is retired, merged or archived.
-  return rows
-    .map(unpackPortalRow)
+  const unpacked = rows.map(unpackPortalRow);
+  const legacyBlockedKeys = new Set(
+    unpacked
+      .filter(({ portal }) => portal.requiresExplicitSelection)
+      .map(({ portal }) => portal.portalKey),
+  );
+  return unpacked
     .filter(({ portal, payer }) =>
       isListableRegistryPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
     )
+    .filter(({ portal }) => !legacyBlockedKeys.has(portal.portalKey))
     .map(({ portal }) => portal);
 }
 
@@ -124,13 +214,20 @@ export async function listPortalsForApi(
  *
  * Not PHI (portal names, URLs, verification state) — no audit row, no role
  * gate, matching the org-scoped route it mirrors. */
-export async function listSharedPortals(db: SupabaseClient<Database>): Promise<PortalApiRow[]> {
-  const { data, error } = await db
+export async function listSharedPortals(
+  db: SupabaseClient<Database>,
+  filters: { portalKey?: string } = {},
+): Promise<PortalApiRow[]> {
+  let query = db
     .from("portals")
     .select(PORTAL_API_COLUMNS)
     .is("org_id", null)
     .order("name", { ascending: true })
     .order("id", { ascending: true });
+  if (filters.portalKey !== undefined) {
+    query = query.eq("portal_key", normalizePortalKey(filters.portalKey) ?? "");
+  }
+  const { data, error } = await query;
   if (error) throw error;
   const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
   // D6.4 (F24): every row here is global, so the shared-tier predicate applies
@@ -145,6 +242,8 @@ export async function listSharedPortals(db: SupabaseClient<Database>): Promise<P
 export interface PortalInput {
   name: string;
   portalKey: string;
+  /** NULL is reserved for legacy registry rows; new configurations set a type. */
+  caseType?: CaseType | null;
   payerId?: string | null;
   formUrl?: string | null;
 }
@@ -169,7 +268,7 @@ export async function listPortals(): Promise<Portal[]> {
     .order("name", { ascending: true });
   if (error) throw error;
   const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
-  return rows
+  const visiblePortals = rows
     .map(unpackPortalRow)
     .filter(({ portal, payer }) =>
       isListableBrowserPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
@@ -179,6 +278,25 @@ export async function listPortals(): Promise<Portal[]> {
       const { payerName: _ignored, ...rest } = portal;
       return rest;
     });
+  const [orgMappings, sharedMappings] = await Promise.all([
+    listEffectivePortalMapResolutions({ db: supabase, orgId }),
+    listEffectivePortalMapResolutions({ db: supabase, orgId: null }),
+  ]);
+  const mappingByPortalId = new Map(
+    [...orgMappings, ...sharedMappings]
+      .filter((resolution) => resolution.portalId !== null)
+      .map((resolution) => [resolution.portalId as string, resolution]),
+  );
+  return visiblePortals.map((portal) => {
+    const resolution = mappingByPortalId.get(portal.id);
+    if (resolution && resolution.activeFieldCount === 0) {
+      // A verified/proven stamp from an older or empty generation is not
+      // current proof. This is a read projection only; the stored history is
+      // left intact for the separate reset/review workflow.
+      return { ...portal, isVerified: false, lastVerifiedAt: null, provenAt: null };
+    }
+    return portal;
+  });
 }
 
 export async function createPortal(input: PortalInput): Promise<Portal> {
@@ -193,7 +311,15 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
     // link), so this is the one chance to canonicalize a hand-typed key.
     portal_key: normalizePortalKey(input.portalKey) ?? "",
     payer_id: input.payerId ?? null,
+    case_type: input.caseType ?? null,
     form_url: input.formUrl?.trim() || null,
+    requires_explicit_selection: input.caseType != null,
+    // Independent configurations start empty and untrusted. Their distinct
+    // key ensures no field maps or proof stamps are inherited from a URL twin.
+    is_verified: false,
+    last_verified_at: null,
+    proven_at: null,
+    url_changed_at: null,
   };
   const { data, error } = await supabase
     .from("portals")
@@ -215,24 +341,39 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
 // Editing the form URL invalidates trust: field selectors were captured on the
 // prior page, so the portal drops to Unverified and stamps url_changed_at,
 // which the "Needs re-verify" pill reads. updated_at is set by the DB trigger.
-export async function updatePortalUrl(id: string, formUrl: string): Promise<Portal> {
+async function updateOrgPortalConfiguration(
+  orgId: string,
+  id: string,
+  expectedMappingGeneration: number | null | undefined,
+  patch: Record<string, unknown>,
+): Promise<Portal> {
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc(
+    "update_org_portal_configuration" as never,
+    {
+      p_org_id: orgId,
+      p_id: id,
+      p_expected_mapping_generation: expectedMappingGeneration ?? null,
+      p_patch: patch as never,
+    } as never,
+  );
+  if (error) throw error;
+  return camelizeRow<Portal>(data as unknown);
+}
+
+export async function updatePortalUrl(
+  id: string,
+  formUrl: string,
+  expectedMappingGeneration?: number | null,
+): Promise<Portal> {
   const orgId = requireActiveOrg();
   const trimmed = formUrl.trim() || null;
-  const { data, error } = await supabase
-    .from("portals")
-    .update({
-      form_url: trimmed,
-      is_verified: false,
-      // A new page invalidates the dry-run proof along with verification (E6.5).
-      proven_at: null,
-      url_changed_at: new Date().toISOString(),
-    } as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, id, expectedMappingGeneration, {
+    form_url: trimmed,
+    is_verified: false,
+    proven_at: null,
+    url_changed_at: new Date().toISOString(),
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -243,19 +384,46 @@ export async function updatePortalUrl(id: string, formUrl: string): Promise<Port
   return after;
 }
 
+/** Rename the display label while preserving the immutable configuration key. */
+export async function updatePortalName(portal: Portal, name: string): Promise<Portal> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Portal name is required");
+  if (portal.orgId === null) {
+    return upsertGlobalPortal({
+      id: portal.id,
+      name: trimmed,
+      portalKey: portal.portalKey,
+      payerId: portal.payerId,
+      formUrl: portal.formUrl,
+      caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
+    });
+  }
+  const orgId = requireActiveOrg();
+  const after = await updateOrgPortalConfiguration(orgId, portal.id, portal.mappingGeneration, {
+    name: trimmed,
+  });
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal",
+    entityId: portal.id,
+    before: { name: portal.name },
+    after: { name: after.name, portalKey: after.portalKey },
+    description: `Renamed portal ${portal.name}`,
+  });
+  return after;
+}
+
 // E6.5 F6.5.3 — an ORG portal passes its mock dry run (every live mapping
 // resolved). Global rows flip through setGlobalPortalFlags instead.
-export async function markPortalProven(id: string): Promise<Portal> {
+export async function markPortalProven(
+  id: string,
+  expectedMappingGeneration?: number | null,
+): Promise<Portal> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({ proven_at: new Date().toISOString() } as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, id, expectedMappingGeneration, {
+    proven_at: new Date().toISOString(),
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -280,8 +448,10 @@ export interface GlobalPortalInput {
   name: string;
   /** Required on create; immutable after (a rename would orphan SOP links). */
   portalKey?: string | null;
+  caseType?: CaseType | null;
   payerId?: string | null;
   formUrl?: string | null;
+  expectedMappingGeneration?: number | null;
 }
 
 export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Portal> {
@@ -293,6 +463,8 @@ export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Port
     p_portal_key: (normalizePortalKey(input.portalKey) ?? "") as string,
     p_payer_id: (input.payerId ?? null) as unknown as string,
     p_form_url: (input.formUrl?.trim() || null) as unknown as string,
+    p_case_type: (input.caseType ?? null) as unknown as string,
+    p_expected_mapping_generation: (input.expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) {
     if (error.message.includes("global_portal_key_exists")) {
@@ -306,6 +478,7 @@ export async function upsertGlobalPortal(input: GlobalPortalInput): Promise<Port
 export async function setGlobalPortalFlags(
   id: string,
   flags: { verified?: boolean; proven?: boolean },
+  expectedMappingGeneration?: number | null,
 ): Promise<Portal> {
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
@@ -313,26 +486,22 @@ export async function setGlobalPortalFlags(
     p_id: id,
     p_verified: (flags.verified ?? null) as unknown as boolean,
     p_proven: (flags.proven ?? null) as unknown as boolean,
+    p_expected_mapping_generation: (expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) throw error;
   return camelizeRow<Portal>(data);
 }
 
 // Completing a training pass verifies the portal (a human reviewed every field).
-export async function markPortalVerified(id: string): Promise<Portal> {
+export async function markPortalVerified(
+  id: string,
+  expectedMappingGeneration?: number | null,
+): Promise<Portal> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({
-      is_verified: true,
-      last_verified_at: new Date().toISOString(),
-    } as never)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, id, expectedMappingGeneration, {
+    is_verified: true,
+    last_verified_at: new Date().toISOString(),
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -353,9 +522,11 @@ export async function savePortalFormUrl(portal: Portal, formUrl: string): Promis
       portalKey: portal.portalKey,
       payerId: portal.payerId,
       formUrl,
+      caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   }
-  return updatePortalUrl(portal.id, formUrl);
+  return updatePortalUrl(portal.id, formUrl, portal.mappingGeneration);
 }
 
 /** FE-only hide-from-pickers: prefix the display name (see portalRetirement.ts).
@@ -371,18 +542,14 @@ export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
       portalKey: portal.portalKey,
       payerId: portal.payerId,
       formUrl: portal.formUrl,
+      caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   }
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
-    .from("portals")
-    .update({ name: nextName } as never)
-    .eq("id", portal.id)
-    .eq("org_id", orgId)
-    .select(PORTAL_COLUMNS)
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Portal>(data);
+  const after = await updateOrgPortalConfiguration(orgId, portal.id, portal.mappingGeneration, {
+    name: nextName,
+  });
   await writeAudit({
     actionType: "UPDATE",
     entityType: "portal",
@@ -396,6 +563,10 @@ export async function hidePortalFromPickers(portal: Portal): Promise<Portal> {
 
 /** Update or set the payer attached to a portal (org or global). */
 export async function updatePortalPayer(portal: Portal, payerId: string | null): Promise<Portal> {
+  if (portal.requiresExplicitSelection === true) {
+    if (payerId === portal.payerId) return portal;
+    throw new Error("The payer is fixed for this independent form configuration.");
+  }
   let after: Portal;
   if (portal.orgId === null) {
     if (payerId === null) throw new Error("Global portals must have an attached payer");
@@ -405,18 +576,14 @@ export async function updatePortalPayer(portal: Portal, payerId: string | null):
       portalKey: portal.portalKey,
       payerId,
       formUrl: portal.formUrl,
+      caseType: portal.caseType ?? null,
+      expectedMappingGeneration: portal.mappingGeneration,
     });
   } else {
     const orgId = requireActiveOrg();
-    const { data, error } = await supabase
-      .from("portals")
-      .update({ payer_id: payerId } as never)
-      .eq("id", portal.id)
-      .eq("org_id", orgId)
-      .select(PORTAL_COLUMNS)
-      .single();
-    if (error) throw error;
-    after = camelizeRow<Portal>(data);
+    after = await updateOrgPortalConfiguration(orgId, portal.id, portal.mappingGeneration, {
+      payer_id: payerId,
+    });
   }
   await writeAudit({
     actionType: "UPDATE",

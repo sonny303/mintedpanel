@@ -3,7 +3,6 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
-import { planStepCompletion, stepCompletionPatch } from "@/lib/sopStepCompletion";
 import {
   planAttachStepArtifact,
   planDetachStepArtifact,
@@ -12,6 +11,7 @@ import {
 import { translateDbError } from "@/lib/dbErrors";
 import { markPayerFormRemoved } from "@/lib/payerForms";
 import { logNote } from "@/services/touches";
+import { completeTaskStep } from "@/services/taskSteps";
 import type { SOPStep, SOPStepAttachment, Task, TaskStatus } from "@/types";
 
 export interface CaseTaskInput {
@@ -143,9 +143,10 @@ export interface TaskFilters {
 
 // sop_template_id/sop_version (E2.2) ride the list so the cases work view can
 // derive "distinct stamped template ids per case" from the already-loaded
-// cache — two id columns, never task bodies (TE-7).
+// cache. The revision token supports later SOP-content CAS writes without
+// loading the full step body in this list query.
 const TASK_LIST_COLUMNS =
-  "id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, sop_template_id, sop_version, created_at, updated_at";
+  "id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, sop_template_id, sop_version, sop_content_revision, created_at, updated_at";
 
 export async function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
   const orgId = requireActiveOrg();
@@ -185,6 +186,31 @@ export async function getTask(id: string): Promise<Task | null> {
   return data ? camelizeRow<Task>(data) : null;
 }
 
+const TASK_SOP_CONTENT_CONFLICT = "Task changed while you were editing it. Reload and retry.";
+
+async function updateTaskSopContentWithRevision(
+  taskId: string,
+  orgId: string,
+  expectedRevision: number | undefined,
+  patch: Record<string, unknown>,
+): Promise<Task> {
+  if (typeof expectedRevision !== "number" || !Number.isInteger(expectedRevision)) {
+    throw new Error("Task is missing its SOP content revision. Reload and retry.");
+  }
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(patch as never)
+    .eq("id", taskId)
+    .eq("org_id", orgId)
+    .eq("sop_content_revision", expectedRevision)
+    .select("*")
+    .maybeSingle();
+  if (error) throw translateDbError(error);
+  if (!data) throw new Error(TASK_SOP_CONTENT_CONFLICT);
+  return camelizeRow<Task>(data);
+}
+
 export async function updateTaskStatus(id: string, status: TaskStatus): Promise<Task> {
   const orgId = requireActiveOrg();
   const before = await getTask(id);
@@ -216,52 +242,15 @@ export async function updateTaskStatus(id: string, status: TaskStatus): Promise<
 
 export async function completeSOPStep(taskId: string, stepId: string): Promise<Task> {
   const orgId = requireActiveOrg();
-  const existing = await getTask(taskId);
-  if (!existing) throw new Error("Task not found");
-
-  const currentSteps: SOPStep[] = Array.isArray(existing.sopContent) ? existing.sopContent : [];
-  const now = new Date().toISOString();
-  // The order rule + all-done rollup live in the pure module, shared with the
-  // server path (PATCH /api/tasks/:id/steps) so the two can't drift.
-  const plan = planStepCompletion(currentSteps, stepId, currentUserId(), now);
-  if (!plan.ok) {
-    throw new Error(
-      plan.reason === "not_found" ? "Step not found on task" : `Complete "${plan.blockedBy}" first`,
-    );
-  }
-  const nextSteps = plan.nextSteps;
-  const allDone = plan.allDone;
-  const patch = stepCompletionPatch(plan, existing.status, now);
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(patch as never)
-    .eq("id", taskId)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Task>(data);
-
-  if (allDone && after.caseId && after.title.toLowerCase().startsWith("submit termination")) {
-    const { error: termErr } = await supabase
-      .from("credential_cases")
-      .update({ termination_date: now.slice(0, 10) } as never)
-      .eq("id", after.caseId)
-      .eq("org_id", orgId)
-      .is("termination_date", null);
-    if (termErr) throw termErr;
-  }
-
-  await writeAudit({
-    actionType: "UPDATE",
-    entityType: "task",
-    entityId: taskId,
-    before: { stepId, isCompleted: false },
-    after: { stepId, isCompleted: true, taskStatus: after.status },
-    description: `Completed SOP step "${nextSteps.find((st) => st.id === stepId)?.label ?? stepId}"`,
-  });
-  return after;
+  const userId = currentUserId();
+  if (!userId) throw new Error("An authenticated actor is required");
+  const result = await completeTaskStep(
+    { db: supabase, orgId, userId, source: "panel" },
+    taskId,
+    stepId,
+  );
+  if (result.kind === "rejected") throw new Error(result.message);
+  return result.task;
 }
 
 // ASD (Active Submission Drawer) — attach/detach a vault document pointer on
@@ -283,15 +272,12 @@ export async function attachStepArtifact(
   if (!plan.ok) throw new Error("Step not found on task");
   const patch = stepAttachmentPatch(plan);
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(patch as never)
-    .eq("id", taskId)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw translateDbError(error);
-  const after = camelizeRow<Task>(data);
+  const after = await updateTaskSopContentWithRevision(
+    taskId,
+    orgId,
+    existing.sopContentRevision,
+    patch,
+  );
 
   await writeAudit({
     actionType: "UPDATE",
@@ -325,15 +311,12 @@ export async function detachStepArtifact(
     ?.attachments?.find((a) => a.documentId === documentId);
   const patch = stepAttachmentPatch(plan);
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(patch as never)
-    .eq("id", taskId)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw translateDbError(error);
-  const after = camelizeRow<Task>(data);
+  const after = await updateTaskSopContentWithRevision(
+    taskId,
+    orgId,
+    existing.sopContentRevision,
+    patch,
+  );
 
   await writeAudit({
     actionType: "UPDATE",
@@ -394,19 +377,16 @@ export async function removePayerFormFromCase(task: Task, reason: string | null)
     removedBy: currentUserId(),
     removedReason: reason,
   });
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({
+  const after = await updateTaskSopContentWithRevision(
+    task.id,
+    orgId,
+    existing.sopContentRevision,
+    {
       sop_content: nextSteps as never,
       status: "blocked" as const,
       completed_date: null,
-    } as never)
-    .eq("id", task.id)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Task>(data);
+    },
+  );
   await writeAudit({
     actionType: "DELETE",
     entityType: "task",

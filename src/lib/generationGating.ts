@@ -29,6 +29,8 @@ export interface GatingResult {
   gated: GatedRow[];
   /** Rows requiring an operator to choose among equal-priority SOPs. */
   ambiguous: GenerationPreviewRow[];
+  /** Proposed Enrollment rows with no compatible SOP; never confirmable. */
+  unmatched: GenerationPreviewRow[];
 }
 
 export interface GatingInput {
@@ -41,14 +43,20 @@ export function evaluateGeneration({ rows, templates, factsById }: GatingInput):
   const confirmable: GenerationPreviewRow[] = [];
   const gated: GatedRow[] = [];
   const ambiguous: GenerationPreviewRow[] = [];
+  const unmatched: GenerationPreviewRow[] = [];
 
   for (const row of rows) {
     if (row.disposition !== "proposed") continue; // only proposed rows are confirmable/gated
-    if (topRankedTemplates(templates, row.payerId, row.state, row.groupId).length > 1) {
+    const ranked = topRankedTemplates(templates, row.payerId, row.state, row.groupId, "enrollment");
+    if (ranked.length === 0) {
+      unmatched.push(row);
+      continue;
+    }
+    if (ranked.length > 1) {
       ambiguous.push(row);
       continue;
     }
-    const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
+    const template = pickTemplate(templates, row.payerId, row.state, row.groupId, "enrollment");
     const required = normalizeRequiredAttributes(template?.requiredProfileAttributes);
     const facts = factsById.get(row.providerId);
     if (required.length === 0 || !facts) {
@@ -63,5 +71,5 @@ export function evaluateGeneration({ rows, templates, factsById }: GatingInput):
     }
   }
 
-  return { confirmable, gated, ambiguous };
+  return { confirmable, gated, ambiguous, unmatched };
 }

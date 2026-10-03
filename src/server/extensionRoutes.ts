@@ -3,21 +3,27 @@
 // authenticated server context into the service layer, never duplicate query
 // logic here.
 import {
-  listPortalFieldMaps,
-  listSharedFieldMaps,
+  listEffectivePortalMapResolutions,
+  listLegacyClientPortalMapResolutions,
+  resolveEffectivePortalMaps,
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
 import { batchLearnPortalFieldMaps } from "@/services/portalFieldMapLearning";
-import { listPortalsForApi, listSharedPortals } from "@/services/portals";
+import { listPortalsForApi, listSharedPortals, type PortalApiRow } from "@/services/portals";
 import { recordFillEvent, supportsFillEventV2, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
+import {
+  getContractFormContext,
+  type ExpectedContractSopContext,
+} from "@/services/contractFormContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { getNextBestAction } from "@/services/nextBestAction";
+import { validateWorkContext } from "@/services/workContext";
 import { completeTaskStep } from "@/services/taskSteps";
 import {
   getExtensionViewPrefs,
@@ -25,6 +31,11 @@ import {
   putExtensionViewPrefs,
 } from "@/services/extensionViewPrefs";
 import { validateQuickCardFields } from "@/lib/quickCardCatalog";
+import { normalizePortalKey } from "@/lib/tokenFormat";
+import {
+  parseWorkContextValidationRequest,
+  type WorkContextValidationErrorCode,
+} from "@/lib/workContext";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
@@ -163,6 +174,56 @@ export async function handleProviderProfile(
 
   const caseIdPresent = hasSnakeCaseId || (hasCamelCaseId && caseId != null);
 
+  const hasContractSnakeCaseId = url.searchParams.has("contract_id");
+  const hasContractCamelCaseId = url.searchParams.has("contractId");
+  const contractIdRaw = hasContractSnakeCaseId
+    ? url.searchParams.get("contract_id")
+    : url.searchParams.get("contractId");
+  let contractId: string | undefined;
+  if (hasContractSnakeCaseId || hasContractCamelCaseId) {
+    if (!contractIdRaw || !UUID_RE.test(contractIdRaw)) {
+      return fail(422, "contract_id must be a UUID");
+    }
+    contractId = contractIdRaw;
+  }
+  if (contractId && caseIdPresent) {
+    return fail(422, "Choose either case_id or contract_id profile context");
+  }
+
+  const contextUuidParam = (camel: string, snake: string): string | undefined | null => {
+    const key = url.searchParams.has(snake) ? snake : camel;
+    if (!url.searchParams.has(key)) return undefined;
+    const value = url.searchParams.get(key);
+    return value && UUID_RE.test(value) ? value : null;
+  };
+  const contextVersionParam = (camel: string, snake: string): number | undefined | null => {
+    const key = url.searchParams.has(snake) ? snake : camel;
+    if (!url.searchParams.has(key)) return undefined;
+    const value = url.searchParams.get(key);
+    if (!value || !/^\d+$/.test(value)) return null;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  };
+  const expectedAssignmentId = contextUuidParam("assignmentId", "assignment_id");
+  const expectedSopTemplateId = contextUuidParam("sopTemplateId", "sop_template_id");
+  const expectedContextVersion = contextVersionParam("contextVersion", "context_version");
+  const expectedSopVersion = contextVersionParam("sopVersion", "sop_version");
+  if (
+    expectedAssignmentId === null ||
+    expectedSopTemplateId === null ||
+    expectedContextVersion === null ||
+    expectedSopVersion === null ||
+    (!contractId &&
+      [
+        expectedAssignmentId,
+        expectedSopTemplateId,
+        expectedContextVersion,
+        expectedSopVersion,
+      ].some((value) => value !== undefined))
+  ) {
+    return fail(422, "Contract assignment selectors require a valid contract_id context");
+  }
+
   // Explicit facility selection for the facility.*/assignment.* tokens. A
   // non-UUID can't be a facility — same early 404 the set-membership check
   // below would produce, without a uuid-cast 500.
@@ -182,11 +243,36 @@ export async function handleProviderProfile(
     groupId = groupIdRaw;
   }
 
+  const expectedStepIdentity = url.searchParams.get("stepIdentity") ?? undefined;
+  if (
+    expectedStepIdentity != null &&
+    (expectedStepIdentity.length === 0 || expectedStepIdentity.length > 512)
+  ) {
+    return fail(422, "stepIdentity is invalid");
+  }
+  if (expectedStepIdentity != null && !contractId) {
+    return fail(422, "stepIdentity requires a contract_id context");
+  }
+
   const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
     state,
     facilityId,
     groupId,
     caseId,
+    ...(contractId
+      ? {
+          contractContext: {
+            contractId,
+            expected: {
+              assignmentId: expectedAssignmentId,
+              contextVersion: expectedContextVersion,
+              sopTemplateId: expectedSopTemplateId,
+              sopVersion: expectedSopVersion,
+              stepIdentity: expectedStepIdentity,
+            },
+          },
+        }
+      : {}),
   });
   if (result.kind === "provider_not_found") return fail(404, "Provider not found");
   // A facilityId outside the caller's org or this provider's facility set —
@@ -197,6 +283,14 @@ export async function handleProviderProfile(
   if (result.kind === "group_not_found") {
     return fail(404, "Group not found for this provider or case");
   }
+  if (result.kind === "contract_not_found") return fail(404, "Contract not found");
+  if (result.kind === "contract_context_not_configured") {
+    return fail(409, `not_configured: ${result.reason}`);
+  }
+  if (result.kind === "contract_context_mismatch") {
+    return fail(422, `mismatch: ${result.reason}`);
+  }
+  if (result.kind === "contract_context_stale") return fail(409, `stale: ${result.reason}`);
   const { profile, needsFacility } = result;
 
   // {{user.*}} tokens ride along with the catalog tokens (R2 locked decision
@@ -229,6 +323,8 @@ export async function handleProviderProfile(
       state: state ?? null,
       facilityId: profile.selected_facility_id,
       caseId: profile.case_id,
+      contractId: profile.contract_context?.contract_id ?? null,
+      assignmentId: profile.contract_context?.assignment_id ?? null,
     },
     description: "Provider profile read (extension fill payload)",
   });
@@ -288,30 +384,79 @@ export async function handleSsnRelease(id: string, url: URL, ctx: AuthContext): 
 export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalsForApi({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
-  return ok(rows, { total: rows.length, registry_empty: rows.length === 0 });
+  // Older extensions select a registry entry by URL alone. Hide any
+  // key if any same-key configuration requires explicit selection: a legacy
+  // URL match cannot choose safely between a flagged and an unflagged sibling.
+  const visibleRows = filterLegacyPortalRows(rows);
+  const current = await portalRowsWithCurrentMetadata(ctx.db, ctx.orgId, visibleRows);
+  return ok(current.rows, {
+    total: current.rows.length,
+    registry_empty: current.rows.length === 0,
+    ...(current.metadata.length ? { portal_mappings: current.metadata } : {}),
+  });
 }
 
-// GET /api/shared-portals — the GLOBAL registry only, for E6.9 Train forms.
+// GET /api/shared-portals — the GLOBAL registry only, for Train/Test. The
+// legacy no-query form hides explicit configurations; selection=explicit is
+// the opt-in candidate and exact-key surface for capable clients.
 //
 // Training carries no org, so this runs on the user-scoped guard. It is the
 // read half of the same tier the shared propose path writes: a trainer sees
 // the shared library and adds to it, and never sees another org's private
 // registry rows (there is no org in scope to widen it to).
-export async function handleListSharedPortals(user: UserContext): Promise<Response> {
+export async function handleListSharedPortals(user: UserContext, url?: URL): Promise<Response> {
   // JWT verification IS the gate (D11) — there is no role model for the shared
   // library, and E6.7 explicitly rejected inventing a platform role here.
-  const rows = await listSharedPortals(user.db);
-  return ok(rows, { total: rows.length });
+  const selection = url?.searchParams.get("selection") ?? null;
+  if (selection !== null && selection !== "explicit") {
+    return fail(422, "selection must be explicit when provided");
+  }
+  const explicitSelection = selection === "explicit";
+  const requestedKey = url?.searchParams.get("portal_key") ?? null;
+  if (explicitSelection && requestedKey !== null && !normalizePortalKey(requestedKey)) {
+    return fail(422, "portal_key must be a non-empty configuration key");
+  }
+
+  const rows = await listSharedPortals(
+    user.db,
+    explicitSelection && requestedKey !== null
+      ? { portalKey: normalizePortalKey(requestedKey) ?? "" }
+      : {},
+  );
+  if (explicitSelection && requestedKey !== null && rows.length === 0) {
+    return fail(404, "Form configuration not found");
+  }
+  if (explicitSelection && requestedKey !== null && rows.length > 1) {
+    return fail(409, "Form configuration key is ambiguous");
+  }
+  const visibleRows = explicitSelection ? rows : filterLegacyPortalRows(rows);
+  const current = await portalRowsWithCurrentMetadata(
+    user.db,
+    null,
+    visibleRows,
+    explicitSelection,
+  );
+  return ok(current.rows, {
+    total: current.rows.length,
+    ...(current.metadata.length ? { portal_mappings: current.metadata } : {}),
+  });
 }
 
 // GET /api/portal-field-maps[?portal_key=...] — global catalog rows (org NULL)
 // plus the caller's own org overrides.
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
-  const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
+  const resolutions = await listLegacyClientPortalMapResolutions(
+    { db: ctx.db, orgId: ctx.orgId },
+    { portalKey, mapType: "all" },
+  );
+  const visible = resolutions.filter((resolution) => resolution.status !== "configuration_missing");
+  const rows = visible.flatMap((resolution) => resolution.maps);
   const v2Supported = await supportsFillEventV2({ db: ctx.db });
   return ok(rows, {
     total: rows.length,
+    ...(portalKey && visible.length === 0 ? { registry_empty: true } : {}),
+    ...(visible.length ? { portal_mappings: visible.map(portalMappingMetadata) } : {}),
     ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
   });
 }
@@ -341,16 +486,106 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 // contract, so a value cannot ride in. No audit row (audit_log.org_id is NOT
 // NULL and there is no org); the row's updated_at is the trail (D14).
 // GET /api/shared-field-maps?portal_key= — the SHARED tier's own rows, for
-// E6.9 Train forms. Pairs with the propose POST below on the same user-scoped
-// guard: a trainer reads what a recognized form already has, then adds to it.
+// Train/Test. selection=explicit opts into exact-key maps for capable clients;
+// legacy requests retain the old URL-selection safety filter.
 export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
+  const selection = url.searchParams.get("selection");
+  if (selection !== null && selection !== "explicit") {
+    return fail(422, "selection must be explicit when provided");
+  }
+  if (selection === "explicit") {
+    const requestedKey = url.searchParams.get("portal_key");
+    const portalKey = requestedKey === null ? null : normalizePortalKey(requestedKey);
+    if (!portalKey) return fail(422, "portal_key is required for explicit selection");
+
+    const resolution = await resolveEffectivePortalMaps(
+      { db: user.db, orgId: null },
+      { portalKey, mapType: "all" },
+    );
+    if (resolution.status === "configuration_missing") {
+      return fail(404, "Form configuration not found");
+    }
+    const rows = resolution.maps;
+    const v2Supported = await supportsFillEventV2({ db: user.db });
+    return ok(rows, {
+      total: rows.length,
+      portal_mappings: [portalMappingMetadata(resolution)],
+      ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
+    });
+  }
+
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
-  const rows = await listSharedFieldMaps(user.db, portalKey);
+  const resolutions = await listLegacyClientPortalMapResolutions(
+    { db: user.db, orgId: null },
+    { portalKey, mapType: "all" },
+  );
+  const visible = resolutions.filter((resolution) => resolution.status !== "configuration_missing");
+  const rows = visible.flatMap((resolution) => resolution.maps);
   const v2Supported = await supportsFillEventV2({ db: user.db });
   return ok(rows, {
     total: rows.length,
+    ...(portalKey && visible.length === 0 ? { registry_empty: true } : {}),
+    ...(visible.length ? { portal_mappings: visible.map(portalMappingMetadata) } : {}),
     ...(v2Supported ? { fill_event_schema_version: 2 } : {}),
   });
+}
+
+function portalMappingMetadata(
+  resolution: Awaited<ReturnType<typeof listEffectivePortalMapResolutions>>[number],
+) {
+  return {
+    portal_key: resolution.portalKey,
+    portal_id: resolution.portalId,
+    case_type: resolution.caseType,
+    requires_explicit_selection: resolution.requiresExplicitSelection,
+    mapping_generation: resolution.mappingGeneration,
+    active_field_count: resolution.activeFieldCount,
+    mapping_ready: resolution.isReady,
+    is_verified: resolution.isVerified,
+    effective_mapping_fingerprint: resolution.effectiveMappingFingerprint,
+  };
+}
+
+function filterLegacyPortalRows(rows: PortalApiRow[]): PortalApiRow[] {
+  const blockedKeys = new Set(
+    rows.filter((row) => row.requiresExplicitSelection).map((row) => row.portalKey),
+  );
+  return rows.filter((row) => !blockedKeys.has(row.portalKey));
+}
+
+async function portalRowsWithCurrentMetadata(
+  db: AuthContext["db"] | UserContext["db"],
+  orgId: string | null,
+  rows: PortalApiRow[],
+  includeCurrentGeneration = false,
+): Promise<{ rows: PortalApiRow[]; metadata: ReturnType<typeof portalMappingMetadata>[] }> {
+  if (rows.length === 0) return { rows: [], metadata: [] };
+  const scopes = new Set(rows.map((row) => (row.orgId === null ? null : orgId)));
+  const resolutions = await Promise.all(
+    [...scopes].map((scope) => listEffectivePortalMapResolutions({ db, orgId: scope })),
+  );
+  const byId = new Map(resolutions.flat().map((resolution) => [resolution.portalId, resolution]));
+  const currentRows = rows.map((row) => {
+    const resolution = byId.get(row.id);
+    const currentGeneration = includeCurrentGeneration
+      ? { mappingGeneration: resolution?.mappingGeneration ?? row.mappingGeneration ?? 1 }
+      : {};
+    if (resolution && resolution.activeFieldCount === 0) {
+      return {
+        ...row,
+        ...currentGeneration,
+        isVerified: false,
+        lastVerifiedAt: null,
+        provenAt: null,
+      };
+    }
+    return { ...row, ...currentGeneration };
+  });
+  const metadata = currentRows.flatMap((row) => {
+    const resolution = byId.get(row.id);
+    return resolution ? [portalMappingMetadata(resolution)] : [];
+  });
+  return { rows: currentRows, metadata };
 }
 
 export async function handleProposeSharedFieldMap(
@@ -433,6 +668,8 @@ export async function handleProveSharedPortal(body: unknown, user: UserContext):
   const input: ProveSharedPortalInput = {
     portalKey: (raw.portalKey ?? raw.portal_key ?? null) as string | null,
     id: (raw.id ?? null) as string | null,
+    expectedMappingGeneration:
+      typeof raw.expected_mapping_generation === "number" ? raw.expected_mapping_generation : null,
   };
   const result = await proveSharedPortal({ db: user.db, userId: user.userId }, input);
   if (result.kind === "rejected") return fail(result.status, result.message);
@@ -532,6 +769,129 @@ export async function handleCaseContext(caseId: string, ctx: AuthContext): Promi
   return response;
 }
 
+// GET /api/contracts/:id/form-context — the assigned Contract SOP plus exact
+// immutable online-form step identities. Optional provider/facility and
+// expected assignment/version selectors are revalidated against org-owned
+// rows. Error prefixes are stable for clients: not_configured, mismatch,
+// forbidden (guard-level), and stale. No Contract row is converted to a case.
+function workContextFailure(
+  status: number,
+  code: WorkContextValidationErrorCode,
+  message: string,
+): Response {
+  return new Response(
+    JSON.stringify({ data: null, error: message, meta: { work_context_error: code } }),
+    {
+      status,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store, max-age=0",
+        pragma: "no-cache",
+      },
+    },
+  );
+}
+
+/** POST /api/work-context/validate — online validation for typed exact-tab
+ * Work. The body is a strict tuple; `orgId` must equal the org selected by
+ * the authenticated guard. Portal URL is intentionally not accepted here. */
+export async function handleValidateWorkContext(
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  const parsed = parseWorkContextValidationRequest(body);
+  if (!parsed.ok) return workContextFailure(422, "malformed_request", parsed.message);
+  const result = await validateWorkContext({ db: ctx.db, orgId: ctx.orgId }, parsed.request);
+  if (result.kind !== "ok") {
+    const status = result.kind === "not_found" ? 404 : result.kind === "mismatch" ? 422 : 409;
+    return workContextFailure(status, result.kind, result.message);
+  }
+  // The shared generation pin is for the server-side immutable fill receipt;
+  // it is derived from the same resolver snapshot and is not part of the M56
+  // validator/Extension wire contract.
+  const { sharedMappingGeneration: _sharedMappingGeneration, ...wireData } = result.data;
+  const response = ok(wireData);
+  response.headers.set("cache-control", "no-store, max-age=0");
+  response.headers.set("pragma", "no-cache");
+  return response;
+}
+
+export async function handleContractFormContext(
+  contractId: string,
+  url: URL,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!UUID_RE.test(contractId)) return fail(404, "Contract not found");
+
+  const optionalUuid = (key: string): string | undefined | null => {
+    if (!url.searchParams.has(key)) return undefined;
+    const raw = url.searchParams.get(key);
+    return raw && UUID_RE.test(raw) ? raw : null;
+  };
+  const optionalVersion = (key: string): number | undefined | null => {
+    if (!url.searchParams.has(key)) return undefined;
+    const raw = url.searchParams.get(key);
+    if (!raw || !/^\d+$/.test(raw)) return null;
+    const parsed = Number(raw);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const providerId = optionalUuid("providerId");
+  const facilityId = optionalUuid("facilityId");
+  const assignmentId = optionalUuid("assignmentId");
+  const sopTemplateId = optionalUuid("sopTemplateId");
+  const contextVersion = optionalVersion("contextVersion");
+  const sopVersion = optionalVersion("sopVersion");
+  if (
+    providerId === null ||
+    facilityId === null ||
+    assignmentId === null ||
+    sopTemplateId === null ||
+    contextVersion === null ||
+    sopVersion === null
+  ) {
+    return fail(422, "Contract context selectors must be valid UUIDs or positive versions");
+  }
+  const stepIdentity = url.searchParams.get("stepIdentity") ?? undefined;
+  if (stepIdentity != null && (stepIdentity.length === 0 || stepIdentity.length > 512)) {
+    return fail(422, "stepIdentity is invalid");
+  }
+  const expected: ExpectedContractSopContext = {
+    assignmentId,
+    contextVersion,
+    sopTemplateId,
+    sopVersion,
+    stepIdentity,
+  };
+  const result = await getContractFormContext(
+    { db: ctx.db, orgId: ctx.orgId },
+    contractId,
+    { providerId, facilityId },
+    expected,
+  );
+  if (result.kind === "not_found") return fail(404, "Contract not found");
+  if (result.kind === "not_configured") return fail(409, `not_configured: ${result.reason}`);
+  if (result.kind === "mismatch") return fail(422, `mismatch: ${result.reason}`);
+  if (result.kind === "stale") return fail(409, `stale: ${result.reason}`);
+
+  await ctx.writeAudit({
+    actionType: "READ",
+    entityType: "contract",
+    entityId: contractId,
+    after: {
+      route: "/api/contracts/:id/form-context",
+      assignmentId: result.context.assignment.id,
+      contextVersion: result.context.assignment.contextVersion,
+      providerId: result.context.selectedProviderId,
+      facilityId: result.context.selectedFacilityId,
+    },
+    description: "Contract SOP form context read",
+  });
+  const response = ok(result.context);
+  response.headers.set("cache-control", "no-store");
+  return response;
+}
+
 // POST /api/cases/:id/touches — the human pressed "Mark submitted" after
 // submitting the portal form themselves. Appends one submission touch
 // (source 'extension'), idempotent on the client-generated idempotency_id.
@@ -580,13 +940,11 @@ export async function handleCreateCaseTouch(
 // PATCH /api/tasks/:id/steps — tick one SOP step complete (S4.3, the
 // extension's Progress tab). The ONE /api write that touches task state.
 //
-// Body: { stepId }. Writer roles only. The ordering rule ("finish the earlier
-// step first") and the all-done -> task completed rollup come from the pure
-// module shared with the webapp path, so the two surfaces can never disagree
-// about which step may be ticked. A blocked step is a 409 naming the blocker,
-// which the panel renders verbatim rather than inventing its own rule; a
-// re-tick of an already-complete step is an idempotent success so a retry
-// converges. Cross-org task id -> 404 before any write.
+// Body: { stepId }. Writer roles only. The service calls the same row-locking
+// SQL transaction as the Panel, which applies the ordering rule, status rollup,
+// optional termination-case update, and audit event atomically. A blocked step
+// is a 409 naming the blocker; a re-tick is an idempotent success. Cross-org
+// task ids remain a 404, and the RPC rechecks the verified actor's membership.
 export async function handleCompleteTaskStep(
   taskId: string,
   body: unknown,
@@ -602,10 +960,9 @@ export async function handleCompleteTaskStep(
     return fail(422, "stepId is required");
   }
   const result = await completeTaskStep(
-    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, writeAudit: ctx.writeAudit },
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, source: "extension" },
     taskId,
     stepId,
-    new Date().toISOString(),
   );
   if (result.kind === "rejected") return fail(result.status, result.message);
   return ok({ task: result.task, allDone: result.allDone });

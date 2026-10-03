@@ -45,7 +45,12 @@ import {
 import { isValidEmail } from "@/lib/contactValidation";
 import { DOCUMENT_KIND_META, parseDocumentKind, requireableDocumentKinds } from "@/lib/documents";
 import { normalizePortalKey } from "@/lib/tokenFormat";
-import { portalDisplayName, portalsForPicker } from "@/lib/portalRetirement";
+import type { CaseType } from "@/lib/caseTypes";
+import {
+  isPortalHiddenFromPickers,
+  portalDisplayName,
+  portalsForPicker,
+} from "@/lib/portalRetirement";
 import type { Portal, SOPStepType } from "@/types";
 import type { TokenGroup } from "@/lib/tokenGroups";
 
@@ -77,6 +82,7 @@ export interface TemplateTaskRowProps {
   // online_form step can be linked to a real portal (payer-filtered by default).
   portals: Portal[];
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   /** Payer PDF — the saved template row a payer form attaches to, and the
    * read-only payer/state context the panel echoes. `templateId` is null in
    * create mode (no row yet), which is exactly when a form cannot be uploaded.
@@ -125,6 +131,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
   portals,
   isGlobalAuthoring,
   templatePayerId,
+  templateCaseType,
   templateId,
   templatePayerName,
   templateStates,
@@ -152,7 +159,11 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
   const soleStep = task.steps.length === 1 ? task.steps[0] : null;
   const inertExecution = (INERT_EXECUTION_TYPES as readonly string[]).includes(task.executionType);
   // Portal Mode → Auto-fill toggle; multi-step / inert legacy keep the select.
-  const showAutoFillToggle = collapsed && soleStep?.stepType === "online_form" && !inertExecution;
+  const showAutoFillToggle =
+    collapsed &&
+    soleStep !== null &&
+    (soleStep.stepType ?? "online_form") === "online_form" &&
+    !inertExecution;
   const showExecutionSelect = !collapsed || inertExecution;
 
   function setPortalKey(stepId: string, portalKey: string) {
@@ -362,6 +373,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
               groupedTokens={groupedTokens}
               portals={portals}
               templatePayerId={templatePayerId}
+              templateCaseType={templateCaseType}
               templateId={templateId}
               templatePayerName={templatePayerName}
               templateStates={templateStates}
@@ -473,6 +485,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                       groupedTokens={groupedTokens}
                       portals={portals}
                       templatePayerId={templatePayerId}
+                      templateCaseType={templateCaseType}
                       templateId={templateId}
                       templatePayerName={templatePayerName}
                       templateStates={templateStates}
@@ -515,6 +528,7 @@ function StepModeBody({
   groupedTokens,
   portals,
   templatePayerId,
+  templateCaseType,
   templateId,
   templatePayerName,
   templateStates,
@@ -532,6 +546,7 @@ function StepModeBody({
   groupedTokens: TokenGroup[];
   portals: Portal[];
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   templateId: string | null;
   templatePayerName: string | null;
   templateStates: string[];
@@ -546,15 +561,25 @@ function StepModeBody({
   // Portal registration lives in Form setup (E6.5) — Admin > Portals redirects
   // away. The picker CTA bumps this signal so FormStepPanel opens the dialog.
   const [registerSignal, setRegisterSignal] = useState(0);
-  const selectedPortalKey = normalizePortalKey(step.portalKey);
-  const selectedPortal = selectedPortalKey
-    ? portals.find((p) => normalizePortalKey(p.portalKey) === selectedPortalKey)
-    : undefined;
+  const requestedPortalKey = normalizePortalKey(step.portalKey);
+  const selectedPortalMatches = portals.filter((p) => p.portalKey === step.portalKey);
+  const selectedPortalCompatible = selectedPortalMatches.filter(
+    (p) =>
+      !templateCaseType ||
+      (p.payerId === templatePayerId &&
+        p.caseType === templateCaseType &&
+        !isPortalHiddenFromPickers(p)),
+  );
+  const selectedPortal =
+    selectedPortalMatches.length === 1 && selectedPortalCompatible.length === 1
+      ? selectedPortalCompatible[0]
+      : undefined;
+  const selectedPortalKey = selectedPortal ? normalizePortalKey(selectedPortal.portalKey) : null;
   // Orphan key only — an empty list while portals are still loading must not
   // force every Form setup panel open. Zero-portal authors use the amber
   // "Register portal" CTA, which bumps registerSignal.
   const needsPortalRegistration = Boolean(
-    portals.length > 0 && selectedPortalKey && !selectedPortal,
+    portals.length > 0 && requestedPortalKey && !selectedPortal,
   );
 
   return (
@@ -650,15 +675,20 @@ function StepModeBody({
         />
       ) : (
         <div className="space-y-3">
-          {step.stepType === "online_form" ? (
+          {(step.stepType ?? "online_form") === "online_form" ? (
             <>
               <PortalStepSelect
                 step={step}
                 portals={portals}
                 templatePayerId={templatePayerId}
+                templateCaseType={templateCaseType}
                 canEdit={canEdit}
                 onChange={onPortalKeyChange}
-                onRequestRegister={canEdit ? () => setRegisterSignal((n) => n + 1) : undefined}
+                onRequestRegister={
+                  canEdit && templatePayerId && templateCaseType
+                    ? () => setRegisterSignal((n) => n + 1)
+                    : undefined
+                }
               />
               {/* E6.5 F6.5.2 — register/train/prove without leaving the
                   editor. Self-contained (own cached hooks); renders
@@ -667,6 +697,7 @@ function StepModeBody({
               <FormStepPanel
                 portalKey={selectedPortalKey}
                 templatePayerId={templatePayerId}
+                templateCaseType={templateCaseType}
                 canEdit={canEdit}
                 isGlobalAuthoring={isGlobalAuthoring}
                 defaultOpen={autoOpenStepId === step.id || needsPortalRegistration}
@@ -684,7 +715,9 @@ function StepModeBody({
               on every step (additive-only rule) — it simply stops
               being read for online-form steps, so an unmigrated or
               rolled-back reader still finds what it expects. */}
-          <div className={step.stepType === "online_form" ? "hidden" : undefined}>
+          <div
+            className={(step.stepType ?? "online_form") === "online_form" ? "hidden" : undefined}
+          >
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs">Data fields</Label>
               {canEdit ? (
@@ -1037,6 +1070,7 @@ function PortalStepSelect({
   step,
   portals,
   templatePayerId,
+  templateCaseType,
   canEdit,
   onChange,
   onRequestRegister,
@@ -1044,34 +1078,39 @@ function PortalStepSelect({
   step: EditableStep;
   portals: Portal[];
   templatePayerId: string | null;
+  templateCaseType: CaseType | null;
   canEdit: boolean;
   onChange: (portalKey: string) => void;
   /** Opens Form setup's Register portal dialog — the live registration path
    * after Admin > Portals became a redirect shell. */
   onRequestRegister?: () => void;
 }) {
-  const [showAll, setShowAll] = useState(false);
-
-  const matching = templatePayerId
-    ? portalsForPicker(portals, step.portalKey).filter((p) => p.payerId === templatePayerId)
-    : [];
-  // Fall back to the full list when the payer has no portals (or the template
-  // has no payer) — otherwise the user would see an empty picker.
   const visiblePortals = portalsForPicker(portals, step.portalKey);
-  const useAll = showAll || !templatePayerId || matching.length === 0;
-  const base = useAll ? visiblePortals : matching;
-
-  const selectedKey = normalizePortalKey(step.portalKey);
-  const selected = selectedKey
-    ? portals.find((p) => normalizePortalKey(p.portalKey) === selectedKey)
-    : undefined;
-  // Keep the currently-selected portal visible even when the payer filter would
-  // otherwise hide it, so the Select value always resolves to an option.
-  const options = selected && !base.some((p) => p.id === selected.id) ? [...base, selected] : base;
-  const value = selected ? selected.portalKey : NO_PORTAL;
-
-  const canToggle =
-    Boolean(templatePayerId) && matching.length > 0 && visiblePortals.length > matching.length;
+  const matching =
+    templatePayerId && templateCaseType
+      ? visiblePortals.filter(
+          (p) => p.payerId === templatePayerId && p.caseType === templateCaseType,
+        )
+      : !templateCaseType && step.portalKey
+        ? visiblePortals.filter((p) => p.portalKey === step.portalKey)
+        : [];
+  const keyCounts = new Map<string, number>();
+  for (const portal of visiblePortals) {
+    keyCounts.set(portal.portalKey, (keyCounts.get(portal.portalKey) ?? 0) + 1);
+  }
+  const ambiguousKeys = new Set(
+    [...keyCounts.entries()].filter(([, count]) => count > 1).map(([key]) => key),
+  );
+  const options = matching.filter(
+    (portal) =>
+      !ambiguousKeys.has(portal.portalKey) &&
+      (!templateCaseType || !isPortalHiddenFromPickers(portal)),
+  );
+  const savedKeyMatches = visiblePortals.filter((p) => p.portalKey === step.portalKey);
+  const selected = savedKeyMatches.length === 1 ? savedKeyMatches[0] : undefined;
+  const selectedIsCompatible =
+    selected != null && options.some((portal) => portal.id === selected.id);
+  const value = selectedIsCompatible ? selected.portalKey : NO_PORTAL;
 
   const registerCta = onRequestRegister ? (
     <button
@@ -1088,21 +1127,16 @@ function PortalStepSelect({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label className="text-xs">Portal</Label>
-        {canToggle ? (
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="text-[11px] text-[#1B4D3E] hover:underline"
-          >
-            {useAll ? "Show payer portals" : "Show all portals"}
-          </button>
-        ) : null}
+        <Label className="text-xs">Form configuration</Label>
       </div>
 
-      {visiblePortals.length === 0 ? (
+      {options.length === 0 && !step.portalKey ? (
         <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
-          No portal registered{templatePayerId ? " for this payer" : ""}.{" "}
+          {!templateCaseType
+            ? "Choose a case type before linking a form configuration."
+            : !templatePayerId
+              ? "Choose a payer before linking a form configuration."
+              : "No form configuration matches this payer and case type."}{" "}
           {onRequestRegister ? (
             <>{registerCta} in Form setup below.</>
           ) : (
@@ -1123,21 +1157,33 @@ function PortalStepSelect({
               <SelectItem value={NO_PORTAL}>No portal (not linked)</SelectItem>
               {options.map((p) => (
                 <SelectItem key={p.id} value={p.portalKey}>
-                  {portalDisplayName(p)}
+                  {portalDisplayName(p)} · {p.portalKey} ·{" "}
+                  {p.orgId === null ? "Global" : "Organization"}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {!selectedKey ? (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#92400E]">
-              <span>This step won&apos;t be linked for extension fill.</span>
-              {onRequestRegister ? <>{registerCta} to link one.</> : null}
+          {ambiguousKeys.size > 0 ? (
+            <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-[11px] text-[#B91C1C]">
+              These matching portal keys resolve to more than one configuration:{" "}
+              {[...ambiguousKeys].join(", ")}. Use a unique key in Form setup before linking it.
             </div>
-          ) : !selected ? (
+          ) : null}
+          {step.portalKey && !selectedIsCompatible ? (
             <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
-              Saved portal key <code>{selectedKey}</code> isn&apos;t in your registry — pick one
-              above or {registerCta}.
+              {templateCaseType
+                ? `Saved portal key ${step.portalKey} is unavailable for this payer and case type.`
+                : `Saved portal key ${step.portalKey} is missing or ambiguous in the registry.`}{" "}
+              Choose a compatible unique key or unlink it.
+            </div>
+          ) : !selectedIsCompatible && !step.portalKey ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#92400E]">
+              <span>
+                This step won&apos;t be linked for extension fill until a compatible configuration
+                is selected.
+              </span>
+              {onRequestRegister ? <>{registerCta} to link one.</> : null}
             </div>
           ) : null}
         </>

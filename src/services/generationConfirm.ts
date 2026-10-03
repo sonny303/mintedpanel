@@ -136,6 +136,7 @@ export async function confirmGenerationBatch(
       const created = await createCase(
         {
           providerId: row.providerId,
+          caseType: "enrollment",
           payerId: row.payerId,
           state: row.state,
           groupId: row.groupId,

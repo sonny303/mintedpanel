@@ -65,6 +65,9 @@ const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 function caseRow(over: Record<string, unknown> = {}) {
   return {
     id: CASE_ID,
+    case_type: null,
+    case_status: "in_progress",
+    context_version: 1,
     state: "KS",
     payer_reference_id: null,
     payer_pipeline_state: "not_started",
@@ -223,6 +226,9 @@ describe("getCaseContext — projection", () => {
     const result = await getCaseContext(ctxWith(db), CASE_ID);
 
     expect(result).toEqual({
+      caseType: null,
+      caseStatus: "in_progress",
+      contextVersion: 1,
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
       provider: { id: "prov-1", name: "Kay One" },
@@ -261,6 +267,8 @@ describe("getCaseContext — projection", () => {
           executionType: "extension_fill",
           sortOrder: 1,
           dueDate: null,
+          sopTemplateId: null,
+          sopVersion: null,
           steps: [],
         },
         {
@@ -270,6 +278,8 @@ describe("getCaseContext — projection", () => {
           executionType: "manual",
           sortOrder: 2,
           dueDate: "2026-07-20",
+          sopTemplateId: null,
+          sopVersion: null,
           steps: [],
         },
       ],
@@ -286,6 +296,54 @@ describe("getCaseContext — projection", () => {
       },
     });
     expect(captures.map((c) => c.table)).toContain("profiles");
+  });
+
+  it("returns typed owner stamps and unique SOP-version-scoped step identities", async () => {
+    const { db } = makeFakeDb([
+      { data: caseRow({ case_type: "recredentialing", context_version: 4 }) },
+      {
+        data: [
+          {
+            id: "task-typed",
+            title: "Complete payer forms",
+            status: "in_progress",
+            execution_type: "extension_fill",
+            sort_order: 1,
+            due_date: null,
+            sop_template_id: "template-7",
+            sop_version: 3,
+            sop_content: [
+              {
+                id: "step-a",
+                label: "Form page one",
+                stepType: "online_form",
+                portalKey: "payer_config",
+              },
+              {
+                id: "step-b",
+                label: "Form page two",
+                stepType: "online_form",
+                portalKey: "payer_config",
+              },
+            ],
+          },
+        ],
+      },
+      { data: [] }, // case_facilities
+      { data: [] }, // touches
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result).toMatchObject({ caseType: "recredentialing", contextVersion: 4 });
+    const task = result?.openTasks[0];
+    expect(task).toMatchObject({ sopTemplateId: "template-7", sopVersion: 3 });
+    expect(task?.steps.map((step) => step.portalKey)).toEqual(["payer_config", "payer_config"]);
+    expect(task?.steps.map((step) => step.stepIdentity)).toEqual([
+      `${CASE_ID}:task-typed:template-7:3:step-a`,
+      `${CASE_ID}:task-typed:template-7:3:step-b`,
+    ]);
+    expect(new Set(task?.steps.map((step) => step.stepIdentity)).size).toBe(2);
   });
 
   it("hides a REMOVED payer-form task from openTasks", async () => {

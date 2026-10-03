@@ -95,7 +95,13 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   async function runImport() {
     try {
       const signed = await download.mutateAsync(formId);
-      const result = await importMut.mutateAsync({ familyId, signedUrl: signed.url });
+      const result = await importMut.mutateAsync({
+        familyId,
+        signedUrl: signed.url,
+        // PDF maps are keyed to payer_forms.family_id and have no portals row;
+        // their guarded legacy generation is fixed at 1.
+        expectedMappingGeneration: 1,
+      });
       invalidateMaps();
       if (result.totalFields === 0) {
         toast.error(
@@ -150,7 +156,10 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
                 }
               : { status: "proposed", source: "manual" };
     try {
-      await trainMut.mutateAsync({ id: map.id, patch });
+      await trainMut.mutateAsync({
+        id: map.id,
+        patch: { ...patch, expectedMappingGeneration: map.mappingGeneration },
+      });
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save the decision");
@@ -161,7 +170,10 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   // overwritten, so a re-import cannot clobber a human's naming.
   async function renameRegistryRow(row: RegistryRow, displayLabel: string | null) {
     try {
-      await renameMut.mutateAsync([{ id: row.id, displayLabel }]);
+      const map = maps.find((candidate) => candidate.id === row.id);
+      await renameMut.mutateAsync([
+        { id: row.id, displayLabel, expectedMappingGeneration: map?.mappingGeneration },
+      ]);
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the field");
@@ -174,7 +186,12 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
     if (shared.length === 0) return;
     try {
-      await renameMut.mutateAsync(sectionRenamePatches(shared, section));
+      await renameMut.mutateAsync(
+        sectionRenamePatches(shared, section).map((patch) => ({
+          ...patch,
+          expectedMappingGeneration: shared.find((map) => map.id === patch.id)?.mappingGeneration,
+        })),
+      );
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the section");

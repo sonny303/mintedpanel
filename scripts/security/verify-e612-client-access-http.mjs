@@ -6,7 +6,7 @@
 // this run. The gateway is only transport glue so the app can use one local
 // Supabase URL while Auth, REST, and Storage remain separate containers.
 import { execFileSync, spawn } from "node:child_process";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E612, baseFixtureSql, restrictedFixtureSql, sqlLiteral } from "./e612-fixtures.mjs";
@@ -56,6 +56,7 @@ const options = {
   stdio: ["pipe", "pipe", "pipe"],
 };
 const emit = (line) => process.stdout.write(`${line}\n`);
+
 const fail = (code) => {
   throw new Error(code);
 };
@@ -194,6 +195,7 @@ const imagePlatform = (image) => {
   if (!/^linux\/(amd64|arm64)$/.test(platform)) fail("E612_HTTP_IMAGE_PLATFORM_UNKNOWN");
   return platform;
 };
+
 let ids;
 let platforms;
 
@@ -547,8 +549,9 @@ function applyMigrations() {
   for (const name of files) {
     try {
       dbExec(readFileSync(`${root}supabase/migrations/${name}`, "utf8"));
-    } catch {
-      fail(`E612_HTTP_MIGRATION_FAILED_${name}`);
+    } catch (err) {
+      process.stderr.write(`Migration failed: ${name}\n${err?.stderr || err?.message || err}\n`);
+      fail(`E612_HTTP_MIGRATION_FAILED_${name.replaceAll(/[^A-Za-z0-9_-]/g, "_")}`);
     }
   }
   emit(`E612|HTTP|MIGRATIONS|${files.length}`);
@@ -868,6 +871,8 @@ try {
   process.stderr.write(`${code}\n`);
   if (code === "E612_HTTP_VERIFICATION_FAILED") {
     process.stderr.write(`E612|HTTP|STAGE_FAILED|${stage}\n`);
+    process.stderr.write(`E612|HTTP|ERROR|${error?.stack || error?.message || error}\n`);
+    if (error?.stderr) process.stderr.write(`E612|HTTP|STDERR|${error.stderr}\n`);
   }
   process.exitCode = 1;
 } finally {

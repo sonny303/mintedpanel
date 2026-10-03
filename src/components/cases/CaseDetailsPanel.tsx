@@ -121,6 +121,18 @@ export function CaseDetailsPanel({
           />
           <Row label="Days open" value={<Num>{daysOpen !== null ? `${daysOpen}d` : "—"}</Num>} />
           <Separator className="my-2" />
+          <Row
+            label="Case type"
+            value={
+              c.caseType === "contract"
+                ? "Contract"
+                : c.caseType === "enrollment"
+                  ? "Enrollment"
+                  : c.caseType === "recredentialing"
+                    ? "Recredentialing (authoring only)"
+                    : "Legacy / unclassified"
+            }
+          />
           <Row label="Coordinator" value={coordinatorName} />
           <Row label="Group" value={c.group?.name ?? "—"} />
           <CaseLocationsSection

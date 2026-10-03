@@ -32,7 +32,13 @@ describe("buildPayerReadiness", () => {
   it("Ready when a payer-specific SOP resolves for every underlying target", () => {
     const templates = [
       fallback,
-      tpl({ id: "t-aetna-nc", payerId: "pay1", state: "NC", groupId: null }),
+      tpl({
+        id: "t-aetna-nc",
+        payerId: "pay1",
+        state: "NC",
+        groupId: null,
+        caseType: "enrollment",
+      }),
     ];
     const rows = buildPayerReadiness({
       targets: [{ payerId: "pay1", groupId: "g1", state: "NC" }],
@@ -61,7 +67,16 @@ describe("buildPayerReadiness", () => {
     // A group-specific SOP (t-g1) covers ONLY its own group under the
     // deterministic precedence — it never leaks onto another group (g2), so the
     // g2 target falls back to the generic fallback and the aggregate is Needs SOP.
-    const templates = [fallback, tpl({ id: "t-g1", payerId: "pay1", state: "NC", groupId: "g1" })];
+    const templates = [
+      fallback,
+      tpl({
+        id: "t-g1",
+        payerId: "pay1",
+        state: "NC",
+        groupId: "g1",
+        caseType: "enrollment",
+      }),
+    ];
     const rows = buildPayerReadiness({
       targets: [
         { payerId: "pay1", groupId: "g1", state: "NC" }, // covered by t-g1
@@ -79,7 +94,16 @@ describe("buildPayerReadiness", () => {
 
   it("an any-group (null groupId) payer SOP covers every group target", () => {
     // Contrast: an any-group SOP legitimately covers both g1 and g2.
-    const templates = [fallback, tpl({ id: "t-any", payerId: "pay1", state: "NC", groupId: null })];
+    const templates = [
+      fallback,
+      tpl({
+        id: "t-any",
+        payerId: "pay1",
+        state: "NC",
+        groupId: null,
+        caseType: "enrollment",
+      }),
+    ];
     const rows = buildPayerReadiness({
       targets: [
         { payerId: "pay1", groupId: "g1", state: "NC" },
@@ -100,6 +124,7 @@ describe("buildPayerReadiness", () => {
         payerId: "pay1",
         state: "NC",
         groupId: null,
+        caseType: "enrollment",
         taskDefinitions: [
           { title: "Submit", executionType: "extension_fill", steps: [{ label: "x" }] },
         ] as never,
@@ -121,6 +146,7 @@ describe("buildPayerReadiness", () => {
         payerId: "pay1",
         state: "NC",
         groupId: null,
+        caseType: "enrollment",
         taskDefinitions: [
           {
             title: "Submit",
@@ -146,6 +172,7 @@ describe("buildPayerReadiness", () => {
         payerId: "pay1",
         state: "NC",
         groupId: null,
+        caseType: "enrollment",
         taskDefinitions: [
           {
             title: "Fax packet",
@@ -164,7 +191,10 @@ describe("buildPayerReadiness", () => {
   });
 
   it("summarizes ready vs needs-sop", () => {
-    const templates = [fallback, tpl({ id: "t1", payerId: "pay1", state: "NC" })];
+    const templates = [
+      fallback,
+      tpl({ id: "t1", payerId: "pay1", state: "NC", caseType: "enrollment" }),
+    ];
     const rows = buildPayerReadiness({
       targets: [
         { payerId: "pay1", groupId: "g1", state: "NC" },

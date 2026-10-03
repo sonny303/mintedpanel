@@ -301,6 +301,7 @@ function canonicalJson(value: unknown): string {
 export interface ProveSharedPortalInput {
   portalKey?: string | null;
   id?: string | null;
+  expectedMappingGeneration?: number | null;
 }
 
 export async function proveSharedPortal(
@@ -339,9 +340,24 @@ export async function proveSharedPortal(
     p_id: portalId,
     p_verified: null as unknown as boolean,
     p_proven: true,
+    p_expected_mapping_generation: (input.expectedMappingGeneration ?? null) as unknown as number,
   });
   if (error) {
     const msg = error.message ?? "";
+    if (msg.includes("mapping_generation_token_required")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "This form configuration requires expected_mapping_generation.",
+      };
+    }
+    if (msg.includes("mapping_generation_stale")) {
+      return {
+        kind: "rejected",
+        status: 409,
+        message: "The form mapping changed. Reload the configuration before marking it proven.",
+      };
+    }
     if (/not found|no rows/i.test(msg)) {
       return { kind: "rejected", status: 404, message: "Shared portal not found" };
     }

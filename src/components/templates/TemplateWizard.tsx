@@ -107,6 +107,8 @@ import {
   type TemplateEditorIntent,
 } from "@/lib/templateEditorIntent";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
+import { isPortalHiddenFromPickers } from "@/lib/portalRetirement";
 import { errorMessage } from "@/lib/dbErrors";
 import { SopVersionConflictError } from "@/services/templates";
 import { lintSopForPublish } from "@/lib/sopPublishLint";
@@ -182,6 +184,19 @@ const STEPS = [
   { n: 3, label: "Review" },
 ] as const;
 
+function caseTypeLabel(type: CaseType | null | undefined): string {
+  switch (type) {
+    case "contract":
+      return "Contract";
+    case "enrollment":
+      return "Enrollment";
+    case "recredentialing":
+      return "Recredentialing (authoring only)";
+    default:
+      return "Legacy / unclassified";
+  }
+}
+
 interface WizardPrefill {
   payerId?: string;
   state?: string;
@@ -191,6 +206,7 @@ interface WizardPrefill {
 /** The serialized draft payload shape (E4.2 F4.2.1 save-as-draft). */
 interface DraftPayload {
   name: string;
+  caseType?: CaseType | null;
   payerId: string;
   /** Multi-state. A draft saved before the migration carries `state` instead —
    *  `draftStates()` reads either. */
@@ -286,6 +302,13 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   // work it points at lives.
   const [step, setStep] = useState(intent ? 2 : 1);
   const [name, setName] = useState(draftPayload?.name ?? initial?.name ?? "");
+  const initialCaseType =
+    (initial as (SOPTemplate & { caseType?: CaseType | null }) | null)?.caseType ?? null;
+  const [caseType, setCaseType] = useState<CaseType | null>(
+    draftPayload && Object.hasOwn(draftPayload, "caseType")
+      ? (draftPayload.caseType ?? null)
+      : initialCaseType,
+  );
   const [payerId, setPayerId] = useState<string>(
     draftPayload?.payerId ?? initial?.payerId ?? prefill?.payerId ?? "none",
   );
@@ -594,6 +617,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const payload = useMemo(
     () => ({
       name: name.trim(),
+      caseType,
       payerId: payerId === "none" ? null : payerId,
       states: states.length === 0 ? null : states,
       specialty: specialty.trim() || null,
@@ -602,7 +626,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       requiredProfileAttributes: requiredAttrs,
       archived: isArchived,
     }),
-    [name, payerId, states, specialty, groupId, previewTasks, requiredAttrs, isArchived],
+    [name, caseType, payerId, states, specialty, groupId, previewTasks, requiredAttrs, isArchived],
   );
 
   // The DERIVED tier line (screen 4): a pure read of the match key. Group only
@@ -728,8 +752,10 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       const saved = await saveDraftMut.mutateAsync({
         id: draftId ?? undefined,
         templateId: initial?.id ?? null,
+        caseType,
         payload: {
           name,
+          caseType,
           payerId,
           states,
           specialty,
@@ -773,8 +799,9 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       !isEdit ||
       !initial ||
       name.trim() !== initial.name ||
+      caseType !== initialCaseType ||
       JSON.stringify(previewTasks) !== initialNormalizedDefs,
-    [isEdit, initial, name, previewTasks, initialNormalizedDefs],
+    [isEdit, initial, name, caseType, initialCaseType, previewTasks, initialNormalizedDefs],
   );
   const matchKeyChanged =
     isEdit && initial
@@ -820,6 +847,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       await authorGlobalMut.mutateAsync({
         id: initial.id,
         name: payload.name,
+        caseType: payload.caseType,
         payerId: payload.payerId,
         states: payload.states,
         groupId: payload.groupId,
@@ -827,7 +855,13 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       });
       return;
     }
-    const { name: _name, taskDefinitions: _defs, archived: _archived, ...matchKey } = payload;
+    const {
+      name: _name,
+      taskDefinitions: _defs,
+      archived: _archived,
+      caseType: _caseType,
+      ...matchKey
+    } = payload;
     await updateMut.mutateAsync(matchKey);
   }
 
@@ -837,16 +871,23 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       setStep(1);
       return;
     }
+    if (!caseType) {
+      toast.error("Choose a case type before publishing this template");
+      setStep(1);
+      return;
+    }
     if (createBlockingErrors.length > 0) {
       toast.error(createBlockingErrors[0].message);
       setStep(2);
       return;
     }
+    if (portalConfigurationBlocked()) return;
     setSaving(true);
     try {
       // Create is ALWAYS the global tier — the editor never creates org rows.
       const created = await authorGlobalMut.mutateAsync({
         name: payload.name,
+        caseType: payload.caseType,
         payerId: payload.payerId,
         states: payload.states,
         groupId: payload.groupId,
@@ -888,10 +929,20 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       setStep(1);
       return;
     }
+    if (!caseType) {
+      toast.error("Choose a case type before publishing this template");
+      setPublishOpen(false);
+      setStep(1);
+      return;
+    }
     if (contentChanged && !lint.ok) {
       toast.error(lint.errors[0].message);
       setPublishOpen(false);
       setStep(2);
+      return;
+    }
+    if (portalConfigurationBlocked()) {
+      setPublishOpen(false);
       return;
     }
     setSaving(true);
@@ -904,6 +955,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           taskDefinitions: previewTasks,
           changeNote: note.trim() || null,
           requiredProfileAttributes: requiredAttrs,
+          caseType,
         });
         toast.success(`Published version ${result.version}`);
       } else {
@@ -940,6 +992,59 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     return true;
   }
 
+  function portalConfigurationBlocked(): boolean {
+    if (!caseType) return false;
+    if (portalsQ.isLoading) {
+      toast.error("Wait for form configurations to load before publishing");
+      setStep(2);
+      return true;
+    }
+    if (portalsQ.isError) {
+      toast.error("Form configurations could not be loaded. Retry before publishing this SOP.");
+      setStep(2);
+      return true;
+    }
+
+    for (const [taskIndex, task] of tasks.entries()) {
+      for (const [stepIndex, step] of task.steps.entries()) {
+        if ((step.stepType ?? "online_form") !== "online_form") continue;
+        const portalKey = step.portalKey?.trim() ?? "";
+        if (!portalKey) {
+          toast.error(
+            `Action ${taskIndex + 1}, step ${stepIndex + 1} needs a form configuration or a different mode.`,
+          );
+          setStep(2);
+          return true;
+        }
+        const availablePortals = portals.filter((portal) => !isPortalHiddenFromPickers(portal));
+        const matches = availablePortals.filter(
+          (portal) =>
+            portal.portalKey === portalKey &&
+            portal.payerId === payload.payerId &&
+            portal.caseType === caseType,
+        );
+        const sameKeyCount = availablePortals.filter(
+          (portal) => portal.portalKey === portalKey,
+        ).length;
+        if (matches.length === 0) {
+          toast.error(
+            `Form key “${portalKey}” has no configuration for this payer and case type. Choose a matching form configuration.`,
+          );
+          setStep(2);
+          return true;
+        }
+        if (sameKeyCount > 1) {
+          toast.error(
+            `Form key “${portalKey}” resolves to more than one visible configuration. Use a unique key before publishing.`,
+          );
+          setStep(2);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // E4.2 SOP hardening — new templates and routing-key changes must target a
   // payer AND a state (the author_global_sop RPC enforces it server-side too;
   // a payerless global row would collide with the default template's grain).
@@ -964,6 +1069,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   function handleSaveClick() {
     if (matchKeyIncompleteBlocked()) return;
     if (portalConflictBlocked()) return;
+    if (portalConfigurationBlocked()) return;
     if (!isEdit) {
       void handleCreate();
       return;
@@ -984,9 +1090,15 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
 
   async function handleDuplicate() {
     if (!initial) return;
+    if (!caseType) {
+      toast.error("Choose a case type before duplicating this template");
+      setStep(1);
+      return;
+    }
     // The copy carries the current in-memory tasks, so the same one-portal-per-
     // task invariant must hold before it is persisted.
     if (portalConflictBlocked()) return;
+    if (portalConfigurationBlocked()) return;
     try {
       // E4.2 — the copy shares the source's payer/state/group, which would
       // collide with it under the active uniqueness rule. Create it ARCHIVED
@@ -996,6 +1108,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         ? await authorGlobalMut.mutateAsync({
             name: `${name} (copy)`,
             payerId: payload.payerId,
+            caseType: payload.caseType,
             states: payload.states,
             groupId: payload.groupId,
             taskDefinitions: payload.taskDefinitions,
@@ -1026,6 +1139,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         await authorGlobalMut.mutateAsync({
           id: initial.id,
           name: payload.name,
+          caseType: payload.caseType,
           payerId: payload.payerId,
           states: payload.states,
           groupId: payload.groupId,
@@ -1219,6 +1333,42 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                 disabled={!canEdit}
               />
             </div>
+            <div className="col-span-2 space-y-1.5">
+              <Label htmlFor="sop-case-type">Case type</Label>
+              <Select
+                value={caseType ?? "__unset__"}
+                onValueChange={(value) => {
+                  setCaseType(value === "__unset__" ? null : (value as CaseType));
+                  markDirty();
+                }}
+                disabled={!canEdit}
+              >
+                <SelectTrigger id="sop-case-type">
+                  <SelectValue placeholder="Choose a case type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unset__">Choose a case type</SelectItem>
+                  {CASE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type === "contract"
+                        ? "Contract"
+                        : type === "enrollment"
+                          ? "Enrollment"
+                          : "Recredentialing — authoring only"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {caseType === "recredentialing"
+                  ? "Recredentialing SOPs can be authored and published, but case execution is not supported in v1."
+                  : caseType === "contract"
+                    ? "Contract work stays in the Group Contracts Matrix; it does not create a provider case."
+                    : caseType === "enrollment"
+                      ? "Enrollment SOPs apply when adding a provider to an existing group contract."
+                      : "Choose the business purpose this SOP describes. New published versions require a case type."}
+              </p>
+            </div>
             {isFallback ? (
               <div className="col-span-2">
                 <Label>Applies to</Label>
@@ -1400,6 +1550,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                 groupedTokens={groupedTokens}
                 portals={portals}
                 templatePayerId={payerId === "none" ? null : payerId}
+                templateCaseType={caseType}
                 templateId={initial?.id ?? null}
                 templatePayerName={payerName}
                 templateStates={states}
@@ -1442,6 +1593,8 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
             <dd>{isFallback ? "Every payer, state, and group" : tierLabel}</dd>
             <dt className="text-muted-foreground">Name</dt>
             <dd className="font-medium">{name.trim() || "—"}</dd>
+            <dt className="text-muted-foreground">Case type</dt>
+            <dd>{caseType ? caseTypeLabel(caseType) : "— (required)"}</dd>
             {!isFallback ? (
               <>
                 <dt className="text-muted-foreground">Payer</dt>

@@ -100,6 +100,7 @@ if (missing.length) {
 
 const API_BASE = env.API_BASE.replace(/\/+$/, "");
 const BYPASS = env.VERCEL_BYPASS_SECRET || "";
+const IS_LOCAL_MOCK_API = env.SUPABASE_ANON_KEY === "mock-anon-key";
 
 async function signIn(email, password) {
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -166,7 +167,7 @@ async function apiPost(path, payload, { token, orgId, extraHeaders = {} } = {}) 
   } catch {
     /* non-JSON → body stays null; raw holds the page */
   }
-  return { status: res.status, body, raw };
+  return { status: res.status, body, raw, cacheControl: res.headers.get("cache-control") };
 }
 
 // One PATCH against the deploy. Same header handling as apiPost.
@@ -506,6 +507,63 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // MINT-58 extends this endpoint with an exact Work v2 tuple. The local
+  // contract mock proves both tuple organization and owner are checked before
+  // the fill idempotency lookup. These requests carry no PHI or valid fill
+  // receipt and are only sent to the in-process mock.
+  if (IS_LOCAL_MOCK_API) {
+    const typedCaseContext = (orgId, ownerId) => ({
+      launchReceiptId: crypto.randomUUID(),
+      orgId,
+      ownerKind: "case",
+      ownerId,
+      contextVersion: 1,
+      sopTemplateId: env.KANSAS_WORK_TEMPLATE_ID,
+      sopVersion: 3,
+      portalId: env.KANSAS_WORK_PORTAL_ID,
+      portalKey: env.KANSAS_WORK_PORTAL_KEY,
+      mappingGeneration: 2,
+      effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+      providerId: env.SOUTHPARK_PROVIDER_ID,
+      facilityId: null,
+      stepIdentity: `${ownerId}:${env.SOUTHPARK_TASK_ID}:${env.KANSAS_WORK_TEMPLATE_ID}:3:${env.KANSAS_WORK_STEP_ID}`,
+      taskId: env.SOUTHPARK_TASK_ID,
+      stepId: env.KANSAS_WORK_STEP_ID,
+    });
+    const typedWrongOrgFill = await apiPost(
+      "/api/fill-events",
+      {
+        id: crypto.randomUUID(),
+        workContext: typedCaseContext(env.SOUTHPARK_ORG, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "7c. Typed Work fill with a foreign org selector is rejected before idempotency",
+      typedWrongOrgFill.status === 404 && typedWrongOrgFill.body?.data == null,
+      `status=${typedWrongOrgFill.status} dataPresent=${typedWrongOrgFill.body?.data != null}`,
+      { leak: true },
+    );
+    const kansasOrgForWork =
+      env.KANSAS_ORG ?? (await apiGet("/api/me/orgs", { token: kansasTok })).body?.data?.[0]?.orgId;
+    const typedWrongOwnerFill = await apiPost(
+      "/api/fill-events",
+      {
+        id: crypto.randomUUID(),
+        workContext: typedCaseContext(kansasOrgForWork, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "7d. Typed Work fill with an own-org selector and foreign owner is rejected",
+      Boolean(kansasOrgForWork) &&
+        typedWrongOwnerFill.status === 404 &&
+        typedWrongOwnerFill.body?.data == null,
+      `status=${typedWrongOwnerFill.status} orgResolved=${Boolean(kansasOrgForWork)} dataPresent=${typedWrongOwnerFill.body?.data != null}`,
+      { leak: true },
+    );
+  }
+
   // 8. Cases dropdown endpoint: Kansas listing its own provider's open cases
   //    works (proves 8b isn't vacuous against a dead route)...
   const ownCases = await apiGet(`/api/cases?providerId=${env.KANSAS_PROVIDER_ID}`, {
@@ -585,6 +643,65 @@ function looksLikeVercelGate(r) {
     `status=${touchReplay.status} dataPresent=${touchReplay.body?.data != null}`,
     { leak: true },
   );
+
+  if (IS_LOCAL_MOCK_API) {
+    const kansasOrgForWork =
+      env.KANSAS_ORG ?? (await apiGet("/api/me/orgs", { token: kansasTok })).body?.data?.[0]?.orgId;
+    const typedTouchContext = (orgId, ownerId) => ({
+      launchReceiptId: crypto.randomUUID(),
+      orgId,
+      ownerKind: "case",
+      ownerId,
+      contextVersion: 1,
+      sopTemplateId: env.KANSAS_WORK_TEMPLATE_ID,
+      sopVersion: 3,
+      portalId: env.KANSAS_WORK_PORTAL_ID,
+      portalKey: env.KANSAS_WORK_PORTAL_KEY,
+      mappingGeneration: 2,
+      effectiveMappingFingerprint: `sha256:${"a".repeat(64)}`,
+      providerId: env.SOUTHPARK_PROVIDER_ID,
+      facilityId: null,
+      stepIdentity: `${ownerId}:${env.SOUTHPARK_TASK_ID}:${env.KANSAS_WORK_TEMPLATE_ID}:3:${env.KANSAS_WORK_STEP_ID}`,
+      taskId: env.SOUTHPARK_TASK_ID,
+      stepId: env.KANSAS_WORK_STEP_ID,
+    });
+    const typedTouchWrongOrg = await apiPost(
+      `/api/cases/${env.KANSAS_CASE_ID}/touches`,
+      {
+        kind: "portal_submission",
+        portal_key: env.KANSAS_WORK_PORTAL_KEY,
+        fill_session_id: crypto.randomUUID(),
+        idempotency_id: crypto.randomUUID(),
+        work_context: typedTouchContext(env.SOUTHPARK_ORG, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "9c. Typed submission with a foreign org selector is rejected before idempotency",
+      typedTouchWrongOrg.status === 404 && typedTouchWrongOrg.body?.data == null,
+      `status=${typedTouchWrongOrg.status} dataPresent=${typedTouchWrongOrg.body?.data != null}`,
+      { leak: true },
+    );
+    const typedTouchWrongOwner = await apiPost(
+      `/api/cases/${env.KANSAS_CASE_ID}/touches`,
+      {
+        kind: "portal_submission",
+        portal_key: env.KANSAS_WORK_PORTAL_KEY,
+        fill_session_id: crypto.randomUUID(),
+        idempotency_id: crypto.randomUUID(),
+        work_context: typedTouchContext(kansasOrgForWork, env.SOUTHPARK_CASE_ID),
+      },
+      { token: kansasTok },
+    );
+    check(
+      "9d. Typed submission with an own-org selector and foreign owner is rejected",
+      Boolean(kansasOrgForWork) &&
+        typedTouchWrongOwner.status === 404 &&
+        typedTouchWrongOwner.body?.data == null,
+      `status=${typedTouchWrongOwner.status} orgResolved=${Boolean(kansasOrgForWork)} dataPresent=${typedTouchWrongOwner.body?.data != null}`,
+      { leak: true },
+    );
+  }
 
   // 10. Org discovery (GET /api/me/orgs): the caller's OWN memberships only,
   //     derived from the JWT user id — no org header involved. testkansas is
@@ -904,6 +1021,202 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 14c/14d — Contract owner context is an independent org-scoped read. The
+  // direct form-context route returns exact SOP/step identifiers only; the
+  // provider profile accepts the same owner binding but must not let a Kansas
+  // provider name a South Park Contract. Optional for hosted runs until the
+  // operator seeds and pins both Contract fixtures; always set by the mock.
+  if (env.KANSAS_CONTRACT_ID && env.SOUTHPARK_CONTRACT_ID) {
+    const ownContractContext = await apiGet(
+      `/api/contracts/${env.KANSAS_CONTRACT_ID}/form-context`,
+      { token: kansasTok },
+    );
+    check(
+      "14c. Kansas reads its own assigned Contract SOP context",
+      ownContractContext.status === 200 &&
+        ownContractContext.cacheControl?.includes("no-store") &&
+        ownContractContext.body?.data?.contract?.id === env.KANSAS_CONTRACT_ID &&
+        ownContractContext.body?.data?.sop?.caseType === "contract" &&
+        ownContractContext.body?.data?.steps?.length === 1 &&
+        typeof ownContractContext.body.data.steps[0]?.stepIdentity === "string",
+      `status=${ownContractContext.status} contractId=${ownContractContext.body?.data?.contract?.id ?? "missing"}`,
+    );
+
+    const foreignContractContext = await apiGet(
+      `/api/contracts/${env.SOUTHPARK_CONTRACT_ID}/form-context`,
+      { token: kansasTok },
+    );
+    check(
+      "14d. Kansas cannot read a South Park Contract SOP context",
+      foreignContractContext.status === 404 && foreignContractContext.body?.data == null,
+      `status=${foreignContractContext.status} dataPresent=${foreignContractContext.body?.data != null}`,
+      { leak: true },
+    );
+
+    const ownContractProfile = await apiGet(
+      `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?contract_id=${encodeURIComponent(env.KANSAS_CONTRACT_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "6c. Kansas Contract profile echoes only its own Contract owner binding",
+      ownContractProfile.status === 200 &&
+        ownContractProfile.body?.data?.contract_context?.contract_id === env.KANSAS_CONTRACT_ID,
+      `status=${ownContractProfile.status} contractId=${ownContractProfile.body?.data?.contract_context?.contract_id ?? "missing"}`,
+    );
+
+    const foreignContractProfile = await apiGet(
+      `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?contract_id=${encodeURIComponent(env.SOUTHPARK_CONTRACT_ID)}`,
+      { token: kansasTok },
+    );
+    check(
+      "6d. Kansas profile cannot pair an own provider with a South Park Contract",
+      foreignContractProfile.status === 404 && foreignContractProfile.body?.data == null,
+      `status=${foreignContractProfile.status} dataPresent=${foreignContractProfile.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  14c/14d/6c/6d. Contract context — Contract fixture IDs not set");
+  }
+
+  // MINT-56 exact Work validation contract. The positive case and Contract
+  // fixtures are synthetic and run only against the local mock.
+  const workCaseRequest = {
+    protocolVersion: 2,
+    launchReceiptId: "b7a90000-0000-4000-a000-0000000000e2",
+    orgId: env.KANSAS_ORG,
+    ownerKind: "case",
+    ownerId: env.KANSAS_CASE_ID,
+    contextVersion: 4,
+    sopTemplateId: env.KANSAS_WORK_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000d3",
+    sopVersion: 3,
+    portalId: env.KANSAS_WORK_PORTAL_ID ?? "b7a90000-0000-4000-a000-0000000000d4",
+    portalKey: env.KANSAS_WORK_PORTAL_KEY ?? "bcbs_ks_enrollment_explicit",
+    mappingGeneration: 2,
+    effectiveMappingFingerprint: env.KANSAS_WORK_FINGERPRINT ?? "sha256:kansas-explicit-v1",
+    providerId: env.KANSAS_PROVIDER_ID,
+    facilityId: env.KANSAS_FACILITY_ID ?? "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
+    stepIdentity: [
+      env.KANSAS_CASE_ID,
+      env.KANSAS_WORK_TASK_ID ?? "b7a90000-0000-4000-a000-0000000000d1",
+      env.KANSAS_WORK_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000d3",
+      3,
+      env.KANSAS_WORK_STEP_ID ?? "b7a90000-0000-4000-a000-0000000000d2",
+    ].join(":"),
+    taskId: env.KANSAS_WORK_TASK_ID ?? "b7a90000-0000-4000-a000-0000000000d1",
+    stepId: env.KANSAS_WORK_STEP_ID ?? "b7a90000-0000-4000-a000-0000000000d2",
+  };
+  const workContractRequest = {
+    protocolVersion: 2,
+    launchReceiptId: "b7a90000-0000-4000-a000-0000000000e3",
+    orgId: env.KANSAS_ORG,
+    ownerKind: "contract",
+    ownerId: env.KANSAS_CONTRACT_ID,
+    contextVersion: 2,
+    sopTemplateId: env.KANSAS_CONTRACT_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000c4",
+    sopVersion: 3,
+    portalId: env.KANSAS_CONTRACT_PORTAL_ID ?? "b7a90000-0000-4000-a000-0000000000d7",
+    portalKey: env.KANSAS_CONTRACT_PORTAL_KEY ?? "kansas_contract_application",
+    mappingGeneration: 1,
+    effectiveMappingFingerprint: env.KANSAS_CONTRACT_FINGERPRINT ?? "sha256:kansas-contract-v1",
+    providerId: env.KANSAS_PROVIDER_ID,
+    facilityId: null,
+    stepIdentity: [
+      env.KANSAS_CONTRACT_ID,
+      env.KANSAS_ORG,
+      env.KANSAS_CONTRACT_ASSIGNMENT_ID ?? "b7a90000-0000-4000-a000-0000000000c3",
+      2,
+      env.KANSAS_CONTRACT_TEMPLATE_ID ?? "b7a90000-0000-4000-a000-0000000000c4",
+      3,
+      0,
+      0,
+    ].join(":"),
+    assignmentId: env.KANSAS_CONTRACT_ASSIGNMENT_ID ?? "b7a90000-0000-4000-a000-0000000000c3",
+    taskIndex: 0,
+    stepIndex: 0,
+  };
+  if (IS_LOCAL_MOCK_API) {
+    const exactCase = await apiPost("/api/work-context/validate", workCaseRequest, {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+    });
+    const expectedCaseTuple = { ...workCaseRequest };
+    delete expectedCaseTuple.protocolVersion;
+    const caseTuple = exactCase.body?.data?.tuple;
+    const caseTupleMatches =
+      caseTuple &&
+      Object.keys(expectedCaseTuple).length === Object.keys(caseTuple).length &&
+      Object.entries(expectedCaseTuple).every(([key, value]) => caseTuple[key] === value);
+    check(
+      "14e. Exact case Work validation returns the canonical tuple and safe config",
+      exactCase.status === 200 &&
+        exactCase.cacheControl?.includes("no-store") &&
+        caseTupleMatches &&
+        exactCase.body?.data?.caseType === "enrollment" &&
+        exactCase.body?.data?.formUrl === "https://example.test/bcbs/enroll" &&
+        exactCase.body?.data?.requiresExplicitSelection === true &&
+        exactCase.body?.data?.effectiveWebMaps?.length > 0,
+      `status=${exactCase.status} tupleMatches=${Boolean(caseTupleMatches)} noStore=${exactCase.cacheControl?.includes("no-store")}`,
+    );
+
+    const exactContract = await apiPost("/api/work-context/validate", workContractRequest, {
+      token: kansasTok,
+      orgId: env.KANSAS_ORG,
+    });
+    const expectedContractTuple = { ...workContractRequest };
+    delete expectedContractTuple.protocolVersion;
+    const contractTuple = exactContract.body?.data?.tuple;
+    const contractTupleMatches =
+      contractTuple &&
+      Object.keys(expectedContractTuple).length === Object.keys(contractTuple).length &&
+      Object.entries(expectedContractTuple).every(([key, value]) => contractTuple[key] === value);
+    check(
+      "14f. Exact Contract Work validation returns the canonical tuple and safe config",
+      exactContract.status === 200 &&
+        exactContract.cacheControl?.includes("no-store") &&
+        contractTupleMatches &&
+        exactContract.body?.data?.caseType === "contract" &&
+        exactContract.body?.data?.formUrl === "https://example.test/bcbs/enroll" &&
+        exactContract.body?.data?.requiresExplicitSelection === true &&
+        exactContract.body?.data?.effectiveWebMaps?.length > 0,
+      `status=${exactContract.status} tupleMatches=${Boolean(contractTupleMatches)} noStore=${exactContract.cacheControl?.includes("no-store")}`,
+    );
+  }
+
+  if (IS_LOCAL_MOCK_API) {
+    const foreignWorkOwner = await apiPost(
+      "/api/work-context/validate",
+      {
+        ...workCaseRequest,
+        ownerId: env.SOUTHPARK_CASE_ID,
+        providerId: env.SOUTHPARK_PROVIDER_ID,
+        facilityId: env.SOUTHPARK_FACILITY_ID,
+        stepIdentity: "foreign-owner-probe",
+      },
+      { token: kansasTok, orgId: env.KANSAS_ORG },
+    );
+    check(
+      "14g. Kansas cannot validate a South Park Work owner",
+      foreignWorkOwner.status === 404 &&
+        foreignWorkOwner.body?.data == null &&
+        foreignWorkOwner.cacheControl?.includes("no-store"),
+      `status=${foreignWorkOwner.status} dataPresent=${foreignWorkOwner.body?.data != null} noStore=${foreignWorkOwner.cacheControl?.includes("no-store")}`,
+      { leak: true },
+    );
+
+    const workUrlSpoof = await apiPost(
+      "/api/work-context/validate",
+      { ...workCaseRequest, portalUrl: "https://example.test/bcbs/enroll" },
+      { token: kansasTok, orgId: env.KANSAS_ORG },
+    );
+    check(
+      "14h. Work validator rejects a caller-supplied portal URL",
+      workUrlSpoof.status === 422 &&
+        workUrlSpoof.body?.data == null &&
+        workUrlSpoof.cacheControl?.includes("no-store"),
+      `status=${workUrlSpoof.status} dataPresent=${workUrlSpoof.body?.data != null} noStore=${workUrlSpoof.cacheControl?.includes("no-store")}`,
+    );
+  }
+
   // 15. Case search (E4.3 TE-11): the extension's standalone case half. Kansas
   //     searching its own cases works (proves 15b isn't vacuous against a dead
   //     route)...
@@ -1019,6 +1332,37 @@ function looksLikeVercelGate(r) {
   } else {
     console.log(
       "SKIP  18b. cross-org portal isolation — South Park holds no org-scoped portal fixture",
+    );
+  }
+
+  // The local contract harness includes a flagged same-URL sibling so this
+  // non-hosted check proves the legacy URL registry preserves the historical
+  // entry while withholding configurations that require explicit selection.
+  if (IS_LOCAL_MOCK_API) {
+    const legacySameUrl = portalRows.find((row) => row.portalKey === "bcbs_ks_enrollment");
+    const sameUrlRows = legacySameUrl
+      ? portalRows.filter((row) => row.formUrl === legacySameUrl.formUrl)
+      : [];
+    check(
+      "18c. Legacy URL registry keeps the historical row and omits its explicit-selection sibling",
+      legacySameUrl?.requiresExplicitSelection === false &&
+        sameUrlRows.length === 1 &&
+        sameUrlRows[0]?.portalKey === "bcbs_ks_enrollment",
+      `legacyVisible=${legacySameUrl != null} sameUrlRows=${sameUrlRows.length}`,
+    );
+
+    const explicitLookup = await apiGet("/api/portals?portal_key=bcbs_ks_enrollment_explicit", {
+      token: kansasTok,
+    });
+    check(
+      "18d. Exact-key legacy lookup cannot expose an explicit-selection configuration",
+      explicitLookup.status === 200 &&
+        Array.isArray(explicitLookup.body?.data) &&
+        explicitLookup.body.data.length === 0 &&
+        explicitLookup.body?.meta?.total === 0 &&
+        explicitLookup.body?.meta?.registry_empty === true,
+      `status=${explicitLookup.status} rows=${explicitLookup.body?.data?.length ?? "?"} ` +
+        `registryEmpty=${String(explicitLookup.body?.meta?.registry_empty)}`,
     );
   }
 

@@ -1,11 +1,8 @@
-// S4.3 — the pure rules for ticking one SOP step complete, shared by the
-// browser path (services/tasks.ts completeSOPStep, the webapp task drawer) and
-// the server path (PATCH /api/tasks/:id/steps, the extension's Progress tab).
-//
-// Extracted rather than reimplemented: the step order rule ("finish the step
-// before this one first") and the all-done -> task completed rollup are
-// product behaviour, and two copies would drift the moment one side changed.
-// Pure — the caller supplies the actor and the clock.
+// S4.3 — the pure reference rules for completing one SOP step. MINT-19 moved
+// persisted Panel and extension completions into one SQL transaction; this
+// helper remains a small executable description of the ordering and rollup
+// contract for focused rule tests. It no longer writes task state.
+// Pure — callers supply the actor and clock for the reference plan.
 import type { SOPStep } from "@/types";
 
 export type StepCompletionPlan =

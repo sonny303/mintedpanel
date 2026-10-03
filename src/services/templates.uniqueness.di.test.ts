@@ -97,6 +97,7 @@ describe("createTemplate — active-org multiple templates allowed", () => {
       payer_id: "pay1",
       states: ["NC"],
       group_id: "g1",
+      case_type: "recredentialing",
       archived: false,
       task_definitions: [],
     };
@@ -104,6 +105,7 @@ describe("createTemplate — active-org multiple templates allowed", () => {
 
     const result = await createTemplate({
       name: "Aetna NC (Recred)",
+      caseType: "recredentialing",
       payerId: "pay1",
       states: ["NC"],
       groupId: "g1",
@@ -121,9 +123,9 @@ describe("createTemplate — active-org multiple templates allowed", () => {
     // blocked before any DB call (no insert, no audit).
     const captures = installDb([]);
 
-    await expect(createTemplate({ name: "Untitled", taskDefinitions: [] })).rejects.toThrow(
-      /payer/i,
-    );
+    await expect(
+      createTemplate({ name: "Untitled", caseType: "enrollment", taskDefinitions: [] }),
+    ).rejects.toThrow(/payer/i);
 
     expect(captures).toHaveLength(0);
     expect(writeAuditMock).not.toHaveBeenCalled();
@@ -139,12 +141,18 @@ describe("createTemplate — active-org multiple templates allowed", () => {
       payer_id: null,
       state: null,
       group_id: null,
+      case_type: "enrollment",
       archived: true,
       task_definitions: [],
     };
     const captures = installDb([{ data: created }]);
 
-    const result = await createTemplate({ name: "Copy", archived: true, taskDefinitions: [] });
+    const result = await createTemplate({
+      name: "Copy",
+      caseType: "enrollment",
+      archived: true,
+      taskDefinitions: [],
+    });
 
     expect(result.id).toBe("arch");
     expect(captures).toHaveLength(1);
