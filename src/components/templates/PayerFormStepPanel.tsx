@@ -29,6 +29,8 @@ import {
   useUploadPayerForm,
   usePayerFormDownload,
 } from "@/hooks/usePayerForms";
+import { useImportPdfFormFields } from "@/hooks/useMappingReview";
+import { withLegacyPdfMappingGeneration } from "@/lib/pdfFieldImport";
 import { payerFormFileError, payerFormLabelError } from "@/lib/payerForms";
 import { PayerFormFieldPanel } from "./PayerFormFieldPanel";
 import { fmtDate } from "@/lib/format";
@@ -56,6 +58,7 @@ export function PayerFormStepPanel({
 }: PayerFormStepPanelProps) {
   const formsQ = useTemplatePayerForms(templateId ?? undefined);
   const upload = useUploadPayerForm();
+  const importFields = useImportPdfFormFields();
   const retire = useRetirePayerForm();
   const download = usePayerFormDownload();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -78,22 +81,44 @@ export function PayerFormStepPanel({
       toast.error(fileError);
       return;
     }
+    let form: PayerForm;
     try {
-      const form = await upload.mutateAsync({
+      form = await upload.mutateAsync({
         templateId,
         label: name,
         file: pending,
         familyId: replacing?.familyId ?? null,
       });
-      // Point the action at the family, not the row: a later replace then
-      // reaches new cases without the template being republished.
-      onFamilyChange(form.familyId);
-      setPending(null);
-      setLabel("");
-      if (fileRef.current) fileRef.current.value = "";
-      toast.success(replacing ? `Replaced “${form.label}”` : `Added “${form.label}”`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not upload that form.");
+      return;
+    }
+    // The file is attached even when field extraction later fails.
+    onFamilyChange(form.familyId);
+    setPending(null);
+    setLabel("");
+    if (fileRef.current) fileRef.current.value = "";
+    try {
+      const result = await importFields.mutateAsync(
+        withLegacyPdfMappingGeneration({ familyId: form.familyId, file: pending }),
+      );
+      if (result.failed > 0) {
+        toast.error(
+          `Form uploaded. Imported ${result.imported} of ${result.rows.length} fillable fields; retry the remaining ${result.failed} from Field mapping.`,
+        );
+      } else if (result.totalFields === 0) {
+        toast.error("Form uploaded, but this PDF has no interactive fields to map.");
+      } else if (result.imported === 0) {
+        toast.error("Form uploaded, but its PDF controls are only buttons or signatures.");
+      } else {
+        toast.success(
+          `${replacing ? "Replaced" : "Added"} “${form.label}” · imported ${result.imported} fields${result.unclearLabels > 0 ? ` · review ${result.unclearLabels} unclear labels` : ""}`,
+        );
+      }
+    } catch (e) {
+      toast.error(
+        `Form uploaded, but field import failed. Retry from Field mapping. ${e instanceof Error ? e.message : ""}`,
+      );
     }
   }
 
@@ -195,7 +220,7 @@ export function PayerFormStepPanel({
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="PT Credentialing Supplement"
-                disabled={upload.isPending}
+                disabled={upload.isPending || importFields.isPending}
               />
             </div>
           )}
@@ -205,16 +230,16 @@ export function PayerFormStepPanel({
               type="file"
               accept="application/pdf"
               className="h-9 max-w-[260px] text-[12px]"
-              disabled={upload.isPending}
+              disabled={upload.isPending || importFields.isPending}
               onChange={(e) => setPending(e.target.files?.[0] ?? null)}
             />
             <Button
               size="sm"
               className="h-9"
-              disabled={!pending || upload.isPending}
+              disabled={!pending || upload.isPending || importFields.isPending}
               onClick={() => runUpload(attached)}
             >
-              {upload.isPending ? (
+              {upload.isPending || importFields.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="mr-2 h-4 w-4" />

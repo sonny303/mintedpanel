@@ -114,6 +114,7 @@ export const DEFAULT_SECTION = "Fields";
 
 export interface RegistryRow extends ClassifiableFieldMap {
   id: string;
+  mapType?: PortalFieldMap["mapType"];
   displayLabel?: string | null;
   fieldLabel?: string | null;
   section?: string | null;

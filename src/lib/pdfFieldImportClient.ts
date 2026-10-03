@@ -54,6 +54,7 @@ export async function readPdfAcroFields(bytes: ArrayBuffer): Promise<PdfAcroFiel
   };
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const form = doc.getForm();
+  const pageByRef = new Map(doc.getPages().map((page, index) => [page.ref.toString(), index + 1]));
   const descriptors: PdfAcroFieldDescriptor[] = [];
   for (const field of form.getFields()) {
     const name = field.getName();
@@ -77,7 +78,14 @@ export async function readPdfAcroFields(bytes: ArrayBuffer): Promise<PdfAcroFiel
       // layer drops them by the same rule it uses everywhere else.
       type = "button";
     }
-    descriptors.push({ name, type, tooltip: readTooltip(field), options });
+    const firstPageRef = field.acroField.getWidgets()[0]?.P();
+    descriptors.push({
+      name,
+      type,
+      tooltip: readTooltip(field),
+      options,
+      pageNumber: firstPageRef ? (pageByRef.get(firstPageRef.toString()) ?? null) : null,
+    });
   }
   return descriptors;
 }
