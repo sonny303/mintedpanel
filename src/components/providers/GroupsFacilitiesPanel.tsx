@@ -81,20 +81,22 @@ export function GroupsFacilitiesPanel({
     [groupAssignQ.data, groupsQ.data, providerId],
   );
 
-  const myFacilities = useMemo(
-    () =>
-      (facilityAssignQ.data ?? [])
-        .filter((a) => a.providerId === providerId)
-        .map((a) => ({
-          assignmentId: a.id,
-          facilityId: a.facilityId as string,
-          isPrimary: Boolean(a.isPrimary),
-          startDate: a.startDate ?? null,
-          name: (facilitiesQ.data ?? []).find((f) => f.id === a.facilityId)?.name ?? "—",
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [facilityAssignQ.data, facilitiesQ.data, providerId],
-  );
+  const myFacilities = useMemo(() => {
+    const rows = (facilityAssignQ.data ?? [])
+      .filter((a) => a.providerId === providerId)
+      .map((a) => ({
+        assignmentId: a.id,
+        facilityId: a.facilityId as string,
+        isPrimary: Boolean(a.isPrimary),
+        startDate: a.startDate ?? null,
+        name: (facilitiesQ.data ?? []).find((f) => f.id === a.facilityId)?.name ?? "—",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (rows.length === 1 && !rows[0].isPrimary) {
+      rows[0].isPrimary = true;
+    }
+    return rows;
+  }, [facilityAssignQ.data, facilitiesQ.data, providerId]);
 
   const addableGroups = useMemo(() => {
     const mine = new Set(myGroups.map((g) => g.groupId));
@@ -186,9 +188,12 @@ export function GroupsFacilitiesPanel({
 
   const removeFacility = (facilityId: string) => {
     const rest = currentDrafts().filter((d) => d.facilityId !== facilityId);
-    const next = rest.some((d) => d.isPrimary)
-      ? rest
-      : rest.map((d, i) => ({ ...d, isPrimary: i === 0 }));
+    const next =
+      rest.length === 1
+        ? [{ ...rest[0], isPrimary: true }]
+        : rest.some((d) => d.isPrimary)
+          ? rest
+          : rest.map((d, i) => ({ ...d, isPrimary: i === 0 }));
     setFacilities.mutate(next, {
       onSuccess: () => toast.success("Facility removed."),
       onError: (e) =>

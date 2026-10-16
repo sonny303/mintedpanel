@@ -621,6 +621,7 @@ export type Database = {
           generation_run_id: string | null;
           group_id: string | null;
           id: string;
+          locations_cleared: boolean;
           mso_id: string | null;
           org_id: string;
           payer_group_provider_id: string | null;
@@ -653,6 +654,7 @@ export type Database = {
           generation_run_id?: string | null;
           group_id?: string | null;
           id?: string;
+          locations_cleared?: boolean;
           mso_id?: string | null;
           org_id: string;
           payer_group_provider_id?: string | null;
@@ -685,6 +687,7 @@ export type Database = {
           generation_run_id?: string | null;
           group_id?: string | null;
           id?: string;
+          locations_cleared?: boolean;
           mso_id?: string | null;
           org_id?: string;
           payer_group_provider_id?: string | null;

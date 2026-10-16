@@ -9,7 +9,7 @@
 // warning, and the two legacy pre-unification history ledgers — the unified
 // timeline is the one history surface. The narrow Work-in-portal launcher
 // lives only inside an eligible case TaskDrawer online-form step.
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ import { pickGroupInsurancePolicy } from "@/lib/groupInsurancePick";
 import { pickLicenseForState } from "@/lib/licensePick";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { useAuthStore } from "@/lib/auth-store";
+import { reconcileCaseLocation } from "@/services/cases";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseStatusControl } from "@/components/cases/CaseStatusControl";
 import { CaseStatusHistoryPanel } from "@/components/cases/CaseStatusHistoryPanel";
@@ -120,6 +121,38 @@ function CaseDetailPage() {
   const savingLocations =
     addFacilityM.isPending || removeFacilityM.isPending || setPrimaryFacilityM.isPending;
   const setDatesM = useSetCaseDates();
+
+  // Auto-reconcile unconfigured cases (e.g. historical cases generated before primary location defaults)
+  const reconciledCaseIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !c ||
+      !canEdit ||
+      c.locationsCleared ||
+      caseFacilitiesQ.isLoading ||
+      (caseFacilitiesQ.data ?? []).length > 0 ||
+      reconciledCaseIdRef.current === c.id
+    ) {
+      return;
+    }
+
+    reconciledCaseIdRef.current = c.id;
+    reconcileCaseLocation(c.id)
+      .then(() => {
+        refetchCaseFacilities();
+        refetchCurrentCase();
+      })
+      .catch((err) => {
+        console.warn("Failed to auto-reconcile case location:", err);
+      });
+  }, [
+    c,
+    canEdit,
+    caseFacilitiesQ.isLoading,
+    caseFacilitiesQ.data,
+    refetchCaseFacilities,
+    refetchCurrentCase,
+  ]);
 
   const coordinatorName = useMemo(() => {
     if (!c?.assignedTo) return "—";

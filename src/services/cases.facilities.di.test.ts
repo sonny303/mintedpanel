@@ -26,6 +26,7 @@ vi.mock("@/lib/audit", () => ({
 import {
   addCaseFacility,
   getCaseFacilities,
+  reconcileCaseLocation,
   removeCaseFacility,
   setPrimaryCaseFacility,
 } from "./cases";
@@ -139,7 +140,7 @@ describe("addCaseFacility", () => {
     });
     const mirrorCap = captures[5];
     expect(mirrorCap.op).toBe("update");
-    expect(mirrorCap.payload).toMatchObject({ facility_id: "fac-1" });
+    expect(mirrorCap.payload).toMatchObject({ facility_id: "fac-1", locations_cleared: false });
     expect(mirrorCap.filters).toContainEqual(["id", "case-1"]);
 
     expect(writeAuditMock).toHaveBeenCalledTimes(1);
@@ -284,7 +285,7 @@ describe("removeCaseFacility", () => {
       "case_facilities:delete",
       "credential_cases:update",
     ]);
-    expect(captures[2].payload).toMatchObject({ facility_id: null });
+    expect(captures[2].payload).toMatchObject({ facility_id: null, locations_cleared: true });
 
     expect(writeAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -437,5 +438,137 @@ describe("getCaseFacilities", () => {
     expect(result.map((r) => r.facility.name)).toEqual(["Alpha Clinic", "Zebra Clinic"]);
     expect(result.map((r) => r.id)).toEqual(["cf-1", "cf-2"]);
     expect(result[0].isPrimary).toBe(true);
+  });
+});
+
+describe("reconcileCaseLocation", () => {
+  it("does not touch cases whose locations were explicitly cleared", async () => {
+    const caseRow = {
+      id: "case-cleared",
+      provider_id: "prov-1",
+      group_id: "grp-1",
+      facility_id: null,
+      locations_cleared: true,
+    };
+    const captures = installDb([
+      { data: caseRow }, // credential_cases select
+      { data: [] },      // case_facilities select (empty)
+    ]);
+
+    await reconcileCaseLocation("case-cleared");
+
+    expect(captures.map((c) => `${c.table}:${c.op}`)).toEqual([
+      "credential_cases:select",
+      "case_facilities:select",
+    ]);
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("repairs missing case_facilities row from valid existing facility_id mirror", async () => {
+    const caseRow = {
+      id: "case-orphaned",
+      provider_id: "prov-1",
+      group_id: "grp-1",
+      facility_id: "fac-1",
+      locations_cleared: false,
+    };
+    const captures = installDb([
+      { data: caseRow }, // credential_cases select
+      { data: [] },      // case_facilities select (empty)
+      { data: FACILITIES }, // facilities select
+      { data: ASSIGNMENTS }, // provider_facility_assignments select
+      { data: { id: "cf-repaired" } }, // case_facilities insert
+      { data: null },    // credential_cases update
+    ]);
+
+    await reconcileCaseLocation("case-orphaned");
+
+    expect(captures.map((c) => `${c.table}:${c.op}`)).toEqual([
+      "credential_cases:select",
+      "case_facilities:select",
+      "facilities:select",
+      "provider_facility_assignments:select",
+      "case_facilities:insert",
+      "credential_cases:update",
+    ]);
+    expect(captures[4].payload).toMatchObject({
+      case_id: "case-orphaned",
+      facility_id: "fac-1",
+      is_primary: true,
+    });
+    expect(writeAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "CREATE",
+        entityType: "case_facility",
+        description: "Repaired missing case location join from existing facility mirror",
+      }),
+    );
+  });
+
+  it("defaults unconfigured case to provider sole/primary location", async () => {
+    const caseRow = {
+      id: "case-unconfigured",
+      provider_id: "prov-1",
+      group_id: "grp-1",
+      facility_id: null,
+      locations_cleared: false,
+    };
+    const captures = installDb([
+      { data: caseRow }, // credential_cases select
+      { data: [] },      // case_facilities select (empty)
+      { data: FACILITIES }, // facilities select
+      { data: ASSIGNMENTS }, // provider_facility_assignments select
+      { data: { id: "cf-new" } }, // case_facilities insert
+      { data: null },    // credential_cases update
+    ]);
+
+    await reconcileCaseLocation("case-unconfigured");
+
+    expect(captures[4].op).toBe("insert");
+    expect(captures[4].payload).toMatchObject({
+      case_id: "case-unconfigured",
+      facility_id: "fac-1",
+      is_primary: true,
+    });
+    expect(writeAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "CREATE",
+        entityType: "case_facility",
+        description: "Defaulted case location from provider primary/sole assignment",
+      }),
+    );
+  });
+
+  it("reconciles mirror if existing case_facilities has a primary that differs from mirror", async () => {
+    const caseRow = {
+      id: "case-existing",
+      provider_id: "prov-1",
+      group_id: "grp-1",
+      facility_id: "fac-old",
+      locations_cleared: false,
+    };
+    const cfRows = [{ id: "cf-1", facility_id: "fac-1", is_primary: true }];
+    const captures = installDb([
+      { data: caseRow }, // credential_cases select
+      { data: cfRows },  // case_facilities select
+      { data: null },    // credential_cases update
+    ]);
+
+    await reconcileCaseLocation("case-existing");
+
+    expect(captures.map((c) => `${c.table}:${c.op}`)).toEqual([
+      "credential_cases:select",
+      "case_facilities:select",
+      "credential_cases:update",
+    ]);
+    expect(captures[2].payload).toMatchObject({ facility_id: "fac-1" });
+    expect(writeAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "UPDATE",
+        entityType: "case",
+        entityId: "case-existing",
+        description: "Reconciled case facility mirror to match primary case location",
+      }),
+    );
   });
 });

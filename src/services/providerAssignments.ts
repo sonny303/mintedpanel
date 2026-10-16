@@ -16,6 +16,7 @@ import {
   type AssignmentDraft,
   type StoredFacilityAssignment,
 } from "@/lib/assignmentScope";
+import { reconcileProviderUnconfiguredCases } from "@/services/cases";
 import type { FacilityAssignment } from "@/types";
 
 // Scoped projection (TE-5): ids + flags + dates only — nothing PHI lives on
@@ -97,6 +98,20 @@ export async function ensureFirstFacilityPrimary(providerIds: string[]): Promise
     .eq("org_id", orgId)
     .in("id", promoteIds);
   if (updateError) throw translateDbError(updateError);
+
+  for (const pid of promoteIds) {
+    await writeAudit({
+      actionType: "UPDATE",
+      entityType: "provider_facility_assignment",
+      entityId: pid,
+      after: { isPrimary: true },
+      description: "Promoted sole/first assignment to primary practice location",
+    });
+  }
+
+  for (const providerId of providerIds) {
+    await reconcileProviderUnconfiguredCases(providerId);
+  }
 }
 
 async function listProviderAssignmentRows(
@@ -182,6 +197,8 @@ export async function setAssignments(providerId: string, drafts: AssignmentDraft
     after: { assignments: drafts },
     description: "Updated facility assignments",
   });
+
+  await reconcileProviderUnconfiguredCases(providerId);
 }
 
 /** One-click primary swap from the section list (F1.4.3) — atomic via RPC. */
@@ -203,4 +220,6 @@ export async function setPrimaryAssignment(
     after: { providerId, assignmentId, isPrimary: true },
     description: "Changed primary practice location",
   });
+
+  await reconcileProviderUnconfiguredCases(providerId);
 }

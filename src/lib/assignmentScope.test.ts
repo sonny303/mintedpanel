@@ -64,9 +64,18 @@ describe("validateAssignmentDrafts", () => {
     );
   });
 
-  it("requires exactly one primary when any assignments exist", () => {
+  it("treats a sole assignment as primary automatically even if isPrimary was false", () => {
     expect(
       validateAssignmentDrafts([{ facilityId: "f-a", startDate: "2026-01-01", isPrimary: false }]),
+    ).toBeNull();
+  });
+
+  it("requires exactly one primary when several assignments exist", () => {
+    expect(
+      validateAssignmentDrafts([
+        { facilityId: "f-a", startDate: "2026-01-01", isPrimary: false },
+        { facilityId: "f-b", startDate: "2026-02-01", isPrimary: false },
+      ]),
     ).toBe(ONE_PRIMARY_ASSIGNMENT_MESSAGE);
     expect(
       validateAssignmentDrafts([
@@ -169,10 +178,23 @@ describe("planFacilityAssignmentSync", () => {
     expect(plan.deleteIds).toEqual([]);
   });
 
-  it("removing the primary without re-picking is rejected (re-pick forced)", () => {
+  it("a provider reduced from several assignments to one automatically treats that assignment as primary", () => {
+    const plan = planFacilityAssignmentSync(
+      [{ facilityId: "f-b", startDate: "2026-02-01", isPrimary: false }],
+      stored,
+    );
+    expect(plan.primaryFacilityId).toBe("f-b");
+    expect(plan.primaryAlreadySet).toBe(false);
+    expect(plan.deleteIds).toEqual(["row-a"]);
+  });
+
+  it("removing the primary while multiple assignments remain forces a re-pick", () => {
     expect(() =>
       planFacilityAssignmentSync(
-        [{ facilityId: "f-b", startDate: "2026-02-01", isPrimary: false }],
+        [
+          { facilityId: "f-b", startDate: "2026-02-01", isPrimary: false },
+          { facilityId: "f-c", startDate: "2026-03-01", isPrimary: false },
+        ],
         stored,
       ),
     ).toThrow(ONE_PRIMARY_ASSIGNMENT_MESSAGE);

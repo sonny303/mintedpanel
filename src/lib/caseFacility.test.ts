@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   caseFacilityOptions,
   facilitiesForCaseProvider,
+  explainCaseFacilityResolution,
   isEligibleCaseFacility,
   pickNextPrimaryCaseFacility,
   resolveCaseFacilityId,
@@ -115,6 +116,76 @@ describe("resolveCaseFacilityId", () => {
         [fac({ id: "f-dead", isActive: false })],
       ),
     ).toBeNull();
+  });
+
+  it("treats sole assigned location as primary even if isPrimary flag is false", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        [asn({ facilityId: "f-sole", isPrimary: false })],
+        [fac({ id: "f-sole", groupId: "g-1" })],
+      ),
+    ).toBe("f-sole");
+  });
+
+  it("preserves sole eligible location default for a group even if provider primary is in another group", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        [
+          asn({ facilityId: "f-g1", isPrimary: false }),
+          asn({ facilityId: "f-g2", isPrimary: true }),
+        ],
+        [
+          fac({ id: "f-g1", groupId: "g-1" }),
+          fac({ id: "f-g2", groupId: "g-2" }),
+        ],
+      ),
+    ).toBe("f-g1");
+  });
+
+  it("explains resolution accurately across all situations", () => {
+    expect(
+      explainCaseFacilityResolution("p-1", null, [], []).status,
+    ).toBe("no_group");
+
+    expect(
+      explainCaseFacilityResolution(
+        "p-1",
+        "g-1",
+        [],
+        [fac({ id: "f-1", groupId: "g-1" })],
+      ).status,
+    ).toBe("no_eligible_locations");
+
+    expect(
+      explainCaseFacilityResolution(
+        "p-1",
+        "g-1",
+        [asn({ facilityId: "f-1", isPrimary: false })],
+        [fac({ id: "f-1", groupId: "g-1" })],
+      ),
+    ).toMatchObject({
+      facilityId: "f-1",
+      status: "resolved",
+    });
+
+    expect(
+      explainCaseFacilityResolution(
+        "p-1",
+        "g-1",
+        [
+          asn({ facilityId: "f-1", isPrimary: false }),
+          asn({ facilityId: "f-2", isPrimary: false }),
+        ],
+        [
+          fac({ id: "f-1", groupId: "g-1" }),
+          fac({ id: "f-2", groupId: "g-1" }),
+        ],
+      ).status,
+    ).toBe("multiple_eligible_no_primary");
   });
 });
 

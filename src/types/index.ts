@@ -1207,6 +1207,9 @@ export interface CredentialCase {
   // E2.1: the generation run that created this case; null = manual one-off or
   // pre-E2.1 row (the "run-less" trail). Optional — narrow projections predate it.
   generationRunId?: string | null;
+  /** True when a coordinator explicitly cleared/removed all locations from this case.
+   * Prevents automated defaults from overwriting the deliberate removal. */
+  locationsCleared?: boolean;
 }
 
 // E1.1 (Track B) — a case's additional locations. `credential_cases.facility_id`

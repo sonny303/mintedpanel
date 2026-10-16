@@ -69,6 +69,69 @@ export function resolveCaseFacilityId(
   return primary?.facilityId ?? null;
 }
 
+export type CaseFacilityResolutionStatus =
+  | "resolved"
+  | "no_group"
+  | "no_eligible_locations"
+  | "multiple_eligible_no_primary";
+
+export interface CaseFacilityResolutionExplanation {
+  facilityId: string | null;
+  status: CaseFacilityResolutionStatus;
+  explanation: string;
+}
+
+/** Detailed explanation of resolution status (for reporting and diagnostics). */
+export function explainCaseFacilityResolution(
+  providerId: string,
+  groupId: string | null | undefined,
+  assignments: readonly CaseFacilityAssignmentRef[],
+  facilities: readonly CaseFacilityRef[],
+): CaseFacilityResolutionExplanation {
+  if (!groupId) {
+    return {
+      facilityId: null,
+      status: "no_group",
+      explanation: "Case has no group specified.",
+    };
+  }
+  const eligibleIds = facilitiesForCaseProvider(providerId, groupId, assignments, facilities);
+  if (eligibleIds.length === 0) {
+    return {
+      facilityId: null,
+      status: "no_eligible_locations",
+      explanation: "No active assigned locations under the case group.",
+    };
+  }
+  if (eligibleIds.length === 1) {
+    return {
+      facilityId: eligibleIds[0] ?? null,
+      status: "resolved",
+      explanation: "Sole active assigned location under the case group.",
+    };
+  }
+  const eligible = new Set(eligibleIds);
+  const primary = assignments.find(
+    (a) =>
+      a.providerId === providerId &&
+      a.facilityId != null &&
+      eligible.has(a.facilityId) &&
+      a.isPrimary === true,
+  );
+  if (primary?.facilityId) {
+    return {
+      facilityId: primary.facilityId,
+      status: "resolved",
+      explanation: "Provider's primary location is eligible under the case group.",
+    };
+  }
+  return {
+    facilityId: null,
+    status: "multiple_eligible_no_primary",
+    explanation: `Multiple eligible locations (${eligibleIds.length}) under the case group with no primary designated; location selection required.`,
+  };
+}
+
 /** Convenience: look up Facility rows for the picker, preserving name order. */
 export function caseFacilityOptions(
   providerId: string,

@@ -78,6 +78,7 @@ export function useCreateCase() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["case-facilities", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

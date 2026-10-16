@@ -71,17 +71,30 @@ export function firstAssignmentIdsToPromote(rows: readonly AssignmentPrimaryCand
   return ids;
 }
 
+/** A provider with exactly one assignment has that assignment automatically
+ * treated as primary (the sole-assignment rule). */
+export function normalizeAssignmentDrafts(
+  drafts: readonly AssignmentDraft[],
+): AssignmentDraft[] {
+  if (drafts.length === 1) {
+    return [{ ...drafts[0], isPrimary: true }];
+  }
+  return drafts.map((d) => ({ ...d }));
+}
+
 /** Returns an error message, or null when the draft set is valid. An empty
  * set is valid here — the wizard surfaces the gap as section progress (the
- * PM's "no unassigned resting state" is a readiness concern, not a DB block). */
+ * PM's "no unassigned resting state" is a readiness concern, not a DB block).
+ * A sole assignment is normalized to primary before validating. */
 export function validateAssignmentDrafts(drafts: readonly AssignmentDraft[]): string | null {
   if (drafts.some((d) => !d.startDate.trim())) return START_DATE_REQUIRED_MESSAGE;
-  if (drafts.length > 0) {
-    const primaries = drafts.filter((d) => d.isPrimary).length;
+  const normalized = normalizeAssignmentDrafts(drafts);
+  if (normalized.length > 0) {
+    const primaries = normalized.filter((d) => d.isPrimary).length;
     if (primaries !== 1) return ONE_PRIMARY_ASSIGNMENT_MESSAGE;
   }
-  const ids = new Set(drafts.map((d) => d.facilityId));
-  if (ids.size !== drafts.length) return "Each location can be assigned only once";
+  const ids = new Set(normalized.map((d) => d.facilityId));
+  if (ids.size !== normalized.length) return "Each location can be assigned only once";
   return null;
 }
 
@@ -109,22 +122,23 @@ export function planFacilityAssignmentSync(
   incoming: readonly AssignmentDraft[],
   stored: readonly StoredFacilityAssignment[],
 ): FacilityAssignmentSyncPlan {
-  const error = validateAssignmentDrafts(incoming);
+  const normalized = normalizeAssignmentDrafts(incoming);
+  const error = validateAssignmentDrafts(normalized);
   if (error) throw new Error(error);
 
-  const incomingByFacility = new Map(incoming.map((d) => [d.facilityId, d]));
+  const incomingByFacility = new Map(normalized.map((d) => [d.facilityId, d]));
   const storedByFacility = new Map(stored.map((r) => [r.facilityId, r]));
 
-  const inserts = incoming.filter((d) => !storedByFacility.has(d.facilityId));
+  const inserts = normalized.filter((d) => !storedByFacility.has(d.facilityId));
   const deleteIds = stored.filter((r) => !incomingByFacility.has(r.facilityId)).map((r) => r.id);
-  const updates = incoming
+  const updates = normalized
     .filter((d) => {
       const match = storedByFacility.get(d.facilityId);
       return match !== undefined && (match.startDate ?? "") !== d.startDate;
     })
     .map((d) => ({ id: storedByFacility.get(d.facilityId)!.id, startDate: d.startDate }));
 
-  const primaryFacilityId = incoming.find((d) => d.isPrimary)?.facilityId ?? null;
+  const primaryFacilityId = normalized.find((d) => d.isPrimary)?.facilityId ?? null;
   const primaryStored = primaryFacilityId ? storedByFacility.get(primaryFacilityId) : undefined;
   const primaryAlreadySet = Boolean(primaryStored?.isPrimary);
 

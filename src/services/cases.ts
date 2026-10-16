@@ -5,7 +5,11 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, currentUserRole, requireActiveOrg, writeAudit } from "@/lib/audit";
-import { isEligibleCaseFacility, pickNextPrimaryCaseFacility } from "@/lib/caseFacility";
+import {
+  isEligibleCaseFacility,
+  pickNextPrimaryCaseFacility,
+  resolveCaseFacilityId,
+} from "@/lib/caseFacility";
 import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -67,7 +71,7 @@ const CASE_LIST_COLUMNS =
   // payer_group_provider_id added with Slice D (payer-and-cases screen 5): the
   // group board's Awaiting-ID derivation (expected + approved + NULL id, per
   // E6.8 F6.8.3) reads it off the same cached list.
-  "id, case_number, provider_id, payer_id, case_type, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_group_provider_id, payer_pipeline_state, created_at, updated_at";
+  "id, case_number, provider_id, payer_id, case_type, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_group_provider_id, payer_pipeline_state, locations_cleared, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
@@ -411,7 +415,10 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
 
   const { data, error } = await supabase
     .from("credential_cases")
-    .update({ facility_id: facilityId } as CredentialCaseUpdate)
+    .update({
+      facility_id: facilityId,
+      locations_cleared: facilityId === null,
+    } as CredentialCaseUpdate)
     .eq("id", caseId)
     .eq("org_id", orgId)
     .select("id, facility_id")
@@ -544,7 +551,10 @@ export async function addCaseFacility(caseId: string, facilityId: string): Promi
   if (isFirst) {
     const { error: mirrorErr } = await supabase
       .from("credential_cases")
-      .update({ facility_id: facilityId } as CredentialCaseUpdate)
+      .update({
+        facility_id: facilityId,
+        locations_cleared: false,
+      } as CredentialCaseUpdate)
       .eq("id", caseId)
       .eq("org_id", orgId);
     if (mirrorErr) throw mirrorErr;
@@ -613,9 +623,13 @@ export async function removeCaseFacility(caseId: string, facilityId: string): Pr
       if (promoteErr) throw promoteErr;
     }
 
+    const patch: CredentialCaseUpdate = {
+      facility_id: promotedFacilityId,
+      ...(promotedFacilityId === null ? { locations_cleared: true } : {}),
+    };
     const { error: mirrorErr } = await supabase
       .from("credential_cases")
-      .update({ facility_id: promotedFacilityId } as CredentialCaseUpdate)
+      .update(patch)
       .eq("id", caseId)
       .eq("org_id", orgId);
     if (mirrorErr) throw mirrorErr;
@@ -694,6 +708,204 @@ export async function setPrimaryCaseFacility(caseId: string, facilityId: string)
     after: { primaryFacilityId: facilityId },
     description: "Set case primary location",
   });
+}
+
+/**
+ * Idempotently audits and reconciles a case's location join and mirror.
+ * 1. If the case already has rows in `case_facilities`:
+ *    - Preserves existing locations.
+ *    - Reconciles the `credential_cases.facility_id` mirror to match the primary join row if out of sync.
+ * 2. If `case_facilities` is empty:
+ *    - If `locations_cleared` is true, does nothing (preserves coordinator's deliberate removal).
+ *    - If `facility_id` mirror is set and eligible, repairs the missing `case_facilities` join row.
+ *    - If unconfigured, resolves the eligible provider default (sole assignment or primary) under the group,
+ *      inserts the primary `case_facilities` row, and updates the mirror.
+ */
+export async function reconcileCaseLocation(caseId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+
+  const casesTable = supabase.from("credential_cases");
+  if (!casesTable || typeof casesTable.select !== "function") {
+    return;
+  }
+
+  const { data: caseRow, error: caseErr } = await casesTable
+    .select("id, org_id, provider_id, group_id, facility_id, locations_cleared")
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (caseErr) throw caseErr;
+  if (!caseRow) return;
+
+  const providerId = caseRow.provider_id as string;
+  const groupId = (caseRow.group_id as string | null) ?? null;
+  const mirrorFacilityId = (caseRow.facility_id as string | null) ?? null;
+  const locationsCleared = Boolean((caseRow as Record<string, unknown>).locations_cleared);
+
+  const { data: cfRows, error: cfErr } = await supabase
+    .from("case_facilities")
+    .select("id, facility_id, is_primary")
+    .eq("org_id", orgId)
+    .eq("case_id", caseId);
+  if (cfErr) throw cfErr;
+
+  const existingJoinRows = (cfRows ?? []) as Array<{ id: string; facility_id: string; is_primary: boolean }>;
+
+  if (existingJoinRows.length > 0) {
+    const primaryRow = existingJoinRows.find((r) => r.is_primary);
+    if (primaryRow) {
+      if (mirrorFacilityId !== primaryRow.facility_id) {
+        await supabase
+          .from("credential_cases")
+          .update({ facility_id: primaryRow.facility_id } as CredentialCaseUpdate)
+          .eq("id", caseId)
+          .eq("org_id", orgId);
+        await writeAudit({
+          actionType: "UPDATE",
+          entityType: "case",
+          entityId: caseId,
+          before: { facilityId: mirrorFacilityId },
+          after: { facilityId: primaryRow.facility_id },
+          description: "Reconciled case facility mirror to match primary case location",
+        });
+      }
+    } else {
+      const target = existingJoinRows[0];
+      await supabase
+        .from("case_facilities")
+        .update({ is_primary: true } as CaseFacilityUpdate)
+        .eq("id", target.id)
+        .eq("org_id", orgId);
+      await supabase
+        .from("credential_cases")
+        .update({ facility_id: target.facility_id } as CredentialCaseUpdate)
+        .eq("id", caseId)
+        .eq("org_id", orgId);
+      await writeAudit({
+        actionType: "UPDATE",
+        entityType: "case_facility",
+        entityId: target.id,
+        before: { isPrimary: false },
+        after: { isPrimary: true, facilityId: target.facility_id },
+        description: "Promoted case location to primary and synced mirror",
+      });
+    }
+    return;
+  }
+
+  // case_facilities is empty
+  if (locationsCleared) {
+    return; // Preserved manual clear
+  }
+
+  const [{ data: facilities, error: facErr }, { data: assignments, error: asnErr }] =
+    await Promise.all([
+      supabase.from("facilities").select("id, group_id, is_active").eq("org_id", orgId),
+      supabase
+        .from("provider_facility_assignments")
+        .select("provider_id, facility_id, is_primary")
+        .eq("org_id", orgId)
+        .eq("provider_id", providerId),
+    ]);
+  if (facErr) throw facErr;
+  if (asnErr) throw asnErr;
+
+  const assignmentList = (assignments ?? []).map((a) => ({
+    providerId: (a.provider_id as string | null) ?? null,
+    facilityId: (a.facility_id as string | null) ?? null,
+    isPrimary: (a.is_primary as boolean | null) ?? null,
+  }));
+  const facilityList = (facilities ?? []).map((f) => ({
+    id: f.id as string,
+    groupId: (f.group_id as string | null) ?? null,
+    isActive: Boolean(f.is_active),
+  }));
+
+  let targetFacilityId: string | null = null;
+  let reason = "";
+
+  if (mirrorFacilityId) {
+    const isEligible = isEligibleCaseFacility(
+      mirrorFacilityId,
+      providerId,
+      groupId,
+      assignmentList,
+      facilityList,
+    );
+    if (isEligible) {
+      targetFacilityId = mirrorFacilityId;
+      reason = "Repaired missing case location join from existing facility mirror";
+    }
+  }
+
+  if (!targetFacilityId) {
+    const defaultFacilityId = resolveCaseFacilityId(
+      providerId,
+      groupId,
+      assignmentList,
+      facilityList,
+    );
+    if (defaultFacilityId) {
+      targetFacilityId = defaultFacilityId;
+      reason = "Defaulted case location from provider primary/sole assignment";
+    }
+  }
+
+  if (targetFacilityId) {
+    const { data: inserted, error: insErr } = await supabase
+      .from("case_facilities")
+      .insert({
+        org_id: orgId,
+        case_id: caseId,
+        facility_id: targetFacilityId,
+        is_primary: true,
+        created_by: currentUserId(),
+      } as CaseFacilityInsert)
+      .select("id")
+      .single();
+    if (insErr) throw insErr;
+
+    const { error: updErr } = await supabase
+      .from("credential_cases")
+      .update({
+        facility_id: targetFacilityId,
+        locations_cleared: false,
+      } as CredentialCaseUpdate)
+      .eq("id", caseId)
+      .eq("org_id", orgId);
+    if (updErr) throw updErr;
+
+    await writeAudit({
+      actionType: "CREATE",
+      entityType: "case_facility",
+      entityId: inserted.id,
+      before: null,
+      after: { caseId, facilityId: targetFacilityId, isPrimary: true },
+      description: reason,
+    });
+  }
+}
+
+/**
+ * Reconciles any unconfigured cases for a given provider (e.g. after assignments are added or modified).
+ */
+export async function reconcileProviderUnconfiguredCases(providerId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+  const casesTable = supabase.from("credential_cases");
+  if (!casesTable || typeof casesTable.select !== "function") {
+    return;
+  }
+  const { data: cases, error } = await casesTable
+    .select("id, facility_id, locations_cleared")
+    .eq("org_id", orgId)
+    .eq("provider_id", providerId)
+    .eq("locations_cleared", false);
+  if (error) throw error;
+  if (!cases || cases.length === 0) return;
+
+  for (const c of cases) {
+    await reconcileCaseLocation(c.id);
+  }
 }
 
 export interface SetCaseDatesInput {
@@ -1090,7 +1302,14 @@ export async function createCase(
     throw translated instanceof Error ? translated : new Error(error.message);
   }
   if (!data) throw new Error("create_case_with_tasks returned no data");
-  return camelizeRow<CredentialCase>(data);
+  const created = camelizeRow<CredentialCase>(data);
+  try {
+    await reconcileCaseLocation(created.id);
+  } catch (err) {
+    // Non-fatal: the create_case_with_tasks RPC handles database-level assignment & case_facilities creation.
+    console.warn("reconcileCaseLocation failed after createCase:", err);
+  }
+  return created;
 }
 
 // E2.1 F2.1.3 (TE-5) — reapplication appends the restamped task set to the

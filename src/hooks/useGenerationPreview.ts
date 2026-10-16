@@ -500,6 +500,7 @@ export function useConfirmGeneration() {
       qc.invalidateQueries({ queryKey: queryKeys.generationCaseRows(orgId) });
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["case-facilities", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
       // E2.4: the fresh run + its disposition rows appear in run history.
       qc.invalidateQueries({ queryKey: ["generation-runs", orgId] });
