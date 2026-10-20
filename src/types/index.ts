@@ -2321,3 +2321,149 @@ export interface RosterExportSnapshot {
   fileName: string;
   downloadPath: string;
 }
+
+// ---------------------------------------------------------------------------
+// Provider self-onboarding — portal login vault (mirrors provider_ssn_vault).
+// The upstream portal login Minted Panel fills on the provider's behalf. Only
+// the password is ciphertext; the username is a non-secret identifier safe to
+// display. The row itself has NO client SELECT grant — these types describe RPC
+// payloads, not table reads.
+//
+// The type alias is `portal` (the union), while `PortalId` is the name other
+// onboarding modules import; both are the same closed set.
+// ---------------------------------------------------------------------------
+
+/** The upstream portals a provider can be onboarded into. */
+export type portal = PortalId;
+
+/** store_portal_credential echoes metadata only — NEVER the password. */
+export interface PortalCredentialStoreResult {
+  ok: boolean;
+  providerId: string;
+  orgId: string;
+  portal: PortalId;
+  username: string;
+  rotatedAt: string;
+}
+
+/**
+ * reveal_portal_credential returns the plaintext exactly once for a brief
+ * auto-rehide window. Never persisted, never cached, never logged.
+ */
+export interface PortalCredentialReveal {
+  portal: PortalId;
+  username: string;
+  password: string;
+  lastVerifiedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Session-bound SSN intake (20261020101200). The session handle minted by
+// verify_intake_code is the capability; the SSN is write-only ingress and is
+// never returned — only the mask. States are uniform so the surface is not a
+// session oracle. The session row records no used_at (the link does), so a
+// terminal state is all that is left behind.
+// ---------------------------------------------------------------------------
+
+export type ProviderIntakeSessionState = "active" | "used" | "expired" | "revoked";
+
+/** What a session handle resolves to; "invalid" means unknown or throttled. */
+export type ProviderIntakeSessionViewState = ProviderIntakeSessionState | "invalid";
+
+export interface ProviderIntakeSessionView {
+  state: ProviderIntakeSessionViewState;
+  orgName?: string;
+  providerName?: string;
+  expiresAt?: string;
+}
+
+/** submit_provider_ssn echoes the mask only — never the value. */
+export interface ProviderSsnSubmitResult {
+  ok: boolean;
+  state: ProviderIntakeSessionViewState;
+  mask?: string;
+}
+
+
+// ===========================================================================
+// 2026-10-20 — provider self-onboarding R1 additions. Additive only.
+// ===========================================================================
+
+export interface IntakeTokenView {
+  state: "active" | "used" | "expired" | "revoked" | "invalid";
+  org_name?: string;
+  provider_name?: string;
+  recipient_email?: string;
+  expires_at?: string;
+}
+
+export interface IntakeCodeRequest {
+  state: "active" | "invalid" | "expired" | "used" | "revoked";
+  org_name?: string;
+  provider_name?: string;
+  recipient_email?: string;
+  code?: string;
+  code_expires_at?: string;
+}
+
+export interface IntakeVerifyResult {
+  ok: boolean;
+  state?: "active" | "invalid" | "expired" | "used" | "revoked";
+  session_token?: string;
+  provider_id?: string;
+  org_id?: string;
+  org_name?: string;
+  provider_name?: string;
+}
+
+export interface IntakeSubmitResult {
+  ok: boolean;
+  state: "submitted" | "invalid" | "expired" | "used";
+  redirect_url?: string;
+}
+
+// PortalId is the shared union name imported across the onboarding modules.
+// PortalCredentialReveal and PortalCredentialStoreResult are defined with the
+// vault block above, so the store/reveal payload contract has one source of truth.
+export type PortalId = "caqh" | "pecos";
+
+export interface OnboardingSubmitResult {
+  ok: boolean;
+  ready_at: string;
+  group_id?: string | null;
+  location_id?: string | null;
+}
+
+export interface ProviderOnboardingReport {
+  target_days: number;
+  current_median_business_days: number | null;
+  hires: Array<{
+    provider_id: string;
+    status: string;
+    verification_state: string;
+    group_id?: string | null;
+    ready_at?: string | null;
+    first_application_at?: string | null;
+    target_delta_business_days: number | null;
+  }>;
+  needs_a_human: Array<{
+    provider_id: string;
+    reason: "help_request" | "told_not_needed" | "duplicate" | "stale_invite";
+    opened_at: string;
+  }>;
+  provider_pace_measured_only: {
+    invitation_to_first_signin_p50_hours: number | null;
+    invitation_to_submit_p50_hours: number | null;
+  };
+}
+
+export type PracticeUserRole = "owner" | "coordinator" | "billing";
+
+export interface PracticeUser {
+  id: string;
+  org_id: string;
+  user_id: string;
+  role: PracticeUserRole;
+  report_access: Record<string, boolean>;
+  created_at: string;
+}

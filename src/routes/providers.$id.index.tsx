@@ -46,6 +46,7 @@ import { isOpenCaseStatus } from "@/lib/caseStatus";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { SsnVaultField } from "@/components/providers/SsnVaultField";
+import { OnboardingCard } from "@/components/onboarding/OnboardingCard";
 import { GroupsFacilitiesPanel } from "@/components/providers/GroupsFacilitiesPanel";
 import { EnrollmentsPanel } from "@/components/providers/EnrollmentsPanel";
 import { ProviderReadinessSection } from "@/components/providers/ProviderReadinessSection";
@@ -537,7 +538,8 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
   ) : undefined;
 
   return (
-    <RecordSectionCard id="identity" title="Provider Info" action={action}>
+    {provider.status === "onboarding" ? <OnboardingCard provider={provider} /> : null}
+        <RecordSectionCard id="identity" title="Provider Info" action={action}>
       <div>
         {groups.map((g, i) => (
           <div key={g.title} className={i > 0 ? "mt-6 border-t border-[#F0EEEA] pt-6" : ""}>
