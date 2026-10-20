@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +15,22 @@ const authStoreState = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth-store", () => ({
   useAuthStore: (selector: (state: typeof authStoreState) => unknown) => selector(authStoreState),
+}));
+
+const routerState = vi.hoisted(() => ({ pathname: "/" }));
+
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children, className }: { to: string; children: ReactNode; className?: string }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
+  useNavigate: () => vi.fn(),
+  useRouterState: ({
+    select,
+  }: {
+    select: (state: { location: { pathname: string } }) => unknown;
+  }) => select({ location: { pathname: routerState.pathname } }),
 }));
 
 import { AccessContextBoundary } from "./AccessContextBoundary";
@@ -39,8 +56,27 @@ const sampleStaffContext: EnrollmentContext = {
   contextRevision: "rev-1",
 };
 
+const sampleClientContext: EnrollmentContext = {
+  actorUserId: "11111111-1111-4111-8111-111111111111",
+  email: "client@example.test",
+  audience: "client",
+  selectedOrgId: "client-org-1",
+  staffOrgs: [],
+  clientOrgs: [
+    {
+      orgId: "client-org-1",
+      orgName: "Client Org",
+      groups: [{ groupId: "group-1", groupName: "Client Providers" }],
+    },
+  ],
+  globalTraining: false,
+  restrictedExternal: true,
+  contextRevision: "rev-client-1",
+};
+
 describe("AccessContextBoundary", () => {
   beforeEach(() => {
+    routerState.pathname = "/";
     authStoreState.session = null;
     authStoreState.accessContext = null;
     authStoreState.accessContextLoading = false;
@@ -98,6 +134,38 @@ describe("AccessContextBoundary", () => {
     );
     expect(markup).toContain("Access context unavailable");
     expect(markup).toContain("Network connection refused");
+    expect(markup).not.toContain("Child Content");
+  });
+
+  it("renders the loading frame, not the fence card, for a client audience on /", () => {
+    authStoreState.session = { user: { id: "11111111-1111-4111-8111-111111111111" } };
+    authStoreState.accessContext = sampleClientContext;
+    routerState.pathname = "/";
+
+    const markup = renderToStaticMarkup(
+      <AccessContextBoundary>
+        <div id="test-child">Child Content</div>
+      </AccessContextBoundary>,
+    );
+    expect(markup).toContain("Resolving your access context…");
+    expect(markup).not.toContain("isn&#x27;t available with client access");
+    expect(markup).not.toContain("Child Content");
+  });
+
+  it("links a client audience on a fenced path to the Reporting Center", () => {
+    authStoreState.session = { user: { id: "11111111-1111-4111-8111-111111111111" } };
+    authStoreState.accessContext = sampleClientContext;
+    routerState.pathname = "/cases";
+
+    const markup = renderToStaticMarkup(
+      <AccessContextBoundary>
+        <div id="test-child">Child Content</div>
+      </AccessContextBoundary>,
+    );
+    expect(markup).toContain("isn&#x27;t available with client access");
+    expect(markup).toContain('href="/reporting"');
+    expect(markup).toContain("Open Reporting Center");
+    expect(markup).toContain("Client Providers");
     expect(markup).not.toContain("Child Content");
   });
 });

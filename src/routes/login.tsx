@@ -42,7 +42,7 @@ function LoginPage() {
       }
       // The root boundary owns landing selection after context resolution:
       // it preserves live staff landing, all-inactive Portfolio fallback, a
-      // dual chooser, and the restricted client surface in one place.
+      // dual chooser, and the client Reporting Center landing in one place.
       await navigate({ to: "/", replace: true });
     } catch {
       redirected.current = false;
