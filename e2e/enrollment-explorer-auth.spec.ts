@@ -18,6 +18,8 @@ const CLIENT_B = "66666666-6666-4666-8666-666666666666";
 const GROUP_A = "77777777-7777-4777-8777-777777777777";
 const GROUP_B = "88888888-8888-4888-8888-888888888888";
 const INVITE_TOKEN = "synthetic-e612-invite-token";
+// The card a client audience sees on a path the E6.12 fence gives no outlet.
+const FENCE_HEADING = "This page isn't available with client access";
 
 type Audience = "staff" | "client";
 type ContextFixture = {
@@ -244,7 +246,13 @@ test("blocks shell and staff hooks until a client context resolves", async ({ co
   expect(state.seenTables.filter((table) => table.startsWith("cases")).length).toBe(0);
 
   gate.resolve();
-  await expect(page.getByText("Client access context ready")).toBeVisible();
+  await expect(page.getByRole("heading", { name: FENCE_HEADING })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Open Reporting Center" }).click();
+  await expect(page).toHaveURL(/\/reporting$/);
+  await expect(page.getByRole("heading", { name: "Reporting Center" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enrollment Explorer" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
 });
 
@@ -274,6 +282,29 @@ test("client Reporting Center exposes only Enrollment Explorer before internal h
       /inbound_leads|cases|providers|provider_groups|facilities/i.test(table),
     ),
   ).toBe(false);
+});
+
+test("a client who signs in lands on the Reporting Center", async ({ context, page }) => {
+  const state: FixtureState = {
+    context: clientContext(),
+    memberships: [],
+    authTokenRequests: 0,
+    seenTables: [],
+    selectionRequests: [],
+  };
+  await installMockNetwork(context, state);
+
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("client@example.test");
+  await page.getByLabel("Password").fill("synthetic-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/reporting$/);
+  await expect(page.getByRole("heading", { name: "Reporting Center" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enrollment Explorer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: FENCE_HEADING })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
+  expect(state.seenTables.every((table) => ["profiles", "memberships"].includes(table))).toBe(true);
 });
 
 for (const scenario of [
@@ -398,7 +429,7 @@ test("a client-only user with multiple granted orgs chooses the client org expli
   await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Client Beta" }).click();
-  await expect(page.getByText("Client access context ready")).toBeVisible();
+  await expect(page.getByRole("heading", { name: FENCE_HEADING })).toBeVisible();
   await expect(page.getByText("Beta Providers", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
   expect(state.selectionRequests).toEqual([
@@ -467,10 +498,10 @@ for (const status of [401, 403, 409]) {
     await seedAuth(context);
 
     await page.goto("/cases");
-    await expect(page.getByText("Client access context ready")).toBeVisible();
+    await expect(page.getByRole("heading", { name: FENCE_HEADING })).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(page.getByRole("heading", { name: "Access context unavailable" })).toBeVisible();
-    await expect(page.getByText("Client access context ready")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: FENCE_HEADING })).toHaveCount(0);
     await expect(page.getByText("Alpha Providers", { exact: true })).toHaveCount(0);
   });
 }
@@ -552,7 +583,7 @@ test("dual-capability users choose audience and organization explicitly, then ca
   await expect(page.getByRole("link", { name: "Cases" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Client Beta" }).click();
-  await expect(page.getByText("Client access context ready")).toBeVisible();
+  await expect(page.getByRole("heading", { name: FENCE_HEADING })).toBeVisible();
   await expect(page.getByText("Beta Providers", { exact: true })).toBeVisible();
   expect(state.selectionRequests[0]).toMatchObject({
     audience: "client",
@@ -577,7 +608,7 @@ test("dual-capability users choose audience and organization explicitly, then ca
   });
 
   await page.getByRole("button", { name: "Client Beta" }).click();
-  await expect(page.getByText("Client access context ready")).toBeVisible();
+  await expect(page.getByRole("heading", { name: FENCE_HEADING })).toBeVisible();
   expect(state.selectionRequests[2]).toMatchObject({
     audience: "client",
     orgId: CLIENT_B,
@@ -669,7 +700,8 @@ test("revisiting a claimed invite after an SPA unmount does not reuse completed 
   expect(state.claimRequests).toHaveLength(1);
 
   await page.getByRole("link", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/reporting$/);
+  await expect(page.getByRole("heading", { name: "Reporting Center" })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/client-invites/claim/${INVITE_TOKEN}$`));
   await expect(page.getByRole("heading", { name: "Unable to claim access" })).toBeVisible();
@@ -741,7 +773,8 @@ test("a post-login context failure is recoverable without another sign-in", asyn
   const authRequestsBeforeRetry = state.authTokenRequests;
   await baseExpect(page.getByRole("button", { name: "Retry" })).toBeVisible({ timeout: 5_000 });
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(page.getByText("Client access context ready")).toBeVisible();
+  await expect(page).toHaveURL(/\/reporting$/);
+  await expect(page.getByRole("heading", { name: "Reporting Center" })).toBeVisible();
   expect(state.authTokenRequests).toBe(authRequestsBeforeRetry);
 });
 
