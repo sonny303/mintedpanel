@@ -137,9 +137,13 @@ stores were never synced.
 
 `id, org_id, name, tin, npi_type2, states[], is_active, created_at`.
 
+The live table also carries `website_url`, `tax_id_type`, `preferred_contact_method`, three 9-column address/contact blocks (`billing_*`, `correspondence_*`, `credentialing_*`: street, suite, city, state, zip, contact_name, phone, fax, email), `contracting_contact_name/title/email` and `contract_signer_name/email`. The full column-by-column inventory (which form, which upload and which fill token touches each column) is in [`docs/ops/field-flow-gap-analysis-2026-10-15.md`](docs/ops/field-flow-gap-analysis-2026-10-15.md).
+
 ### facilities
 
 `id, org_id, group_id, name, street, city, state, zip, is_active, status_id, effective_date, reference_only, created_at` (plus operational detail columns).
+
+The operational detail columns are `suite`, `county`, `phone`, `fax`, `email`, `appointment_phone`, `contact_name`, `accepting_new_patients`, `language_line`, `languages_offered[]`, `interpreter_languages[]`, `hours` (jsonb, per-day; `src/lib/facilityHours.ts` is the contract), `ada_compliance`, `service_types`, `treating_categories` (jsonb). Column-by-column writers and fill tokens: [`docs/ops/field-flow-gap-analysis-2026-10-15.md`](docs/ops/field-flow-gap-analysis-2026-10-15.md).
 
 `reference_only` (`boolean NOT NULL DEFAULT false`, migration `20260707150000_reference_only_flag.sql`, Epic 2e): a migrated/onboard-existing location that exists to be referenced, not worked — skipped by Home's "Launches at risk" queue and shown with a "Reference" chip in the launches list/detail. All pre-migration rows are `false` (fully worked).
 
