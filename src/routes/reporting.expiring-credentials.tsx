@@ -6,6 +6,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { ExpiringCredentialsTable } from "@/components/documents/ExpiringCredentialsTable";
 
 export const Route = createFileRoute("/reporting/expiring-credentials")({
@@ -25,6 +26,7 @@ function ExpiringCredentialsReportPage() {
       <PageHeader
         title="Expiring Credentials"
         description="Documents by soonest expiration — spot what blocks a submission before it does."
+        actions={<AboutReportButton reportKey="expiring-credentials" />}
       />
       <TooltipProvider delayDuration={200}>
         <ExpiringCredentialsTable />

@@ -7,8 +7,9 @@ import type { EnrollmentClientOrg, EnrollmentStaffOrg } from "@/services/clientA
 
 interface AccessContextBoundaryProps {
   children: ReactNode;
-  /** The root route supplies a shell-free outlet only for the two allowed
-   * client Reporting Center routes. Other client paths keep the E6.12 fence. */
+  /** The root route supplies a shell-free outlet only for the allowed client
+   * Reporting Center routes (the index, Enrollment Explorer and the Reporting
+   * Guide). Other client paths keep the E6.12 fence. */
   clientReportOutlet?: ReactNode;
 }
 

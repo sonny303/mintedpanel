@@ -2,6 +2,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { LocationsPerGroupReport } from "@/components/reporting/LocationsPerGroupReport";
 
 export const Route = createFileRoute("/reporting/locations-per-group")({
@@ -21,6 +22,7 @@ function ReportPage() {
       <PageHeader
         title="Locations per Group"
         description="Active location counts by provider group."
+        actions={<AboutReportButton reportKey="locations-per-group" />}
       />
       <LocationsPerGroupReport />
     </div>

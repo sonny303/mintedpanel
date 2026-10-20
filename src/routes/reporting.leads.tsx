@@ -5,6 +5,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { InboundLeadsPanel } from "@/components/org/InboundLeadsPanel";
 
 export const Route = createFileRoute("/reporting/leads")({
@@ -24,6 +25,7 @@ function LeadsReportPage() {
       <PageHeader
         title="Inbound Leads"
         description="Website inquiries awaiting triage — convert to a prospect organization or dismiss."
+        actions={<AboutReportButton reportKey="leads" />}
       />
       <InboundLeadsPanel alwaysRender />
     </div>

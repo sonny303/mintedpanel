@@ -2,6 +2,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { GroupContractsMatrix } from "@/components/reports/GroupContractsMatrix";
 
 export const Route = createFileRoute("/reporting/contracts-matrix")({
@@ -27,6 +28,7 @@ function GroupContractsMatrixPage() {
       <PageHeader
         title="Group Contracts Matrix"
         description="Payer × state contract execution, tentative/confirmed effective dates, and cross-payer dependencies per provider group."
+        actions={<AboutReportButton reportKey="contracts-matrix" />}
       />
       <GroupContractsMatrix initialContext={search} />
     </div>

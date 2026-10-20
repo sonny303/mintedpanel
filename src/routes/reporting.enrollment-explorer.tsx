@@ -6,6 +6,7 @@ import { EnrollmentReportMatrix } from "@/components/reporting/enrollment-explor
 import { EnrollmentScopeDrawer } from "@/components/reporting/enrollment-explorer/EnrollmentScopeDrawer";
 import { EnrollmentStaffWorkspace } from "@/components/reporting/enrollment-explorer/EnrollmentStaffWorkspace";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -245,17 +246,20 @@ function EnrollmentExplorerRoute() {
             : "View payer enrollment published for your assigned provider groups."
         }
         actions={
-          contextMatchesUrl && firstPage && !reportInvalid ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void exportCsv()}
-              disabled={exporting}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />{" "}
-              {exporting ? "Preparing…" : "Download CSV"}
-            </Button>
-          ) : undefined
+          <>
+            <AboutReportButton reportKey="enrollment-explorer" />
+            {contextMatchesUrl && firstPage && !reportInvalid ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void exportCsv()}
+                disabled={exporting}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />{" "}
+                {exporting ? "Preparing…" : "Download CSV"}
+              </Button>
+            ) : null}
+          </>
         }
       />
       {!context ? (

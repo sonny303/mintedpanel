@@ -4,8 +4,9 @@
 // an active org (renders from the cross-org registry; org-scoped reports gate
 // themselves inside their content).
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BarChart3, ChevronRight } from "lucide-react";
+import { BarChart3, BookOpen, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useInboundLeads } from "@/hooks/useInboundLeads";
 import { useAuthStore } from "@/lib/auth-store";
@@ -44,6 +45,18 @@ function ReportCard({ report, badge }: { report: ReportDef; badge?: number }) {
   );
 }
 
+/** The Reporting Guide entry point — both audiences get it. */
+function GuideButton() {
+  return (
+    <Button asChild variant="outline" size="sm">
+      <Link to="/reporting/guide">
+        <BookOpen />
+        Guide &amp; definitions
+      </Link>
+    </Button>
+  );
+}
+
 function ReportingCenterPage() {
   const audience = useAuthStore((state) => state.accessContext?.audience);
   return audience === "client" ? <ClientReportingCenter /> : <InternalReportingCenter />;
@@ -56,6 +69,7 @@ function ClientReportingCenter() {
       <PageHeader
         title="Reporting Center"
         description="View payer enrollment published for your assigned provider groups."
+        actions={<GuideButton />}
       />
       {report ? (
         <section aria-label="Credentialing reports" className="max-w-3xl">
@@ -76,6 +90,7 @@ function InternalReportingCenter() {
       <PageHeader
         title="Reporting Center"
         description="Cross-organization reports for your book of business."
+        actions={<GuideButton />}
       />
       <div className="space-y-6">
         {REPORT_GROUPS.map((group) => {

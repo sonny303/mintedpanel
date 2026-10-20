@@ -4,6 +4,11 @@ _Updated for: provider CSV first-facility-as-primary (2026-08-14); Add Provider 
 data the app shows and stores. Terms are grouped by the surface where you
 meet them; each definition describes the SHIPPED behavior on `redesign`._
 
+The Reporting Center's in-app **Guide & definitions** (`/reporting/guide`)
+carries the customer-facing version of these definitions, plus report labels
+and metrics, in plain English. Its content lives in
+`src/lib/reportingGuide.ts`; see [Reporting Center](./reporting-center.md#reporting-guide-help-and-data-dictionary).
+
 ## Core entities
 
 - **Organization (org)** — the customer account. Everything you see is

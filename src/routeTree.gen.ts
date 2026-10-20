@@ -66,6 +66,7 @@ import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials
 import { Route as ReportingEnrollmentExplorerRouteImport } from './routes/reporting.enrollment-explorer'
 import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
 import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
+import { Route as ReportingGuideRouteImport } from './routes/reporting.guide'
 import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launches'
 import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
 import { Route as ReportingLocationsPerGroupRouteImport } from './routes/reporting.locations-per-group'
@@ -393,6 +394,11 @@ const ReportingFacilitiesWithoutProvidersRoute =
     path: '/reporting/facilities-without-providers',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ReportingGuideRoute = ReportingGuideRouteImport.update({
+  id: '/reporting/guide',
+  path: '/reporting/guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportingLaunchesRoute = ReportingLaunchesRouteImport.update({
   id: '/reporting/launches',
   path: '/reporting/launches',
@@ -635,6 +641,7 @@ export interface FileRoutesByFullPath {
   '/reporting/enrollment-explorer': typeof ReportingEnrollmentExplorerRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/guide': typeof ReportingGuideRoute
   '/reporting/launches': typeof ReportingLaunchesRoute
   '/reporting/leads': typeof ReportingLeadsRoute
   '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
@@ -721,6 +728,7 @@ export interface FileRoutesByTo {
   '/reporting/enrollment-explorer': typeof ReportingEnrollmentExplorerRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/guide': typeof ReportingGuideRoute
   '/reporting/launches': typeof ReportingLaunchesRoute
   '/reporting/leads': typeof ReportingLeadsRoute
   '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
@@ -817,6 +825,7 @@ export interface FileRoutesById {
   '/reporting/enrollment-explorer': typeof ReportingEnrollmentExplorerRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/guide': typeof ReportingGuideRoute
   '/reporting/launches': typeof ReportingLaunchesRoute
   '/reporting/leads': typeof ReportingLeadsRoute
   '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
@@ -914,6 +923,7 @@ export interface FileRouteTypes {
     | '/reporting/enrollment-explorer'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
+    | '/reporting/guide'
     | '/reporting/launches'
     | '/reporting/leads'
     | '/reporting/locations-per-group'
@@ -1000,6 +1010,7 @@ export interface FileRouteTypes {
     | '/reporting/enrollment-explorer'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
+    | '/reporting/guide'
     | '/reporting/launches'
     | '/reporting/leads'
     | '/reporting/locations-per-group'
@@ -1095,6 +1106,7 @@ export interface FileRouteTypes {
     | '/reporting/enrollment-explorer'
     | '/reporting/expiring-credentials'
     | '/reporting/facilities-without-providers'
+    | '/reporting/guide'
     | '/reporting/launches'
     | '/reporting/leads'
     | '/reporting/locations-per-group'
@@ -1187,6 +1199,7 @@ export interface RootRouteChildren {
   ReportingEnrollmentExplorerRoute: typeof ReportingEnrollmentExplorerRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
   ReportingFacilitiesWithoutProvidersRoute: typeof ReportingFacilitiesWithoutProvidersRoute
+  ReportingGuideRoute: typeof ReportingGuideRoute
   ReportingLaunchesRoute: typeof ReportingLaunchesRoute
   ReportingLeadsRoute: typeof ReportingLeadsRoute
   ReportingLocationsPerGroupRoute: typeof ReportingLocationsPerGroupRoute
@@ -1608,6 +1621,13 @@ declare module '@tanstack/react-router' {
       path: '/reporting/facilities-without-providers'
       fullPath: '/reporting/facilities-without-providers'
       preLoaderRoute: typeof ReportingFacilitiesWithoutProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/guide': {
+      id: '/reporting/guide'
+      path: '/reporting/guide'
+      fullPath: '/reporting/guide'
+      preLoaderRoute: typeof ReportingGuideRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reporting/launches': {
@@ -2054,6 +2074,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
   ReportingFacilitiesWithoutProvidersRoute:
     ReportingFacilitiesWithoutProvidersRoute,
+  ReportingGuideRoute: ReportingGuideRoute,
   ReportingLaunchesRoute: ReportingLaunchesRoute,
   ReportingLeadsRoute: ReportingLeadsRoute,
   ReportingLocationsPerGroupRoute: ReportingLocationsPerGroupRoute,

@@ -183,10 +183,13 @@ function RootComponent() {
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const accessContext = useAuthStore((s) => s.accessContext);
+  // The Reporting Guide is static help content (no data reads), audience-
+  // narrowed inside the page, so client users may open it too.
   const isRestrictedReportingPath =
     pathname === "/reporting" ||
     pathname === "/reporting/" ||
-    pathname === "/reporting/enrollment-explorer";
+    pathname === "/reporting/enrollment-explorer" ||
+    pathname === "/reporting/guide";
   const routeContextKey = accessContext?.contextRevision ?? activeOrgId ?? "no-context";
   const routeOutlet = <Outlet key={routeContextKey} />;
 

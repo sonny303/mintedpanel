@@ -2,6 +2,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { LaunchesReport } from "@/components/reporting/LaunchesReport";
 
 export const Route = createFileRoute("/reporting/launches")({
@@ -21,6 +22,7 @@ function ReportPage() {
       <PageHeader
         title="Launches"
         description="What's opening when — go-live dates, providers, open cases, and at-risk flags."
+        actions={<AboutReportButton reportKey="launches" />}
       />
       <LaunchesReport />
     </div>

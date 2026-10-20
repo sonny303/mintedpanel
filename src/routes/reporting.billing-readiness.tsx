@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { BillingReadinessReport } from "@/components/reporting/BillingReadinessReport";
 
 export const Route = createFileRoute("/reporting/billing-readiness")({
@@ -20,6 +21,7 @@ function BillingReadinessPage() {
       <PageHeader
         title="Billing Readiness"
         description="Review current enrollment prerequisites and recorded credentialing changes before releasing held claims."
+        actions={<AboutReportButton reportKey="billing-readiness" />}
       />
       <BillingReadinessReport />
     </div>

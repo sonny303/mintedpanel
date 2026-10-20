@@ -2,6 +2,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { AuditLogReport } from "@/components/reporting/AuditLogReport";
 
 export const Route = createFileRoute("/reporting/audit-log")({
@@ -21,6 +22,7 @@ function ReportPage() {
       <PageHeader
         title="Audit Log"
         description="Read-only history of organization activity. Entries can never be edited or deleted."
+        actions={<AboutReportButton reportKey="audit-log" />}
       />
       <AuditLogReport />
     </div>

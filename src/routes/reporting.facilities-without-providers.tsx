@@ -2,6 +2,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { FacilitiesWithoutProvidersReport } from "@/components/reporting/FacilitiesWithoutProvidersReport";
 
 export const Route = createFileRoute("/reporting/facilities-without-providers")({
@@ -21,6 +22,7 @@ function ReportPage() {
       <PageHeader
         title="Facilities Without Providers"
         description="Active locations with no providers assigned."
+        actions={<AboutReportButton reportKey="facilities-without-providers" />}
       />
       <FacilitiesWithoutProvidersReport />
     </div>

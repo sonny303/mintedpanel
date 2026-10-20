@@ -4,6 +4,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AboutReportButton } from "@/components/reporting/guide/AboutReportButton";
 import { PortfolioReport } from "@/components/reporting/PortfolioReport";
 
 export const Route = createFileRoute("/reporting/portfolio")({
@@ -20,7 +21,11 @@ function PortfolioReportPage() {
         <ChevronLeft className="h-3.5 w-3.5" />
         Reporting Center
       </Link>
-      <PageHeader title="Portfolio" description="Your organizations across the business." />
+      <PageHeader
+        title="Portfolio"
+        description="Your organizations across the business."
+        actions={<AboutReportButton reportKey="portfolio" />}
+      />
       <PortfolioReport />
     </div>
   );
