@@ -178,7 +178,16 @@ export interface BillingFeedFilters {
   range: BillingFeedRange;
   facilityId?: string;
   payerId?: string;
+  kind?: BillingFeedKind;
 }
+
+/** Change-type filter options, in display order. */
+export const BILLING_FEED_KIND_LABELS: Record<BillingFeedKind, string> = {
+  approval: "Enrollment approved",
+  facility_added: "Facility linked",
+  termination: "Termination effective",
+  license_expiration: "License expired",
+};
 
 const PTA_TAXONOMY = "225200000X";
 const OTA_TAXONOMY_PREFIX = "224Z";
@@ -223,17 +232,23 @@ function shiftDays(date: string, days: number): string | null {
   return value.toISOString().slice(0, 10);
 }
 
+// A membership with no start date counts as started (PM decision 2026-10-20),
+// the same rule the enrollment readiness matrix applies: only a recorded
+// future start or a passed end date takes a clinician off the group.
 function isCurrentMembership(
   row: BillingGroupMembership,
   today: string,
-): { current: boolean; missing: boolean; invalid: boolean } {
-  if (!row.startDate) return { current: false, missing: true, invalid: false };
-  if (!validIsoDate(row.startDate) || (row.endDate !== null && !validIsoDate(row.endDate))) {
-    return { current: false, missing: false, invalid: true };
+): { current: boolean; invalid: boolean } {
+  if (
+    (row.startDate !== null && !validIsoDate(row.startDate)) ||
+    (row.endDate !== null && !validIsoDate(row.endDate))
+  ) {
+    return { current: false, invalid: true };
   }
   return {
-    current: row.startDate <= today && (row.endDate === null || row.endDate >= today),
-    missing: false,
+    current:
+      (row.startDate === null || row.startDate <= today) &&
+      (row.endDate === null || row.endDate >= today),
     invalid: false,
   };
 }
@@ -244,6 +259,83 @@ function isPtTaxonomy(code: string | null): code is string {
   return Boolean(
     label?.startsWith("Physical Therapist") && label !== "Physical Therapist Assistant",
   );
+}
+
+interface SnapshotIndex {
+  providers: Map<string, BillingProvider>;
+  groups: Map<string, BillingGroup>;
+  facilities: Map<string, BillingFacility>;
+  payers: Map<string, BillingPayer>;
+  casesByProvider: Map<string, BillingCase[]>;
+  caseFacilitiesByCase: Map<string, BillingCaseFacility[]>;
+  membershipsByProvider: Map<string, BillingGroupMembership[]>;
+  assignmentsByProvider: Map<string, BillingFacilityAssignment[]>;
+  assignmentsByFacility: Map<string, BillingFacilityAssignment[]>;
+  licensesByProvider: Map<string, BillingLicense[]>;
+}
+
+const INDEXED_ARRAYS = [
+  "providers",
+  "groups",
+  "facilities",
+  "payers",
+  "groupMemberships",
+  "facilityAssignments",
+  "licenses",
+  "cases",
+  "caseFacilities",
+] as const;
+
+const snapshotIndexes = new WeakMap<
+  BillingReadinessSnapshot,
+  { arrays: readonly unknown[][]; lengths: number[]; index: SnapshotIndex }
+>();
+
+function byId<T extends { id: string }>(rows: readonly T[]): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const row of rows) if (!map.has(row.id)) map.set(row.id, row);
+  return map;
+}
+
+function groupRows<T>(rows: readonly T[], key: (row: T) => string | null): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const value = key(row);
+    if (value === null) continue;
+    const current = map.get(value);
+    if (current) current.push(row);
+    else map.set(value, [row]);
+  }
+  return map;
+}
+
+// At Luna scale (thousands of clinicians, tens of thousands of cases) an
+// assessment must not rescan the whole snapshot. The index is rebuilt whenever
+// one of the snapshot's arrays is replaced or changes length; rows are shared
+// by reference, so edits to a row's fields are always seen.
+function snapshotIndex(snapshot: BillingReadinessSnapshot): SnapshotIndex {
+  const arrays = INDEXED_ARRAYS.map((key) => snapshot[key] as unknown[]);
+  const cached = snapshotIndexes.get(snapshot);
+  if (
+    cached &&
+    arrays.every((rows, i) => rows === cached.arrays[i] && rows.length === cached.lengths[i])
+  ) {
+    return cached.index;
+  }
+  const index: SnapshotIndex = {
+    providers: byId(snapshot.providers),
+    groups: byId(snapshot.groups),
+    facilities: byId(snapshot.facilities),
+    payers: byId(snapshot.payers),
+    casesByProvider: groupRows(snapshot.cases, (row) => row.providerId),
+    caseFacilitiesByCase: groupRows(snapshot.caseFacilities, (row) => row.caseId),
+    membershipsByProvider: groupRows(snapshot.groupMemberships, (row) => row.providerId),
+    assignmentsByProvider: groupRows(snapshot.facilityAssignments, (row) => row.providerId),
+    assignmentsByFacility: groupRows(snapshot.facilityAssignments, (row) => row.facilityId),
+    licensesByProvider: groupRows(snapshot.licenses, (row) => row.providerId),
+  };
+  snapshotIndexes.set(snapshot, { arrays, lengths: arrays.map((rows) => rows.length), index });
+  return index;
 }
 
 function currentStateLicense(
@@ -343,8 +435,18 @@ function providerFacilityEvidence(
   includeCase: boolean,
 ): BillingReason[] {
   const reasons: BillingReason[] = [];
-  if (provider.status !== "active") {
-    reasons.push({ severity: "stop", label: "The clinician is not active." });
+  // Only a terminated clinician is Do Not Bill. "onboarding" is the create
+  // default and rarely flipped, so it holds rather than stops (PM decision
+  // 2026-10-20): an approved, effective enrollment must never read as a stop.
+  if (provider.status === "terminated") {
+    reasons.push({ severity: "stop", label: "The clinician is terminated." });
+  } else if (provider.status === "onboarding") {
+    reasons.push({
+      severity: "hold",
+      label: "The clinician is still marked Onboarding. Mark them Active to clear this hold.",
+    });
+  } else if (provider.status !== "active") {
+    reasons.push({ severity: "hold", label: "The clinician status is not recorded." });
   }
   if (provider.verificationState !== "verified") {
     reasons.push({ severity: "hold", label: "Clinician verification is incomplete." });
@@ -362,9 +464,10 @@ function providerFacilityEvidence(
   if (!state)
     reasons.push({ severity: "hold", label: "The facility state is missing or invalid." });
 
+  const index = snapshotIndex(snapshot);
   if (group) {
-    const memberships = snapshot.groupMemberships.filter(
-      (row) => row.providerId === provider.id && row.groupId === group.id,
+    const memberships = (index.membershipsByProvider.get(provider.id) ?? []).filter(
+      (row) => row.groupId === group.id,
     );
     const states = memberships.map((row) => isCurrentMembership(row, today));
     if (states.some((result) => result.invalid)) {
@@ -376,15 +479,13 @@ function providerFacilityEvidence(
           label: "Conflicting current group memberships are recorded.",
         });
       }
-    } else if (states.some((result) => result.missing)) {
-      reasons.push({ severity: "hold", label: "A group membership start date is missing." });
     } else {
       reasons.push({ severity: "hold", label: "Current group membership is not established." });
     }
   }
 
-  const assignments = snapshot.facilityAssignments.filter(
-    (row) => row.providerId === provider.id && row.facilityId === facility.id,
+  const assignments = (index.assignmentsByProvider.get(provider.id) ?? []).filter(
+    (row) => row.facilityId === facility.id,
   );
   if (assignments.length === 0) {
     reasons.push({
@@ -405,7 +506,12 @@ function providerFacilityEvidence(
   }
 
   if (includeCase && state) {
-    const licenses = currentStateLicense(snapshot.licenses, provider.id, state, today);
+    const licenses = currentStateLicense(
+      index.licensesByProvider.get(provider.id) ?? [],
+      provider.id,
+      state,
+      today,
+    );
     if (licenses.reason) reasons.push(licenses.reason);
   }
   return reasons;
@@ -431,7 +537,13 @@ function supervisorCandidates(
   today: string,
 ): BillingSupervisorCandidate[] {
   if (!group || !state || !facility.isActive || !group.isActive) return [];
+  const index = snapshotIndex(snapshot);
+  // Candidates must be assigned to this facility, so only its roster is read.
+  const rosterIds = new Set(
+    (index.assignmentsByFacility.get(facility.id) ?? []).map((row) => row.providerId),
+  );
   return snapshot.providers
+    .filter((provider) => rosterIds.has(provider.id))
     .filter((provider) => provider.id !== selectedProviderId && isPtTaxonomy(provider.taxonomyCode))
     .filter(
       (provider) =>
@@ -456,14 +568,13 @@ export function evaluateBillingReadiness(
   today: string,
 ): BillingAssessment | null {
   if (!validIsoDate(today)) return null;
-  const provider = snapshot.providers.find((row) => row.id === selection.providerId);
-  const facility = snapshot.facilities.find((row) => row.id === selection.facilityId);
-  const payer = snapshot.payers.find((row) => row.id === selection.payerId);
+  const index = snapshotIndex(snapshot);
+  const provider = index.providers.get(selection.providerId);
+  const facility = index.facilities.get(selection.facilityId);
+  const payer = index.payers.get(selection.payerId);
   if (!provider || !facility || !payer) return null;
 
-  const group = facility.groupId
-    ? (snapshot.groups.find((row) => row.id === facility.groupId) ?? null)
-    : null;
+  const group = facility.groupId ? (index.groups.get(facility.groupId) ?? null) : null;
   const state = stateCode(facility.state);
   const reasons = providerFacilityEvidence(
     snapshot,
@@ -474,9 +585,8 @@ export function evaluateBillingReadiness(
     today,
     false,
   );
-  const exactCases = snapshot.cases.filter(
+  const exactCases = (index.casesByProvider.get(provider.id) ?? []).filter(
     (row) =>
-      row.providerId === provider.id &&
       row.groupId === (facility.groupId ?? null) &&
       row.payerId === payer.id &&
       state !== null &&
@@ -496,8 +606,8 @@ export function evaluateBillingReadiness(
     });
   } else if (selectedCase) {
     const enrollment = selectedCase;
-    const linked = snapshot.caseFacilities.some(
-      (row) => row.caseId === enrollment.id && row.facilityId === facility.id,
+    const linked = (index.caseFacilitiesByCase.get(enrollment.id) ?? []).some(
+      (row) => row.facilityId === facility.id,
     );
     if (!linked)
       reasons.push({
@@ -580,7 +690,12 @@ export function evaluateBillingReadiness(
       }
     }
     if (state) {
-      const license = currentStateLicense(snapshot.licenses, provider.id, state, today);
+      const license = currentStateLicense(
+        index.licensesByProvider.get(provider.id) ?? [],
+        provider.id,
+        state,
+        today,
+      );
       if (license.reason) reasons.push(license.reason);
     }
   }
@@ -677,14 +792,11 @@ function makeFeedEvent(
   snapshot: BillingReadinessSnapshot,
   fields: Omit<BillingFeedEvent, "providerName" | "npi" | "facilityName" | "payerName">,
 ): BillingFeedEvent | null {
-  const provider = snapshot.providers.find((row) => row.id === fields.providerId);
+  const index = snapshotIndex(snapshot);
+  const provider = index.providers.get(fields.providerId);
   if (!provider) return null;
-  const facility = fields.facilityId
-    ? (snapshot.facilities.find((row) => row.id === fields.facilityId) ?? null)
-    : null;
-  const payer = fields.payerId
-    ? (snapshot.payers.find((row) => row.id === fields.payerId) ?? null)
-    : null;
+  const facility = fields.facilityId ? (index.facilities.get(fields.facilityId) ?? null) : null;
+  const payer = fields.payerId ? (index.payers.get(fields.payerId) ?? null) : null;
   return {
     ...fields,
     eventDate: eventDateLabel(fields.eventDate),
@@ -700,6 +812,7 @@ export function buildBillingFeed(
   today: string,
 ): BillingFeedEvent[] {
   if (!validIsoDate(today)) return [];
+  const index = snapshotIndex(snapshot);
   const casesById = new Map(snapshot.cases.map((row) => [row.id, row]));
   const linkedFacilitiesByCase = new Map<string, BillingCaseFacility[]>();
   for (const link of snapshot.caseFacilities) {
@@ -821,22 +934,19 @@ export function buildBillingFeed(
       effectiveExpiredDate > today
     )
       continue;
-    const matchingAssignments = snapshot.facilityAssignments.filter(
+    const providerId = license.providerId;
+    const matchingAssignments = (index.assignmentsByProvider.get(providerId) ?? []).filter(
       (row) =>
-        row.providerId === license.providerId &&
-        row.facilityId &&
-        row.startDate &&
-        validIsoDate(row.startDate) &&
-        row.startDate <= today,
+        row.facilityId && row.startDate && validIsoDate(row.startDate) && row.startDate <= today,
     );
     for (const assignment of matchingAssignments) {
-      const facility = snapshot.facilities.find((row) => row.id === assignment.facilityId);
+      const facility = assignment.facilityId
+        ? index.facilities.get(assignment.facilityId)
+        : undefined;
       if (!facility || stateCode(facility.state) !== stateCode(license.state)) continue;
-      const payerCases = snapshot.cases.filter(
+      const payerCases = (index.casesByProvider.get(providerId) ?? []).filter(
         (row) =>
-          row.providerId === license.providerId &&
-          row.groupId === facility.groupId &&
-          stateCode(row.state) === stateCode(license.state),
+          row.groupId === facility.groupId && stateCode(row.state) === stateCode(license.state),
       );
       const contextCases = payerCases.length > 0 ? payerCases : [null];
       for (const row of contextCases) {
@@ -879,7 +989,8 @@ export function filterBillingFeed(
     (event) =>
       eventWithinRange(event, filters.range, today) &&
       (!filters.facilityId || event.facilityId === filters.facilityId) &&
-      (!filters.payerId || event.payerId === filters.payerId),
+      (!filters.payerId || event.payerId === filters.payerId) &&
+      (!filters.kind || event.kind === filters.kind),
   );
 }
 
@@ -1001,4 +1112,227 @@ export function billingFeedQueryWindowStart(today: string): string | null {
 
 export function isPtaTaxonomy(code: string | null): boolean {
   return code?.trim().toUpperCase() === PTA_TAXONOMY;
+}
+
+/** The current assessment for a feed event's own case and facility, or null
+ * when that pair no longer resolves to the same case (moved group, conflict). */
+export function assessFeedEvent(
+  snapshot: BillingReadinessSnapshot,
+  event: BillingFeedEvent,
+  today: string,
+): BillingAssessment | null {
+  if (!event.payerId || !event.facilityId) return null;
+  const assessment = evaluateBillingReadiness(
+    snapshot,
+    { providerId: event.providerId, facilityId: event.facilityId, payerId: event.payerId },
+    today,
+  );
+  if (
+    !assessment?.case ||
+    assessment.case.id !== event.caseId ||
+    assessment.case.groupId !== event.groupId
+  ) {
+    return null;
+  }
+  return assessment;
+}
+
+/** Every visible change-feed row with its current readiness, for export. */
+export function buildChangeFeedCsv(
+  snapshot: BillingReadinessSnapshot,
+  events: BillingFeedEvent[],
+  today: string,
+): string {
+  const headings = [
+    "Date",
+    "Change",
+    "Source",
+    "Clinician",
+    "Provider NPI",
+    "Facility",
+    "Payer",
+    "State",
+    "Current readiness",
+    "Reasons",
+    "Recorded confirmed effective date",
+    "Assessed as of",
+  ];
+  const rows = events.map((event) => {
+    const assessment = assessFeedEvent(snapshot, event, today);
+    return [
+      eventLocalCalendarDate(event.eventDate) ?? event.eventDate,
+      event.title,
+      event.recorded ? "Recorded" : "Date-derived",
+      event.providerName,
+      event.npi ?? "",
+      event.facilityName ?? "",
+      event.payerName ?? "",
+      event.state ?? "",
+      assessment?.label ?? "Unable to assess",
+      assessment?.reasons.map((reason) => reason.label).join(" ") ?? "",
+      assessment?.confirmedEffectiveDate ?? "",
+      today,
+    ];
+  });
+  return [headings, ...rows]
+    .map((row) => row.map((cell) => safeCsvCell(cell)).join(","))
+    .join("\r\n");
+}
+
+export interface BillingProviderMatch {
+  provider: BillingProvider;
+  name: string;
+  groupNames: string[];
+  states: string[];
+}
+
+export interface BillingProviderSearch {
+  matches: BillingProviderMatch[];
+  total: number;
+}
+
+const SEARCH_RESULT_LIMIT = 50;
+
+/** One search box for the clearance lookup: clinician name, NPI, state code,
+ * location, or group. Results carry group and state so duplicate names can be
+ * told apart; at most 50 are returned with the full match count. */
+export function searchBillingProviders(
+  snapshot: BillingReadinessSnapshot,
+  query: string,
+  today: string,
+): BillingProviderSearch {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return { matches: [], total: 0 };
+  const index = snapshotIndex(snapshot);
+  const tokens = needle.split(/\s+/);
+  const digits = needle.replace(/\D/g, "");
+  const isNumeric = /^[\d\s-]+$/.test(needle) && digits.length >= 3;
+  const stateQuery = /^[a-z]{2}$/.test(needle) ? needle.toUpperCase() : null;
+
+  const ranked: Array<{ rank: number; match: BillingProviderMatch }> = [];
+  for (const provider of snapshot.providers) {
+    const name = `${provider.firstName} ${provider.lastName}`.trim();
+    const memberships = index.membershipsByProvider.get(provider.id) ?? [];
+    const current = memberships.filter((row) => isCurrentMembership(row, today).current);
+    const groupNames = [
+      ...new Set(
+        (current.length > 0 ? current : memberships)
+          .map((row) => index.groups.get(row.groupId)?.name)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ].sort();
+    const facilities = (index.assignmentsByProvider.get(provider.id) ?? [])
+      .map((row) => (row.facilityId ? index.facilities.get(row.facilityId) : undefined))
+      .filter((row): row is BillingFacility => Boolean(row));
+    const states = [
+      ...new Set(
+        [
+          ...facilities.map((row) => stateCode(row.state)),
+          ...(index.casesByProvider.get(provider.id) ?? []).map((row) => stateCode(row.state)),
+        ].filter((value): value is string => value !== null),
+      ),
+    ].sort();
+
+    const words = name.toLowerCase().split(/\s+/);
+    let rank: number | null = null;
+    if (isNumeric && provider.npi?.includes(digits)) rank = provider.npi === digits ? 0 : 1;
+    else if (name.toLowerCase() === needle) rank = 0;
+    else if (tokens.every((token) => words.some((word) => word.startsWith(token)))) rank = 2;
+    else if (stateQuery && states.includes(stateQuery)) rank = 3;
+    else if (
+      needle.length >= 3 &&
+      (facilities.some((row) => row.name.toLowerCase().includes(needle)) ||
+        groupNames.some((group) => group.toLowerCase().includes(needle)))
+    )
+      rank = 4;
+    if (rank === null) continue;
+    ranked.push({ rank, match: { provider, name, groupNames, states } });
+  }
+  ranked.sort(
+    (a, b) =>
+      a.rank - b.rank ||
+      a.match.name.localeCompare(b.match.name) ||
+      a.match.provider.id.localeCompare(b.match.provider.id),
+  );
+  return {
+    matches: ranked.slice(0, SEARCH_RESULT_LIMIT).map((row) => row.match),
+    total: ranked.length,
+  };
+}
+
+export interface BillingPayerStatusRow {
+  key: string;
+  caseId: string;
+  payer: BillingPayer;
+  facility: BillingFacility | null;
+  state: string | null;
+  status: BillingReadinessStatus;
+  label: BillingAssessment["label"];
+  reasons: BillingReason[];
+  confirmedEffectiveDate: string | null;
+  expectedEffectiveDate: string | null;
+  assessment: BillingAssessment | null;
+}
+
+/** Payer-by-payer readiness for one clinician: one row per enrollment case and
+ * linked location, alphabetical by payer then location. A case with no linked
+ * location still gets a row, held, so it never silently disappears. */
+export function providerPayerStatuses(
+  snapshot: BillingReadinessSnapshot,
+  providerId: string,
+  today: string,
+): BillingPayerStatusRow[] {
+  if (!validIsoDate(today)) return [];
+  const index = snapshotIndex(snapshot);
+  const rows: BillingPayerStatusRow[] = [];
+  for (const row of index.casesByProvider.get(providerId) ?? []) {
+    const payer = index.payers.get(row.payerId);
+    if (!payer) continue;
+    const facilityIds = [
+      ...new Set((index.caseFacilitiesByCase.get(row.id) ?? []).map((link) => link.facilityId)),
+    ];
+    if (facilityIds.length === 0) {
+      rows.push({
+        key: `${row.id}:none`,
+        caseId: row.id,
+        payer,
+        facility: null,
+        state: stateCode(row.state),
+        status: "hold",
+        label: "Hold",
+        reasons: [{ severity: "hold", label: "No location is linked to this enrollment case." }],
+        confirmedEffectiveDate: row.confirmedEffectiveDate,
+        expectedEffectiveDate: row.expectedEffectiveDate,
+        assessment: null,
+      });
+      continue;
+    }
+    for (const facilityId of facilityIds) {
+      const assessment = evaluateBillingReadiness(
+        snapshot,
+        { providerId, facilityId, payerId: row.payerId },
+        today,
+      );
+      if (!assessment) continue;
+      rows.push({
+        key: `${row.id}:${facilityId}`,
+        caseId: row.id,
+        payer,
+        facility: assessment.facility,
+        state: assessment.state,
+        status: assessment.status,
+        label: assessment.label,
+        reasons: assessment.reasons,
+        confirmedEffectiveDate: assessment.confirmedEffectiveDate,
+        expectedEffectiveDate: assessment.expectedEffectiveDate,
+        assessment,
+      });
+    }
+  }
+  return rows.sort(
+    (a, b) =>
+      a.payer.name.localeCompare(b.payer.name) ||
+      (a.facility?.name ?? "").localeCompare(b.facility?.name ?? "") ||
+      a.key.localeCompare(b.key),
+  );
 }

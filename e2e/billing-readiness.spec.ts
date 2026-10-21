@@ -75,10 +75,6 @@ function normalizeSelect(select: string | null | undefined): string {
   return (select ?? "").replace(/\s+/g, "");
 }
 
-function clinicianOption(providerId: string, name: string): string {
-  return `${name} · NPI ${syntheticNpi(providerId)}`;
-}
-
 function facilityOption(name: string, groupName = "Synthetic North Group"): string {
   return `${name} · NC · ${groupName}`;
 }
@@ -633,6 +629,22 @@ async function choose(page: import("@playwright/test").Page, label: string, opti
   }
 }
 
+// The lookup is one search box (RC-04): search, pick the clinician, then open
+// one payer row's full assessment.
+async function lookUp(page: Page, providerId: string, providerName: string, payerName: string) {
+  const search = page.getByLabel("Find a clinician");
+  await expect(search).toBeEnabled();
+  await search.fill(syntheticNpi(providerId));
+  await page
+    .getByRole("list", { name: "Matching clinicians" })
+    .getByRole("button", { name: new RegExp(providerName) })
+    .click();
+  await expect(
+    page.getByRole("tabpanel").getByText(`NPI ${syntheticNpi(providerId)}`),
+  ).toBeVisible();
+  await page.getByRole("button", { name: new RegExp(`^${payerName} at .*: details$`) }).click();
+}
+
 function feedRowsWithProvider(page: Page, providerName: string) {
   return page.getByRole("tabpanel").getByRole("row").filter({ hasText: providerName });
 }
@@ -663,23 +675,14 @@ test("Reporting Center links to billing readiness; exact approved scope is green
   await expect(page.getByRole("heading", { name: "Billing Readiness" })).toBeVisible();
 
   await page.getByRole("tab", { name: "Clearance Lookup" }).click();
-  await choose(page, "Clinician", clinicianOption("provider-pt", "Caseyproviderpt Synthetic"));
-  await choose(page, "Facility", facilityOption("Central Clinic"));
-  await choose(page, "Payer", "Blue Cross Synthetic");
-  await expect(page.getByRole("combobox", { name: "Clinician" })).toContainText(
-    `NPI ${syntheticNpi("provider-pt")}`,
-  );
-  await expect(page.getByRole("combobox", { name: "Facility" })).toContainText(
-    facilityOption("Central Clinic"),
-  );
+  await lookUp(page, "provider-pt", "Caseyproviderpt Synthetic", "Blue Cross Synthetic");
+  await expect(page.getByRole("tabpanel").getByText("Central Clinic").first()).toBeVisible();
   await expect(
     page.getByTestId("billing-assessment-status").getByText("Billable Ready", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("tabpanel").getByText("Caseyproviderpta Synthetic")).toHaveCount(0);
 
-  await choose(page, "Clinician", clinicianOption("provider-pta", "Caseyproviderpta Synthetic"));
-  await choose(page, "Facility", facilityOption("Central Clinic"));
-  await choose(page, "Payer", "Blue Cross Synthetic");
+  await lookUp(page, "provider-pta", "Caseyproviderpta Synthetic", "Blue Cross Synthetic");
   await expect(
     page.getByTestId("billing-assessment-status").getByText("Hold", { exact: true }),
   ).toBeVisible();
@@ -808,6 +811,19 @@ test("feed ranges and filters apply; digest includes only combinations that pass
 
   await choose(page, "Facility", "All facilities");
   await choose(page, "Payer", "All payers");
+  await choose(page, "Change type", "Termination effective");
+  await expect(feedRowsWithProvider(page, "Caseyproviderterminated Synthetic")).not.toHaveCount(0);
+  await expect(feedRowsWithProvider(page, "Caseyproviderold Synthetic")).toHaveCount(0);
+  const changesPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export changes" }).click();
+  const changes = await changesPromise;
+  expect(changes.suggestedFilename()).toBe("credentialing-changes.csv");
+  const changesText = await readFile(await changes.path(), "utf8");
+  expect(changesText).toContain("Enrollment termination effective");
+  expect(changesText).toContain(syntheticNpi("provider-terminated"));
+  expect(changesText).not.toContain(syntheticNpi("provider-old"));
+  await choose(page, "Change type", "All changes");
+
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Newly Billable Digest" }).click();
   const download = await downloadPromise;
@@ -835,16 +851,7 @@ test("switching organizations clears lookup selections and replaces feed rows", 
     timeout: 30000,
   });
   await page.getByRole("tab", { name: "Clearance Lookup" }).click();
-  await choose(
-    page,
-    "Clinician",
-    clinicianOption("provider-north", "Caseyprovidernorth Synthetic"),
-  );
-  await choose(page, "Facility", facilityOption("Central Clinic"));
-  await choose(page, "Payer", "Blue Cross Synthetic");
-  await expect(page.getByRole("combobox", { name: "Clinician" })).toContainText(
-    `NPI ${syntheticNpi("provider-north")}`,
-  );
+  await lookUp(page, "provider-north", "Caseyprovidernorth Synthetic", "Blue Cross Synthetic");
   expectOrganizationScoped(requests, ORG_A);
   const switchRequestStart = requests.length;
 
@@ -853,8 +860,8 @@ test("switching organizations clears lookup selections and replaces feed rows", 
   await expect(
     page.getByRole("button", { name: /Active organization: Synthetic South Rehab/ }),
   ).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Clinician" })).toHaveText("Select clinician");
-  await expect(page.getByRole("combobox", { name: "Facility" })).toHaveText("Select facility");
+  await expect(page.getByLabel("Find a clinician")).toHaveValue("");
+  await expect(page.getByTestId("billing-assessment-status")).toHaveCount(0);
   await page.getByRole("tab", { name: "Change Feed" }).click();
   await expect(feedRowsWithProvider(page, "Caseyprovidersouth Synthetic")).not.toHaveCount(0);
   await expect(feedRowsWithProvider(page, "Caseyprovidernorth Synthetic")).toHaveCount(0);
@@ -875,13 +882,7 @@ test("a failed fresh read clears a prior green result and cancels the digest", a
     timeout: 30000,
   });
   await page.getByRole("tab", { name: "Clearance Lookup" }).click();
-  await choose(
-    page,
-    "Clinician",
-    clinicianOption("provider-error", "Caseyprovidererror Synthetic"),
-  );
-  await choose(page, "Facility", facilityOption("Central Clinic"));
-  await choose(page, "Payer", "Blue Cross Synthetic");
+  await lookUp(page, "provider-error", "Caseyprovidererror Synthetic", "Blue Cross Synthetic");
   await expect(
     page.getByTestId("billing-assessment-status").getByText("Billable Ready", { exact: true }),
   ).toBeVisible();
