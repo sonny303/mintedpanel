@@ -602,6 +602,15 @@ The readiness service reads DOB / ssn_last4 / home-address columns **only to
 reduce them to presence booleans in the service** — values never enter the
 cache or render.
 
+**Whole-org inputs read to completion.** PostgREST stops an unranged read at
+max-rows (1000) and says nothing. Every readiness and generation source read
+(the three in `services/enrollmentReadiness.ts`, group assignments, licenses,
+generation case/contract rows, exclusions, and the browser `getProviders`
+roster) goes through `readCompletePages` (`src/lib/completePages.ts`):
+`count: "exact"`, id-ordered pages, and a throw rather than a short list.
+Pinned at Luna scale by `src/services/readinessReads.test.ts`. A new whole-org
+read does the same. The next-best-action queue reads do not yet (TD-55).
+
 ### Documents
 
 `src/lib/documents.ts` owns the kind metadata map (labels, owner grains,

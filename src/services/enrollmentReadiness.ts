@@ -1,5 +1,5 @@
 // E1.8 TE-2/TE-5 — the readiness read layer: batched org-scoped reads (one
-// query per source table, joined in memory by the pure evaluator — never
+// paged query per source table, joined in memory by the pure evaluator — never
 // per-row round-trips). First application consumer of provider_documents and
 // second of group_insurance_policies (both dormant until now; read-only here).
 //
@@ -7,8 +7,14 @@
 // ONLY to reduce them to presence booleans right here — date of birth, SSN
 // last-4, and home address values never leave this module, never enter the
 // cache, and never render.
+//
+// Every read here is an org-wide derivation input, so each one reads to
+// completion (readCompletePages, id-ordered pages) rather than stopping at
+// PostgREST's max-rows cap — a capped facts read would silently drop
+// providers from readiness AND generation candidacy.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
+import { readCompletePages } from "@/lib/completePages";
 import { requireActiveOrg } from "@/lib/audit";
 import { currentGroupReadinessDocuments, type GroupReadinessDocumentRow } from "@/lib/documents";
 import type {
@@ -41,17 +47,21 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
   // E4.2 TE-17 — the designated test provider is excluded from this ONE fence
   // read too, so it never appears in E1.8 readiness OR E2.0 generation
   // candidacy (the shared exclusion, at the shared source).
-  const { data, error } = await supabase
+  const query = supabase
     .from("providers")
     .select(
       "id, first_name, last_name, status, verification_state, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4",
+      { count: "exact" },
     )
     .eq("org_id", orgId)
     .neq("status", "terminated")
     .neq("verification_state", "pending_verification")
-    .neq("is_test_provider", true);
-  if (error) throw error;
-  const rows = camelizeRow<ProviderFactsRow[]>(data ?? []);
+    .neq("is_test_provider", true)
+    .order("id", { ascending: true });
+  const data = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Provider readiness facts",
+  });
+  const rows = camelizeRow<ProviderFactsRow[]>(data);
   return rows.map((r) => ({
     providerId: r.id,
     providerName: `${r.firstName} ${r.lastName}`.trim(),
@@ -70,24 +80,31 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
  * currency and never leave this module. */
 export async function listGroupReadinessDocuments(): Promise<GroupDocumentInput[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  const query = supabase
     .from("provider_documents")
     .select(
       "id, group_id, doc_type, expiration_date, document_family_id, version_number, supersedes_document_id",
+      { count: "exact" },
     )
     .eq("org_id", orgId)
     .not("group_id", "is", null)
-    .in("doc_type", ["w9", "coi"]);
-  if (error) throw error;
-  return currentGroupReadinessDocuments(camelizeRow<GroupReadinessDocumentRow[]>(data ?? []));
+    .in("doc_type", ["w9", "coi"])
+    .order("id", { ascending: true });
+  const data = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Group readiness documents",
+  });
+  return currentGroupReadinessDocuments(camelizeRow<GroupReadinessDocumentRow[]>(data));
 }
 
 export async function listGroupInsurancePolicies(): Promise<GroupInsuranceInput[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  const query = supabase
     .from("group_insurance_policies")
-    .select("group_id, policy_end_date")
-    .eq("org_id", orgId);
-  if (error) throw error;
-  return camelizeRow<GroupInsuranceInput[]>(data ?? []);
+    .select("group_id, policy_end_date", { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const data = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Group insurance policies",
+  });
+  return camelizeRow<GroupInsuranceInput[]>(data);
 }

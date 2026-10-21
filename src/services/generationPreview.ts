@@ -5,8 +5,12 @@
 //
 // PHI posture (TE-12): both reads are explicit narrow column sets — never
 // select('*') — and carry keys + status ids only, no demographics.
+//
+// Both read to completion (id-ordered pages): a case row missing past
+// PostgREST's max-rows would re-propose a case that already exists.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
+import { readCompletePages } from "@/lib/completePages";
 import { requireActiveOrg } from "@/lib/audit";
 
 /** The 4-part key set (TE-5/TE-6): group_id rides the projection since E2.1
@@ -24,12 +28,17 @@ export interface GenerationCaseRow {
 
 export async function listGenerationCaseRows(): Promise<GenerationCaseRow[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  const query = supabase
     .from("credential_cases")
-    .select("id, provider_id, payer_id, state, group_id, credentialing_status_id")
-    .eq("org_id", orgId);
-  if (error) throw error;
-  const rows = camelizeRow<GenerationCaseRow[]>(data ?? []);
+    .select("id, provider_id, payer_id, state, group_id, credentialing_status_id", {
+      count: "exact",
+    })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const data = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Generation case rows",
+  });
+  const rows = camelizeRow<GenerationCaseRow[]>(data);
   // Normalize a missing key to an explicit null — the two-branch match keys
   // on `groupId === null` and must never see undefined.
   return rows.map((r) => ({ ...r, groupId: r.groupId ?? null }));
@@ -47,10 +56,13 @@ export interface GenerationContractRow {
 
 export async function listGenerationContractRows(): Promise<GenerationContractRow[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  const query = supabase
     .from("contracts")
-    .select("group_id, payer_id, state, contracting_status_id")
-    .eq("org_id", orgId);
-  if (error) throw error;
-  return camelizeRow<GenerationContractRow[]>(data ?? []);
+    .select("group_id, payer_id, state, contracting_status_id", { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const data = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Generation contract rows",
+  });
+  return camelizeRow<GenerationContractRow[]>(data);
 }

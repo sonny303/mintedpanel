@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { markFirstFacilityPrimary } from "@/lib/assignmentScope";
 import { currentUserId, requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { readCompletePages } from "@/lib/completePages";
 import {
   attachProviderGroups,
   indexProviderGroups,
@@ -136,7 +137,9 @@ export interface ProviderPage {
 const SORTABLE_COLUMNS = new Set(["last_name", "first_name", "created_at", "updated_at", "status"]);
 
 // Single source of the provider list query. Serves both the browser
-// (unpaginated) and the API list route (paginated with exact total).
+// (unpaginated: every matching row, read to completion past PostgREST's
+// max-rows cap with an id tiebreak) and the API list route (paginated with
+// exact total).
 export async function listProviders(
   ctx: ProviderServiceCtx,
   filters: ProviderFilters = {},
@@ -156,7 +159,7 @@ export async function listProviders(
 
   let query = db
     .from("providers")
-    .select(selectStr, paged ? { count: "exact" } : {})
+    .select(selectStr, { count: "exact" })
     .eq("org_id", orgId)
     .order(sortColumn, { ascending });
 
@@ -178,16 +181,25 @@ export async function listProviders(
       .eq("credential_cases.payer_id", filters.payerId);
   }
 
+  let data: unknown[];
+  let count: number | null = null;
   if (paged) {
     const pageSize = Math.min(Math.max(options.pageSize ?? 25, 1), 100);
     const page = Math.max(options.page ?? 1, 1);
     const from = (page - 1) * pageSize;
-    query = query.range(from, from + pageSize - 1);
+    const result = await query.range(from, from + pageSize - 1);
+    if (result.error) throw result.error;
+    data = result.data ?? [];
+    count = result.count;
+  } else {
+    // The browser roster feeds whole-org derivations (generation skips, the
+    // roster screens), so it never stops at the cap.
+    const ordered = query.order("id", { ascending: true });
+    data = await readCompletePages(async (from, to) => await ordered.range(from, to), {
+      label: "Provider list",
+    });
   }
-
-  const { data, error, count } = await query;
-  if (error) throw error;
-  const stripped = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => {
+  const stripped = (data as Array<Record<string, unknown>>).map((row) => {
     const { state_licenses: _sl, credential_cases: _cc, ...rest } = row;
     return rest;
   });
@@ -824,12 +836,17 @@ export async function updateProviderWithLicenses(
 // table; providers.group_id stays a frozen legacy mirror.
 export async function listProviderGroupAssignments(): Promise<ProviderGroupAssignment[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  // The group roster behind readiness and generation candidacy: read to
+  // completion, never cut at PostgREST's max-rows.
+  const query = supabase
     .from("provider_group_assignments")
-    .select("*")
-    .eq("org_id", orgId);
-  if (error) throw error;
-  return camelizeRow<ProviderGroupAssignment[]>(data ?? []);
+    .select("*", { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const rows = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Provider group assignment list",
+  });
+  return camelizeRow<ProviderGroupAssignment[]>(rows);
 }
 
 // E6.4 F6.4.3 — the record's in-place group-membership editor. A NARROW write:

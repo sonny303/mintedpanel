@@ -9,18 +9,24 @@
 // the free-text note, which may describe a provider.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
+import { readCompletePages } from "@/lib/completePages";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import type { CaseGenerationExclusion, CaseGenerationExclusionReason } from "@/types";
 
 export async function listCaseGenerationExclusions(): Promise<CaseGenerationExclusion[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  // Read to completion: an exclusion lost past PostgREST's max-rows would let
+  // generation re-propose the row it excludes.
+  const query = supabase
     .from("case_generation_exclusions")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("org_id", orgId)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return camelizeRow<CaseGenerationExclusion[]>(data ?? []);
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+  const rows = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "Case generation exclusion list",
+  });
+  return camelizeRow<CaseGenerationExclusion[]>(rows);
 }
 
 export interface CreateExclusionInput {
