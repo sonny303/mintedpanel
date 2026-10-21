@@ -69,6 +69,9 @@ export async function handleCreateUploadIntent(body: unknown, ctx: AuthContext):
   if (b.caseId != null && (typeof b.caseId !== "string" || !UUID_RE.test(b.caseId))) {
     return fail(404, "Case not found for this owner");
   }
+  if (b.payerId != null && (typeof b.payerId !== "string" || !UUID_RE.test(b.payerId))) {
+    return fail(404, "Payer not found");
+  }
 
   const input: UploadIntentInput = {
     ownerType: b.ownerType,
@@ -79,6 +82,7 @@ export async function handleCreateUploadIntent(body: unknown, ctx: AuthContext):
     mimeType: b.mimeType,
     familyId: (b.familyId as string | undefined) ?? null,
     caseId: (b.caseId as string | undefined) ?? null,
+    payerId: (b.payerId as string | undefined) ?? null,
   };
   const result = await createDocumentUploadIntent(
     { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },
@@ -138,6 +142,9 @@ export async function handleFinalizeDocument(body: unknown, ctx: AuthContext): P
   if (b.caseId != null && (typeof b.caseId !== "string" || !UUID_RE.test(b.caseId))) {
     return fail(404, "Case not found for this owner");
   }
+  if (b.payerId != null && (typeof b.payerId !== "string" || !UUID_RE.test(b.payerId))) {
+    return fail(404, "Payer not found");
+  }
 
   const input: FinalizeDocumentInput = {
     ownerType: b.ownerType,
@@ -150,6 +157,7 @@ export async function handleFinalizeDocument(body: unknown, ctx: AuthContext): P
     effectiveDate,
     expirationDate,
     caseId: (b.caseId as string | undefined) ?? null,
+    payerId: (b.payerId as string | undefined) ?? null,
   };
   const result = await finalizeDocument(
     { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },

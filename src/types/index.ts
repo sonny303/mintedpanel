@@ -1207,6 +1207,9 @@ export interface CredentialCase {
   // E2.1: the generation run that created this case; null = manual one-off or
   // pre-E2.1 row (the "run-less" trail). Optional — narrow projections predate it.
   generationRunId?: string | null;
+  /** True when a coordinator explicitly cleared/removed all locations from this case.
+   * Prevents automated defaults from overwriting the deliberate removal. */
+  locationsCleared?: boolean;
 }
 
 // E1.1 (Track B) — a case's additional locations. `credential_cases.facility_id`
@@ -2053,6 +2056,7 @@ export type DocumentKind =
   | "board_cert"
   | "cp_575"
   | "filled_form"
+  | "provider_enrollment_letter"
   | "other";
 
 /** Derived at render time from expiration_date + the shared per-kind
@@ -2065,6 +2069,7 @@ export interface ProviderDocument {
   providerId: string | null;
   groupId: string | null;
   caseId: string | null;
+  payerId?: string | null;
   docType: DocumentKind;
   fileName: string;
   filePath: string;
