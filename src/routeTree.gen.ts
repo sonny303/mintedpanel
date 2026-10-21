@@ -70,6 +70,7 @@ import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launch
 import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
 import { Route as ReportingLocationsPerGroupRouteImport } from './routes/reporting.locations-per-group'
 import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
+import { Route as ReportingProviderOnboardingRouteImport } from './routes/reporting.provider-onboarding'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
@@ -414,6 +415,12 @@ const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
   path: '/reporting/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingProviderOnboardingRoute =
+  ReportingProviderOnboardingRouteImport.update({
+    id: '/reporting/provider-onboarding',
+    path: '/reporting/provider-onboarding',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ShareTokenRoute = ShareTokenRouteImport.update({
   id: '/share/$token',
   path: '/share/$token',
@@ -639,6 +646,7 @@ export interface FileRoutesByFullPath {
   '/reporting/leads': typeof ReportingLeadsRoute
   '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/reporting/provider-onboarding': typeof ReportingProviderOnboardingRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
@@ -725,6 +733,7 @@ export interface FileRoutesByTo {
   '/reporting/leads': typeof ReportingLeadsRoute
   '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/reporting/provider-onboarding': typeof ReportingProviderOnboardingRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
@@ -821,6 +830,7 @@ export interface FileRoutesById {
   '/reporting/leads': typeof ReportingLeadsRoute
   '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/reporting/provider-onboarding': typeof ReportingProviderOnboardingRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
@@ -918,6 +928,7 @@ export interface FileRouteTypes {
     | '/reporting/leads'
     | '/reporting/locations-per-group'
     | '/reporting/portfolio'
+    | '/reporting/provider-onboarding'
     | '/share/$token'
     | '/ssn-intake/$token'
     | '/tasks/$id'
@@ -1004,6 +1015,7 @@ export interface FileRouteTypes {
     | '/reporting/leads'
     | '/reporting/locations-per-group'
     | '/reporting/portfolio'
+    | '/reporting/provider-onboarding'
     | '/share/$token'
     | '/ssn-intake/$token'
     | '/tasks/$id'
@@ -1099,6 +1111,7 @@ export interface FileRouteTypes {
     | '/reporting/leads'
     | '/reporting/locations-per-group'
     | '/reporting/portfolio'
+    | '/reporting/provider-onboarding'
     | '/share/$token'
     | '/ssn-intake/$token'
     | '/tasks/$id'
@@ -1191,6 +1204,7 @@ export interface RootRouteChildren {
   ReportingLeadsRoute: typeof ReportingLeadsRoute
   ReportingLocationsPerGroupRoute: typeof ReportingLocationsPerGroupRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
+  ReportingProviderOnboardingRoute: typeof ReportingProviderOnboardingRoute
   ShareTokenRoute: typeof ShareTokenRoute
   SsnIntakeTokenRoute: typeof SsnIntakeTokenRoute
   TasksIdRoute: typeof TasksIdRoute
@@ -1638,6 +1652,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingPortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/provider-onboarding': {
+      id: '/reporting/provider-onboarding'
+      path: '/reporting/provider-onboarding'
+      fullPath: '/reporting/provider-onboarding'
+      preLoaderRoute: typeof ReportingProviderOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/share/$token': {
       id: '/share/$token'
       path: '/share/$token'
@@ -2058,6 +2079,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportingLeadsRoute: ReportingLeadsRoute,
   ReportingLocationsPerGroupRoute: ReportingLocationsPerGroupRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
+  ReportingProviderOnboardingRoute: ReportingProviderOnboardingRoute,
   ShareTokenRoute: ShareTokenRoute,
   SsnIntakeTokenRoute: SsnIntakeTokenRoute,
   TasksIdRoute: TasksIdRoute,

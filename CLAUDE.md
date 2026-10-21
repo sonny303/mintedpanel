@@ -298,13 +298,6 @@ before any schema work.
 - `20261015130000_fill_sessions_system_today_date.sql` — additive nullable
   `fill_sessions.system_today_date`; the service probes for the column and
   drops only the date when it is absent, so the apply can follow the merge.
-- `20261017120000_case_creation_primary_location.sql` — **needs PM
-  sign-off.** `create_case_with_tasks` writes the primary `case_facilities`
-  row, plus a backfill of cases that have only the `facility_id` mirror (36
-  on production, 0 on staging, 2026-10-17). Verify: the function's `prosrc`
-  contains `INSERT INTO public.case_facilities`, and no case with a
-  `facility_id` lacks a matching child row. Staging already runs draft PR
-  #520's superset body; the migration's guard leaves that body alone.
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 
@@ -321,6 +314,13 @@ text; both function bodies md5-match the repo) and
 `fill_session_id`). Ledger versions are MCP-minted (`20261014154315`,
 `20261014154527`), not the filenames.
 
+Object-verified applied and dropped from this list (2026-10-20):
+`20261017120000_case_creation_primary_location.sql` on production (PM
+sign-off; ledger `20261020234352`). `create_case_with_tasks` `md5(prosrc)`
+matches the repo body, one overload, 36 cases backfilled, and no case with a
+`facility_id` lacks a `case_facilities` row. Staging runs draft PR #520's
+superset body, which the migration's guard leaves alone.
+
 Because some are unapplied, a `types.ts` regen may **delete** types for columns
 the repo just added. Check before regenerating.
 
@@ -330,8 +330,8 @@ All are repo migrations unless noted.
 
 - **`create_case_with_tasks(p_input jsonb, p_tasks jsonb)`** — transactional
   case + initial status history + tasks + audit rows, and the primary
-  `case_facilities` row whenever it stamps `facility_id` (repo
-  `20261017120000`; hosted production lacks it until the operator apply).
+  `case_facilities` row whenever it stamps `facility_id` (`20261017120000`,
+  on production since 2026-10-20).
   Exactly one overload. Threads
   `generation_run_id` and per-task `sop_template_id` / `sop_version` /
   `execution_type` / `sop_resolution_tier`. **Not replay-idempotent** — batch
@@ -569,6 +569,32 @@ creates tasks), `src/lib/nextBestActions.ts` (fixed shipped ranking; the config
 seam was removed), `src/lib/providerGaps.ts`, `src/lib/reports.ts` (grouped
 index — adding a report is one registry entry + one route),
 `src/lib/casesMatrix.ts` (the `/cases` Matrix board — see below).
+
+**Reporting Center rules that are easy to get wrong:**
+
+- **Billing Readiness** (`src/lib/billingReadiness.ts`): only a `terminated`
+  clinician is Do Not Bill; `onboarding` (the create default) is a Hold with
+  its own reason, so an approved, effective enrollment never reads as a stop
+  (PM 2026-10-20). A group membership with no `start_date` counts as current,
+  the same rule as the enrollment readiness matrix. Every lookup goes through
+  `snapshotIndex`, a per-snapshot Map index cached in a WeakMap and rebuilt
+  when any indexed array is replaced or changes length. Do not reintroduce
+  `snapshot.cases.filter(...)` per assessment: at ~21k cases the 90-day feed
+  becomes seconds. The Lookup is one search box (`searchBillingProviders`,
+  50 results + total) and a payer-by-payer table (`providerPayerStatuses`);
+  a case with no linked location still gets a held row.
+- **Portfolio** (`src/lib/portfolioFootprint.ts`, `listPortfolioFootprint` in
+  `src/services/reporting.ts`) is Organization → Group → State with provider
+  and active-location counts, CROSS-org under RLS like the rest of that
+  service. It absorbed Locations per Group (old route redirects). Empty and
+  all-inactive states still render `PortfolioContent`, which owns the
+  create-org CTA; the share view still uses `PortfolioContent` too.
+- **Provider Onboarding** (`src/lib/providerOnboarding.ts`): four stages,
+  each provider in exactly one; any case means Credentialing. Licenses are
+  judged for the states the provider works in (active facility assignments),
+  or all licenses when unassigned. DOB / SSN last-4 become presence booleans
+  in `src/services/providerOnboarding.ts` and never leave it. An "Invited"
+  stage waits on provider invites (MINT-89).
 
 **The readiness matrix is deliberately WIDE, and that is not what any one
 screen shows.** `evaluateEnrollmentReadiness` emits active targets × group

@@ -34,6 +34,7 @@ export const queryKeys = {
   // Org-wide case_facilities links (Launches). Same "cases" prefix ride.
   orgCaseFacilityLinks: (orgId: string) => ["cases", orgId, "facility-links"] as const,
   providerReadinessFacts: (orgId: string) => ["provider-readiness-facts", orgId] as const,
+  providerOnboarding: (orgId: string) => ["provider-onboarding", orgId] as const,
   groupReadinessDocuments: (orgId: string) => ["group-readiness-documents", orgId] as const,
   groupInsurancePolicies: (orgId: string) => ["group-insurance-policies", orgId] as const,
   templates: (orgId: string) => ["templates", orgId] as const,
@@ -111,8 +112,11 @@ export const queryKeys = {
   // active org (it renders without one). RLS scopes the read to the caller's
   // member orgs; org switch clears it via queryClient.removeQueries() anyway.
   portfolio: () => ["portfolio"] as const,
+  // Portfolio footprint (RC-05): cross-org and USER-scoped — the rows span
+  // every org the caller belongs to, so the identity is the user, not an org.
+  portfolioFootprint: (userId: string) => ["portfolio-footprint", userId] as const,
   // E1.6 — cross-org global catalog keys (deliberately un-scoped, like
-  // portfolio()/orgStates(): the catalog is platform-level data).
+  // portfolio(): the catalog is platform-level data).
   payerCatalog: () => ["payer-catalog"] as const,
   // Global provider lookup (spike PoC). CROSS-org and USER-scoped: the result
   // set spans every org the caller belongs to, so scoping it to the active org
@@ -143,8 +147,7 @@ export const queryKeys = {
   // session inside the service — no id rides the key.
   myProfile: () => ["my-profile"] as const,
   // Reporting Center (redesign E0.6). CROSS-org (renders without an active org):
-  // per-org geography for the state breakdown, and the caller's shares per report.
-  orgStates: () => ["org-states"] as const,
+  // the caller's shares per report.
   reportShares: (reportKey: string) => ["report-shares", reportKey] as const,
   // E4.2 Payer & SOP admin module. (The reason-code and queue-ranking editor
   // keys retired with their editors — E6.6 F6.6.6 fixed defaults; the Denied
