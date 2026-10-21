@@ -64,6 +64,8 @@ export interface UploadIntentInput {
    * resulting document once finalize returns. Never the canonical owner
    * itself — see verifyCaseLink. */
   caseId?: string | null;
+  /** Optional payer association (Proposal #2). */
+  payerId?: string | null;
 }
 
 export interface UploadIntent {
@@ -87,6 +89,8 @@ export interface FinalizeDocumentInput {
   /** Optional usage context (TE-1) — must be an org-owned case linked to the
    * owner; never the canonical owner itself. */
   caseId?: string | null;
+  /** Optional payer association (Proposal #2). */
+  payerId?: string | null;
 }
 
 export type DocumentStorageResult<T> =
@@ -186,20 +190,24 @@ async function verifyCaseLink(
   caseId: string,
   ownerType: DocumentOwnerType,
   ownerId: string,
-): Promise<boolean> {
+): Promise<{ linked: boolean; payerId: string | null }> {
   const { data: caseRow, error: caseErr } = await ctx.db
     .from("credential_cases")
-    .select("id, provider_id, group_id")
+    .select("id, provider_id, group_id, payer_id")
     .eq("id", caseId)
     .eq("org_id", ctx.orgId)
     .maybeSingle();
   if (caseErr) throw caseErr;
-  return Boolean(
+  const linked = Boolean(
     caseRow &&
     (ownerType === "provider"
       ? (caseRow as { provider_id: string | null }).provider_id === ownerId
       : (caseRow as { group_id: string | null }).group_id === ownerId),
   );
+  return {
+    linked,
+    payerId: (caseRow as { payer_id?: string | null } | null)?.payer_id ?? null,
+  };
 }
 
 /** Load a family's rows (org-scoped) and check it belongs to this owner with
@@ -269,8 +277,8 @@ export async function createDocumentUploadIntent(
   const displayName = normalizeDocumentFileName(input.fileName, input.fileName, input.mimeType);
 
   if (input.caseId) {
-    const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
-    if (!linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
+    const caseCheck = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
+    if (!caseCheck.linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
   }
 
   let familyId = input.familyId ?? null;
@@ -346,9 +354,11 @@ export async function finalizeDocument(
     return { kind: "rejected", status: 422, message: "versionNumber must be a positive integer" };
   }
 
+  let casePayerId: string | null = null;
   if (input.caseId) {
-    const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
-    if (!linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
+    const caseCheck = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
+    if (!caseCheck.linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
+    casePayerId = caseCheck.payerId;
   }
 
   const family = await loadFamily(ctx, input.familyId);
@@ -412,11 +422,13 @@ export async function finalizeDocument(
   }
 
   const head = currentVersions(family)[0] ?? null;
+  const resolvedPayerId = input.payerId ?? casePayerId ?? null;
   const insert: Database["public"]["Tables"]["provider_documents"]["Insert"] = {
     org_id: ctx.orgId,
     provider_id: input.ownerType === "provider" ? input.ownerId : null,
     group_id: input.ownerType === "group" ? input.ownerId : null,
     case_id: input.caseId ?? null,
+    payer_id: resolvedPayerId,
     doc_type: input.kind,
     file_path: path,
     file_name: displayName,

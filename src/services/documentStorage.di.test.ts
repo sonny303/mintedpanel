@@ -365,6 +365,41 @@ describe("finalizeDocument", () => {
     });
   });
 
+  it("stores explicit payer_id and inherits payer_id from linked case", async () => {
+    const PAYER = "55555555-5555-4555-8555-555555555555";
+    const { db, inserted } = fakeDb(
+      {
+        providers: [orgProvider],
+        credential_cases: [
+          { id: "case-payer-1", org_id: ORG, provider_id: PROVIDER, group_id: null, payer_id: PAYER },
+        ],
+      },
+      {
+        [`org/${ORG}/provider/${PROVIDER}/${FAMILY}/1`]: [
+          { name: "letter.pdf", metadata: { size: 500, mimetype: "application/pdf" } },
+        ],
+      },
+    );
+    const result = await finalizeDocument(ctx(db), {
+      ownerType: "provider",
+      ownerId: PROVIDER,
+      kind: "provider_enrollment_letter",
+      familyId: FAMILY,
+      versionNumber: 1,
+      fileName: "letter.pdf",
+      mimeType: "application/pdf",
+      effectiveDate: "2026-11-01",
+      caseId: "case-payer-1",
+    });
+    expect(result.kind).toBe("ok");
+    expect(inserted[0]).toMatchObject({
+      provider_id: PROVIDER,
+      doc_type: "provider_enrollment_letter",
+      case_id: "case-payer-1",
+      payer_id: PAYER,
+    });
+  });
+
   it("rejects missing and future W-9 signed dates before metadata writes", async () => {
     const { db, inserted } = fakeDb({ provider_groups: [orgGroup] });
     const nextDay = new Date();

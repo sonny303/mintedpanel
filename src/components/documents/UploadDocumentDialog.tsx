@@ -36,6 +36,7 @@ import {
   vaultPickerKinds,
 } from "@/lib/documents";
 import { useUploadDocument } from "@/hooks/useDocuments";
+import { usePayers } from "@/hooks/useAdmin";
 import type { DocumentKind, DocumentOwnerType, ProviderDocument } from "@/types";
 
 interface UploadDocumentDialogProps {
@@ -65,6 +66,7 @@ export function UploadDocumentDialog({
   onClose,
 }: UploadDocumentDialogProps) {
   const uploadM = useUploadDocument();
+  const payersQ = usePayers();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<DocumentKind | "">(replaceTarget?.docType ?? presetKind ?? "");
   const [file, setFile] = useState<File | null>(null);
@@ -72,6 +74,7 @@ export function UploadDocumentDialog({
   const [fileNameEdited, setFileNameEdited] = useState(false);
   const [effectiveDate, setEffectiveDate] = useState(replaceTarget?.effectiveDate ?? "");
   const [expirationDate, setExpirationDate] = useState("");
+  const [payerId, setPayerId] = useState<string>(replaceTarget?.payerId ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const kindLocked = Boolean(replaceTarget) || Boolean(presetKind);
@@ -130,6 +133,7 @@ export function UploadDocumentDialog({
         fileName,
         familyId: replaceTarget?.documentFamilyId ?? null,
         caseId: caseId ?? null,
+        payerId: payerId || null,
       },
       {
         onSuccess: (doc) => {
@@ -198,6 +202,28 @@ export function UploadDocumentDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {kind === "provider_enrollment_letter" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-payer">Payer (optional)</Label>
+              <Select
+                value={payerId || "none"}
+                onValueChange={(v) => setPayerId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger id="doc-payer">
+                  <SelectValue placeholder="Select a payer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None / Not payer specific</SelectItem>
+                  {(payersQ.data ?? []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="doc-file">File</Label>
