@@ -171,6 +171,28 @@ describe("setCaseStatus — params", () => {
     });
   });
 
+  it("threads a correction into Approved with its effective date (backfill from the letter)", async () => {
+    rpcMock.mockResolvedValue({
+      data: { id: "case-1", case_status: "approved", confirmed_effective_date: "2026-10-01" },
+      error: null,
+    });
+    const result = await setCaseStatus({
+      caseId: "case-1",
+      toStatus: "approved",
+      expectedStatus: "denied",
+      isCorrection: true,
+      note: "Backfilled from the approval letter",
+      effectiveDate: "2026-10-01",
+    });
+    expect(result.confirmedEffectiveDate).toBe("2026-10-01");
+    const { args } = rpcArgs();
+    expect(args).toMatchObject({
+      p_to_status: "approved",
+      p_is_correction: true,
+      p_effective_date: "2026-10-01",
+    });
+  });
+
   it("the Add-touch bump passes NO expected status (auto triggers may have advanced)", async () => {
     rpcMock.mockResolvedValue({
       data: { id: "case-1", case_status: "submitted" },

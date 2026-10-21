@@ -386,6 +386,9 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Verify set_case_status correction effective date on disposable PostgreSQL
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/set-case-status-correction-effective-date.sql
+
       - name: Verify portal field-map flywheel RPC on disposable PostgreSQL
         run: node scripts/security/verify-portal-field-map-learning.mjs
 

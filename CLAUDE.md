@@ -305,6 +305,14 @@ before any schema work.
   contains `INSERT INTO public.case_facilities`, and no case with a
   `facility_id` lacks a matching child row. Staging already runs draft PR
   #520's superset body; the migration's guard leaves that body alone.
+- `20261021120000_set_case_status_correction_effective_date.sql` — **needs
+  PM sign-off.** Same-signature `CREATE OR REPLACE` of `set_case_status`: an
+  admin correction into Approved stores `p_effective_date` when given. Both
+  hosted projects ran the E6.8 body unchanged on 2026-10-21 (`md5(prosrc)`
+  `9a010715…`). Verify: `prosrc` contains
+  `ELSIF p_is_correction AND p_to_status = 'approved' THEN`, still exactly one
+  overload. The repeated grant block also fixes staging's NULL ACL (PUBLIC
+  could EXECUTE).
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 
@@ -339,7 +347,14 @@ All are repo migrations unless noted.
 - **`set_case_status(...)`** — the ONE case-status transition path. Evidence
   rules, admin corrections, optimistic concurrency, append-only history with
   `reason_code_id`. At Approved, each **expected** payer ID must be supplied or
-  explicitly acked missing. Exactly one overload; never add a defaulted arg.
+  explicitly acked missing. An admin correction into Approved skips those
+  checks and writes no payer IDs, but stores `p_effective_date` when given
+  (repo `20261021120000`; hosted drops it until the operator apply). A
+  dateless correction is allowed and keeps the case's existing date; Billing
+  Readiness holds the case until one is entered. Exactly one overload; never
+  add a defaulted arg. Behavior proven by
+  `supabase/tests/set-case-status-correction-effective-date.sql` (CI
+  Migration dry-run).
 - **`delete_case(p_org_id, p_case_id)`** — admin-only SECURITY DEFINER hard
   delete. Removes the case and case-scoped children (touches, tasks,
   status_history, case_facilities; DB cascades for case_status_history /
