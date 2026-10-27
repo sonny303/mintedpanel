@@ -18,6 +18,8 @@
     "test:recovery": "node --test scripts/recovery/*.test.mjs",
     "test:backup": "node --test scripts/backup/*.test.mjs",
     "test:delivery": "node --test scripts/delivery/*.test.mjs",
+    "test:ops": "node --test scripts/ops/*.test.mjs",
+    "sync:catalog-to-staging": "node scripts/ops/sync-catalog-to-staging.mjs",
     "test:migrations": "node --test scripts/migrations/*.test.mjs",
     "check:migrations": "node scripts/migrations/cli.mjs check",
     "email:send-test": "node --env-file-if-exists=.env scripts/email/send-test.ts",
