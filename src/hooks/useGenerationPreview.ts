@@ -45,12 +45,18 @@ import {
   voidCaseGenerationExclusion,
   type CreateExclusionInput,
 } from "@/services/caseGenerationExclusions";
+import {
+  buildBlockerIndex,
+  buildGenerationBlockers,
+  type GenerationBlockerIndex,
+  type GenerationBlockers,
+} from "@/lib/generationBlockers";
 import { listGenerationCaseRows, listGenerationContractRows } from "@/services/generationPreview";
 import { planGenerationConfirm } from "@/lib/generationConfirm";
-import { isFallbackTemplate, pickTemplate, topRankedTemplates } from "@/lib/pickTemplate";
+import { isFallbackTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks, stampExecutionTypes, templateProvenance } from "@/lib/sopStamp";
-import { evaluateGeneration, type GatedRow } from "@/lib/generationGating";
+import { evaluateGeneration, resolveRowTemplate, type GatedRow } from "@/lib/generationGating";
 import { applyReleaseScope, releaseScopeRecord, type ReleaseScope } from "@/lib/releaseScope";
 import {
   confirmGenerationBatch,
@@ -59,7 +65,7 @@ import {
 } from "@/services/generationConfirm";
 import { useProviders } from "@/hooks/useProviders";
 import { useSops } from "@/hooks/useAdmin";
-import type { CaseGenerationExclusion } from "@/types";
+import type { CaseGenerationExclusion, SOPTemplate } from "@/types";
 
 export function useCaseGenerationExclusions() {
   const orgId = useActiveOrgId() ?? "no-org";
@@ -136,18 +142,36 @@ export interface GenerationPreviewData {
   unmatched: GenerationPreviewRow[] | undefined;
   /** GEN-SILENT — group members dropped before candidacy with an explanation. */
   skips: GenerationSkipRow[] | undefined;
+  /** Expected pairs that never became a row and that `skips` doesn't name
+   * (out-of-state targets, missing payer setup, archived payers) — org-wide;
+   * the grid narrows them with `scopeGenerationBlockers`. */
+  blockers: GenerationBlockers | undefined;
+  /** The same chain, for the "Why isn't it here?" lookup of one exact key. */
+  blockerIndex: GenerationBlockerIndex | undefined;
   /** E4.2 SOP hardening — keys of PROPOSED rows that resolve to the generic
    * fallback SOP (no payer-specific SOP matches). The preview labels these and
    * warns before confirming; the tier is persisted on the created run row. */
   fallbackRowKeys: Set<string> | undefined;
   /** provider id → facility ids, for a location-based release scope (TE-14). */
   providerFacilities: Map<string, Set<string>> | undefined;
+  /** Proposed rows whose top tier holds several SOPs → the tied SOPs. Chosen
+   * rows stay here (so the pick can change) but leave `ambiguous`. */
+  tiedTemplatesByKey: Map<string, SOPTemplate[]> | undefined;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
 }
 
-export function useGenerationPreview(scope?: GenerationScope): GenerationPreviewData {
+export interface GenerationPreviewOptions {
+  /** Operator picks for tied rows: preview row key → SOP template id. */
+  templateChoices?: ReadonlyMap<string, string>;
+}
+
+export function useGenerationPreview(
+  scope?: GenerationScope,
+  options?: GenerationPreviewOptions,
+): GenerationPreviewData {
+  const templateChoices = options?.templateChoices;
   const targetsQ = usePayerNetworkTargets();
   const groupAssignmentsQ = useProviderGroupAssignments();
   const facilityAssignmentsQ = useProviderAssignments();
@@ -241,33 +265,50 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       (r) => (!scopePayer || r.payerId === scopePayer) && (!scopeGroup || r.groupId === scopeGroup),
     );
 
-    const allSkips = buildGenerationSkips(
-      previewInput,
-      (rosterQ.data ?? []).map((p) => ({
-        providerId: p.id,
-        providerName: `${p.firstName} ${p.lastName}`.trim(),
-        pendingVerification: p.verificationState === "pending_verification",
-        skipEligible: p.status !== "terminated" && !p.referenceOnly && p.isTestProvider !== true,
-      })),
-    );
+    const roster = (rosterQ.data ?? []).map((p) => ({
+      providerId: p.id,
+      providerName: `${p.firstName} ${p.lastName}`.trim(),
+      pendingVerification: p.verificationState === "pending_verification",
+      skipEligible: p.status !== "terminated" && !p.referenceOnly && p.isTestProvider !== true,
+    }));
+    const allSkips = buildGenerationSkips(previewInput, roster);
     const skips = allSkips.filter(
       (s) => (!scopePayer || s.payerId === scopePayer) && (!scopeGroup || s.groupId === scopeGroup),
     );
+
+    // Brief 2026-10-27 — explain the expected pairs that never became rows.
+    // Fed the RAW targets (archived payers included) so an archived payer is
+    // named rather than silently dropped; candidacy above is untouched.
+    const blockerIndex = buildBlockerIndex({
+      today,
+      targets: targetsQ.data ?? [],
+      payers: payersQ.data ?? [],
+      groups: groupsQ.data ?? [],
+      groupAssignments: groupAssignmentsQ.data ?? [],
+      facilityAssignments: facilityAssignmentsQ.data ?? [],
+      facilities: facilitiesQ.data ?? [],
+      licenses: licensesQ.data ?? [],
+      roster,
+    });
+    const blockers = buildGenerationBlockers(blockerIndex, targetsQ.data ?? []);
 
     // TE-13 — gate proposed rows against their SOP's required attributes.
     const factsById = new Map<string, ProviderReadinessFacts>(
       (factsQ.data ?? []).map((f) => [f.providerId, f]),
     );
     const templates = templatesQ.data ?? [];
-    const gating = evaluateGeneration({ rows, templates, factsById });
+    const gating = evaluateGeneration({ rows, templates, factsById, templateChoices });
 
     // E4.2 SOP hardening — flag PROPOSED rows that resolve to the generic
-    // fallback (no payer-specific SOP), via the SAME deterministic pickTemplate
-    // the confirm loop uses. Derived every preview; never stored.
+    // fallback (no payer-specific SOP), via the SAME resolveRowTemplate the
+    // confirm loop uses (a tied row resolves to the operator's pick). Derived
+    // every preview; never stored.
     const fallbackRowKeys = new Set<string>();
+    const tiedTemplatesByKey = new Map<string, SOPTemplate[]>();
     for (const r of rows) {
       if (r.disposition !== "proposed") continue;
-      const tpl = pickTemplate(templates, r.payerId, r.state, r.groupId, "enrollment");
+      const { ranked, template: tpl } = resolveRowTemplate(templates, r, templateChoices);
+      if (ranked.length > 1) tiedTemplatesByKey.set(previewRowKey(r), ranked);
       if (tpl && isFallbackTemplate(tpl)) fallbackRowKeys.add(previewRowKey(r));
     }
 
@@ -299,11 +340,15 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       ambiguous: gating.ambiguous,
       unmatched: gating.unmatched,
       skips,
+      blockers,
+      blockerIndex,
       providerFacilities,
       fallbackRowKeys,
+      tiedTemplatesByKey,
     };
   }, [
     resolved,
+    templateChoices,
     today,
     scopePayer,
     scopeGroup,
@@ -334,8 +379,11 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     ambiguous: derived?.ambiguous,
     unmatched: derived?.unmatched,
     skips: derived?.skips,
+    blockers: derived?.blockers,
+    blockerIndex: derived?.blockerIndex,
     fallbackRowKeys: derived?.fallbackRowKeys,
     providerFacilities: derived?.providerFacilities,
+    tiedTemplatesByKey: derived?.tiedTemplatesByKey,
     isLoading: sources.some((q) => q.isLoading),
     isError: sources.some((q) => q.isError),
     refetch: () => {
@@ -345,8 +393,9 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
 }
 
 // E2.1 F2.1.2 — the confirm & create mutation. Resolution rides the SAME
-// pickTemplate/resolveTemplate tier every other creation surface uses;
-// facility stays null (generation cases aren't location-linked) and no MSO
+// precedence tier every other creation surface uses (resolveRowTemplate: the
+// sole top-ranked SOP, or the operator's pick among a tie); the location is
+// the provider's clinic in the case's state (resolveCaseFacilityId) and no MSO
 // routing is resolved (not in the epic's table trace). Every resolved task is
 // version-stamped (E2.2 F2.2.1) from the SAME head-row snapshot the resolver
 // consumed — the TE-2 contract: stamp the version read with the content,
@@ -365,6 +414,9 @@ export interface ConfirmGenerationVars {
   skippedRows?: GenerationPreviewRow[];
   /** E6.3 — enrollment-fact-covered rows: ledger-recorded, never attempted. */
   enrolledRows?: GenerationPreviewRow[];
+  /** Operator picks for tied rows (row key → SOP id), the same map the
+   * preview gated with; a tied row without a valid pick still refuses. */
+  templateChoices?: ReadonlyMap<string, string>;
 }
 
 export function useConfirmGeneration() {
@@ -420,27 +472,20 @@ export function useConfirmGeneration() {
       // family's current row, which is what lets a replaced file reach new
       // cases without republishing the template, while a case already created
       // keeps the exact file it was generated with.
-      const templateByRowKey = new Map<string, ReturnType<typeof pickTemplate>>();
+      const templateByRowKey = new Map<string, SOPTemplate>();
       for (const row of plan.toCreate) {
-        const ranked = topRankedTemplates(
-          templates,
-          row.payerId,
-          row.state,
-          row.groupId,
-          "enrollment",
-        );
+        const { ranked, template } = resolveRowTemplate(templates, row, vars.templateChoices);
         if (ranked.length === 0) {
           throw new Error(
             `No Enrollment SOP matches ${row.payerName} ${row.state} for ${row.groupName}. Add an Enrollment SOP before generating this case.`,
           );
         }
-        if (ranked.length > 1) {
-          throw new Error("Multiple SOP templates match this case. Select a template manually.");
+        if (!template) {
+          throw new Error(
+            `Several SOPs tie for ${row.providerName} · ${row.payerName} ${row.state}. Choose one on the tied-SOP list before confirming.`,
+          );
         }
-        templateByRowKey.set(
-          previewRowKey(row),
-          pickTemplate(templates, row.payerId, row.state, row.groupId, "enrollment"),
-        );
+        templateByRowKey.set(previewRowKey(row), template);
       }
       const payerFormsByTemplate = await listPayerFormsForTemplates(
         [...templateByRowKey.values()].flatMap((t) => (t ? [t.id] : [])),
@@ -449,11 +494,13 @@ export function useConfirmGeneration() {
       const entries: GenerationConfirmEntry[] = plan.toCreate.map((row) => {
         const provider = providerById.get(row.providerId);
         const template = templateByRowKey.get(previewRowKey(row)) ?? null;
-        // Stamp the group's primary (or sole) facility onto the case so
-        // detail/profile/fill resolve a location; leave null when ambiguous.
+        // Stamp the provider's clinic in the CASE'S state (sole, else primary)
+        // so detail/profile/fill resolve the location that made the case
+        // eligible; leave null when ambiguous or licence-only.
         const facilityId = resolveCaseFacilityId(
           row.providerId,
           row.groupId,
+          row.state,
           facilityAssignments,
           facilities,
         );

@@ -14,6 +14,7 @@ function fac(over: Partial<CaseFacilityRef> & { id: string }): CaseFacilityRef {
   return {
     groupId: "g-1",
     isActive: true,
+    state: "CO",
     ...over,
   };
 }
@@ -34,6 +35,7 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         null,
+        "CO",
         [asn({ facilityId: "f-1", isPrimary: true })],
         [fac({ id: "f-1" })],
       ),
@@ -45,6 +47,7 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         "g-1",
+        "CO",
         [asn({ facilityId: "f-other", providerId: "p-2" })],
         [fac({ id: "f-other", groupId: "g-1" }), fac({ id: "f-1", groupId: "g-2" })],
       ),
@@ -56,6 +59,7 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         "g-1",
+        "CO",
         [asn({ facilityId: "f-1" }), asn({ facilityId: "f-2", providerId: "p-1" })],
         [
           fac({ id: "f-1", groupId: "g-1" }),
@@ -70,6 +74,7 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         "g-1",
+        "CO",
         [
           asn({ facilityId: "f-a", isPrimary: false }),
           asn({ facilityId: "f-b", isPrimary: true }),
@@ -89,6 +94,7 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         "g-1",
+        "CO",
         [asn({ facilityId: "f-a" }), asn({ facilityId: "f-b" })],
         [fac({ id: "f-a" }), fac({ id: "f-b" })],
       ),
@@ -100,6 +106,7 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         "g-1",
+        "CO",
         [asn({ facilityId: "f-dead", isPrimary: true }), asn({ facilityId: "f-live" })],
         [fac({ id: "f-dead", isActive: false }), fac({ id: "f-live" })],
       ),
@@ -111,8 +118,94 @@ describe("resolveCaseFacilityId", () => {
       resolveCaseFacilityId(
         "p-1",
         "g-1",
+        "CO",
         [asn({ facilityId: "f-dead", isPrimary: true })],
         [fac({ id: "f-dead", isActive: false })],
+      ),
+    ).toBeNull();
+  });
+
+  it("stamps the clinic in the case's state over an out-of-state primary", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        "KS",
+        [asn({ facilityId: "f-co", isPrimary: true }), asn({ facilityId: "f-ks" })],
+        [fac({ id: "f-co", state: "CO" }), fac({ id: "f-ks", state: "KS" })],
+      ),
+    ).toBe("f-ks");
+  });
+
+  it("returns null when the provider has no clinic in the case's state (licence-only)", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        "KS",
+        [asn({ facilityId: "f-co", isPrimary: true })],
+        [fac({ id: "f-co", state: "CO" })],
+      ),
+    ).toBeNull();
+  });
+
+  it("stamps the primary among several in-state clinics", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        "KS",
+        [
+          asn({ facilityId: "f-ks-1" }),
+          asn({ facilityId: "f-ks-2", isPrimary: true }),
+          asn({ facilityId: "f-co" }),
+        ],
+        [
+          fac({ id: "f-ks-1", state: "KS" }),
+          fac({ id: "f-ks-2", state: "KS" }),
+          fac({ id: "f-co", state: "CO" }),
+        ],
+      ),
+    ).toBe("f-ks-2");
+  });
+
+  it("returns null for several in-state clinics when the primary is out of state", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        "KS",
+        [
+          asn({ facilityId: "f-ks-1" }),
+          asn({ facilityId: "f-ks-2" }),
+          asn({ facilityId: "f-co", isPrimary: true }),
+        ],
+        [
+          fac({ id: "f-ks-1", state: "KS" }),
+          fac({ id: "f-ks-2", state: "KS" }),
+          fac({ id: "f-co", state: "CO" }),
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when the case has no state, and never matches a state-less clinic", () => {
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        null,
+        [asn({ facilityId: "f-1", isPrimary: true })],
+        [fac({ id: "f-1" })],
+      ),
+    ).toBeNull();
+    expect(
+      resolveCaseFacilityId(
+        "p-1",
+        "g-1",
+        "KS",
+        [asn({ facilityId: "f-1", isPrimary: true })],
+        [fac({ id: "f-1", state: null })],
       ),
     ).toBeNull();
   });

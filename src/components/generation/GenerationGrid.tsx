@@ -21,6 +21,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -32,6 +39,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ExclusionReasonDialog } from "@/components/generation/ExclusionReasonDialog";
+import { GenerationBlockersPanel } from "@/components/generation/GenerationBlockersPanel";
+import { GenerationPairLookup } from "@/components/generation/GenerationPairLookup";
 import {
   useConfirmGeneration,
   useGenerationPreview,
@@ -47,6 +56,7 @@ import {
   bucketGridRows,
   filterGridRows,
   groupGridRows,
+  inGridScope,
   reconcileGrid,
   splitGridSelection,
   type GridPivot,
@@ -59,7 +69,10 @@ import {
   generationSkipKey,
   previewRowKey,
   type GenerationPreviewRow,
+  type GenerationSkipRow,
 } from "@/lib/generationPreview";
+import { scopeGenerationBlockers } from "@/lib/generationBlockers";
+import type { SOPTemplate } from "@/types";
 
 function ReadinessBadge({ readiness }: { readiness: ReadinessRow | undefined }) {
   if (!readiness) {
@@ -94,7 +107,10 @@ export interface GenerationGridProps {
 }
 
 export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: GenerationGridProps) {
-  const preview = useGenerationPreview();
+  // Operator picks for rows whose top SOP tier is a tie (row key → SOP id).
+  // Selection state only, like skip-for-now: nothing is stored until confirm.
+  const [templateChoices, setTemplateChoices] = useState<Map<string, string>>(new Map());
+  const preview = useGenerationPreview(undefined, { templateChoices });
   const factsQ = useEnrollmentFacts();
   const isAdmin = useIsAdmin();
   const canWrite = useCanWrite();
@@ -183,9 +199,19 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   const released = applyReleaseScope(split.selectedRows, releaseScope);
   const releasedCount = released.length;
   const releasedFallbackCount = released.filter((r) => fallbackKeys.has(previewRowKey(r))).length;
-  const gated = preview.gated ?? [];
-  const unmatched = preview.unmatched ?? [];
-  const skips = preview.skips ?? [];
+  // Every explanation list follows the grid's scope, so a payer- or
+  // provider-scoped entry reads only what it can act on.
+  const inScope = (r: Pick<GenerationPreviewRow, "providerId" | "groupId" | "payerId">) =>
+    inGridScope(r, scope, preview.providerFacilities);
+  const gated = (preview.gated ?? []).filter((g) => inScope(g.row));
+  const unmatched = (preview.unmatched ?? []).filter(inScope);
+  const skips = (preview.skips ?? []).filter(inScope);
+  const blockers = preview.blockers
+    ? scopeGenerationBlockers(preview.blockers, scope, preview.providerFacilities)
+    : undefined;
+  const tiedRows = (preview.rows ?? []).filter(
+    (r) => preview.tiedTemplatesByKey?.has(previewRowKey(r)) === true && inScope(r),
+  );
   const groups = groupGridRows(gridRows, pivot);
 
   const toggleKeys = (keys: readonly string[], check: boolean) => {
@@ -212,6 +238,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
         providerFacilities: preview.providerFacilities,
         skippedRows: [...split.skippedRows, ...cappedOut],
         enrolledRows: split.enrolledRows,
+        templateChoices,
       },
       {
         onSuccess: (result) => {
@@ -243,15 +270,20 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
     });
   };
 
-  if (gridRows.length === 0 && unmatched.length === 0) {
+  if (gridRows.length === 0 && unmatched.length === 0 && tiedRows.length === 0) {
     return (
-      <div className="rounded-md border border-[#E8E5E0] p-4">
-        <p className="text-[13px] font-medium">Nothing to review here yet</p>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          Candidates derive from the group&apos;s active payer targets × providers with a clinic
-          assignment under the group, minus enrollment facts, existing cases, and standing
-          exclusions. Attach payers and add providers on the group&apos;s pages to see rows.
-        </p>
+      <div className="space-y-4">
+        <div className="rounded-md border border-[#E8E5E0] p-4">
+          <p className="text-[13px] font-medium">Nothing to review here yet</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Candidates derive from the group&apos;s active payer targets × providers with a clinic
+            assignment under the group, minus enrollment facts, existing cases, and standing
+            exclusions. Attach payers and add providers on the group&apos;s pages to see rows.
+          </p>
+        </div>
+        <SkipsBanner skips={skips} />
+        {blockers ? <GenerationBlockersPanel blockers={blockers} /> : null}
+        <GenerationPairLookup preview={preview} facts={factsQ.data ?? []} />
       </div>
     );
   }
@@ -340,16 +372,20 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
         </div>
       ) : null}
 
-      {(preview.ambiguous?.length ?? 0) > 0 ? (
-        <div
-          className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]"
-          role="alert"
-        >
-          {preview.ambiguous?.length} case{preview.ambiguous?.length === 1 ? "" : "s"} blocked
-          because multiple SOP templates have equal priority. Create these cases manually and select
-          a template, or archive an obsolete template.
-        </div>
-      ) : null}
+      <TiedTemplatesBanner
+        rows={tiedRows}
+        tiedByKey={preview.tiedTemplatesByKey}
+        choices={templateChoices}
+        canWrite={canWrite}
+        onChoose={(key, templateId) =>
+          setTemplateChoices((prev) => {
+            const next = new Map(prev);
+            if (templateId === null) next.delete(key);
+            else next.set(key, templateId);
+            return next;
+          })
+        }
+      />
 
       {unmatched.length > 0 ? (
         <div
@@ -382,44 +418,11 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
         </div>
       ) : null}
 
-      {skips.length > 0 ? (
-        <div className="rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-3">
-          <p className="text-[13px] font-medium text-foreground">
-            {skips.length} provider × target{skips.length === 1 ? "" : "s"} not generating — reason
-            shown (not a missing profile attribute).
-          </p>
-          <ul className="mt-2 space-y-2">
-            {skips.map((skip) => (
-              <li
-                key={generationSkipKey(skip)}
-                className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground"
-              >
-                <span className="font-medium text-foreground">{skip.providerName}</span>
-                <span>
-                  {skip.groupName} · {skip.payerName} {skip.state} — {skip.reasonLabel}
-                </span>
-                {skip.reason === "no_facility" ? (
-                  <Link
-                    to="/providers/$id"
-                    params={{ id: skip.providerId }}
-                    className="ml-auto text-[12px] text-primary underline-offset-2 hover:underline"
-                  >
-                    Fix facility
-                  </Link>
-                ) : (
-                  <Link
-                    to="/providers/$id"
-                    params={{ id: skip.providerId }}
-                    className="ml-auto text-[12px] text-primary underline-offset-2 hover:underline"
-                  >
-                    Open provider
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <SkipsBanner skips={skips} />
+
+      {blockers ? <GenerationBlockersPanel blockers={blockers} /> : null}
+
+      <GenerationPairLookup preview={preview} facts={factsQ.data ?? []} />
 
       {releasedFallbackCount > 0 ? (
         <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3" role="alert">
@@ -601,6 +604,110 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
       {excluding ? (
         <ExclusionReasonDialog row={excluding} onClose={() => setExcluding(null)} />
       ) : null}
+    </div>
+  );
+}
+
+/** GEN-SILENT — group members dropped before candidacy, with the reason. */
+function SkipsBanner({ skips }: { skips: readonly GenerationSkipRow[] }) {
+  if (skips.length === 0) return null;
+  return (
+    <div className="rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-3">
+      <p className="text-[13px] font-medium text-foreground">
+        {skips.length} provider × target{skips.length === 1 ? "" : "s"} not generating — reason
+        shown (not a missing profile attribute).
+      </p>
+      <ul className="mt-2 space-y-2">
+        {skips.map((skip) => (
+          <li
+            key={generationSkipKey(skip)}
+            className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground"
+          >
+            <span className="font-medium text-foreground">{skip.providerName}</span>
+            <span>
+              {skip.groupName} · {skip.payerName} {skip.state} — {skip.reasonLabel}
+            </span>
+            <Link
+              to="/providers/$id"
+              params={{ id: skip.providerId }}
+              className="ml-auto text-[12px] text-primary underline-offset-2 hover:underline"
+            >
+              {skip.reason === "no_facility" ? "Fix facility" : "Open provider"}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const NO_CHOICE = "__none__";
+
+/** Tied SOPs are named BEFORE the run, each row with a chooser. A chosen row
+ * joins the grid as a candidate (gated against the chosen SOP); an unchosen
+ * one stays out and the confirm refuses it. */
+function TiedTemplatesBanner({
+  rows,
+  tiedByKey,
+  choices,
+  canWrite,
+  onChoose,
+}: {
+  rows: readonly GenerationPreviewRow[];
+  tiedByKey: ReadonlyMap<string, SOPTemplate[]> | undefined;
+  choices: ReadonlyMap<string, string>;
+  canWrite: boolean;
+  onChoose: (key: string, templateId: string | null) => void;
+}) {
+  if (rows.length === 0 || !tiedByKey) return null;
+  const open = rows.filter((r) => !choices.has(previewRowKey(r))).length;
+  return (
+    <div
+      className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]"
+      role="alert"
+      data-testid="generation-tied-sops"
+    >
+      <p className="font-medium">
+        {rows.length} case{rows.length === 1 ? " has" : "s have"} several SOPs that tie.
+        {open > 0
+          ? ` Choose one for ${open === 1 ? "it" : `each of the ${open} still open`} to add it to this run, or archive the SOP you don't use.`
+          : " Every tie has a choice, so these cases are in the list below."}
+      </p>
+      <ul className="mt-2 space-y-2">
+        {rows.map((row) => {
+          const key = previewRowKey(row);
+          const tied = tiedByKey.get(key) ?? [];
+          return (
+            <li key={key} className="flex flex-wrap items-center gap-2">
+              <span>
+                {row.providerName} · {row.groupName} · {row.payerName} {row.state}
+              </span>
+              <Select
+                value={choices.get(key) ?? NO_CHOICE}
+                disabled={!canWrite}
+                onValueChange={(v) => onChoose(key, v === NO_CHOICE ? null : v)}
+              >
+                <SelectTrigger
+                  className="ml-auto h-8 w-72 bg-white text-[12.5px]"
+                  aria-label={`SOP for ${row.providerName}, ${row.payerName} ${row.state}`}
+                >
+                  <SelectValue placeholder="Choose an SOP" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CHOICE}>Choose an SOP</SelectItem>
+                  {tied.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                      {t.currentVersion ? ` · v${t.currentVersion}` : ""}
+                      {t.orgId === null ? " · Minted" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

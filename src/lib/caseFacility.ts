@@ -2,12 +2,16 @@
 // from the provider's group-scoped assignments, and list the same set for the
 // post-create editor. Pure — no I/O.
 //
-// Stamp rule (product): among ACTIVE facilities that (a) the provider is
-// assigned to and (b) belong to the case's group —
+// Stamp rule (product, PM 2026-10-27): among ACTIVE facilities that (a) the
+// provider is assigned to, (b) belong to the case's group, and (c) sit in the
+// CASE'S STATE — the clinic that made the case eligible —
 //   • exactly one → that facility
 //   • several → the assignment marked primary, if any
 //   • otherwise (zero, or several with no primary) → null (ambiguous / none)
-// A null case.groupId cannot be scoped → null. Inactive facilities never stamp.
+// A provider who qualifies for the state by licence alone has no clinic there,
+// so the case gets no location rather than an out-of-state one (a BCBS Kansas
+// case never stamps the provider's Colorado primary). A null case.groupId or
+// state cannot be scoped → null. Inactive facilities never stamp.
 import type { Facility, FacilityAssignment } from "@/types";
 
 export interface CaseFacilityAssignmentRef {
@@ -20,6 +24,8 @@ export interface CaseFacilityRef {
   id: string;
   groupId: string | null;
   isActive: boolean;
+  /** Facility operating state. Null/absent never matches a case state. */
+  state?: string | null;
 }
 
 /** Provider's assigned facilities under the case's group (active only by
@@ -51,10 +57,19 @@ export function facilitiesForCaseProvider(
 export function resolveCaseFacilityId(
   providerId: string,
   groupId: string | null | undefined,
+  state: string | null | undefined,
   assignments: readonly CaseFacilityAssignmentRef[],
   facilities: readonly CaseFacilityRef[],
 ): string | null {
-  const eligibleIds = facilitiesForCaseProvider(providerId, groupId, assignments, facilities);
+  const caseState = state?.trim();
+  if (!caseState) return null;
+  const stateById = new Map(facilities.map((f) => [f.id, f.state?.trim() ?? null]));
+  const eligibleIds = facilitiesForCaseProvider(
+    providerId,
+    groupId,
+    assignments,
+    facilities,
+  ).filter((id) => stateById.get(id) === caseState);
   if (eligibleIds.length === 0) return null;
   if (eligibleIds.length === 1) return eligibleIds[0] ?? null;
 

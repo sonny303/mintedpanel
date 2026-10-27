@@ -7,6 +7,7 @@ import {
   alreadyAttachedPayerIds,
   attachPlanTotals,
   attachRowKey,
+  clinicStateGaps,
   defaultAttachSelection,
   groupAttachExpansion,
   planMultiAttachSave,
@@ -307,5 +308,35 @@ describe("CSV row resolution + eligibility", () => {
         reason: "Sleepy Health is archived — reactivate it before attaching",
       },
     });
+  });
+});
+
+describe("clinicStateGaps — clinic states the operating states missed", () => {
+  const facility = (over: Partial<Facility>): Facility =>
+    ({ id: "f", groupId: "g1", state: "KS", isActive: true, ...over }) as Facility;
+
+  it("names payers covering a clinic state that isn't an operating state", () => {
+    const blueKc = payer({ id: "kc", name: "Blue KC", states: ["KS", "MO"] });
+    const aetna = payer({ id: "a", name: "Aetna", states: ["NC", "KS"] });
+    const nc = payer({ id: "nc", name: "BCBS NC", states: ["NC"] });
+    const gaps = clinicStateGaps([nc, blueKc, aetna], GROUP, [
+      facility({ id: "f-ks", state: "KS" }),
+      facility({ id: "f-nc", state: "NC" }),
+    ]);
+    expect(gaps.map((g) => [g.payer.name, g.states])).toEqual([
+      ["Aetna", ["KS"]],
+      ["Blue KC", ["KS"]],
+    ]);
+  });
+
+  it("ignores inactive clinics, other groups' clinics, and covered states", () => {
+    const blueKc = payer({ id: "kc", name: "Blue KC", states: ["KS", "MO"] });
+    expect(
+      clinicStateGaps([blueKc], GROUP, [
+        facility({ isActive: false }),
+        facility({ groupId: "g2" }),
+        facility({ state: "NC" }),
+      ]),
+    ).toEqual([]);
   });
 });

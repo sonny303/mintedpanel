@@ -416,8 +416,12 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
   is unchanged in shape and is now a PRIMARY MIRROR of whichever row is
   primary — every existing reader keeps working untouched.
   `resolveCaseFacilityId` (creation-time stamp) still stamps exactly one
-  location, and `create_case_with_tasks` writes its primary child row in the
-  same transaction; everything past that goes through `src/services/cases.ts`'s
+  location: the provider's active clinic under the case's group **in the
+  case's state** (the clinic that made it eligible; several in-state → the
+  one marked primary, else none; licence-only footprint → none, never an
+  out-of-state primary), and `create_case_with_tasks` writes its primary
+  child row in the same transaction; everything past that goes through
+  `src/services/cases.ts`'s
   `addCaseFacility`/`removeCaseFacility`/`setPrimaryCaseFacility`, which keep
   the mirror in lockstep in the same call as the child-row write. **A mirror
   with no child row is a defect**: Billing Readiness and the typed
@@ -555,6 +559,28 @@ Confirm writes an immutable per-candidate disposition ledger
 (`case_generation_run_rows`, INSERT-only by policy **and** grant). Run counts
 **derive from those child rows at read time**; the stored plan counts are a
 flagged fallback. Exclusions are reasoned and voided-not-deleted.
+
+**Nothing an operator expects drops silently.** `src/lib/generationBlockers.ts`
+explains, without changing candidacy, every expected pair that never became a
+row and that `buildGenerationSkips` doesn't already name: active targets where
+a member has no clinic or license in the state (folded per provider), a payer
+the group already works with in a state where a member has a group clinic but
+there is no active target (reason: group operating state / archived target /
+not attached; a payer that doesn't list the state is not "expected" and is left
+to the lookup), and an archived payer's still-active targets. Each carries ONE
+reason and ONE fix descriptor (data, mapped to a `Link` in
+`GenerationBlockersPanel`). The "Why isn't a pair here?" lookup
+(`GenerationPairLookup`) walks the SAME chain per exact key
+(`diagnoseGenerationKey` → `generationPairVerdict`), and a test pins that a key
+with no block is exactly a preview row. Every explanation list on the grid
+follows the grid scope (`inGridScope`).
+
+**Tied SOPs are chosen, not refused.** `resolveRowTemplate`
+(`src/lib/generationGating.ts`) is the one rule for the preview gate, the
+fallback flag and the confirm loop: the sole top-ranked SOP, or the operator's
+pick among a tie (a pick outside the tied set is ignored). Picks are grid
+selection state (`templateChoices`), passed to `useGenerationPreview` and to
+the confirm; a chosen row is gated against the chosen SOP.
 
 ### Touchlog
 

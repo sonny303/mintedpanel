@@ -7,7 +7,8 @@
 // unmet attributes). Gated providers are simply absent from the confirmed set —
 // the E2.1 RPC is unchanged. No stored blocked state: re-derived every preview.
 
-import { pickTemplate, topRankedTemplates } from "./pickTemplate";
+import { topRankedTemplates } from "./pickTemplate";
+import { previewRowKey } from "./generationPreview";
 import {
   evaluateProfileGate,
   normalizeRequiredAttributes,
@@ -37,9 +38,31 @@ export interface GatingInput {
   rows: readonly GenerationPreviewRow[];
   templates: SOPTemplate[];
   factsById: ReadonlyMap<string, ProviderReadinessFacts>;
+  /** Operator picks for tied rows: preview row key → template id. A pick
+   * outside the row's top-ranked set is ignored (the row stays ambiguous). */
+  templateChoices?: ReadonlyMap<string, string>;
 }
 
-export function evaluateGeneration({ rows, templates, factsById }: GatingInput): GatingResult {
+/** The template a row generates with: the sole top-ranked one, or the
+ * operator's pick among a tie. null = no match, or an unresolved tie. Shared
+ * by the preview gate and the confirm loop so the two can never disagree. */
+export function resolveRowTemplate(
+  templates: SOPTemplate[],
+  row: Pick<GenerationPreviewRow, "providerId" | "groupId" | "payerId" | "state">,
+  templateChoices?: ReadonlyMap<string, string>,
+): { ranked: SOPTemplate[]; template: SOPTemplate | null } {
+  const ranked = topRankedTemplates(templates, row.payerId, row.state, row.groupId, "enrollment");
+  if (ranked.length <= 1) return { ranked, template: ranked[0] ?? null };
+  const chosenId = templateChoices?.get(previewRowKey(row));
+  return { ranked, template: ranked.find((t) => t.id === chosenId) ?? null };
+}
+
+export function evaluateGeneration({
+  rows,
+  templates,
+  factsById,
+  templateChoices,
+}: GatingInput): GatingResult {
   const confirmable: GenerationPreviewRow[] = [];
   const gated: GatedRow[] = [];
   const ambiguous: GenerationPreviewRow[] = [];
@@ -47,17 +70,16 @@ export function evaluateGeneration({ rows, templates, factsById }: GatingInput):
 
   for (const row of rows) {
     if (row.disposition !== "proposed") continue; // only proposed rows are confirmable/gated
-    const ranked = topRankedTemplates(templates, row.payerId, row.state, row.groupId, "enrollment");
+    const { ranked, template } = resolveRowTemplate(templates, row, templateChoices);
     if (ranked.length === 0) {
       unmatched.push(row);
       continue;
     }
-    if (ranked.length > 1) {
+    if (!template) {
       ambiguous.push(row);
       continue;
     }
-    const template = pickTemplate(templates, row.payerId, row.state, row.groupId, "enrollment");
-    const required = normalizeRequiredAttributes(template?.requiredProfileAttributes);
+    const required = normalizeRequiredAttributes(template.requiredProfileAttributes);
     const facts = factsById.get(row.providerId);
     if (required.length === 0 || !facts) {
       confirmable.push(row);

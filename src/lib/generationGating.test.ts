@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { SOPTemplate } from "@/types";
 import type { ProviderReadinessFacts } from "./enrollmentReadiness";
 import type { GenerationPreviewRow } from "./generationPreview";
-import { evaluateGeneration } from "./generationGating";
+import { evaluateGeneration, resolveRowTemplate } from "./generationGating";
+import { previewRowKey } from "./generationPreview";
 import { pickTemplate, resolutionTier } from "./pickTemplate";
 import { templateProvenance } from "./sopStamp";
 
@@ -189,5 +190,50 @@ describe("SOP resolution consistency (gating / task stamp / run-row tier)", () =
     const selected = pickTemplate(templates, "pay-unknown", "NC", "g1", "enrollment");
     expect(selected?.id).toBe("fb");
     expect(templateProvenance(selected).sopResolutionTier).toBe("generic_fallback");
+  });
+});
+
+describe("tied SOPs — the operator's choice (brief 2026-10-27)", () => {
+  const first = tpl([]);
+  const second = { ...tpl(["npi"]), id: "second", name: "Aetna NC (new)" };
+  const key = previewRowKey(row({}));
+
+  it("resolves a tie to the chosen SOP and gates against THAT SOP", () => {
+    const res = evaluateGeneration({
+      rows: [row({})],
+      templates: [first, second],
+      factsById: new Map([["p1", facts({ npiPresent: false })]]),
+      templateChoices: new Map([[key, "second"]]),
+    });
+    expect(res.ambiguous).toHaveLength(0);
+    expect(res.confirmable).toHaveLength(0);
+    expect(res.gated.map((g) => g.unmet.map((u) => u.key))).toEqual([["npi"]]);
+  });
+
+  it("makes the row confirmable when the chosen SOP's gate passes", () => {
+    const res = evaluateGeneration({
+      rows: [row({})],
+      templates: [first, second],
+      factsById: new Map([["p1", facts({})]]),
+      templateChoices: new Map([[key, first.id]]),
+    });
+    expect(res.confirmable).toHaveLength(1);
+    expect(res.ambiguous).toHaveLength(0);
+  });
+
+  it("ignores a choice outside the tied set", () => {
+    const res = evaluateGeneration({
+      rows: [row({})],
+      templates: [first, second],
+      factsById: new Map([["p1", facts({})]]),
+      templateChoices: new Map([[key, "some-other-sop"]]),
+    });
+    expect(res.ambiguous).toHaveLength(1);
+    expect(resolveRowTemplate([first, second], row({}), new Map([[key, "x"]])).template).toBe(null);
+  });
+
+  it("never needs a choice for a sole top-ranked SOP", () => {
+    expect(resolveRowTemplate([first], row({})).template?.id).toBe(first.id);
+    expect(resolveRowTemplate([], row({})).template).toBeNull();
   });
 });

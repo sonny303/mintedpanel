@@ -262,11 +262,13 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     if (!provider) return;
     const group = (groupsQ.data ?? []).find((g) => g.id === selection.groupId) ?? null;
     const template = effectiveTemplate;
-    // Stamp primary-or-sole facility under the selected group (null when
-    // ambiguous); case detail can edit it after create.
+    // Stamp the provider's sole-or-primary clinic under the selected group in
+    // the selected state (null when ambiguous or licence-only); case detail
+    // can edit it after create.
     const facilityId = resolveCaseFacilityId(
       selection.providerId,
       selection.groupId,
+      selection.state,
       facilityAssignmentsQ.data ?? [],
       facilitiesQ.data ?? [],
     );

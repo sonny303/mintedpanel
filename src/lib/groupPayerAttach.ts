@@ -75,6 +75,38 @@ export function splitAttachPicker(
   return { eligible, ineligible };
 }
 
+/** A payer the group can't attach in a state where it HAS a clinic: the payer
+ * covers a state where the group has an active clinic, but that state isn't
+ * an operating state. Adding a clinic never edits operating states, so this
+ * is the silent gap the picker hides — whole payers (zero overlap) or single
+ * states of a payer it does offer. */
+export interface ClinicStateGap {
+  payer: Payer;
+  /** Payer states ∩ the group's active-clinic states, minus operating states. */
+  states: string[];
+}
+
+/** The catalog payers worth naming with a fix, A→Z by payer name. */
+export function clinicStateGaps(
+  payers: readonly Payer[],
+  group: Pick<ProviderGroup, "id" | "states">,
+  facilities: readonly Facility[],
+): ClinicStateGap[] {
+  const operating = new Set(group.states ?? []);
+  const clinicStates = new Set<string>();
+  for (const f of facilities) {
+    if (!f.isActive || f.groupId !== group.id || !f.state) continue;
+    if (!operating.has(f.state)) clinicStates.add(f.state);
+  }
+  if (clinicStates.size === 0) return [];
+  const out: ClinicStateGap[] = [];
+  for (const payer of payers) {
+    const states = (payer.states ?? []).filter((s) => clinicStates.has(s)).sort();
+    if (states.length > 0) out.push({ payer, states });
+  }
+  return out.sort((a, b) => a.payer.name.localeCompare(b.payer.name));
+}
+
 /**
  * The reviewable expansion for a group-basis attach: one row per proposed
  * state, carrying the group's active-facility count in that state as context

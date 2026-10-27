@@ -9,6 +9,7 @@
 // (never a duplicate). Save runs attachGroupPayers: one insert for the whole
 // selection (OPA-RETIRE: targets only — no org_payer_assignments).
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 import {
@@ -37,6 +38,7 @@ import {
   alreadyAttachedPayerIds,
   attachPlanTotals,
   attachRowKey,
+  clinicStateGaps,
   defaultAttachSelection,
   planMultiAttachSave,
   reviewAttachSelection,
@@ -70,6 +72,21 @@ export function GroupAttachPayerDialog({
   const split = useMemo(
     () => splitAttachPicker(catalogQ.data ?? [], group),
     [catalogQ.data, group],
+  );
+  // Clinic states the operating states missed: the payers (or single states
+  // of offered payers) the picker can't attach there, named with the fix.
+  const clinicGaps = useMemo(
+    () =>
+      clinicStateGaps(
+        [...split.eligible.map((e) => e.payer), ...split.ineligible],
+        group,
+        facilities,
+      ),
+    [split, group, facilities],
+  );
+  const clinicGapStates = useMemo(
+    () => [...new Set(clinicGaps.flatMap((g) => g.states))].sort(),
+    [clinicGaps],
   );
 
   const [step, setStep] = useState<"select" | "review">(initialPayer ? "review" : "select");
@@ -319,6 +336,32 @@ export function GroupAttachPayerDialog({
                 )}
               </>
             )}
+            {clinicGaps.length > 0 ? (
+              <div
+                className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[12.5px] text-[#92400E]"
+                data-testid="attach-clinic-state-gap"
+              >
+                <p className="font-medium">
+                  This group has a clinic in {clinicGapStates.join(", ")}, but{" "}
+                  {clinicGapStates.length === 1
+                    ? "it isn't an operating state"
+                    : "they aren't operating states"}
+                  , so no payer can be attached there.
+                </p>
+                <p className="mt-1">
+                  Payers that cover {clinicGapStates.length === 1 ? "it" : "them"}:{" "}
+                  {clinicGaps.map((g) => `${g.payer.name} (${g.states.join(", ")})`).join(" · ")}
+                </p>
+                <Link
+                  to="/groups/$groupId"
+                  params={{ groupId: group.id }}
+                  onClick={onClose}
+                  className="mt-1 inline-block font-medium underline underline-offset-2"
+                >
+                  Edit operating states
+                </Link>
+              </div>
+            ) : null}
             {split.ineligible.length > 0 ? (
               <Collapsible>
                 <CollapsibleTrigger className="flex items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground">
@@ -331,7 +374,15 @@ export function GroupAttachPayerDialog({
                   <p className="mt-1 text-[12px] text-muted-foreground">
                     {split.ineligible.map((p) => p.name).join(" · ")} — none cover{" "}
                     {(group.states ?? []).join(", ") || "the group's states"}. Widen the
-                    group&apos;s operating states to attach one of these.
+                    group&apos;s operating states to attach one of these.{" "}
+                    <Link
+                      to="/groups/$groupId"
+                      params={{ groupId: group.id }}
+                      onClick={onClose}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Edit operating states
+                    </Link>
                   </p>
                 </CollapsibleContent>
               </Collapsible>
