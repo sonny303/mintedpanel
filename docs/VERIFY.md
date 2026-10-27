@@ -170,6 +170,10 @@ VITE_MINTED_EXTENSION_ID=abcdefghijklmnopabcdefghijklmnop npm run dev &
 
 ## 5. Sandbox notes
 
+- **Email changes** (`src/server/email/**`): also run
+  `npm run email:send-test -- --to <your address>` with a real key in `.env`.
+  It runs in SendGrid sandbox (expect `status: 200`) unless you pass `--live`.
+
 - **Chromium path:** the repo's Playwright pin is newer than the sandbox
   browsers — the config already launches `/opt/pw-browsers/chromium` when it
   exists. Never run `playwright install`.
