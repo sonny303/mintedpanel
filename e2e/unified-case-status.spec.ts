@@ -539,7 +539,7 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
 
   // The cases work list (the redesigned Flat view) renders the canonical pill —
   // ONE "Case Status" column, no pipeline / contract machine columns.
-  await page.goto("/cases");
+  await page.goto("/cases?pivot=flat");
   await expect(page.getByRole("columnheader", { name: "Case Status" })).toBeVisible({
     timeout: 30000,
   });
