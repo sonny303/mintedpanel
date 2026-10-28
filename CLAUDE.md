@@ -171,6 +171,13 @@ route modules so `/api/health` stays free of the Supabase graph.
 `chrome-extension://<id>`). Default empty = no CORS headers. Allowed headers:
 `authorization, content-type, x-org-id`.
 
+### Email (`src/server/email/`)
+
+SendGrid mailer with no caller yet. Read `docs/sendgrid-email.md` before
+adding one. Callers name a registered template (no free-form body), take the
+recipient from a server lookup, never resend on a retry, and write their own
+audit row. Keep the module's imports relative `.ts` so the CLI runs.
+
 ### The routes
 
 Org-scoped (full `authenticate()`):

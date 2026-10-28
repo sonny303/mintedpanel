@@ -20,6 +20,7 @@
     "test:delivery": "node --test scripts/delivery/*.test.mjs",
     "test:migrations": "node --test scripts/migrations/*.test.mjs",
     "check:migrations": "node scripts/migrations/cli.mjs check",
+    "email:send-test": "node --env-file-if-exists=.env scripts/email/send-test.ts",
     "seed:staging-uat": "node scripts/uat/seed-staging-uat.mjs",
     "seed:staging-uat:ci": "node scripts/uat/seed-staging-uat.mjs && node scripts/uat/verify-uat-fixture.mjs",
     "test:staging-uat": "node --test scripts/uat/*.test.mjs",
