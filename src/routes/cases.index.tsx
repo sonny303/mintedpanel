@@ -2,7 +2,7 @@
 // pivots. The Matrix branch composes its own derived board without changing
 // the existing case, touch, generation-run, or manual-case contracts.
 // 2026-07-22 Cases page redesign — ONE Cases surface with four VIEWS via a
-// segmented control: Flat (default) · By provider · By payer · Matrix. The former
+// segmented control: Matrix (default) · Flat · By provider · By payer. The former
 // "to-do" pivot is retired AS A TAB, but its ranked ordering is not: Flat's
 // DEFAULT sort is the E2.3 next-best-action deadline ranking (reused via
 // useNextBestActions); clicking a column header switches to that column's sort
@@ -14,7 +14,7 @@
 // Case# is the NEW globally-sequential immutable case number (C-<n>, Geist
 // Mono) and IS the row's click-through — there is no separate Open-case action.
 //
-// Back-compat: ?pivot=provider|payer selects a view (no param = Flat); ?chip=
+// Back-compat: ?pivot=flat|provider|payer|matrix selects a view (no param = Matrix); ?chip=
 // maps to the KPI quick-filter (legacy needs/generic land on Total); ?ids= pins
 // a bulk-touch set; ?runId=/?run= filter to a generation run's cases + banner;
 // /work still redirects here.
@@ -80,7 +80,7 @@ const CHIP_TO_KPI: Record<string, CasesKpi> = {
 };
 
 interface CasesSearch {
-  pivot?: "provider" | "payer" | "matrix";
+  pivot?: "flat" | "provider" | "payer" | "matrix";
   chip?: string;
   ids?: string;
   runId?: string;
@@ -91,7 +91,10 @@ export const Route = createFileRoute("/cases/")({
   component: CasesPage,
   validateSearch: (search: Record<string, unknown>): CasesSearch => ({
     pivot:
-      search.pivot === "provider" || search.pivot === "payer" || search.pivot === "matrix"
+      search.pivot === "flat" ||
+      search.pivot === "provider" ||
+      search.pivot === "payer" ||
+      search.pivot === "matrix"
         ? search.pivot
         : undefined,
     chip: typeof search.chip === "string" && search.chip in CHIP_TO_KPI ? search.chip : undefined,
@@ -128,7 +131,7 @@ function CasesPage() {
   const canWrite = useCanWrite();
   const runQ = useGenerationRun(runId ?? run ?? undefined);
 
-  const view: CasesView = pivotParam ?? "flat";
+  const view: CasesView = pivotParam ?? "matrix";
   const kpi: CasesKpi = chipParam ? (CHIP_TO_KPI[chipParam] ?? "total") : "total";
 
   const runFilter = runId ?? run ?? null;
@@ -287,7 +290,7 @@ function CasesPage() {
     navigate({
       to: "/cases",
       search: {
-        ...(v === "flat" ? {} : { pivot: v }),
+        ...(v === "matrix" ? {} : { pivot: v }),
         ...(chipParam ? { chip: chipParam } : {}),
         ...(runFilter ? { runId: runFilter } : {}),
         ...(idsParam ? { ids: idsParam } : {}),
@@ -299,7 +302,7 @@ function CasesPage() {
     navigate({
       to: "/cases",
       search: {
-        ...(view === "flat" ? {} : { pivot: view }),
+        ...(view === "matrix" ? {} : { pivot: view }),
         ...(k === "total" ? {} : { chip: k }),
         ...(runFilter ? { runId: runFilter } : {}),
         ...(idsParam ? { ids: idsParam } : {}),
@@ -434,6 +437,9 @@ function CasesPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Tabs value={view} onValueChange={(v) => setView(v as CasesView)}>
           <TabsList aria-label="Cases views">
+            <TabsTrigger className="text-[12.5px]" value="matrix">
+              Matrix
+            </TabsTrigger>
             <TabsTrigger className="text-[12.5px]" value="flat">
               Flat
             </TabsTrigger>
@@ -442,9 +448,6 @@ function CasesPage() {
             </TabsTrigger>
             <TabsTrigger className="text-[12.5px]" value="payer">
               By payer
-            </TabsTrigger>
-            <TabsTrigger className="text-[12.5px]" value="matrix">
-              Matrix
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -547,7 +550,7 @@ function CasesPage() {
             size="sm"
             className="ml-auto h-7"
             onClick={() =>
-              navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })
+              navigate({ to: "/cases", search: view === "matrix" ? {} : { pivot: view } })
             }
           >
             Show all cases
@@ -565,7 +568,7 @@ function CasesPage() {
             size="sm"
             className="ml-auto h-7"
             onClick={() =>
-              navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })
+              navigate({ to: "/cases", search: view === "matrix" ? {} : { pivot: view } })
             }
           >
             <X className="mr-1 h-4 w-4" /> Show all cases

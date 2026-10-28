@@ -10,7 +10,8 @@
 // escape (approve anyway; the enrollment reads Awaiting ID). There is NO hard
 // client-side ID requirement anymore (handoff §2.1, PM-approved): silence is
 // rejected by the RPC's named errors, which surface — never pre-blocked here.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { FileText, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -185,6 +186,8 @@ export interface ApprovedValues {
    * reads Awaiting ID until back-filled via the existing set-later paths. */
   providerIdMissingAck: boolean;
   groupIdMissingAck: boolean;
+  /** Proposal #3: Optional Provider Enrollment Letter file attached at case approval */
+  enrollmentLetterFile?: File | null;
 }
 
 // ---- One expectation-driven ID row: the payer's own label + scope hint, a
@@ -281,6 +284,8 @@ export function ApprovedDialog({
   const [individualMissing, setIndividualMissing] = useState(false);
   const [groupMissing, setGroupMissing] = useState(false);
   const [contractExecutedDate, setContractExecutedDate] = useState("");
+  const [enrollmentLetterFile, setEnrollmentLetterFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const providerConfig = resolveIdentifierConfig(payer);
   const groupConfig = resolveGroupIdentifierConfig(payer);
@@ -366,6 +371,63 @@ export function ApprovedDialog({
               {payerName} issues no enrollment ID, so there&apos;s nothing else to capture.
             </p>
           )}
+
+          {/* Optional Enrollment Letter Evidence */}
+          <div className="space-y-2 border-t border-[#F0EEE9] pt-4">
+            <div className="flex items-center justify-between">
+              <Label className={FIELD_LABEL}>Enrollment letter evidence (optional)</Label>
+              <span className="text-[11px] text-muted-foreground">Auto-files to vault</span>
+            </div>
+            {enrollmentLetterFile ? (
+              <div className="flex items-center justify-between rounded-md border border-[#86efac] bg-[#f0fdf4] p-2.5 text-xs">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <FileText className="h-4 w-4 shrink-0 text-emerald-700" />
+                  <div className="truncate">
+                    <span className="font-medium text-emerald-900">
+                      {enrollmentLetterFile.name}
+                    </span>
+                    <span className="ml-2 font-mono text-[11px] text-emerald-700">
+                      ({(enrollmentLetterFile.size / 1024).toFixed(0)} KB)
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-stone-400 hover:text-stone-700"
+                  onClick={() => setEnrollmentLetterFile(null)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div
+                className="flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[#D6D3CD] p-3 text-center transition-colors hover:border-[#1B4D3E] hover:bg-[#FBFBF9]"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="mb-1 h-4 w-4 text-muted-foreground" />
+                <p className="text-[12px] font-medium text-foreground">
+                  Drop Provider Enrollment Letter here, or{" "}
+                  <span className="text-[#1B4D3E] underline">browse</span>
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  PDF, PNG, JPG up to 25MB • Can also be attached later
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.tiff"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setEnrollmentLetterFile(f);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5 border-t border-[#F0EEE9] pt-4">
             <Label className={FIELD_LABEL}>Contract executed (optional)</Label>
             <DatePicker
@@ -395,6 +457,7 @@ export function ApprovedDialog({
                 contractExecutedDate: contractExecutedDate || null,
                 providerIdMissingAck: providerConfig.expected && individualMissing,
                 groupIdMissingAck: groupConfig.expected && groupMissing,
+                enrollmentLetterFile,
               })
             }
           >

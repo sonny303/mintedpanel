@@ -321,7 +321,7 @@ function seedCases(fixtures: Record<string, Record<string, unknown>[]>) {
   });
 }
 
-test("Flat view (default): KPI cards, Case# columns, and the E2.3 deadline ranking as default sort", async ({
+test("Flat view: KPI cards, Case# columns, and the E2.3 deadline ranking as default sort", async ({
   context,
   page,
 }) => {
@@ -331,9 +331,8 @@ test("Flat view (default): KPI cards, Case# columns, and the E2.3 deadline ranki
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/cases");
+  await page.goto("/cases?pivot=flat");
   await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
-  // Flat is the default view.
   await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true");
 
   // KPI cards are derived filters: Total 5 / In progress 2 (follow + task) /
@@ -367,7 +366,7 @@ test("KPI + Case Status filters narrow the Flat table; the KPI selection rides ?
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/cases");
+  await page.goto("/cases?pivot=flat");
   await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
   await expect(page.locator("tbody tr")).toHaveCount(5, { timeout: 30000 });
 
@@ -431,10 +430,10 @@ test("legacy back-compat: ?chip= maps to the KPI quick-filter; case-detail deep 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  // Legacy ?chip=needs has no new KPI equivalent — it lands on Total (Flat),
+  // Legacy ?chip=needs has no new KPI equivalent — it lands on Total (Matrix default),
   // never a dead end.
   await page.goto("/cases?chip=needs");
-  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true", {
+  await expect(page.getByRole("tab", { name: "Matrix" })).toHaveAttribute("aria-selected", "true", {
     timeout: 30000,
   });
   await expect(page.getByRole("button", { name: /Total cases/ })).toHaveAttribute(
@@ -481,7 +480,7 @@ test("post-generation ?run= filters to that batch with a banner; Show all cases 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/cases?run=run-9");
+  await page.goto("/cases?run=run-9&pivot=flat");
   await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("created by this generation run")).toBeVisible({ timeout: 30000 });
   await expect(page.locator("tbody tr")).toHaveCount(1);
@@ -491,13 +490,13 @@ test("post-generation ?run= filters to that batch with a banner; Show all cases 
   // (E2.3 TE-10): rendering the list wrote nothing.
   expect(writes).toHaveLength(0);
 
-  // "Show all cases" is a param removal, not component state — back to all six.
+  // "Show all cases" is a param removal, not component state — keeps pivot=flat.
   await page.getByRole("button", { name: "Show all cases" }).click();
-  await expect(page).toHaveURL(/\/cases\/?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/pivot=flat/, { timeout: 15000 });
   await expect(page.locator("tbody tr")).toHaveCount(6);
 
   // The E2.1 ?runId= spelling is honored too (old links stay live).
-  await page.goto("/cases?runId=run-9");
+  await page.goto("/cases?runId=run-9&pivot=flat");
   await expect(page.locator("tbody tr")).toHaveCount(1);
 });
 
@@ -533,7 +532,7 @@ function seedMatrixTargets(fixtures: Record<string, Record<string, unknown>[]>) 
   );
 }
 
-test("Matrix pivot: ?pivot=matrix renders a semantic provider x payer table with case, gap and excluded cells", async ({
+test("Matrix view (default): renders a semantic provider x payer table with case, gap and excluded cells", async ({
   context,
   page,
 }) => {
@@ -547,10 +546,14 @@ test("Matrix pivot: ?pivot=matrix renders a semantic provider x payer table with
   await page.goto("/cases");
   await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
 
-  // The Matrix is a fourth tab, not a replacement — Flat is still the default.
-  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true");
+  // Matrix is the default view.
+  await expect(page.getByRole("tab", { name: "Matrix" })).toHaveAttribute("aria-selected", "true");
+  // Can switch to Flat and back
+  await page.getByRole("tab", { name: "Flat" }).click();
+  await expect(page).toHaveURL(/pivot=flat/, { timeout: 15000 });
   await page.getByRole("tab", { name: "Matrix" }).click();
-  await expect(page).toHaveURL(/pivot=matrix/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/cases\/?$/, { timeout: 15000 });
+  await expect(page.getByRole("tab", { name: "Matrix" })).toHaveAttribute("aria-selected", "true");
 
   // A real <table> with a 2D header relationship, not a div grid —
   // payers are column headers, providers are row headers.
@@ -784,4 +787,25 @@ test("Matrix gap cell: keyboard focus opens the popover and Enter reaches the Ge
   await expect(gap).toBeFocused();
   await page.waitForTimeout(500);
   await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
+});
+
+test("selecting Cases tab from left menu lands on Matrix view by default", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=flat");
+  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true");
+
+  // Select Cases from the left menu
+  await page.locator("aside").getByRole("link", { name: /Cases/ }).click();
+  await expect(page).toHaveURL(/\/cases\/?$/, { timeout: 15000 });
+  await expect(page.getByRole("tab", { name: "Matrix" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("table", { name: /North Carolina/ })).toBeVisible({ timeout: 30000 });
 });
