@@ -1,19 +1,22 @@
-// Sends the `test` template once. Sandbox (validated, never delivered) unless
-// --live is passed, whatever SENDGRID_SANDBOX says.
+// Sends one registered template with sample data (default `test`). Sandbox
+// (validated, never delivered) unless --live is passed, whatever
+// SENDGRID_SANDBOX says.
 //
-//   npm run email:send-test -- --to you@example.com [--reply-to a@b.com] [--practice "Acme Health"] [--live]
+//   npm run email:send-test -- --to you@example.com [--template provider_invitation] [--reply-to a@b.com] [--practice "Acme Health"] [--live]
 import { parseArgs } from "node:util";
 import { resolveEmailEnv } from "../../src/server/email/env.ts";
 import { EmailError, sendEmail } from "../../src/server/email/sendgrid.ts";
+import type { TemplateDataMap, TemplateKey } from "../../src/server/email/templates.ts";
 
 const USAGE =
-  'usage: npm run email:send-test -- --to <address> [--reply-to <address>] [--practice "<name>"] [--live]\n';
+  'usage: npm run email:send-test -- --to <address> [--template test|provider_invitation|intake_code] [--reply-to <address>] [--practice "<name>"] [--live]\n';
 
 let values;
 try {
   ({ values } = parseArgs({
     options: {
       to: { type: "string" },
+      template: { type: "string" },
       "reply-to": { type: "string" },
       practice: { type: "string" },
       live: { type: "boolean", default: false },
@@ -29,20 +32,43 @@ if (!values.to) {
   process.exit(2);
 }
 
-const env = { ...resolveEmailEnv(), sandbox: !values.live };
+// A const copy keeps the parsed type inside send() below.
+const args = values;
+const env = { ...resolveEmailEnv(), sandbox: !args.live };
 const practiceName = values.practice ?? "Minted Panel";
 
-try {
-  const result = await sendEmail(
+// Sample data only: the invitation link points nowhere real.
+const SAMPLES: { [K in TemplateKey]: TemplateDataMap[K] } = {
+  test: { practiceName },
+  provider_invitation: {
+    practiceName,
+    firstName: "Anita",
+    link: "https://example.invalid/intake/sample-token",
+  },
+  intake_code: { practiceName, code: "123456" },
+};
+
+const template = (values.template ?? "test") as TemplateKey;
+if (!Object.hasOwn(SAMPLES, template)) {
+  process.stderr.write(USAGE);
+  process.exit(2);
+}
+
+function send<K extends TemplateKey>(key: K, to: string) {
+  return sendEmail(
     {
-      to: values.to,
-      template: "test",
-      data: { practiceName },
-      practiceName: values.practice,
-      replyTo: { email: values["reply-to"] ?? env.fromEmail ?? "" },
+      to,
+      template: key,
+      data: SAMPLES[key],
+      practiceName: args.practice,
+      replyTo: { email: args["reply-to"] ?? env.fromEmail ?? "" },
     },
     { env },
   );
+}
+
+try {
+  const result = await send(template, values.to);
   process.stdout.write(`sandbox: ${result.sandbox ? "on" : "off"}\n`);
   process.stdout.write(`status: ${result.status}\n`);
   process.stdout.write(`x-message-id: ${result.messageId ?? "(none)"}\n`);

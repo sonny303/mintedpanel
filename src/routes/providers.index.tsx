@@ -40,6 +40,7 @@ import { buildRosterCsv, type RosterRowInput } from "@/lib/rosterExport";
 import { downloadCsvText } from "@/lib/csv";
 import { fmtDate } from "@/lib/format";
 import type { Provider } from "@/types";
+import { InviteProviderDialog } from "@/components/providers/InviteProviderDialog";
 
 export const Route = createFileRoute("/providers/")({
   component: ProvidersRoster,
@@ -83,6 +84,7 @@ function ProvidersRoster() {
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [gapsOnly, setGapsOnly] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   const today = localTodayIso();
 
@@ -320,6 +322,7 @@ function ProvidersRoster() {
 
   return (
     <div className="space-y-4">
+      {inviting ? <InviteProviderDialog onClose={() => setInviting(false)} /> : null}
       <PageHeader
         title="Providers"
         description="Sorted A→Z by last name. Gap pills point at the exact record section to fix."
@@ -334,6 +337,11 @@ function ProvidersRoster() {
             >
               Export roster
             </Button>
+            {canWrite ? (
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setInviting(true)}>
+                Invite provider
+              </Button>
+            ) : null}
             {canWrite ? (
               <Button asChild size="sm" className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
                 <Link to="/providers/new">New Provider</Link>

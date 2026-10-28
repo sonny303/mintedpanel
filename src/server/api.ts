@@ -35,6 +35,7 @@ const loadExtensionRoutes = () => import("./extensionRoutes");
 const loadDocumentRoutes = () => import("./documentRoutes");
 const loadPayerFormRoutes = () => import("./payerFormRoutes");
 const loadRosterRoutes = () => import("./rosterRoutes");
+const loadProviderIntakeRoutes = () => import("./providerIntakeRoutes");
 
 // `/api/providers/:id/profile` — must be matched before the generic :id route.
 const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
@@ -97,6 +98,9 @@ const PAYER_FORM_UPLOAD_INTENT_ROUTE = /^\/api\/payer-forms\/upload-intent\/?$/;
 const PAYER_FORM_FINALIZE_ROUTE = /^\/api\/payer-forms\/finalize\/?$/;
 const PAYER_FORM_DOWNLOAD_ROUTE = /^\/api\/payer-forms\/([^/]+)\/download\/?$/;
 const ROSTER_ROUTE = /^\/api\/rosters(?:\/.*)?\/?$/;
+// Provider onboarding slice 1: staff create and resend provider invites.
+const PROVIDER_INVITES_ROUTE = /^\/api\/provider-invites\/?$/;
+const PROVIDER_INVITE_RESEND_ROUTE = /^\/api\/provider-invites\/([^/]+)\/resend\/?$/;
 
 // Keep verified user context request-scoped. Legacy routes retain one auth
 // call while the additive context-revision header reuses that actor after
@@ -187,6 +191,19 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     requestPath.startsWith("/api/enrollment-explorer/")
   ) {
     return withCors(await handleEnrollmentExplorerApiRequest(request), request);
+  }
+  // The provider intake surface carries no JWT: its own session is an HttpOnly
+  // cookie checked inside the handler, so it skips operation-context resolution.
+  if (requestPath === "/api/intake" || requestPath.startsWith("/api/intake/")) {
+    try {
+      const routes = await loadProviderIntakeRoutes();
+      return withCors(
+        await routes.handleIntakeRequest(request, () => readBoundedJsonBody(request, 4096)),
+        request,
+      );
+    } catch (error) {
+      return withCors(noStore(toErrorResponse(error)), request);
+    }
   }
   const operation = await resolveOperationContext(request);
   if (operation && "error" in operation) {
@@ -457,6 +474,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
       ? null
       : pathname.match(PAYER_FORM_DOWNLOAD_ROUTE);
   const isRosterRoute = ROSTER_ROUTE.test(pathname);
+  const isProviderInvites = PROVIDER_INVITES_ROUTE.test(pathname);
+  const providerInviteResendMatch = pathname.match(PROVIDER_INVITE_RESEND_ROUTE);
   if (
     !profileMatch &&
     !ssnReleaseMatch &&
@@ -491,7 +510,9 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isPayerFormUploadIntent &&
     !isPayerFormFinalize &&
     !payerFormDownloadMatch &&
-    !isRosterRoute
+    !isRosterRoute &&
+    !isProviderInvites &&
+    !providerInviteResendMatch
   ) {
     return fail(404, "Not found");
   }
@@ -796,6 +817,16 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "POST") return fail(405, "Method not allowed");
       const routes = await loadDocumentRoutes();
       return await routes.handleCreateUploadIntent(await readJsonBody(request), ctx);
+    }
+    if (isProviderInvites) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadProviderIntakeRoutes();
+      return await routes.handleCreateProviderInvite(await readBoundedJsonBody(request, 4096), ctx);
+    }
+    if (providerInviteResendMatch) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadProviderIntakeRoutes();
+      return await routes.handleResendProviderInvite(providerInviteResendMatch[1], ctx);
     }
     if (isDocumentFinalize) {
       if (method !== "POST") return fail(405, "Method not allowed");

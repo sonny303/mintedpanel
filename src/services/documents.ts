@@ -15,10 +15,7 @@ import { camelizeRow } from "@/lib/case";
 import { readCompletePages } from "@/lib/completePages";
 import { requireActiveOrg } from "@/lib/audit";
 import { normalizeDocumentFileName, signedDocumentUrlWithFileName } from "@/lib/documents";
-import {
-  getContextRevisionSnapshot,
-  observeContextRevisionForRequest,
-} from "@/lib/contextRevision";
+import { authedApiFetch } from "@/services/authedApi";
 import type { DocumentKind, DocumentOwnerType, ProviderDocument } from "@/types";
 
 const DOCUMENT_COLUMNS =
@@ -94,43 +91,6 @@ export async function listUploaderNames(userIds: string[]): Promise<Map<string, 
 // The signed actions — /api through the same-origin nitro server, with the
 // caller's JWT + active org (the extension's auth contract, from the browser).
 // ---------------------------------------------------------------------------
-
-interface ApiEnvelope<T> {
-  data: T | null;
-  error: string | null;
-}
-
-async function authedApiFetch<T>(
-  path: string,
-  init?: RequestInit,
-  options: { rejectStale?: boolean } = {},
-): Promise<T> {
-  const orgId = requireActiveOrg();
-  // Capture before any asynchronous auth/session work. An auth transition
-  // during getSession or response parsing must invalidate this response.
-  const before = getContextRevisionSnapshot();
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  const token = sessionData.session?.access_token;
-  if (!token) throw new Error("Not signed in");
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      authorization: `Bearer ${token}`,
-      "x-org-id": orgId,
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-    },
-  });
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-  if (observeContextRevisionForRequest(response, before, options)) {
-    throw new Error("Access context changed; retry the request");
-  }
-  if (!response.ok || envelope.data === null) {
-    throw new Error(envelope.error ?? `Request failed (${response.status})`);
-  }
-  return envelope.data;
-}
 
 export interface DocumentUploadIntent {
   familyId: string;

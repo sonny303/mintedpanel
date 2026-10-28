@@ -70,9 +70,19 @@ export function cleanName(value: string, max: number = MAX_NAME): string {
   return Array.from(line).slice(0, max).join("").trim();
 }
 
+// Exported so callers can reject an address up front, before writing anything.
+export function isEmailAddress(value: string): boolean {
+  if (value.length === 0 || value.length > 254 || !EMAIL_PATTERN.test(value)) return false;
+  // No empty labels or edge dots: SendGrid would reject these after the
+  // invite had already been saved.
+  const [local, domain] = value.split("@");
+  if (local.startsWith(".") || local.endsWith(".") || local.includes("..")) return false;
+  return domain.split(".").every((l) => l.length > 0 && !l.startsWith("-") && !l.endsWith("-"));
+}
+
 function checkAddress(value: string, kind: EmailErrorKind, label: string): string {
   const email = value.trim();
-  if (email.length === 0 || email.length > 254 || !EMAIL_PATTERN.test(email)) {
+  if (!isEmailAddress(email)) {
     throw new EmailError(kind, `${label} is not a valid email address`);
   }
   return email;

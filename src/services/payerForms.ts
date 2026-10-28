@@ -13,10 +13,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { currentPayerForms } from "@/lib/payerForms";
-import {
-  getContextRevisionSnapshot,
-  observeContextRevisionForRequest,
-} from "@/lib/contextRevision";
+import { authedApiFetch } from "@/services/authedApi";
 import type { PayerForm } from "@/types";
 
 const PAYER_FORM_COLUMNS =
@@ -98,44 +95,6 @@ export async function retirePayerForm(form: PayerForm): Promise<PayerForm> {
 // The signed actions — /api through the same-origin nitro server, with the
 // caller's JWT + active org.
 // ---------------------------------------------------------------------------
-
-interface ApiEnvelope<T> {
-  data: T | null;
-  error: string | null;
-}
-
-async function authedApiFetch<T>(
-  path: string,
-  init?: RequestInit,
-  options: { rejectStale?: boolean } = {},
-): Promise<T> {
-  const orgId = requireActiveOrg();
-  // Bind the request before the first async auth read and validate again only
-  // after the response body is accepted. This closes transitions during
-  // getSession() and JSON parsing without discarding committed upload results.
-  const before = getContextRevisionSnapshot();
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  const token = sessionData.session?.access_token;
-  if (!token) throw new Error("Not signed in");
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      authorization: `Bearer ${token}`,
-      "x-org-id": orgId,
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-    },
-  });
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-  if (observeContextRevisionForRequest(response, before, options)) {
-    throw new Error("Access context changed; retry the request");
-  }
-  if (!response.ok || envelope.data === null) {
-    throw new Error(envelope.error ?? `Request failed (${response.status})`);
-  }
-  return envelope.data;
-}
 
 export interface PayerFormUploadIntent {
   familyId: string;

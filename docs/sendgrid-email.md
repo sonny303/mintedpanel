@@ -10,16 +10,16 @@ This change builds the reusable sending layer only. Features add their own templ
 
 ## Decisions
 
-| Decision         | Choice                                                                      | Why                                                                                                            |
-| ---------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Runtime          | Server-only module in `src/server/email/` (Node, Vercel)                    | The first callers are `/api` routes beside `guard.ts`. Testable in vitest and CI. Not a Supabase edge function |
-| Scope            | Module, closed template registry, one `test` template, local CLI            | No `/api` route, so no isolation-gate change                                                                   |
-| Caller input     | A registered template key plus typed data. No free-form subject or body     | Prevents an open relay and stray PHI in bodies, and keeps the spec's copy rules in one place                   |
-| Template storage | Typed render functions in git                                               | Reviewed and versioned. A later move (e.g. SendGrid Dynamic Templates) changes only `templates.ts`             |
-| Reply-to         | Required on every send                                                      | Spec: replies reach a person                                                                                   |
-| Audit row        | Written by the caller, not the module                                       | The caller has the org and entity. The module has no database access                                           |
-| CLI default      | Sandbox unless `--live`                                                     | A stray run or typo never delivers real mail                                                                   |
-| Deployed default | `SENDGRID_SANDBOX=true` on staging and production until onboarding launches | Early callers can't reach real providers. Flipping it is an operator step                                      |
+| Decision         | Choice                                                                  | Why                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Runtime          | Server-only module in `src/server/email/` (Node, Vercel)                | The first callers are `/api` routes beside `guard.ts`. Testable in vitest and CI. Not a Supabase edge function |
+| Scope            | Module, closed template registry, one `test` template, local CLI        | No `/api` route, so no isolation-gate change                                                                   |
+| Caller input     | A registered template key plus typed data. No free-form subject or body | Prevents an open relay and stray PHI in bodies, and keeps the spec's copy rules in one place                   |
+| Template storage | Typed render functions in git                                           | Reviewed and versioned. A later move (e.g. SendGrid Dynamic Templates) changes only `templates.ts`             |
+| Reply-to         | Required on every send                                                  | Spec: replies reach a person                                                                                   |
+| Audit row        | Written by the caller, not the module                                   | The caller has the org and entity. The module has no database access                                           |
+| CLI default      | Sandbox unless `--live`                                                 | A stray run or typo never delivers real mail                                                                   |
+| Deployed default | Delivers; `SENDGRID_SANDBOX=true` opts an environment into sandbox      | Only internal users exist pre-launch, so one fewer var to set                                                  |
 
 ## Rules every send follows
 
@@ -33,13 +33,13 @@ From spec §4.5 and §9:
 
 ## Files
 
-| File                                | Responsibility                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/server/email/templates.ts`     | `TemplateDataMap` (one entry, `test: { practiceName: string }`), the `TEMPLATES` record of pure render functions returning `{ subject, text, html }`, and `escapeHtml`                                                                                                                                                         |
-| `src/server/email/env.ts`           | `resolveEmailEnv()` returns `{ apiKey?, fromEmail?, fromName, sandbox }` from `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME` (default `"Minted Panel"`) and `SENDGRID_SANDBOX` (sandbox unless exactly `"false"`, so it fails closed). Values are trimmed. Copies the `pick` pattern from `src/server/env.ts` |
-| `src/server/email/sendgrid.ts`      | `sendEmail(input, deps?)`, `buildMailPayload` (exported for tests), and `EmailError` with `kind` and optional `status`                                                                                                                                                                                                         |
-| `src/server/email/sendgrid.test.ts` | vitest with an injected `fetch` and an explicit `env`                                                                                                                                                                                                                                                                          |
-| `scripts/email/send-test.ts`        | Local CLI                                                                                                                                                                                                                                                                                                                      |
+| File                                | Responsibility                                                                                                                                                                                                                                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/server/email/templates.ts`     | `TemplateDataMap` (one entry, `test: { practiceName: string }`), the `TEMPLATES` record of pure render functions returning `{ subject, text, html }`, and `escapeHtml`                                                                                                                                       |
+| `src/server/email/env.ts`           | `resolveEmailEnv()` returns `{ apiKey?, fromEmail?, fromName, sandbox }` from `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME` (default `"Minted Panel"`) and `SENDGRID_SANDBOX` (sandbox only when exactly `"true"`). Values are trimmed. Copies the `pick` pattern from `src/server/env.ts` |
+| `src/server/email/sendgrid.ts`      | `sendEmail(input, deps?)`, `buildMailPayload` (exported for tests), and `EmailError` with `kind` and optional `status`                                                                                                                                                                                       |
+| `src/server/email/sendgrid.test.ts` | vitest with an injected `fetch` and an explicit `env`                                                                                                                                                                                                                                                        |
+| `scripts/email/send-test.ts`        | Local CLI                                                                                                                                                                                                                                                                                                    |
 
 **Node type-stripping constraint.** The CLI runs on Node 22.22's built-in TypeScript stripping, so no new dependency is needed. Every file the CLI imports must:
 
@@ -126,14 +126,14 @@ npm script: `"email:send-test": "node --env-file-if-exists=.env scripts/email/se
 
 Local keys go in the root `.env`, which is gitignored. Non-`VITE_` variables are never baked into the browser bundle (`vite.config.ts` loads only the `VITE_` prefix).
 
-| Variable              | Required | Notes                                                             |
-| --------------------- | -------- | ----------------------------------------------------------------- |
-| `SENDGRID_API_KEY`    | yes      | Restricted key, Mail Send only                                    |
-| `SENDGRID_FROM_EMAIL` | yes      | On Minted's authenticated domain                                  |
-| `SENDGRID_FROM_NAME`  | no       | Default `Minted Panel`                                            |
-| `SENDGRID_SANDBOX`    | no       | Only `false` delivers; anything else validates without delivering |
+| Variable              | Required | Notes                                                            |
+| --------------------- | -------- | ---------------------------------------------------------------- |
+| `SENDGRID_API_KEY`    | yes      | Restricted key, Mail Send only                                   |
+| `SENDGRID_FROM_EMAIL` | yes      | On Minted's authenticated domain                                 |
+| `SENDGRID_FROM_NAME`  | no       | Default `Minted Panel`                                           |
+| `SENDGRID_SANDBOX`    | no       | Only `true` validates without delivering; anything else delivers |
 
-Deployed: Vercel env vars per project, staging first, with `SENDGRID_SANDBOX=true` on both until launch. An operator sets these; the PR doesn't.
+Deployed: Vercel env vars per project, staging first. An operator sets these; the PR doesn't.
 
 ## Tests (`sendgrid.test.ts`)
 

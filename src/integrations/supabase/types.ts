@@ -4491,6 +4491,47 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      create_provider_intake_invite: {
+        Args: {
+          p_actor_id: string;
+          p_actor_name: string;
+          p_expires_at: string;
+          p_input: Json;
+          p_org_id: string;
+          p_token_hash: string;
+        };
+        Returns: Json;
+      };
+      issue_intake_code: {
+        Args: { p_code_hash: string; p_token_hash: string };
+        Returns: Json;
+      };
+      read_intake_link: { Args: { p_token_hash: string }; Returns: Json };
+      read_intake_session: {
+        Args: { p_session_hash: string; p_token_hash: string };
+        Returns: Json;
+      };
+      resend_provider_intake_invite: {
+        Args: {
+          p_actor_id: string;
+          p_actor_name: string;
+          p_expires_at: string;
+          p_org_id: string;
+          p_provider_id: string;
+          p_token_hash: string;
+        };
+        Returns: Json;
+      };
+      revoke_intake_session: { Args: { p_session_hash: string }; Returns: undefined };
+      verify_intake_code: {
+        Args: {
+          p_code_hash: string;
+          p_session_expires_at: string;
+          p_session_hash: string;
+          p_token_hash: string;
+        };
+        Returns: string;
+      };
       _apply_case_status_auto: {
         Args: {
           p_case_id: string;

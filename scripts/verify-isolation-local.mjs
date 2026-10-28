@@ -39,6 +39,11 @@ function runGate(baseUrl) {
         SOUTHPARK_FIELDMAP_ID: FIXTURES.SOUTHPARK_FIELDMAP_ID,
         SOUTHPARK_CASE_ID: FIXTURES.SOUTHPARK_CASE_ID,
         SOUTHPARK_FACILITY_ID: FIXTURES.SOUTHPARK_FACILITY_ID,
+        // Provider onboarding slice 1 (35-35d) — always set here; optional in
+        // the real gate.
+        KANSAS_GROUP_ID: FIXTURES.KANSAS_GROUP_ID,
+        SOUTHPARK_GROUP_ID: FIXTURES.SOUTHPARK_GROUP_ID,
+        KANSAS_INTAKE_TOKEN: FIXTURES.KANSAS_INTAKE_TOKEN,
         // Assertion 13 (task-ownership isolation) fixtures — always set here so
         // the mock run exercises it; optional in the real gate.
         KANSAS_CASE_ID: FIXTURES.KANSAS_CASE_ID,
@@ -148,6 +153,11 @@ const EXPECTED_FAILS = {
   // this leak lets a non-admin mint a signed target (28b) and finalize a row
   // (28c) for a form every org depends on.
   payerformwrite: ["28b", "28c"],
+  // Provider onboarding slice 1: an invite lands in another org's group (35b)
+  // and a resend reaches another org's provider (35c).
+  providerinvites: ["35b", "35c"],
+  // A provider intake session reads another org's provider (35d).
+  intakesession: ["35d"],
 };
 
 function failedAssertions(output) {

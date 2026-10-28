@@ -47,6 +47,9 @@
 //   documentupload cross-org owner honored on upload-intent/finalize instead
 //               of 404 before any signing/insert (ASD BITE-ASD-04)   (25b, 26)
 //   learning   AI mapping promotion ignores writer/evidence checks          (20b, 20c)
+//   providerinvites a provider invite is created in another org's group, and
+//               a resend reaches another org's provider              (35b, 35c)
+//   intakesession a provider intake session reads another org's provider (35d)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -81,6 +84,12 @@ export const FIXTURES = {
   // ROLE (admin-only writes), not tenancy.
   PAYER_FORM_TEMPLATE_ID: "b7a90000-0000-4000-a000-0000000000f1",
   PAYER_FORM_ID: "b7a90000-0000-4000-a000-0000000000f2",
+  // Provider onboarding slice 1 (35-35d). The groups are the mock's own ids;
+  // the intake token stands in for an emailed link, and code 000000 for the
+  // emailed code, because the mock sends no mail.
+  KANSAS_GROUP_ID: "k-group-1",
+  SOUTHPARK_GROUP_ID: "sp-group-1",
+  KANSAS_INTAKE_TOKEN: "mock-intake-kansas",
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
   EXPLICIT_SELECTION_PORTAL_KEY: "bcbs_ks_enrollment_explicit",
@@ -121,6 +130,8 @@ export const LEAK_MODES = [
   "providergroups",
   "payerformwrite",
   "e613isolation",
+  "providerinvites",
+  "intakesession",
 ];
 
 const USERS = {
@@ -711,6 +722,40 @@ export async function createMockApiServer(options = {}) {
       return;
     }
     if (url.pathname === "/api/health") return envelope(res, 200, "ok");
+
+    // --- /api/intake/* (provider onboarding slice 1): no JWT, an HttpOnly
+    // cookie instead. A right code for the Kansas link opens a Kansas session;
+    // /me must return only that invite's provider. Leak "intakesession" serves
+    // a South Park provider from a Kansas session.
+    if (url.pathname === "/api/intake/session" && method === "POST") {
+      const body = (await readBody(req)) ?? {};
+      if (body.t !== FIXTURES.KANSAS_INTAKE_TOKEN || body.code !== "000000") {
+        return envelope(res, 400, null, "code_invalid");
+      }
+      res.setHeader(
+        "set-cookie",
+        "mp_intake=mock-session-kansas; HttpOnly; SameSite=Strict; Path=/api/intake",
+      );
+      return envelope(res, 200, { signedIn: true });
+    }
+    if (url.pathname === "/api/intake/me" && method === "POST") {
+      const cookie = req.headers.cookie ?? "";
+      const body = (await readBody(req)) ?? {};
+      if (
+        !cookie.includes("mp_intake=mock-session-kansas") ||
+        body.t !== FIXTURES.KANSAS_INTAKE_TOKEN
+      ) {
+        return envelope(res, 401, null, "signed_out");
+      }
+      const sp = leak === "intakesession";
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, {
+        practiceName: sp ? "South Park Physician Group" : "Kansas Fitness Physio",
+        firstName: sp ? "South" : "Kay",
+        lastName: sp ? "Park" : "One",
+        email: sp ? "sp.provider@example.test" : "kay.one@example.test",
+      });
+    }
 
     // --- auth: resolve the caller, then the org (x-org-id needs membership) ---
     const auth = req.headers.authorization ?? "";
@@ -1586,6 +1631,51 @@ export async function createMockApiServer(options = {}) {
     // simulate, because a cross-org READ is the intended behavior (29). The
     // wall is ROLE: only an admin may change what every org sees, so the leak
     // mode to simulate is a non-admin getting through (28b/28c).
+    // --- /api/provider-invites (provider onboarding slice 1) ---
+    // Writer-only. The group must be the caller's org's or it's a 404 with
+    // nothing created; a resend for another org's provider is a 404. Leak
+    // "providerinvites" honors a cross-org group and a cross-org resend.
+    if (/^\/api\/provider-invites\/?$/.test(url.pathname) && method === "POST") {
+      if (user.role === "billing")
+        return envelope(res, 403, null, "Only admins and specialists can invite providers");
+      const body = await readBody(req);
+      if (
+        !body ||
+        typeof body !== "object" ||
+        !body.firstName ||
+        !body.lastName ||
+        !body.email ||
+        !body.groupId
+      ) {
+        return envelope(res, 422, null, "First and last name are required");
+      }
+      const groupOrg = {
+        [FIXTURES.KANSAS_GROUP_ID]: FIXTURES.KANSAS_ORG,
+        [FIXTURES.SOUTHPARK_GROUP_ID]: FIXTURES.SOUTHPARK_ORG,
+      }[body.groupId];
+      if (!groupOrg || (groupOrg !== orgId && leak !== "providerinvites")) {
+        return envelope(res, 404, null, "Group not found");
+      }
+      return envelope(res, 201, {
+        outcome: "created",
+        providerId: `invited-${Date.now()}`,
+        delivery: "sent",
+      });
+    }
+    const resendMatch = url.pathname.match(/^\/api\/provider-invites\/([^/]+)\/resend\/?$/);
+    if (resendMatch && method === "POST") {
+      if (user.role === "billing")
+        return envelope(res, 403, null, "Only admins and specialists can resend invites");
+      const target = PROVIDERS.find((row) => row.id === resendMatch[1]);
+      if (!target || (target.orgId !== orgId && leak !== "providerinvites")) {
+        return envelope(res, 404, null, "Invite not found");
+      }
+      return envelope(res, 200, {
+        delivery: "sent",
+        email: `${target.firstName}.${target.lastName}@example.test`.toLowerCase(),
+      });
+    }
+
     if (url.pathname === "/api/payer-forms/upload-intent" && method === "POST") {
       if (user.role !== "admin" && leak !== "payerformwrite") {
         return envelope(res, 403, null, "Only an admin can add payer forms");

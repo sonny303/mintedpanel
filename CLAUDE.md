@@ -115,6 +115,9 @@ service-role client, consumed by the **Chrome extension**.
 two file surfaces: the browser documents and payer-forms services call their
 `/api/*` signing endpoints, because a signed Storage URL cannot be minted
 client-side. Metadata reads (and the payer-form soft retire) stay on RLS.
+Provider onboarding adds two more for the same kind of reason: staff invites
+(`/api/provider-invites`, the server sends the email) and the provider intake
+(`/api/intake/*`, the provider has no Supabase session).
 
 Routes get built only when a real consumer pulls them. Don't migrate existing
 screens to `/api`.
@@ -173,7 +176,8 @@ route modules so `/api/health` stays free of the Supabase graph.
 
 ### Email (`src/server/email/`)
 
-SendGrid mailer with no caller yet. Read `docs/sendgrid-email.md` before
+SendGrid mailer. Its callers are the provider invite and intake routes
+(`src/server/providerIntakeRoutes.ts`). Read `docs/sendgrid-email.md` before
 adding one. Callers name a registered template (no free-form body), take the
 recipient from a server lookup, never resend on a retry, and write their own
 audit row. Keep the module's imports relative `.ts` so the CLI runs.
@@ -206,6 +210,28 @@ User-scoped (`authenticateUser()`, no org resolution):
 | `GET /api/me/orgs`                                                                                                            | it's how a multi-org caller learns what `x-org-id` to send                                        |
 | `GET/PUT /api/me/view-prefs`                                                                                                  | quick-card layout follows the user across orgs                                                    |
 | `GET/POST /api/shared-field-maps`, `GET /api/shared-portals`, `POST /api/shared-portals/prove`, `POST /api/shared-test-fills` | the shared training tier belongs to **no org**; global rows only, so there is nothing to widen to |
+
+**Provider onboarding** (`docs/provider-onboarding/slice-1-invite-to-form.md`).
+There is no on/off switch: the routes and the Invite button are live wherever
+the code runs, and need the migration plus the email env. Each write is one `SECURITY DEFINER` RPC granted to
+`service_role` only, which writes its own audit rows.
+
+- `POST /api/provider-invites`, `POST /api/provider-invites/:providerId/resend`
+  (full `authenticate()`, writers): create the onboarding provider + primary
+  group assignment + invite and email the link; a duplicate returns
+  `outcome: "already_exists"`; resend has a 10-minute cooldown, serializes on
+  the provider id (advisory lock), sends to the record's **current** email
+  (returned as `email`), and gives a provider with an email but no open
+  invite a first one. Both report `delivery: "sent" | "sandbox" | "failed"` —
+  a failed send is never an error, the invite is already saved. Missing email
+  env or a non-origin `APP_BASE_URL` → 500 before any write.
+- `POST /api/intake/{link,code,session,me,signout}` (no JWT; POST + JSON
+  only; dispatched before operation-context resolution): the code always goes
+  to the invited address, `code` answers `sent` for every link state (a
+  missing email env is the one 500), a right code sets the `mp_intake` cookie
+  (`HttpOnly; SameSite=Strict; Path=/api/intake`, 2 hours), and `me` takes
+  `{ t }` so a session reads back only under its own link. Tokens and codes
+  are hashed before they reach SQL.
 
 ### Contracts worth knowing before you touch them
 
@@ -305,6 +331,10 @@ before any schema work.
 - `20261015130000_fill_sessions_system_today_date.sql` — additive nullable
   `fill_sessions.system_today_date`; the service probes for the column and
   drops only the date when it is absent, so the apply can follow the merge.
+- `20261025120000_provider_intake_invites.sql` — provider onboarding slice 1
+  (three token tables + seven RPCs). Not applied anywhere yet; staging first.
+  Verify: `pg_proc.proname = 'verify_intake_code'` exists, then run
+  `scripts/sql/provider-intake-smoke.sql` (every RPC, rolled back).
 - `20261017120000_case_creation_primary_location.sql` — **needs PM
   sign-off.** `create_case_with_tasks` writes the primary `case_facilities`
   row, plus a backfill of cases that have only the `facility_id` mirror (36
@@ -730,6 +760,9 @@ control silently dates a break to a fill that never touched it.**
   onto the service-role client without an explicit membership filter; the
   service key bypasses RLS, which is the wall. Analysis:
   `docs/ops/global-provider-search-spike.md`.
+- `src/services/intake.ts` is the third service that skips `requireActiveOrg()`:
+  the onboarding provider has no org and no Supabase session, so it calls
+  `/api/intake/*` with only its HttpOnly cookie.
 - The provider footprint (`loadProviderDossier`,
   `src/services/providerDossier.ts`) is the same kind of read, one embedded
   select, issued only when the inspector opens on `/dev/global-search`. It
@@ -793,7 +826,8 @@ control silently dates a break to a fill that never touched it.**
   `DESIGN-DEBT.md`.
 - **Public (no-session) routes:** `/`, `/login`, `/dev*`, `/privacy`, plus the
   chromeless token routes (`/capture/$token`, `/share/$token`,
-  `/ssn-intake/$token`, `/contact`). The list lives in `__root.tsx`.
+  `/ssn-intake/$token`, `/intake/$token`, `/contact`). The list lives in
+  `__root.tsx`.
   `/privacy` is the Chrome Web Store policy URL — it mirrors
   `docs/privacy-policy.md` and is a business document; don't reword it.
 - **Case page affordances.** Rare case actions live in the header ⋯ menu

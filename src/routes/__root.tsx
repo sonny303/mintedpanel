@@ -161,6 +161,9 @@ function RootComponent() {
   const isShareRoute = pathname.startsWith("/share/");
   // E4.4 public secure SSN intake link — write-only ingress, no session.
   const isSsnIntakeRoute = pathname.startsWith("/ssn-intake/");
+  // Provider onboarding intake: an emailed link plus a 6-digit code, with its
+  // own HttpOnly session cookie. No Supabase session ever exists here.
+  const isProviderIntakeRoute = pathname.startsWith("/intake/");
   // E6.12 claim links are explicit entrypoints for existing verified
   // recipients. They must remain reachable before a session is present so the
   // page can send the recipient to sign in with the token preserved.
@@ -174,6 +177,7 @@ function RootComponent() {
     isContactRoute ||
     isShareRoute ||
     isSsnIntakeRoute ||
+    isProviderIntakeRoute ||
     isClientInviteClaimRoute;
   const isPublicRoute = isChromelessRoute || isDevRoute;
   const router = useRouter();

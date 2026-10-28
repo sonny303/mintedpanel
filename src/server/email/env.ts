@@ -18,7 +18,7 @@ export function resolveEmailEnv(): EmailEnv {
     apiKey: pick("SENDGRID_API_KEY"),
     fromEmail: pick("SENDGRID_FROM_EMAIL"),
     fromName: pick("SENDGRID_FROM_NAME") ?? "Minted Panel",
-    // Fails closed: a typo or an unset var never delivers real mail.
-    sandbox: pick("SENDGRID_SANDBOX") !== "false",
+    // Delivers unless exactly "true". The CLI forces sandbox on its own.
+    sandbox: pick("SENDGRID_SANDBOX") === "true",
   };
 }

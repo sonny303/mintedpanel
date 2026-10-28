@@ -51,6 +51,7 @@ import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as GroupsIndexRouteImport } from './routes/groups.index'
 import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId'
 import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
+import { Route as IntakeTokenRouteImport } from './routes/intake.$token'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
 import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
@@ -311,6 +312,11 @@ const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
 const ImportRunIdRoute = ImportRunIdRouteImport.update({
   id: '/import/$runId',
   path: '/import/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntakeTokenRoute = IntakeTokenRouteImport.update({
+  id: '/intake/$token',
+  path: '/intake/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
@@ -624,6 +630,7 @@ export interface FileRoutesByFullPath {
   '/generation/runs': typeof GenerationRunsRouteWithChildren
   '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
   '/import/$runId': typeof ImportRunIdRoute
+  '/intake/$token': typeof IntakeTokenRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
@@ -711,6 +718,7 @@ export interface FileRoutesByTo {
   '/dev/global-search': typeof DevGlobalSearchRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/import/$runId': typeof ImportRunIdRoute
+  '/intake/$token': typeof IntakeTokenRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
@@ -806,6 +814,7 @@ export interface FileRoutesById {
   '/generation_/runs': typeof GenerationRunsRouteWithChildren
   '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
   '/import/$runId': typeof ImportRunIdRoute
+  '/intake/$token': typeof IntakeTokenRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
@@ -903,6 +912,7 @@ export interface FileRouteTypes {
     | '/generation/runs'
     | '/groups/$groupId'
     | '/import/$runId'
+    | '/intake/$token'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
@@ -990,6 +1000,7 @@ export interface FileRouteTypes {
     | '/dev/global-search'
     | '/dev/primitives'
     | '/import/$runId'
+    | '/intake/$token'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/new'
@@ -1084,6 +1095,7 @@ export interface FileRouteTypes {
     | '/generation_/runs'
     | '/groups/$groupId'
     | '/import/$runId'
+    | '/intake/$token'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
@@ -1179,6 +1191,7 @@ export interface RootRouteChildren {
   GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
   GroupsGroupIdRoute: typeof GroupsGroupIdRouteWithChildren
   ImportRunIdRoute: typeof ImportRunIdRoute
+  IntakeTokenRoute: typeof IntakeTokenRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingAuditLogRoute: typeof ReportingAuditLogRoute
   ReportingBillingReadinessRoute: typeof ReportingBillingReadinessRoute
@@ -1503,6 +1516,13 @@ declare module '@tanstack/react-router' {
       path: '/import/$runId'
       fullPath: '/import/$runId'
       preLoaderRoute: typeof ImportRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/intake/$token': {
+      id: '/intake/$token'
+      path: '/intake/$token'
+      fullPath: '/intake/$token'
+      preLoaderRoute: typeof IntakeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/launches/': {
@@ -2045,6 +2065,7 @@ const rootRouteChildren: RootRouteChildren = {
   GenerationRunsRoute: GenerationRunsRouteWithChildren,
   GroupsGroupIdRoute: GroupsGroupIdRouteWithChildren,
   ImportRunIdRoute: ImportRunIdRoute,
+  IntakeTokenRoute: IntakeTokenRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingAuditLogRoute: ReportingAuditLogRoute,
   ReportingBillingReadinessRoute: ReportingBillingReadinessRoute,

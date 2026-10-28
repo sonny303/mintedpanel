@@ -60,6 +60,9 @@
 //   SOUTHPARK_ROSTER_EXPORT_ID
 //                          Optional South Park roster export fixture; the gate
 //                          verifies a Kansas caller cannot download its bytes.
+//   SOUTHPARK_GROUP_ID     A South Park provider_groups id for 35b (cross-org
+//                          invite must 404). 35-35c SKIP while the invite routes
+//                          are off; 35d runs against the local mock only.
 //   (no new env needed for 25/25b/26 — the document upload-intent + finalize
 //   write-path pair, ASD BITE-ASD-04, closing the TD-53 gap; they reuse
 //   KANSAS_PROVIDER_ID/SOUTHPARK_PROVIDER_ID as the owner ids.)
@@ -1784,6 +1787,88 @@ function looksLikeVercelGate(r) {
     );
   } else {
     console.log("SKIP  29. global payer-form download — PAYER_FORM_ID not set");
+  }
+
+  // 35-35d — provider onboarding slice 1. 35 is the positive control: an
+  // empty body must 422, which proves the route is live, so 35b/35c can't pass
+  // against a dead route. A deploy without the code (404) or without the
+  // email env (that exact 500) reports SKIP. 35b/35c write nothing on a
+  // correct server: the cross-org group or provider misses before any insert.
+  const inviteProbe = await apiPost("/api/provider-invites", {}, { token: kansasTok });
+  if (inviteProbe.status === 404) {
+    console.log("SKIP  35/35b/35c. provider invites — route not deployed");
+  } else if (
+    inviteProbe.status === 500 &&
+    inviteProbe.body?.error === "Provider invites are not configured"
+  ) {
+    console.log("SKIP  35/35b/35c. provider invites — email env not configured on this deploy");
+  } else {
+    check(
+      "35. Kansas POST /api/provider-invites with an empty body -> 422 (route is live)",
+      inviteProbe.status === 422,
+      `status=${inviteProbe.status} (expect 422)`,
+    );
+    if (env.SOUTHPARK_GROUP_ID) {
+      const xInvite = await apiPost(
+        "/api/provider-invites",
+        {
+          firstName: "Gate",
+          lastName: "Probe",
+          email: "gate.probe@example.invalid",
+          groupId: env.SOUTHPARK_GROUP_ID,
+        },
+        { token: kansasTok },
+      );
+      check(
+        "35b. Kansas invite into a South Park group -> 404, nothing created",
+        xInvite.status === 404 && xInvite.body?.data == null,
+        `status=${xInvite.status} (expect 404) dataPresent=${xInvite.body?.data != null}`,
+        { leak: true },
+      );
+    } else {
+      console.log("SKIP  35b. cross-org invite group — SOUTHPARK_GROUP_ID not set");
+    }
+    const xResend = await apiPost(
+      `/api/provider-invites/${env.SOUTHPARK_PROVIDER_ID}/resend`,
+      {},
+      { token: kansasTok },
+    );
+    check(
+      "35c. Kansas resend for a South Park provider -> 404",
+      xResend.status === 404 && xResend.body?.data == null,
+      `status=${xResend.status} (expect 404) dataPresent=${xResend.body?.data != null}`,
+      { leak: true },
+    );
+  }
+
+  // 35d — a provider intake session reads only its own invite's provider.
+  // Needs an emailed code, so it runs against the local mock only. Node's
+  // fetch keeps no cookie jar; the session cookie is forwarded by hand.
+  if (IS_LOCAL_MOCK_API && env.KANSAS_INTAKE_TOKEN) {
+    const signIn = await fetch(`${API_BASE}/api/intake/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ t: env.KANSAS_INTAKE_TOKEN, code: "000000" }),
+    });
+    const cookie = signIn.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const me = await apiPost(
+      "/api/intake/me",
+      { t: env.KANSAS_INTAKE_TOKEN },
+      { extraHeaders: { cookie } },
+    );
+    check(
+      "35d. A Kansas intake session reads only its own invite's provider",
+      signIn.status === 200 &&
+        me.status === 200 &&
+        me.body?.data?.practiceName === "Kansas Fitness Physio",
+      `session=${signIn.status} me=${me.status} practice=${me.body?.data?.practiceName}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  35d. intake session scope — local mock only (needs an emailed code)");
   }
 
   // ---- Pass/fail table ----

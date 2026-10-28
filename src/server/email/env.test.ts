@@ -6,13 +6,13 @@ afterEach(() => {
 });
 
 describe("resolveEmailEnv", () => {
-  it("delivers only when SENDGRID_SANDBOX is exactly 'false'", () => {
-    for (const value of ["", "true", "TRUE", "False", "0", "no"]) {
+  it("is sandbox only when SENDGRID_SANDBOX is exactly 'true'", () => {
+    for (const value of ["", "false", "TRUE", "True", "1", "yes"]) {
       vi.stubEnv("SENDGRID_SANDBOX", value);
-      expect(resolveEmailEnv().sandbox).toBe(true);
+      expect(resolveEmailEnv().sandbox).toBe(false);
     }
-    vi.stubEnv("SENDGRID_SANDBOX", "false");
-    expect(resolveEmailEnv().sandbox).toBe(false);
+    vi.stubEnv("SENDGRID_SANDBOX", "true");
+    expect(resolveEmailEnv().sandbox).toBe(true);
   });
 
   it("trims configured values", () => {
