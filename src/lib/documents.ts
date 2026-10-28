@@ -164,6 +164,22 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     uploadable: true,
     aliases: ["filled_form"],
   },
+  provider_enrollment_letter: {
+    kind: "provider_enrollment_letter",
+    label: "Provider Enrollment Letter",
+    owners: ["provider"],
+    expirationRequired: false,
+    dateKind: "effective_and_expiration",
+    expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
+    uploadable: true,
+    aliases: [
+      "provider_enrollment_letter",
+      "enrollment_letter",
+      "approval_letter",
+      "payer_approval_letter",
+      "payer_enrollment_letter",
+    ],
+  },
   other: {
     kind: "other",
     label: "Other",

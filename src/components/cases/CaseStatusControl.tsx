@@ -31,6 +31,7 @@ import {
   StatusTransitionDialog,
 } from "@/components/cases/CaseStatusDialogs";
 import { useSetCaseStatus } from "@/hooks/useCases";
+import { useUploadDocument } from "@/hooks/useDocuments";
 import { resolveReferenceProvenance } from "@/lib/referenceProvenance";
 import { CaseStatusError } from "@/services/cases";
 import {
@@ -102,6 +103,7 @@ export function CaseStatusControl({
 }) {
   const status = c.caseStatus;
   const setStatusM = useSetCaseStatus();
+  const uploadM = useUploadDocument();
   const [dialog, setDialog] = useState<DialogState>(null);
 
   // S4.5 / C3: the stored payer reference + where it came from, so approving
@@ -160,7 +162,7 @@ export function CaseStatusControl({
     }
   }
 
-  const saving = setStatusM.isPending;
+  const saving = setStatusM.isPending || uploadM.isPending;
   const hasMenu = canEdit && (targets.length > 0 || isAdmin);
 
   return (
@@ -280,7 +282,24 @@ export function CaseStatusControl({
             .join(" · ")}
           saving={saving}
           onCancel={() => setDialog(null)}
-          onConfirm={(v) =>
+          onConfirm={async (v) => {
+            if (v.enrollmentLetterFile && c.provider?.id) {
+              try {
+                await uploadM.mutateAsync({
+                  ownerType: "provider",
+                  ownerId: c.provider.id,
+                  kind: "provider_enrollment_letter",
+                  file: v.enrollmentLetterFile,
+                  effectiveDate: v.effectiveDate,
+                  caseId: c.id,
+                  payerId: c.payer?.id ?? null,
+                });
+              } catch (e) {
+                toast.error(
+                  `Enrollment letter upload failed: ${e instanceof Error ? e.message : "Upload error"}. Proceeding with case approval.`,
+                );
+              }
+            }
             confirm(
               {
                 caseId: c.id,
@@ -295,9 +314,11 @@ export function CaseStatusControl({
                 providerIdMissingAck: v.providerIdMissingAck,
                 groupIdMissingAck: v.groupIdMissingAck,
               },
-              "Case approved",
-            )
-          }
+              v.enrollmentLetterFile
+                ? "Case approved and enrollment letter filed"
+                : "Case approved",
+            );
+          }}
         />
       ) : null}
       {dialog?.kind === "denied" ? (

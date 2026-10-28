@@ -121,6 +121,21 @@ describe("kind metadata (TE-5)", () => {
     expect(DOCUMENT_KIND_META.w9).toMatchObject({ expirationRequired: false, dateKind: "signed" });
     expect(expirationDateError("w9", null)).toBeNull();
   });
+
+  it("registers provider_enrollment_letter on provider grain with no expiration required", () => {
+    expect(DOCUMENT_KIND_META.provider_enrollment_letter).toMatchObject({
+      kind: "provider_enrollment_letter",
+      label: "Provider Enrollment Letter",
+      owners: ["provider"],
+      expirationRequired: false,
+      uploadable: true,
+    });
+    expect(vaultPickerKinds("provider").map((m) => m.kind)).toContain("provider_enrollment_letter");
+    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain(
+      "provider_enrollment_letter",
+    );
+    expect(expirationDateError("provider_enrollment_letter", null)).toBeNull();
+  });
 });
 
 describe("W-9 signed dates (MP-22)", () => {

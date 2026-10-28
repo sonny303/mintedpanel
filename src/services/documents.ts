@@ -153,6 +153,8 @@ export interface UploadDocumentInput {
   familyId?: string | null;
   /** Optional usage context (TE-1). */
   caseId?: string | null;
+  /** Optional payer association (Proposal #2). */
+  payerId?: string | null;
 }
 
 /** The full upload pipeline: intent → signed PUT (browser → Storage direct) →
@@ -175,6 +177,7 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
         mimeType: input.file.type,
         familyId: input.familyId ?? null,
         caseId: input.caseId ?? null,
+        payerId: input.payerId ?? null,
       }),
     },
     { rejectStale: false },
@@ -202,6 +205,7 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
         effectiveDate: input.effectiveDate ?? null,
         expirationDate,
         caseId: input.caseId ?? null,
+        payerId: input.payerId ?? null,
       }),
     },
     { rejectStale: false },
