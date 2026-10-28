@@ -131,7 +131,9 @@ describe("kind metadata (TE-5)", () => {
       uploadable: true,
     });
     expect(vaultPickerKinds("provider").map((m) => m.kind)).toContain("provider_enrollment_letter");
-    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain("provider_enrollment_letter");
+    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain(
+      "provider_enrollment_letter",
+    );
     expect(expirationDateError("provider_enrollment_letter", null)).toBeNull();
   });
 });

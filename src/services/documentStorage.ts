@@ -278,7 +278,8 @@ export async function createDocumentUploadIntent(
 
   if (input.caseId) {
     const caseCheck = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
-    if (!caseCheck.linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
+    if (!caseCheck.linked)
+      return { kind: "rejected", status: 404, message: "Case not found for this owner" };
   }
 
   let familyId = input.familyId ?? null;
@@ -357,7 +358,8 @@ export async function finalizeDocument(
   let casePayerId: string | null = null;
   if (input.caseId) {
     const caseCheck = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
-    if (!caseCheck.linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
+    if (!caseCheck.linked)
+      return { kind: "rejected", status: 404, message: "Case not found for this owner" };
     casePayerId = caseCheck.payerId;
   }
 

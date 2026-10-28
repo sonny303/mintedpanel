@@ -383,7 +383,9 @@ export function ApprovedDialog({
                 <div className="flex items-center gap-2 overflow-hidden">
                   <FileText className="h-4 w-4 shrink-0 text-emerald-700" />
                   <div className="truncate">
-                    <span className="font-medium text-emerald-900">{enrollmentLetterFile.name}</span>
+                    <span className="font-medium text-emerald-900">
+                      {enrollmentLetterFile.name}
+                    </span>
                     <span className="ml-2 font-mono text-[11px] text-emerald-700">
                       ({(enrollmentLetterFile.size / 1024).toFixed(0)} KB)
                     </span>
@@ -406,9 +408,12 @@ export function ApprovedDialog({
               >
                 <Upload className="mb-1 h-4 w-4 text-muted-foreground" />
                 <p className="text-[12px] font-medium text-foreground">
-                  Drop Provider Enrollment Letter here, or <span className="text-[#1B4D3E] underline">browse</span>
+                  Drop Provider Enrollment Letter here, or{" "}
+                  <span className="text-[#1B4D3E] underline">browse</span>
                 </p>
-                <p className="text-[11px] text-muted-foreground">PDF, PNG, JPG up to 25MB • Can also be attached later</p>
+                <p className="text-[11px] text-muted-foreground">
+                  PDF, PNG, JPG up to 25MB • Can also be attached later
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"

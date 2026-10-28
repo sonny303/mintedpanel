@@ -371,7 +371,13 @@ describe("finalizeDocument", () => {
       {
         providers: [orgProvider],
         credential_cases: [
-          { id: "case-payer-1", org_id: ORG, provider_id: PROVIDER, group_id: null, payer_id: PAYER },
+          {
+            id: "case-payer-1",
+            org_id: ORG,
+            provider_id: PROVIDER,
+            group_id: null,
+            payer_id: PAYER,
+          },
         ],
       },
       {
