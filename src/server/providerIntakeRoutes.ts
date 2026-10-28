@@ -241,13 +241,13 @@ export async function handleIntakeRequest(
 ): Promise<Response> {
   const match = new URL(request.url).pathname.match(INTAKE_ROUTE);
   if (!match) return fail(404, "Not found");
-  const db = injectedDb ?? getServiceClient();
   const action = match[1];
   const method = request.method.toUpperCase();
 
   if (method !== "POST") return noStore(fail(405, "Method not allowed"));
   if (!isJsonRequest(request)) return noStore(fail(415, "Send application/json"));
   const body = await readBody();
+  const db = injectedDb ?? getServiceClient();
 
   if (action === "link") return noStore(await readLink(body, db));
   if (action === "code") return noStore(await issueCode(body, db, deps));
