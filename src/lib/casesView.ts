@@ -36,7 +36,7 @@ export interface CaseViewRow {
   lastTouchLabel: string;
   /** Days since the last touch; null = never touched (sorts last). */
   lastTouchDays: number | null;
-  /** Whole days the case has been open (0 for a never-worked case). */
+  /** Calendar days since the case was created — see `caseDaysOpen`. */
   daysOpen: number;
   createdAt: string;
 }

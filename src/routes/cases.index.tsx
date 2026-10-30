@@ -49,6 +49,7 @@ import { useNextBestActions, useGenerationRun } from "@/hooks/useNextBestActions
 import { useCasesMatrix } from "@/hooks/useCasesMatrix";
 import { fmtDate } from "@/lib/format";
 import { useCanWrite } from "@/lib/permissions";
+import { caseDaysOpen } from "@/lib/caseAge";
 import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
 import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import {
@@ -208,7 +209,7 @@ function CasesPage() {
           lastTouchLabel:
             lastTouchDays === null ? "—" : lastTouchDays === 0 ? "today" : `${lastTouchDays}d ago`,
           lastTouchDays,
-          daysOpen: Math.max(0, differenceInCalendarDays(now, parseISO(c.createdAt))),
+          daysOpen: caseDaysOpen(c.createdAt, now),
           createdAt: c.createdAt,
         };
       });
