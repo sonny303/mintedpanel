@@ -98,6 +98,10 @@ jobs:
         env:
           FILLER_OUTCOMES_DOCKER_CONTEXT: default
         run: node scripts/security/verify-filler-outcomes.mjs
+      - name: Verify Mission Control platform-admin authorization and admin ledger
+        env:
+          MISSION_CONTROL_DOCKER_CONTEXT: default
+        run: node scripts/security/verify-mission-control.mjs
 
   staging-uat-seed:
     name: Deterministic staging UAT seed
