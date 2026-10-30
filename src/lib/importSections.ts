@@ -35,6 +35,7 @@ import { toCsv } from "@/lib/csv";
 import { matchFacilityLocator, type FacilityLocatorRecord } from "@/lib/facilityLocator";
 import { matchGroupLocator, type GroupMatchCandidate } from "@/lib/groupLocator";
 import { validatePayerAttachRow, type PayerAttachScanContext } from "@/lib/groupPayerAttach";
+import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi } from "@/lib/providerIdentity";
 import {
   CAQH_RE,
   EMAIL_RE,
@@ -110,7 +111,7 @@ interface SectionScanSpec {
   ssn4Columns: readonly string[];
   middleInitialColumns: readonly string[];
   boolColumns: readonly string[];
-  /** columns that use Add Provider's stricter field validators */
+  /** columns that use Add Provider's stricter field validators (shape + CMS check digit) */
   addProviderNpiColumns?: readonly string[];
   caqhColumns?: readonly string[];
   emailColumns?: readonly string[];
@@ -401,6 +402,9 @@ function scanWith(descriptor: SectionDescriptor, record: CsvRecord, headers: str
     }
     if (spec.addProviderNpiColumns?.includes(h) && v && !NPI_RE.test(v)) {
       fail(h, "NPI must be 10 digits and start with 1");
+    }
+    if (spec.addProviderNpiColumns?.includes(h) && NPI_RE.test(v) && !isValidNpi(v)) {
+      fail(h, NPI_CHECK_DIGIT_MESSAGE);
     }
     if (spec.caqhColumns?.includes(h) && v && !CAQH_RE.test(v)) {
       fail(h, "CAQH must be 8 digits");

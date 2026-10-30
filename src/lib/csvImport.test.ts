@@ -7,6 +7,11 @@ import {
   parseCsvRecords,
   parseImportPackage,
 } from "./csvImport";
+import {
+  DEA_CHECK_DIGIT_MESSAGE,
+  DEA_FORMAT_MESSAGE,
+  NPI_CHECK_DIGIT_MESSAGE,
+} from "./providerIdentity";
 
 /* ------------------------------ CSV parser ------------------------------ */
 
@@ -117,7 +122,7 @@ describe("parseImportPackage header mapping", () => {
   it("maps CSV columns to domain fields regardless of header casing/spacing", () => {
     const providersCsv = [
       "First Name,Last Name,NPI,Email,Home State,Start Date,Specialty",
-      "Jane,Doe,1234567890,jane@x.com,KS,2026-01-15,Physical Therapy",
+      "Jane,Doe,1234567893,jane@x.com,KS,2026-01-15,Physical Therapy",
     ].join("\n");
     const { providers, errors } = parseImportPackage({ providersCsv });
     expect(errors).toEqual([]);
@@ -125,7 +130,7 @@ describe("parseImportPackage header mapping", () => {
     expect(providers[0].input).toMatchObject({
       firstName: "Jane",
       lastName: "Doe",
-      npi: "1234567890",
+      npi: "1234567893",
       email: "jane@x.com",
       homeState: "KS",
       startDate: "2026-01-15",
@@ -133,7 +138,7 @@ describe("parseImportPackage header mapping", () => {
       status: "active",
     });
     // provider keys expose ref/npi/email for assignment resolution
-    expect(providers[0].keys).toEqual(expect.arrayContaining(["1234567890", "jane@x.com"]));
+    expect(providers[0].keys).toEqual(expect.arrayContaining(["1234567893", "jane@x.com"]));
   });
 
   it("expands license_state and license_states into license rows", () => {
@@ -202,6 +207,23 @@ describe("parseImportPackage validation", () => {
     );
   });
 
+  it("flags a wrong NPI check digit and a bad DEA checksum; blank DEA stays allowed", () => {
+    const providersCsv = [
+      "first_name,last_name,npi,dea_number",
+      "Al,Roe,1234567890,AB1234563",
+      "Bo,Lee,1902833742,AB1234564",
+      "Cy,Ng,1093817462,AB12",
+      "Di,Ko,1000000004,",
+    ].join("\n");
+    const { providers, errors } = parseImportPackage({ providersCsv });
+    expect(errors).toEqual([
+      { file: "providers", line: 2, column: "npi", message: NPI_CHECK_DIGIT_MESSAGE },
+      { file: "providers", line: 3, column: "dea_number", message: DEA_CHECK_DIGIT_MESSAGE },
+      { file: "providers", line: 4, column: "dea_number", message: DEA_FORMAT_MESSAGE },
+    ]);
+    expect(providers.find((p) => p.line === 5)?.input.deaNumber).toBeNull();
+  });
+
   it("flags an assignment referencing an unknown facility", () => {
     const facilitiesCsv = ["ref,name", "f1,Casa Bonita"].join("\n");
     const providersCsv = ["ref,first_name,last_name", "p1,Jane,Doe"].join("\n");
@@ -264,7 +286,7 @@ describe("parseImportPackage validation", () => {
     const facilitiesCsv = ["ref,name,state", "loc1,Main Clinic,KS", "loc2,,KS"].join("\n");
     const providersCsv = [
       "ref,first_name,last_name,npi,is_new_grad",
-      "prov1,Jane,Doe,1234567890,yes",
+      "prov1,Jane,Doe,1234567893,yes",
       "prov2,,Smith,,no",
       "prov3,Amy,Ng,999,maybe",
     ].join("\n");

@@ -1,6 +1,6 @@
+import { isValidNpi } from "@/lib/providerIdentity";
 import {
   getRosterSourceValue,
-  isValidNpi,
   isSsnLast4,
   isRosterSourceCompatibleWithTarget,
   isZipPlus4,

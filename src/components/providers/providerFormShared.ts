@@ -1,5 +1,6 @@
 // Shared constants, types, and validation for the Add Provider stepper.
 // Record edit uses a separate inline Identity path (EditProviderForm retired).
+import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi } from "@/lib/providerIdentity";
 import { isKnownTaxonomyCode } from "@/lib/providerTaxonomy";
 
 // Re-export the single mastered state list (src/lib/usStates.ts) rather than
@@ -94,7 +95,10 @@ export function validatePersonal(f: ProviderFormState): ProviderFormErrors {
 
 export function validateCredentials(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
+  // Blank stays allowed (incomplete onboarding); an entered NPI must pass the
+  // shape AND the CMS check digit (MINT-7).
   if (f.npi && !NPI_RE.test(f.npi)) e.npi = "NPI must be 10 digits and start with 1";
+  else if (f.npi && !isValidNpi(f.npi)) e.npi = NPI_CHECK_DIGIT_MESSAGE;
   if (!f.isNewGrad && f.caqhId && !CAQH_RE.test(f.caqhId)) e.caqhId = "CAQH must be 8 digits";
   // Soft gate: value must be one of the picker options (PT/PTA + dietitian).
   // Blank stays allowed; the Credentials step defaults to Physical Therapist.

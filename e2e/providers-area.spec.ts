@@ -958,3 +958,41 @@ test("F05: license editor blocks reversed dates inline and accepts equal dates",
     ]),
   );
 });
+
+test("MINT-7: Add Provider blocks a wrong NPI check digit inline; the corrected NPI saves", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  const { handler, requests } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/providers/new");
+  await expect(page.getByRole("heading", { name: "Add provider" })).toBeVisible({
+    timeout: 30000,
+  });
+  await page.getByLabel("First name", { exact: true }).fill("Taylor");
+  await page.getByLabel("Last name", { exact: true }).fill("Provider");
+  await page.getByRole("button", { name: "Next" }).click();
+
+  const npi = page.getByLabel("NPI", { exact: true });
+  await npi.fill("1234567890");
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByText("NPI check digit is invalid — re-check the number")).toBeVisible();
+  await expect(npi).toBeVisible();
+
+  await npi.fill("1234567893");
+  for (let step = 0; step < 3; step += 1) {
+    await page.getByRole("button", { name: "Next" }).click();
+  }
+  await page.getByRole("button", { name: "Create provider" }).click();
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+  const createWrites = requests.filter(
+    (request) => request.method === "POST" && request.path === "providers",
+  );
+  expect(createWrites).toHaveLength(1);
+  expect((createWrites[0].body as Record<string, unknown>).npi).toBe("1234567893");
+});

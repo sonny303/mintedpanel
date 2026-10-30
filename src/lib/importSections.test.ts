@@ -27,6 +27,7 @@ import {
 } from "@/lib/importSections";
 import { ROSTER_TEMPLATE_HEADERS } from "@/lib/rosterImport";
 import { emptyProviderFormState } from "@/components/providers/providerFormShared";
+import { NPI_CHECK_DIGIT_MESSAGE } from "@/lib/providerIdentity";
 import type { ScannedRow } from "@/lib/rosterImport";
 
 // Build one data record from a header→cell map (template order) and scan it.
@@ -458,6 +459,20 @@ describe("provider scan (TE-2/TE-6)", () => {
     const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, [column]: value });
     expect(row.rowState).toBe("error");
     expect(row.errorColumn).toBe(column);
+  });
+
+  it("rejects a format-valid NPI with a wrong check digit, naming the column (MINT-7)", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, npi: "1234567890" });
+    expect(row.rowState).toBe("error");
+    expect(row.errorColumn).toBe("npi");
+    expect(row.errorReason).toBe(NPI_CHECK_DIGIT_MESSAGE);
+    expect(row.mapped).toBeNull();
+  });
+
+  it("rejects an impossible calendar date, naming the column", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, date_of_birth: "1990-02-30" });
+    expect(row.rowState).toBe("error");
+    expect(row.errorColumn).toBe("date_of_birth");
   });
 
   it("keeps status off the provider template and names the breaking re-download", () => {

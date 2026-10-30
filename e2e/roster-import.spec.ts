@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+import { npiCheckDigit } from "@/lib/providerIdentity";
 import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 // E3.0 TE-11 + E3.3 (per-section retarget) — roster-import coverage over the
@@ -413,7 +414,7 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   await uploadRoster(
     section,
     "roster.csv",
-    [HEADER_LINE, rowLine(), rowLine({ provider_first_name: "Quinn", npi: "1093817465" })].join(
+    [HEADER_LINE, rowLine(), rowLine({ provider_first_name: "Quinn", npi: "1093817462" })].join(
       "\n",
     ),
   );
@@ -484,7 +485,7 @@ test("TS-59: org-rep streamlined wizard upload stages identically beside the man
   await uploadRoster(
     card,
     "org-roster.csv",
-    [HEADER_LINE, rowLine(), rowLine({ provider_first_name: "Quinn", npi: "1093817465" })].join(
+    [HEADER_LINE, rowLine(), rowLine({ provider_first_name: "Quinn", npi: "1093817462" })].join(
       "\n",
     ),
   );
@@ -527,13 +528,16 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   // 2026-07-20: expand the collapsed import disclosure first.
   await section.getByText("Bulk provider import").click();
 
-  // 60 rows, 3 with malformed NPIs.
-  const badIndexes = [10, 25, 40];
+  // 60 rows, 3 with bad NPIs: two malformed, one (row 25) 10 digits with a
+  // wrong CMS check digit (MINT-7). Every other NPI carries a valid one.
+  const npiFor = (i: number) => {
+    if (i === 25) return "1234567890";
+    if (i === 10 || i === 40) return "999";
+    const first9 = String(100000000 + i);
+    return `${first9}${npiCheckDigit(first9)}`;
+  };
   const rows = Array.from({ length: 60 }, (_, i) =>
-    rowLine({
-      npi: badIndexes.includes(i) ? "999" : String(1000000000 + i),
-      provider_last_name: `Scott${i}`,
-    }),
+    rowLine({ npi: npiFor(i), provider_last_name: `Scott${i}` }),
   );
   await uploadRoster(section, "big-roster.csv", [HEADER_LINE, ...rows].join("\n"));
   await expect(section.getByText("60 data rows")).toBeVisible();
@@ -578,7 +582,7 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   expect(lines).toHaveLength(4);
   for (const [i, line] of [12, 27, 42].entries()) {
     expect(lines[i + 1]).toContain(`${line},npi,`);
-    expect(lines[i + 1]).toContain("10 digits");
+    expect(lines[i + 1]).toContain(line === 27 ? "check digit is invalid" : "10 digits");
   }
 
   // Staging only — live tables untouched.

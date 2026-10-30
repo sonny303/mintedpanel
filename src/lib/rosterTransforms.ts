@@ -1,4 +1,5 @@
 import type { RosterGrain, RosterSourceField, RosterTransform, RosterValueType } from "@/types";
+import { isIsoDate } from "@/lib/providerIdentity";
 
 export const ROSTER_SOURCE_FIELDS: ReadonlyArray<{
   value: RosterSourceField;
@@ -95,35 +96,6 @@ export function isRosterSourceCompatibleWithTarget(
   return (SOURCE_FIELDS_BY_TYPE[targetType] ?? []).includes(sourceField);
 }
 
-export function isValidNpi(value: unknown): boolean {
-  if (typeof value !== "string" && typeof value !== "number") return false;
-  const digits = String(value).trim();
-  if (!/^\d{10}$/.test(digits)) return false;
-  // NPI's Luhn check digit is calculated with the CMS 80840 prefix.
-  const prefixed = `80840${digits.slice(0, 9)}`;
-  let sum = Number(digits[9]);
-  let double = true;
-  for (let index = prefixed.length - 1; index >= 0; index -= 1) {
-    let digit = Number(prefixed[index]);
-    if (double) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-    sum += digit;
-    double = !double;
-  }
-  return sum % 10 === 0;
-}
-
-function validIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-  );
-}
-
 export function formatRosterDate(
   value: unknown,
   transform: "date_yyyy_mm_dd" | "date_mm_dd_yyyy",
@@ -133,7 +105,7 @@ export function formatRosterDate(
   let iso = raw;
   const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
   if (us) iso = `${us[3]}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
-  if (!validIsoDate(iso)) return null;
+  if (!isIsoDate(iso)) return null;
   if (transform === "date_yyyy_mm_dd") return iso;
   const [year, month, day] = iso.split("-");
   return `${month}/${day}/${year}`;

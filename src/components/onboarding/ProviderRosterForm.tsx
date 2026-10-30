@@ -1,6 +1,6 @@
 // Provider form dialog (E1.3 F1.3.1) — the CAQH-anchored baseline over the
 // EXISTING providers columns. Group assignment is step one (required, M:N,
-// one primary). Required to save: name, Type 1 NPI (10-digit format-only),
+// one primary). Required to save: name, Type 1 NPI (10 digits + CMS check digit),
 // ≥1 group assignment; every other CAQH field is optional (readiness — E1.8
 // — is the gate, not entry). SSN is captured as LAST-4 ONLY (hard rule; the
 // full-SSN vault is R6/R7). No status picker — new providers default to
@@ -41,7 +41,8 @@ import { useCreateEnrollmentFact } from "@/hooks/useEnrollmentFacts";
 import { usePayers } from "@/hooks/useAdmin";
 import { StateSelect } from "@/components/StateSelect";
 import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
-import { isValidNpi } from "@/lib/providerGroup";
+import { normalizeNpi } from "@/lib/providerGroup";
+import { NPI_CHECK_DIGIT_MESSAGE, identityFieldChanged, isValidNpi } from "@/lib/providerIdentity";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
 import {
@@ -217,8 +218,18 @@ function FormBody({
     const next: RosterFormErrors = {};
     if (!form.firstName.trim()) next.firstName = "First name is required";
     if (!form.lastName.trim()) next.lastName = "Last name is required";
+    // MINT-7: an entered or changed NPI must pass the CMS check digit; an
+    // unchanged stored NPI is not re-validated, so legacy data never blocks
+    // an unrelated edit.
+    const npiDigits = normalizeNpi(form.npi);
+    const npiChanged = identityFieldChanged(
+      form.npi,
+      provider ? initialForm.npi : undefined,
+      normalizeNpi,
+    );
     if (!form.npi.trim()) next.npi = "Type 1 NPI is required";
-    else if (!isValidNpi(form.npi)) next.npi = "NPI must be 10 digits";
+    else if (npiChanged && npiDigits.length !== 10) next.npi = "NPI must be 10 digits";
+    else if (npiChanged && !isValidNpi(npiDigits)) next.npi = NPI_CHECK_DIGIT_MESSAGE;
     if (form.ssnLast4.trim() && !/^\d{4}$/.test(form.ssnLast4.trim()))
       next.ssnLast4 = "Enter the LAST 4 digits only";
     const assignmentError = validateGroupAssignments(assignments);

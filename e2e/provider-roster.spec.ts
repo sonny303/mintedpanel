@@ -446,7 +446,13 @@ test("TS-34: two-TIN provider — both groups assigned, first primary; last-assi
   await dialog.getByLabel("Assign Shelby Performance Group LLC").click();
   await dialog.locator("#prov-first").fill("Quinn");
   await dialog.locator("#prov-last").fill("James");
+  // MINT-7: a 10-digit NPI with the wrong CMS check digit is an inline error
+  // and nothing is written; the corrected number saves.
   await dialog.locator("#prov-npi").fill("1093817465");
+  await dialog.getByRole("button", { name: "Save provider" }).click();
+  await expect(dialog).toContainText("NPI check digit is invalid");
+  expect(fixtures.providers!).toHaveLength(0);
+  await dialog.locator("#prov-npi").fill("1093817462");
   await dialog.getByRole("button", { name: "Save provider" }).click();
 
   await expect(card).toContainText("Quinn James", { timeout: 15000 });
@@ -681,6 +687,8 @@ function p03Fixtures() {
         group_id: "g-NC",
         first_name: "Brooke",
         last_name: "Ostrander",
+        // Fails the NPI check digit on purpose (MINT-7): the roster editor
+        // saves without re-validating an unchanged stored NPI.
         npi: "1093817465",
       }),
     ],

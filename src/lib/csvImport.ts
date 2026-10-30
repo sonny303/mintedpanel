@@ -15,6 +15,13 @@
 // line where they start so every validation error can point at a source line.
 import type { FacilityInput } from "@/services/orgSettings";
 import type { LicenseInput, ProviderInput } from "@/services/providers";
+import {
+  DEA_CHECK_DIGIT_MESSAGE,
+  DEA_FORMAT_MESSAGE,
+  NPI_CHECK_DIGIT_MESSAGE,
+  deaProblem,
+  isValidNpi,
+} from "@/lib/providerIdentity";
 
 export type ImportFile = "facilities" | "providers" | "provider_facility_assignments";
 
@@ -389,6 +396,23 @@ function parseProviders(csv: string, errors: CsvImportError[]): ParsedProvider[]
         column: "npi",
         message: `NPI must be 10 digits, got "${npi}"`,
       });
+    } else if (npi && !isValidNpi(npi)) {
+      errors.push({
+        file: "providers",
+        line: record.line,
+        column: "npi",
+        message: NPI_CHECK_DIGIT_MESSAGE,
+      });
+    }
+    const dea = reader.cell(record, "dea_number");
+    const deaIssue = dea ? deaProblem(dea) : null;
+    if (deaIssue) {
+      errors.push({
+        file: "providers",
+        line: record.line,
+        column: "dea_number",
+        message: deaIssue === "format" ? DEA_FORMAT_MESSAGE : DEA_CHECK_DIGIT_MESSAGE,
+      });
     }
     const ssn = reader.cell(record, "ssn_last4");
     if (ssn && !SSN4_RE.test(ssn)) {
@@ -511,7 +535,7 @@ function parseProviders(csv: string, errors: CsvImportError[]): ParsedProvider[]
         caqhLastAttestedDate,
         specialty: nullable(reader.cell(record, "specialty")),
         taxonomyCode: nullable(reader.cell(record, "taxonomy_code")),
-        deaNumber: nullable(reader.cell(record, "dea_number")),
+        deaNumber: nullable(dea),
         dateOfBirth,
         ssnLast4: nullable(ssn),
         startDate,
