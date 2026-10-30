@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   PAYER_DETAIL_TABS,
+  UNTITLED_DRAFT_LABEL,
   buildPayerCaseRows,
   buildPayerEnrollmentRows,
+  draftResumeSearch,
   parsePayerDetailTab,
   payerMergeCandidates,
+  payerTemplateDraftRows,
   payerTemplateRows,
   templateIntentForFormSuggestion,
   templateStateCoverage,
@@ -12,7 +15,7 @@ import {
   type PayerEnrollmentCaseSlice,
 } from "@/lib/payerDetailView";
 import { TEMPLATE_EDITOR_INTENTS } from "@/lib/templateEditorIntent";
-import type { EnrollmentFact, Payer, SOPTemplate } from "@/types";
+import type { EnrollmentFact, Payer, SOPTemplate, SopTemplateDraft } from "@/types";
 
 const PAYER_ID = "p-1";
 const OTHER_PAYER = "p-2";
@@ -328,5 +331,84 @@ describe("templateStateCoverage — multi-state templates", () => {
       multiRow(["AZ", "CO", "TX", "NV"]),
     ]);
     expect(coverage).toMatchObject({ covered: 2, total: 2 });
+  });
+});
+
+describe("payerTemplateDraftRows", () => {
+  function draft(over: Partial<SopTemplateDraft> = {}): SopTemplateDraft {
+    return {
+      id: "d-1",
+      orgId: "o-1",
+      templateId: null,
+      payload: { name: "Aetna CO contract", payerId: PAYER_ID },
+      updatedBy: "u-1",
+      updatedByName: "Owner Dillon",
+      createdAt: "2026-10-01T00:00:00Z",
+      updatedAt: "2026-10-02T00:00:00Z",
+      ...over,
+    };
+  }
+
+  it("keeps this payer's new-template drafts, most recently saved first", () => {
+    const rows = payerTemplateDraftRows(
+      [
+        draft({ id: "older", updatedAt: "2026-10-01T09:00:00Z" }),
+        draft({ id: "newer", updatedAt: "2026-10-03T09:00:00Z", updatedByName: null }),
+      ],
+      PAYER_ID,
+    );
+    expect(rows).toEqual([
+      {
+        id: "newer",
+        name: "Aetna CO contract",
+        updatedAt: "2026-10-03T09:00:00Z",
+        updatedByName: null,
+      },
+      {
+        id: "older",
+        name: "Aetna CO contract",
+        updatedAt: "2026-10-01T09:00:00Z",
+        updatedByName: "Owner Dillon",
+      },
+    ]);
+  });
+
+  it("filters on the payload's payer, not on any column", () => {
+    const rows = payerTemplateDraftRows(
+      [
+        draft({ id: "other", payload: { name: "Cigna", payerId: OTHER_PAYER } }),
+        draft({ id: "picker-unset", payload: { name: "No payer yet", payerId: "none" } }),
+        draft({ id: "no-payer", payload: { name: "Legacy shape" } }),
+        draft({ id: "not-an-object", payload: [PAYER_ID] }),
+        draft({ id: "mine" }),
+      ],
+      PAYER_ID,
+    );
+    expect(rows.map((r) => r.id)).toEqual(["mine"]);
+  });
+
+  it("leaves out drafts of an existing template — the create route cannot resume them", () => {
+    expect(payerTemplateDraftRows([draft({ templateId: "tpl-1" })], PAYER_ID)).toEqual([]);
+  });
+
+  it("labels an unnamed draft instead of rendering a blank row", () => {
+    const rows = payerTemplateDraftRows(
+      [
+        draft({ id: "blank", payload: { name: "   ", payerId: PAYER_ID } }),
+        draft({ id: "missing", payload: { payerId: PAYER_ID } }),
+      ],
+      PAYER_ID,
+    );
+    expect(rows.map((r) => r.name)).toEqual([UNTITLED_DRAFT_LABEL, UNTITLED_DRAFT_LABEL]);
+  });
+});
+
+describe("draftResumeSearch", () => {
+  it("reopens the draft with the same payer context the New template link carries", () => {
+    expect(draftResumeSearch(PAYER_ID, "d-1")).toEqual({
+      payerId: PAYER_ID,
+      tier: "global",
+      draftId: "d-1",
+    });
   });
 });

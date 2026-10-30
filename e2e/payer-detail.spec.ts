@@ -13,6 +13,9 @@ import { test, expect, type Route } from "./fixtures/legacy-access-context";
 //   Templates (#process)     — list + state coverage in the header, the
 //                              Active-match chip, and the ?intent= next step.
 //   No template yet          — the fallback explainer + Author CTA.
+//   Saved drafts (MINT-74)   — the payer's drafts list under Drafts and Resume
+//                              reopens one; a first save writes ?draftId= so
+//                              reload and Back reopen it; admin-only.
 //   Scorecard (#scorecard)   — §2.10 fold: the standalone route redirects into
 //                              this tab; there is exactly ONE scorecard.
 //   Manage (#manage)         — §2.2 collapse: Archive is the ONE removal verb,
@@ -33,6 +36,9 @@ const CASE_OPEN = "33333333-3333-4333-8333-000000000002";
 const CASE_OPEN_2 = "33333333-3333-4333-8333-000000000003";
 const TPL_ORG = "44444444-4444-4444-8444-000000000001";
 const TPL_GLOBAL = "44444444-4444-4444-8444-000000000002";
+const DRAFT_UHC = "55555555-5555-4555-8555-000000000001";
+const DRAFT_CIGNA = "55555555-5555-4555-8555-000000000002";
+const DRAFT_EDIT = "55555555-5555-4555-8555-000000000003";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -97,6 +103,31 @@ function templateRow(id: string, extra: Row = {}): Row {
     ],
     created_at: "2026-07-12T00:00:00Z",
     updated_at: "2026-07-14T00:00:00Z",
+    ...extra,
+  };
+}
+
+// A saved Template Editor draft. The payer lives in the payload, not a column.
+function draftRow(id: string, payerId: string, name: string, extra: Row = {}): Row {
+  return {
+    id,
+    org_id: ORG_ID,
+    template_id: null,
+    case_type: "enrollment",
+    payload: {
+      name,
+      caseType: "enrollment",
+      payerId,
+      states: ["AZ"],
+      specialty: "",
+      groupId: "none",
+      tasks: [],
+      requiredProfileAttributes: [],
+      isArchived: false,
+    },
+    updated_by: USER_ID,
+    created_at: "2026-10-28T12:00:00Z",
+    updated_at: "2026-10-29T12:00:00Z",
     ...extra,
   };
 }
@@ -290,6 +321,7 @@ function buildDb(): Record<string, Row[]> {
     provider_groups: [
       { id: "g-1", org_id: ORG_ID, name: "Dillon Sports Medicine", is_active: true },
     ],
+    sop_template_drafts: [],
     portals: [],
     portal_field_maps: [],
     fill_sessions: [],
@@ -415,6 +447,23 @@ async function fulfillSupabase(route: Route) {
     return true;
   };
 
+  // The Template Editor's save-as-draft upsert, answered like PostgREST so a
+  // saved id round-trips through the URL and back onto the Templates tab.
+  if (table === "sop_template_drafts" && req.method() === "POST") {
+    tableWrites.push({ table, method: req.method() });
+    const body = (req.postDataJSON() ?? {}) as Row;
+    const drafts = db.sop_template_drafts;
+    const id =
+      typeof body.id === "string"
+        ? body.id
+        : `55555555-5555-4555-8555-${String(drafts.length + 100).padStart(12, "0")}`;
+    const existing = drafts.find((d) => d.id === id);
+    const row: Row = { template_id: null, created_at: "2026-10-30T12:00:00Z", ...body, id };
+    if (existing) Object.assign(existing, row);
+    else drafts.push(row);
+    return json(wantsObject ? row : [row], 201);
+  }
+
   if (req.method() !== "GET" && req.method() !== "HEAD") {
     tableWrites.push({ table, method: req.method() });
     return json(wantsObject ? {} : [{}], 201);
@@ -455,6 +504,10 @@ async function openDetail(page: import("@playwright/test").Page, payerId = AETNA
 
 const tab = (page: import("@playwright/test").Page, name: string) =>
   page.getByRole("tab", { name, exact: true });
+
+// The Template Editor's name field (its Label is not bound to the input).
+const templateNameInput = (page: import("@playwright/test").Page) =>
+  page.getByText("Template name", { exact: true }).locator("xpath=following-sibling::input");
 
 test("overview — identity, both ID expectations, aliases, delegation, coverage, contacts", async ({
   context,
@@ -654,6 +707,98 @@ test("templates — the no-template empty state explains the fallback and offers
   await expect(page.getByText("No template for this payer yet")).toBeVisible();
   await expect(page.getByText(/fall back to the default template/)).toBeVisible();
   await expect(page.getByRole("link", { name: "+ Author template" })).toBeVisible();
+});
+
+test("templates — a saved draft lists under Drafts and Resume reopens it in the editor (MINT-74)", async ({
+  context,
+  page,
+}) => {
+  await seed(context);
+  db!.sop_template_drafts.push(
+    draftRow(DRAFT_UHC, UHC_ID, "UHC AZ enrollment (draft)"),
+    // Another payer's draft, and a draft of an EXISTING template (the create
+    // route cannot resume it), stay off this payer's list.
+    draftRow(DRAFT_CIGNA, CIGNA_ID, "Cigna CO enrollment (draft)"),
+    draftRow(DRAFT_EDIT, UHC_ID, "UHC edit-in-progress", { template_id: TPL_GLOBAL }),
+  );
+  await openDetail(page, UHC_ID);
+  await tab(page, "Templates").click();
+
+  // The published list is still empty; the draft is findable beside it.
+  await expect(page.getByText("No template for this payer yet")).toBeVisible();
+  const drafts = page.getByRole("region", { name: "Drafts" });
+  await expect(drafts).toBeVisible();
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+  await expect(drafts).toContainText("UHC AZ enrollment (draft)");
+  await expect(drafts).toContainText("Last saved Oct 29, 2026");
+  await expect(drafts).toContainText("by Owner Dillon");
+  await expect(
+    drafts.getByRole("button", { name: "Discard UHC AZ enrollment (draft)" }),
+  ).toBeVisible();
+
+  const resume = drafts.getByRole("link", { name: "Resume UHC AZ enrollment (draft)" });
+  await expect(resume).toHaveAttribute("href", new RegExp(`payerId=${UHC_ID}`));
+  await expect(resume).toHaveAttribute("href", /tier=global/);
+  await expect(resume).toHaveAttribute("href", new RegExp(`draftId=${DRAFT_UHC}`));
+
+  await resume.click();
+  await expect(page).toHaveURL(new RegExp(`/admin/templates/new\\?.*draftId=${DRAFT_UHC}`), {
+    timeout: 15000,
+  });
+  await expect(page.getByRole("heading", { name: "Resume draft" })).toBeVisible({ timeout: 30000 });
+  await expect(templateNameInput(page)).toHaveValue("UHC AZ enrollment (draft)");
+});
+
+test("templates — a first draft save writes ?draftId=, so reload and Back reopen the draft (MINT-74)", async ({
+  context,
+  page,
+}) => {
+  await seed(context);
+  await openDetail(page, UHC_ID);
+  await tab(page, "Templates").click();
+  await page.getByRole("link", { name: "+ Author template" }).click();
+
+  await expect(page.getByRole("heading", { name: "New template" })).toBeVisible({ timeout: 30000 });
+  await templateNameInput(page).fill("UHC AZ credentialing");
+  await page.getByRole("button", { name: /^2 ?Actions$/ }).click();
+  await page.getByRole("button", { name: "Save draft" }).first().click();
+  await expect(page.getByText("Draft saved")).toBeVisible();
+  // The open editor stays mounted on its step (no loading swap back to Basics).
+  await expect(page.getByRole("button", { name: /Add action/ })).toBeVisible();
+
+  // Replace, not push: the same entry now carries the id and the payer context.
+  await expect(page).toHaveURL(/draftId=55555555-5555-4555-8555-/);
+  await expect(page).toHaveURL(new RegExp(`payerId=${UHC_ID}`));
+  const draftUrl = page.url();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Resume draft" })).toBeVisible({ timeout: 30000 });
+  await expect(templateNameInput(page)).toHaveValue("UHC AZ credentialing");
+
+  // Leave for the payer's Templates tab: the new draft is listed there.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${UHC_ID}\\?tab=templates`));
+  await expect(page.getByRole("region", { name: "Drafts" })).toContainText("UHC AZ credentialing");
+
+  // Back returns to the draft, not a blank wizard.
+  await page.goBack();
+  await expect(page).toHaveURL(draftUrl);
+  await expect(page.getByRole("heading", { name: "Resume draft" })).toBeVisible({ timeout: 30000 });
+  await expect(templateNameInput(page)).toHaveValue("UHC AZ credentialing");
+});
+
+test("templates — saved drafts are admin-only (RLS), so a specialist sees no Drafts group", async ({
+  context,
+  page,
+}) => {
+  await seed(context, "specialist");
+  db!.sop_template_drafts.push(draftRow(DRAFT_UHC, UHC_ID, "UHC AZ enrollment (draft)"));
+  await openDetail(page, UHC_ID);
+  await tab(page, "Templates").click();
+
+  await expect(page.getByText("No template for this payer yet")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Drafts" })).toHaveCount(0);
+  await expect(page.getByText("UHC AZ enrollment (draft)")).toHaveCount(0);
 });
 
 test("§2.10 scorecard fold — the standalone route redirects into the tab, and there is ONE scorecard", async ({

@@ -7,12 +7,14 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/StatusPill";
+import { PayerTemplateDrafts } from "@/components/payer-admin/PayerTemplateDrafts";
 import { useSops } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { formatSopStateLabel } from "@/lib/sopMatchKey";
 import { fmtDate } from "@/lib/format";
 import { payerTemplateRows, templateStateCoverage } from "@/lib/payerDetailView";
 import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
+import { useIsAdmin } from "@/lib/permissions";
 import type { Payer } from "@/types";
 import {
   Select,
@@ -40,6 +42,8 @@ function caseTypeLabel(caseType: CaseType | null | undefined): string {
 export function PayerTemplatesTab({ payer }: { payer: Payer }) {
   const templatesQ = useSops();
   const groupsQ = useProviderGroups();
+  // Saved drafts are admin-only under RLS, so only an admin sees the group.
+  const isAdmin = useIsAdmin();
   const [typeFilter, setTypeFilter] = useState<TemplateTypeFilter>("all");
 
   const rows = useMemo(
@@ -130,7 +134,8 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
             </Button>
           ) : null}
         </div>
-        <div className="p-5">
+        <div className="space-y-4 p-5">
+          {isAdmin ? <PayerTemplateDrafts payerId={payer.id} /> : null}
           {rows.length === 0 ? (
             <div className="rounded-md border border-dashed border-[#E8E5E0] px-4 py-8 text-center">
               <p className="text-[14px] font-medium text-foreground">
