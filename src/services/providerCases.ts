@@ -29,6 +29,7 @@
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { caseStatusLabel, isCaseStatus, isOpenCaseStatus } from "@/lib/caseStatus";
+import { readCompletePages } from "@/lib/completePages";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -111,6 +112,16 @@ function displayStatus(caseStatus: string | null): string | null {
   return caseStatusLabel(caseStatus);
 }
 
+// Ids per `.in()` filter. At ~39 URL bytes per uuid this keeps each request
+// near 4 KB, well under proxy URL limits.
+const IN_LIST_CHUNK = 100;
+
+function chunked<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += IN_LIST_CHUNK) out.push(items.slice(i, i + IN_LIST_CHUNK));
+  return out;
+}
+
 // Null = the provider is not in the caller's org (the route's 404) — a
 // cross-org provider is indistinguishable from one that doesn't exist.
 export async function listOpenProviderCases(
@@ -128,33 +139,47 @@ export async function listOpenProviderCases(
   if (providerErr) throw providerErr;
   if (!provider) return null;
 
-  const { data: cases, error: caseErr } = await db
+  // The dropdown lists every open case, so each read below runs to completion
+  // (never cut at PostgREST's max-rows; a failed page fails the request) with
+  // an id tiebreak keeping page boundaries stable.
+  const caseQuery = db
     .from("credential_cases")
-    .select(CASE_COLUMNS)
+    .select(CASE_COLUMNS, { count: "exact" })
     .eq("org_id", orgId)
-    .eq("provider_id", providerId);
-  if (caseErr) throw caseErr;
+    .eq("provider_id", providerId)
+    .order("id", { ascending: true });
+  const cases = await readCompletePages(async (from, to) => await caseQuery.range(from, to), {
+    label: "Provider case list",
+  });
 
-  const open = ((cases ?? []) as unknown as CaseRow[]).filter((row) => rowIsOpen(row.case_status));
+  const open = (cases as unknown as CaseRow[]).filter((row) => rowIsOpen(row.case_status));
 
-  // PR C: latest note + last submission per open case, from the touchlog. One
-  // org-scoped read over just the open case ids; skipped when there are none.
+  // PR C: latest note + last submission per open case, from the touchlog, and
+  // Phase 4 portal tasks — org-scoped reads over just the open case ids,
+  // skipped when there are none. The ids go IN_LIST_CHUNK at a time so a
+  // provider with hundreds of open cases never builds an over-long URL.
   const openIds = open.map((row) => row.id);
   const latestNoteByCase = new Map<string, { notes: string; author: string | null; at: string }>();
   const lastSubmittedByCase = new Map<string, string>();
   const portalTasksByCase = new Map<string, OpenProviderCasePortalTask[]>();
-  if (openIds.length > 0) {
-    const { data: touchRows, error: touchErr } = await db
+  for (const ids of chunked(openIds)) {
+    const touchQuery = db
       .from("touches")
-      .select("case_id, entry_type, outcome, notes, coordinator_id, created_at")
+      .select("case_id, entry_type, outcome, notes, coordinator_id, created_at", {
+        count: "exact",
+      })
       .eq("org_id", orgId)
-      .in("case_id", openIds)
-      .order("created_at", { ascending: false });
-    if (touchErr) throw touchErr;
-    const rows = (touchRows ?? []) as unknown as TouchRow[];
+      .in("case_id", ids)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
+    const touchRows = await readCompletePages(
+      async (from, to) => await touchQuery.range(from, to),
+      { label: "Provider case touchlog" },
+    );
 
-    // Rows are newest-first, so the first hit per case wins for each derivation.
-    for (const r of rows) {
+    // Rows are newest-first and a case's touches never span two chunks, so the
+    // first hit per case wins for each derivation.
+    for (const r of touchRows as unknown as TouchRow[]) {
       if (r.entry_type === "note" && r.notes != null && !latestNoteByCase.has(r.case_id)) {
         latestNoteByCase.set(r.case_id, {
           notes: r.notes,
@@ -167,18 +192,20 @@ export async function listOpenProviderCases(
       }
     }
 
-    // Phase 4: portal-linked open tasks per case, from ONE more org-scoped read
-    // over the same open case ids. A task contributes one entry per DISTINCT
-    // portalKey among its steps; completed tasks and steps without a portalKey
-    // are skipped. Keys are normalized so the extension's page-key match is a
-    // literal string compare (same discipline as the field-map join).
-    const { data: taskRows, error: taskErr } = await db
+    // Phase 4: portal-linked open tasks per case. A task contributes one entry
+    // per DISTINCT portalKey among its steps; completed tasks and steps without
+    // a portalKey are skipped. Keys are normalized so the extension's page-key
+    // match is a literal string compare (same discipline as the field-map join).
+    const taskQuery = db
       .from("tasks")
-      .select("id, case_id, title, status, sop_content")
+      .select("id, case_id, title, status, sop_content", { count: "exact" })
       .eq("org_id", orgId)
-      .in("case_id", openIds);
-    if (taskErr) throw taskErr;
-    for (const t of (taskRows ?? []) as unknown as TaskRow[]) {
+      .in("case_id", ids)
+      .order("id", { ascending: true });
+    const taskRows = await readCompletePages(async (from, to) => await taskQuery.range(from, to), {
+      label: "Provider case tasks",
+    });
+    for (const t of taskRows as unknown as TaskRow[]) {
       if (t.status === "completed" || t.case_id == null) continue;
       const steps = Array.isArray(t.sop_content) ? t.sop_content : [];
       const seen = new Set<string>();
@@ -191,27 +218,28 @@ export async function listOpenProviderCases(
         portalTasksByCase.set(t.case_id, list);
       }
     }
+  }
 
-    // Resolve note authors to display names (full_name, else email).
-    const authorIds = Array.from(
-      new Set(
-        [...latestNoteByCase.values()].map((n) => n.author).filter((v): v is string => Boolean(v)),
-      ),
-    );
-    if (authorIds.length > 0) {
-      const { data: profs, error: profErr } = await db
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", authorIds);
-      if (profErr) throw profErr;
-      const nameById = new Map<string, string | null>();
-      for (const p of profs ?? []) {
-        nameById.set(p.id as string, (p.full_name as string | null) ?? (p.email as string | null));
-      }
-      for (const note of latestNoteByCase.values()) {
-        if (note.author) note.author = nameById.get(note.author) ?? null;
-      }
+  // Resolve note authors to display names (full_name, else email). Each chunk
+  // holds at most IN_LIST_CHUNK profiles, so one request per chunk is whole.
+  const authorIds = Array.from(
+    new Set(
+      [...latestNoteByCase.values()].map((n) => n.author).filter((v): v is string => Boolean(v)),
+    ),
+  );
+  const nameById = new Map<string, string | null>();
+  for (const ids of chunked(authorIds)) {
+    const { data: profs, error: profErr } = await db
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", ids);
+    if (profErr) throw profErr;
+    for (const p of profs ?? []) {
+      nameById.set(p.id as string, (p.full_name as string | null) ?? (p.email as string | null));
     }
+  }
+  for (const note of latestNoteByCase.values()) {
+    if (note.author) note.author = nameById.get(note.author) ?? null;
   }
 
   const rows = open.map<OpenProviderCase>((row) => {
@@ -268,7 +296,8 @@ export interface CaseSearchRow {
   facilityId: string | null;
 }
 
-const CASE_SEARCH_MAX = 50;
+/** One search answers at most this many rows; past it the result says so. */
+export const CASE_SEARCH_MAX = 50;
 
 const CASE_SEARCH_COLUMNS =
   "id, case_number, state, provider_id, facility_id, payer_reference_id, case_status, payer_pipeline_state, " +
@@ -285,6 +314,14 @@ interface CaseSearchDbRow {
   payer_pipeline_state: string | null;
   providers: { id: string; first_name: string | null; last_name: string | null } | null;
   payers: { name: string | null } | null;
+}
+
+/** The capped search answer: the first CASE_SEARCH_MAX matches, how many
+ * cases matched in all, and whether `rows` holds fewer than that. */
+export interface CaseSearchResult {
+  rows: CaseSearchRow[];
+  total: number;
+  truncated: boolean;
 }
 
 /** When the query looks like a case number (`1001`, `C-1001`, `c1001`), return
@@ -304,25 +341,30 @@ export function caseNumberSearchDigits(raw: string): string | null {
 // a case-insensitive substring, capped at CASE_SEARCH_MAX. Filtering is in
 // memory over the org's own cases (the providerCases.ts idiom, robust across
 // the provider/payer FK embeds); the service-role client is org-scoped by the
-// eq(org_id) on the read, so a cross-org row can never appear. Returns [] for
-// a blank query (no full-table dump).
+// eq(org_id) on the read, so a cross-org row can never appear. The read runs
+// to completion (never cut at PostgREST's max-rows; a failed page fails the
+// search), so `total` counts every match and `truncated` says when `rows` is
+// only the first CASE_SEARCH_MAX of them. Blank query → no read.
 export async function searchOrgCases(
   ctx: ProviderCasesServiceCtx,
   query: string,
-): Promise<CaseSearchRow[]> {
+): Promise<CaseSearchResult> {
   const { db, orgId } = ctx;
   const q = query.trim().toLowerCase();
-  if (q === "") return [];
+  if (q === "") return { rows: [], total: 0, truncated: false };
   const caseDigitsQuery = caseNumberSearchDigits(query);
 
-  const { data: cases, error: caseErr } = await db
+  const caseQuery = db
     .from("credential_cases")
-    .select(CASE_SEARCH_COLUMNS)
-    .eq("org_id", orgId);
-  if (caseErr) throw caseErr;
+    .select(CASE_SEARCH_COLUMNS, { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const cases = await readCompletePages(async (from, to) => await caseQuery.range(from, to), {
+    label: "Case search",
+  });
 
   const rows: CaseSearchRow[] = [];
-  for (const row of (cases ?? []) as unknown as CaseSearchDbRow[]) {
+  for (const row of cases as unknown as CaseSearchDbRow[]) {
     const providerName =
       `${row.providers?.first_name ?? ""} ${row.providers?.last_name ?? ""}`.trim();
     const payerName = row.payers?.name ?? null;
@@ -355,5 +397,9 @@ export async function searchOrgCases(
       (a.payerName ?? "").localeCompare(b.payerName ?? "") ||
       a.state.localeCompare(b.state),
   );
-  return rows.slice(0, CASE_SEARCH_MAX);
+  return {
+    rows: rows.slice(0, CASE_SEARCH_MAX),
+    total: rows.length,
+    truncated: rows.length > CASE_SEARCH_MAX,
+  };
 }

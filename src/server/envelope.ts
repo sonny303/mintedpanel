@@ -23,6 +23,11 @@ export interface ApiMeta {
   // failure so the extension can show a loud empty-state instead of treating
   // the tab as an unrecognized page.
   registry_empty?: boolean;
+  // GET /api/cases?q= only, always sent there: true when more cases matched
+  // than `data` holds (the first 50 in provider/payer/state order); `total`
+  // counts every match. A client says the list is partial ("Showing first 50
+  // — refine your search") rather than presenting it as every match.
+  truncated?: boolean;
   /**
    * Exact-key active mapping/readiness metadata. Rows are emitted only for
    * configurations visible to the requested legacy/API scope.

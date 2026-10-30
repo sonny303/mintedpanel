@@ -1447,18 +1447,24 @@ describe("provider cases handler", () => {
         facilityId: "fac-1",
       },
     ];
-    searchCasesMock.mockResolvedValue(rows);
+    searchCasesMock.mockResolvedValue({ rows, total: 1, truncated: false });
     const res = await handleListProviderCases(url("?q=ostrander"), ctx("billing"));
     expect(res.status).toBe(200);
     const b = await body(res);
     expect(b.data).toEqual(rows);
-    expect(b.meta).toEqual({ total: 1 });
+    expect(b.meta).toEqual({ total: 1, truncated: false });
     expect(searchCasesMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       "ostrander",
     );
     // providerId path is untouched by a q-only request.
     expect(listCasesMock).not.toHaveBeenCalled();
+  });
+
+  it("says a capped ?q= answer is truncated, with the total of every match", async () => {
+    searchCasesMock.mockResolvedValue({ rows: [], total: 312, truncated: true });
+    const b = await body(await handleListProviderCases(url("?q=a"), ctx()));
+    expect(b.meta).toEqual({ total: 312, truncated: true });
   });
 
   it("prefers providerId over q when both are present (the fill flow's primary path)", async () => {

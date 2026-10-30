@@ -1901,7 +1901,12 @@ export async function createMockApiServer(options = {}) {
                     (caseDigits != null && digits !== "" && digits.includes(caseDigits))
                   );
                 });
-        return envelope(res, 200, rows, null, { total: rows.length });
+        // At most 50 rows; meta.total counts every match and meta.truncated
+        // says whether data holds all of them (always sent on this mode).
+        return envelope(res, 200, rows.slice(0, 50), null, {
+          total: rows.length,
+          truncated: rows.length > 50,
+        });
       }
       return envelope(res, 422, null, "providerId or q query parameter is required");
     }

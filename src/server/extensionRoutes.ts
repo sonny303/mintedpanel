@@ -720,7 +720,9 @@ export async function handleBatchLearnPortalFieldMaps(
 //   ?q=<text>           E4.3 TE-11 — the case half of the unified standalone
 //                       search: org-scoped, matching payer name / provider
 //                       name / tracking id / case number (C-<n>), ids +
-//                       display fields only.
+//                       display fields only. At most 50 rows; meta.total
+//                       counts every match and meta.truncated says whether
+//                       `data` holds all of them.
 // providerId takes precedence when both are present (the fill flow's primary
 // path). Neither present is a 422 — the route never dumps the whole org.
 export async function handleListProviderCases(url: URL, ctx: AuthContext): Promise<Response> {
@@ -735,8 +737,8 @@ export async function handleListProviderCases(url: URL, ctx: AuthContext): Promi
     return ok(rows, { total: rows.length });
   }
   if (q != null) {
-    const rows = await searchOrgCases({ db: ctx.db, orgId: ctx.orgId }, q);
-    return ok(rows, { total: rows.length });
+    const result = await searchOrgCases({ db: ctx.db, orgId: ctx.orgId }, q);
+    return ok(result.rows, { total: result.total, truncated: result.truncated });
   }
   return fail(422, "providerId or q query parameter is required");
 }

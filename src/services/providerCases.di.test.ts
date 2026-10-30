@@ -2,17 +2,16 @@ import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
-import {
-  listOpenProviderCases,
-  searchOrgCases,
-  type ProviderCasesServiceCtx,
-} from "./providerCases";
+import { listOpenProviderCases, type ProviderCasesServiceCtx } from "./providerCases";
 
 // Minimal chainable fake of the supabase-js query builder — enough for the
 // provider-cases shapes (org-scoped maybeSingle lookup, filtered selects, the
 // touchlog .in().order() read, and the profiles .in() author resolution).
 // Records table, select columns, and filters; results consume in call order,
-// which is deterministic in listOpenProviderCases.
+// which is deterministic in listOpenProviderCases. Each canned result is one
+// short page, so the complete-page reads end after it. Paging past the
+// max-rows cap and case search run against the evaluating fake in
+// providerCases.complete.test.ts.
 interface Captured {
   table?: string;
   selectCols?: string;
@@ -42,6 +41,9 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
           return builder;
         },
         order() {
+          return builder;
+        },
+        range() {
           return builder;
         },
         maybeSingle: () => Promise.resolve(take()),
@@ -418,107 +420,5 @@ describe("listOpenProviderCases — dropdown ordering", () => {
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
 
     expect(result?.map((r) => r.id)).toEqual(["c-aetna", "c-bcbs-ks", "c-bcbs-mo", "c-noname"]);
-  });
-});
-
-describe("searchOrgCases — E4.3 TE-11 case search", () => {
-  const searchCaseRow = (over: Record<string, unknown> = {}) => ({
-    id: "c1",
-    case_number: 1001,
-    state: "KS",
-    provider_id: "p1",
-    facility_id: "fac-1",
-    payer_reference_id: null,
-    case_status: "in_progress",
-    payer_pipeline_state: "drafting",
-    providers: { id: "p1", first_name: "Brooke", last_name: "Ostrander" },
-    payers: { name: "BCBS of Kansas" },
-    ...over,
-  });
-
-  it("returns [] for a blank query without any DB read", async () => {
-    const { db, captures } = makeFakeDb([]);
-    const result = await searchOrgCases(ctxWith(db), "   ");
-    expect(result).toEqual([]);
-    expect(captures).toHaveLength(0);
-  });
-
-  it("org-scopes the case read (no status_configs)", async () => {
-    const { db, captures } = makeFakeDb([{ data: [searchCaseRow()] }]);
-    await searchOrgCases(ctxWith(db), "brooke");
-    expect(captures.map((c) => c.table)).toEqual(["credential_cases"]);
-    expect(captures[0].filters).toContainEqual(["org_id", "org-1"]);
-    expect(captures[0].selectCols).toContain("case_status");
-    expect(captures[0].selectCols).toContain("case_number");
-    expect(captures[0].selectCols).toContain("facility_id");
-  });
-
-  it("matches on provider name, payer name, and tracking id (case-insensitive), mapping display fields", async () => {
-    const rows = [
-      searchCaseRow({ id: "c1" }),
-      searchCaseRow({
-        id: "c2",
-        case_number: 1002,
-        providers: { id: "p2", first_name: "Stan", last_name: "Marsh" },
-        payers: { name: "Humana" },
-        payer_reference_id: "REF-BROOKE-9",
-      }),
-      searchCaseRow({
-        id: "c3",
-        case_number: 1003,
-        providers: { id: "p3", first_name: "Kyle", last_name: "Broflovski" },
-        payers: { name: "Aetna" },
-      }),
-    ];
-    const { db } = makeFakeDb([{ data: rows }]);
-
-    const result = await searchOrgCases(ctxWith(db), "BROOKE");
-    expect(result.map((r) => r.id).sort()).toEqual(["c1", "c2"]);
-    const c1 = result.find((r) => r.id === "c1");
-    expect(c1).toMatchObject({
-      providerName: "Brooke Ostrander",
-      payerName: "BCBS of Kansas",
-      state: "KS",
-      status: "In Progress",
-      payerPipelineState: "drafting",
-      caseNumber: 1001,
-      facilityId: "fac-1",
-    });
-  });
-
-  it("carries a null facilityId when the case has no facility_id", async () => {
-    const { db } = makeFakeDb([{ data: [searchCaseRow({ facility_id: null })] }]);
-    const result = await searchOrgCases(ctxWith(db), "brooke");
-    expect(result[0].facilityId).toBeNull();
-  });
-
-  it("matches case number as C-1001, c1001, or bare 1001 without breaking payer names like cigna", async () => {
-    const rows = [
-      searchCaseRow({ id: "c1", case_number: 1001 }),
-      searchCaseRow({
-        id: "c2",
-        case_number: 1002,
-        providers: { id: "p2", first_name: "Addie", last_name: "Jones" },
-        payers: { name: "Cigna" },
-      }),
-    ];
-    const run = (q: string) => searchOrgCases(ctxWith(makeFakeDb([{ data: rows }]).db), q);
-
-    expect((await run("C-1001")).map((r) => r.id)).toEqual(["c1"]);
-    expect((await run("1002")).map((r) => r.id)).toEqual(["c2"]);
-    expect((await run("c1001")).map((r) => r.id)).toEqual(["c1"]);
-    // Leading "c" in a payer name must still match as text, not as a case #.
-    expect((await run("cigna")).map((r) => r.id)).toEqual(["c2"]);
-  });
-
-  it("resolves the case_status label and defaults pipeline to not_started", async () => {
-    const { db } = makeFakeDb([
-      {
-        data: [searchCaseRow({ case_status: null, payer_pipeline_state: null })],
-      },
-    ]);
-    const result = await searchOrgCases(ctxWith(db), "brooke");
-    expect(result[0].status).toBeNull();
-    expect(result[0].payerPipelineState).toBe("not_started");
   });
 });
