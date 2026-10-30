@@ -140,6 +140,7 @@ export function useNextBestActions(): NextBestActionsData {
       groupId: c.groupId,
       payerId: c.payerId,
       state: c.state,
+      specialtyKey: c.specialtyKey,
       statusLabel: c.contractingStatusId
         ? (statusById.get(c.contractingStatusId)?.label ?? null)
         : null,

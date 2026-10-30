@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useReplaceCaseSop } from "@/hooks/useCases";
 import type { ChangeCaseSopOptions } from "@/lib/changeCaseSop";
+import { contractSpecialtyForTaxonomy } from "@/lib/contractSpecialty";
 import { topRankedTemplates } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import type { CaseDetail, SOPTemplate } from "@/types";
@@ -46,7 +47,13 @@ export function CaseTypeNotice({ c, canEdit }: { c: CaseDetail; canEdit: boolean
           <Button asChild variant="link" size="sm" className="h-auto px-1 py-0">
             <Link
               to="/reporting/contracts-matrix"
-              search={{ groupId: c.groupId, payerId: c.payerId, state: c.state }}
+              search={{
+                groupId: c.groupId,
+                payerId: c.payerId,
+                state: c.state,
+                // The matrix opens the case's specialty table (GCM-20).
+                specialty: contractSpecialtyForTaxonomy(c.provider?.taxonomyCode) ?? undefined,
+              }}
             >
               Open matching Matrix cell
             </Link>

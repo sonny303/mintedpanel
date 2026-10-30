@@ -342,6 +342,14 @@ before any schema work.
   contains `INSERT INTO public.case_facilities`, and no case with a
   `facility_id` lacks a matching child row. Staging already runs draft PR
   #520's superset body; the migration's guard leaves that body alone.
+- `20261029120000_contracts_specialty_key.sql` — `contracts.specialty_key`
+  and the 4-part unique index; drops `contracts_group_id_payer_id_state_key`
+  under the PM-approved carve-out in AGENTS.md (D11). Object-verified on
+  staging 2026-10-30 (ledger `20261030025358`); production pending. Contract
+  reads fall back without the column (rows read as `all`, via
+  `isMissingContractSpecialtyKeyError` in `src/lib/dbErrors.ts`); contract
+  saves fail until it is applied. Verify the objects listed in the
+  migration header.
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 
@@ -484,6 +492,15 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
   catalog** — every global payer is readable.
 - **`enrollment_facts`** = provider × group × payer × state. Expiry is a flip
   (`expired_at`), which re-opens the candidate.
+- **A contract is keyed group × payer × state × `specialty_key`** (`all` |
+  `pt` | `ot` | `slp` | `nutrition` | `chiro`). `all` is one agreement covering
+  every specialty of the group in that state. Whoever asks which contract
+  applies for a specialty resolves through `src/lib/contractSpecialty.ts`:
+  that specialty's own record first, then `all`; an unknown specialty gets
+  only `all`. A provider's specialty comes from the exact taxonomy code
+  (`contractSpecialtyForTaxonomy`; PTA counts as PT). `specialty_key` is set
+  at create and never changed by an update; the free-text `specialty` column
+  is deprecated in place.
 - **Documents:** "current version" is the family row with no successor —
   **derived, never a flag.** Replacement is a new INSERT; there is no update or
   delete grant.
@@ -619,7 +636,8 @@ checkbox that reveals the rest (a group targeting eight states does not make
 its PT licensed in eight states, and those rows can never go green). Note the
 UI hook does NOT pass `contracts`, so on that card the payer axis carries no
 information the `(group, state)` pair doesn't already — the other two callers
-do pass it.
+do pass it, and there the group-contract check resolves the record for the
+roster provider's specialty, falling back to `all`.
 
 `casesMatrix.ts` derives the provider × payer board a section at a time, where
 a section is **one group + one state**. That pinning is what makes "one cell =
@@ -631,6 +649,20 @@ providers who already hold a case. A provider drops off the whole board when no
 non-terminal case remains anywhere, evaluated against their unfiltered case set.
 Columns are active `payer_network_targets` **∪** payers with a case in that
 section, so a case whose target was later archived never vanishes.
+
+`src/lib/groupContractsMatrix.ts` derives the Group Contracts Matrix
+(`/reporting/contracts-matrix`): the whole organization, one table per
+specialty in `MATRIX_SPECIALTIES` (PT, Nutrition), group → state columns,
+payer rows. A specialty's columns are the states where a group has a
+provider of that specialty with a footprint (`providerFootprint.ts`), plus
+states holding a record for that specialty. An `all` record shows wherever
+its column exists, and when no table would show it, its column is added to
+every table without an own record there. The one case no table shows — every
+`MATRIX_SPECIALTIES` specialty has its own record at that group, payer and
+state — comes back as `supersededSharedRecords`, and the page names it,
+because it still decides readiness for providers of other specialties.
+A payer's cells outside its catalog `states` are `outside` (not clickable,
+not counted). The component only renders this output.
 
 All date math is date-only against a passed-in `today` — **never a clock read
 inside a pure lib.**

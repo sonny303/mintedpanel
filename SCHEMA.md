@@ -9,7 +9,7 @@ tables have no ordinary UPDATE/DELETE path.
 ## Core rules
 
 - **Unique case**: one row in `credential_cases` per `(provider_id, group_id, payer_id, state)` — `UNIQUE NULLS NOT DISTINCT` since E2.1 (`20260713150000`), so legacy NULL-group rows stay unique at the old 3-part key. Credentialing only — contracting status lives on `contracts`.
-- **Contracts**: one row per `(group_id, payer_id, state)`. Contracting status, effective/expiration dates.
+- **Contracts**: one row per `(group_id, payer_id, state, specialty_key)` — unique index `contracts_group_payer_state_specialty_key` (`20261029120000`, PM decision D11; it replaced the 3-part `contracts_group_id_payer_id_state_key`). `specialty_key = 'all'` is one agreement covering every specialty of the group in that state; a specialty's own record takes precedence over it for that specialty only. Contracting status, effective/expiration dates.
 - **Append-only (ordinary writers):** `touches`, `status_history`, `audit_log`.
   Never updated; never deleted by day-to-day paths. **Carve-out:**
   `delete_case(p_org_id, p_case_id)` (admin-only SECURITY DEFINER,
@@ -267,7 +267,7 @@ Service layer (`src/services/cases.ts`): `resolveCaseFacilityId` (creation-time 
 
 ### contracts
 
-`id, org_id, group_id, payer_id, state, effective_date, expiration_date, notes, contracting_status_id, created_at, updated_at`. Contracting status lives here, never on cases.
+`id, org_id, group_id, payer_id, state, specialty_key, effective_date, tentative_effective_date, expiration_date, notes, contracting_status_id, payer_group_id, specialty, created_at, updated_at`. Contracting status lives here, never on cases. **Specialty grain (migration `20261029120000`, PM decision D11, Oct 29, 2026; repo-only until the operator applies it, staging first):** `specialty_key text NOT NULL DEFAULT 'all'`, CHECK `contracts_specialty_key_check` ∈ `{all, pt, ot, slp, nutrition, chiro}` (v1 screens offer PT and Nutrition only; the others are allowed so adding them needs no migration). Unique index `contracts_group_payer_state_specialty_key (group_id, payer_id, state, specialty_key)`, NULLS DISTINCT like the 3-part constraint it replaced — the one PM-approved constraint replacement (AGENTS.md "Database rules"); it loosened the rule and deleted no data. A record is for one specialty or for `all`; readers resolve a specialty's own record first, then `all` (`resolveContractForSpecialty`, `src/lib/contractSpecialty.ts`). `specialty_key` is set on create and never changed by an update (`src/services/contracts.ts`; `upsertContract` matches on all four parts). **`specialty` (free text, `20260926160000`) is deprecated in place** — no longer written, kept readable; the migration backfilled `specialty_key` from it only where the label clearly names Physical therapy or Nutrition, and left everything else (blank, Multi-Specialty, OT/SLP/chiro labels, anything unclear) at `all` so nothing is hidden or guessed (D12, D15). `audit_log`, `status_history` and `contract_sop_assignments` point at `contracts.id`, so each specialty record has its own history and Contract SOP.
 
 ### tasks
 

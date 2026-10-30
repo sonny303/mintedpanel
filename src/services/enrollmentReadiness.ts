@@ -27,6 +27,7 @@ interface ProviderFactsRow {
   caqhLastAttestedDate: string | null;
   dateOfBirth: string | null;
   ssnLast4: string | null;
+  taxonomyCode: string | null;
 }
 
 export async function listProviderReadinessFacts(): Promise<ProviderReadinessFacts[]> {
@@ -44,7 +45,7 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
   const { data, error } = await supabase
     .from("providers")
     .select(
-      "id, first_name, last_name, status, verification_state, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4",
+      "id, first_name, last_name, status, verification_state, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, taxonomy_code",
     )
     .eq("org_id", orgId)
     .neq("status", "terminated")
@@ -60,6 +61,8 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
     caqhLastAttestedDate: r.caqhLastAttestedDate,
     dobPresent: Boolean(r.dateOfBirth),
     ssnLast4Present: Boolean(r.ssnLast4?.trim()),
+    // Not PHI — picks the contract record behind the group-contract check.
+    taxonomyCode: r.taxonomyCode ?? null,
   }));
 }
 

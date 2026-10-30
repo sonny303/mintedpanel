@@ -28,6 +28,7 @@ import {
 import { currentGroupReadinessDocuments } from "@/lib/documents";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
 import { isCaseStatus } from "@/lib/caseStatus";
+import { isMissingContractSpecialtyKeyError } from "@/lib/dbErrors";
 
 export interface NextBestActionServiceCtx {
   db: SupabaseClient<Database>;
@@ -134,6 +135,22 @@ interface ReadinessFactsRow {
   date_of_birth: string | null;
   ssn_last4: string | null;
   malpractice_coverage_end: string | null;
+  taxonomy_code: string | null;
+}
+
+const CONTRACT_READINESS_COLUMNS =
+  "group_id, payer_id, state, specialty_key, contracting_status_id";
+// The same read for a database that predates migration 20261029120000.
+const PRE_SPECIALTY_KEY_CONTRACT_COLUMNS = "group_id, payer_id, state, contracting_status_id";
+
+/** The group-contract readiness rows (GCM-35). Deploy-order safety: when the
+ * database predates migration 20261029120000, retry once without
+ * `specialty_key` so every row reads as `all` (the services/contracts idiom);
+ * any other error is returned for the caller's error sweep. */
+async function readContractReadinessRows(db: SupabaseClient<Database>, orgId: string) {
+  const result = await db.from("contracts").select(CONTRACT_READINESS_COLUMNS).eq("org_id", orgId);
+  if (!result.error || !isMissingContractSpecialtyKeyError(result.error)) return result;
+  return await db.from("contracts").select(PRE_SPECIALTY_KEY_CONTRACT_COLUMNS).eq("org_id", orgId);
 }
 
 /** Assemble the org-scoped queue inputs, rank via the pure reducer, and return
@@ -214,7 +231,7 @@ export async function getNextBestAction(
     db
       .from("providers")
       .select(
-        "id, first_name, last_name, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4",
+        "id, first_name, last_name, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, taxonomy_code",
       )
       .eq("org_id", orgId)
       .neq("status", "terminated")
@@ -235,10 +252,7 @@ export async function getNextBestAction(
       .not("group_id", "is", null)
       .in("doc_type", ["w9", "coi"]),
     db.from("group_insurance_policies").select("group_id, policy_end_date").eq("org_id", orgId),
-    db
-      .from("contracts")
-      .select("group_id, payer_id, state, contracting_status_id")
-      .eq("org_id", orgId),
+    readContractReadinessRows(db, orgId),
   ]);
 
   for (const res of [
@@ -274,6 +288,9 @@ export async function getNextBestAction(
       caqhLastAttestedDate: r.caqh_last_attested_date,
       dobPresent: Boolean(r.date_of_birth),
       ssnLast4Present: Boolean(r.ssn_last4?.trim()),
+      // Not PHI — picks the contract record behind the group-contract check
+      // (GCM-35), the same as the browser readiness read.
+      taxonomyCode: r.taxonomy_code ?? null,
     }),
   );
 
@@ -282,12 +299,15 @@ export async function getNextBestAction(
       group_id: string | null;
       payer_id: string | null;
       state: string;
+      // Absent on a database that predates the migration: reads as `all`.
+      specialty_key?: string | null;
       contracting_status_id: string | null;
     }>
   ).map((c) => ({
     groupId: c.group_id,
     payerId: c.payer_id,
     state: c.state,
+    specialtyKey: c.specialty_key,
     statusLabel: c.contracting_status_id ? (labelById.get(c.contracting_status_id) ?? null) : null,
   }));
 

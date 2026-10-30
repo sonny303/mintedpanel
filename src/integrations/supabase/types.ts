@@ -486,6 +486,7 @@ export type Database = {
           org_id: string;
           payer_group_id: string | null;
           payer_id: string | null;
+          specialty_key: string;
           state: string;
           updated_at: string | null;
         };
@@ -500,6 +501,7 @@ export type Database = {
           org_id: string;
           payer_group_id?: string | null;
           payer_id?: string | null;
+          specialty_key?: string;
           state: string;
           updated_at?: string | null;
         };
@@ -514,6 +516,7 @@ export type Database = {
           org_id?: string;
           payer_group_id?: string | null;
           payer_id?: string | null;
+          specialty_key?: string;
           state?: string;
           updated_at?: string | null;
         };

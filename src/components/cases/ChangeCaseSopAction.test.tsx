@@ -6,9 +6,22 @@ vi.mock("@/hooks/useCases", () => ({
   useReplaceCaseSop: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    children,
+    to,
+    search,
+  }: {
+    children: React.ReactNode;
+    to: string;
+    search?: Record<string, string | undefined>;
+  }) => {
+    const query = new URLSearchParams(
+      Object.entries(search ?? {}).flatMap(([key, value]) =>
+        value === undefined ? [] : [[key, value]],
+      ),
+    ).toString();
+    return <a href={query ? `${to}?${query}` : to}>{children}</a>;
+  },
 }));
 
 import { CaseTypeNotice } from "./ChangeCaseSopAction";
@@ -39,6 +52,26 @@ describe("CaseTypeNotice", () => {
     const html = renderToStaticMarkup(<CaseTypeNotice c={c} canEdit />);
     expect(html).toContain("Group Contracts Matrix");
     expect(html).toContain("/reporting/contracts-matrix");
+  });
+
+  it("links to the case's specialty table when the provider's taxonomy names one (GCM-20)", () => {
+    const c = {
+      ...baseCase,
+      caseType: "contract",
+      provider: { taxonomyCode: "133V00000X" },
+    } as unknown as CaseDetail;
+    const html = renderToStaticMarkup(<CaseTypeNotice c={c} canEdit />);
+    expect(html).toContain(
+      "/reporting/contracts-matrix?groupId=group-1&amp;payerId=aetna&amp;state=CO&amp;specialty=nutrition",
+    );
+  });
+
+  it("leaves the specialty out when the provider's taxonomy names none", () => {
+    const c = { ...baseCase, caseType: "contract", provider: null } as unknown as CaseDetail;
+    const html = renderToStaticMarkup(<CaseTypeNotice c={c} canEdit />);
+    expect(html).toContain(
+      '/reporting/contracts-matrix?groupId=group-1&amp;payerId=aetna&amp;state=CO"',
+    );
   });
 
   it("shows nothing to a read-only viewer or on a closed case", () => {

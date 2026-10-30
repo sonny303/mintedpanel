@@ -1297,6 +1297,10 @@ export type ContractingStatusLabel =
   | "Denied - Reapplied"
   | "Out of Network";
 
+/** The specialty a contract record covers (`contracts.specialty_key`). `all` is
+ * one agreement covering every specialty of the group in that state. */
+export type ContractSpecialtyKey = "all" | "pt" | "ot" | "slp" | "nutrition" | "chiro";
+
 export interface Contract {
   id: string;
   orgId: string;
@@ -1306,7 +1310,10 @@ export interface Contract {
   effectiveDate: string | null;
   tentativeEffectiveDate?: string | null;
   expirationDate: string | null;
+  /** Deprecated free-text label, kept readable; `specialtyKey` is the grain. */
   specialty?: string | null;
+  /** Optional so cached pre-migration rows stay valid; absent reads as `all`. */
+  specialtyKey?: ContractSpecialtyKey;
   notes: string | null;
   contractingStatusId: string | null;
   createdAt: string;

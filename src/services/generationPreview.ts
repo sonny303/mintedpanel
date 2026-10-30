@@ -8,6 +8,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import { isMissingContractSpecialtyKeyError } from "@/lib/dbErrors";
 
 /** The 4-part key set (TE-5/TE-6): group_id rides the projection since E2.1
  * widened the case key. A NULL-group row (legacy) still covers ALL candidate
@@ -35,22 +36,40 @@ export async function listGenerationCaseRows(): Promise<GenerationCaseRow[]> {
   return rows.map((r) => ({ ...r, groupId: r.groupId ?? null }));
 }
 
-/** Group-contract readiness input (TE-8): the contract keys plus the status
- * id, resolved to a label against the contracting status_configs cache in
- * the composition hook. */
+/** Group-contract readiness input (TE-8): the contract keys (with the
+ * specialty grain, GCM-35) plus the status id, resolved to a label against
+ * the contracting status_configs cache in the composition hook. */
 export interface GenerationContractRow {
   groupId: string | null;
   payerId: string | null;
   state: string;
+  /** `all` or one specialty. Absent when the database predates migration
+   * 20261029120000; readiness reads a missing key as `all`. */
+  specialtyKey?: string | null;
   contractingStatusId: string | null;
 }
 
+const GENERATION_CONTRACT_COLUMNS =
+  "group_id, payer_id, state, specialty_key, contracting_status_id";
+// The same read for a database that predates migration 20261029120000.
+const PRE_SPECIALTY_KEY_CONTRACT_COLUMNS = "group_id, payer_id, state, contracting_status_id";
+
 export async function listGenerationContractRows(): Promise<GenerationContractRow[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  const result = await supabase
     .from("contracts")
-    .select("group_id, payer_id, state, contracting_status_id")
+    .select(GENERATION_CONTRACT_COLUMNS)
     .eq("org_id", orgId);
-  if (error) throw error;
-  return camelizeRow<GenerationContractRow[]>(data ?? []);
+  if (result.error && isMissingContractSpecialtyKeyError(result.error)) {
+    // The app shipped before the operator applied the migration: read without
+    // the column, so every row reads as `all` (the services/contracts idiom).
+    const fallback = await supabase
+      .from("contracts")
+      .select(PRE_SPECIALTY_KEY_CONTRACT_COLUMNS)
+      .eq("org_id", orgId);
+    if (fallback.error) throw fallback.error;
+    return camelizeRow<GenerationContractRow[]>(fallback.data ?? []);
+  }
+  if (result.error) throw result.error;
+  return camelizeRow<GenerationContractRow[]>(result.data ?? []);
 }

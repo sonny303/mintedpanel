@@ -29,6 +29,15 @@ export const OON_LABEL = "OON";
 // / OON are shared with the credentialing constants above). ---
 export const CONTRACTED_LABEL = "Contracted";
 
+// --- The 8 governed contract-record labels (`ContractingStatusLabel`, synced
+// into every org by migration 20260926160000). Not Started, In-Network and
+// Denied are the shared constants above. ---
+export const APPLICATION_SUBMITTED_LABEL = "Application Submitted";
+export const CONTRACT_SIGNED_LABEL = "In Progress (Contract Signed)";
+export const DENIED_APPEALED_LABEL = "Denied - Appealed";
+export const DENIED_REAPPLIED_LABEL = "Denied - Reapplied";
+export const OUT_OF_NETWORK_LABEL = "Out of Network";
+
 // --- Location-track (launch) status labels. ---
 export const PROSPECT_LABEL = "Prospect";
 export const PLANNED_LABEL = "Planned";

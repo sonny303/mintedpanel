@@ -78,7 +78,12 @@ tenant isolation there is enforced in code, not by the database.
   additive** (retain, hide, stop-write, deprecate in place). _The pre-GA
   destructive-DDL window closed at the production cut (2026-07-19); any
   future exception requires an explicit PM-approved carve-out written into
-  this section._
+  this section._ **Carve-out (PM decision D11, Oct 29, 2026):** migration
+  `20261029120000` replaces the unique constraint
+  `contracts_group_id_payer_id_state_key` with the unique index
+  `contracts_group_payer_state_specialty_key` on
+  `(group_id, payer_id, state, specialty_key)` — this one constraint, nothing
+  else. It loosens the rule and deletes no data or column.
 - `touches`, `status_history`, and `audit_log` are append-only for ordinary
   writers — no UPDATE, no DELETE in day-to-day code or RLS. **Carve-out:**
   admin hard-delete of a case goes through the `delete_case` SECURITY DEFINER
@@ -87,7 +92,7 @@ tenant isolation there is enforced in code, not by the database.
   row. `audit_log` itself is never deleted.
 - Providers store `ssn_last4` only in ordinary tables. The full SSN exists ONLY inside the E4.4 server-only Sensitive Identifiers Vault (PM security decision 2026-07-14): a separated, RLS-locked table with no PostgREST/client SELECT grant, encrypted at rest, accessed exclusively through the narrowly scoped audited SECURITY DEFINER RPCs the epic defines (fill-only release with `no-store`, admin reveal with justification, audited ingress). Outside those vault paths the last-4-only rule still binds absolutely: never accept, store, log, export, or render a full SSN anywhere else.
 - One credentialing case per `(provider_id, group_id, payer_id, state)` — the live DB constraint since E2.1 (`UNIQUE NULLS NOT DISTINCT`, migration `20260713150000`): a provider can have parallel cases with the same payer/state under different groups (each group's TIN contracts separately), and legacy NULL-group rows stay unique at `(provider_id, payer_id, state)` because NULL = NULL under NULLS NOT DISTINCT. Credentialing only.
-- Contracting status lives on `contracts` (group + payer + state). Never put contracting status on `credential_cases`.
+- Contracting status lives on `contracts` (group + payer + state + specialty, where specialty `all` is one agreement for every specialty). Never put contracting status on `credential_cases`.
 - All access is scoped by `org_id` RLS. Every insert sets `org_id` from the active org. Every public table needs explicit `GRANT`s alongside RLS.
 - Any migration that adds or supersedes a table or column updates the row in `docs/data-model/table-register.md` in the same PR.
 - Follow the grain and M:N rules in `SCHEMA.md` — state/purpose/payer-varying data is a child row keyed by that dimension, never a new column; plausible many-to-many relationships get a join table from day one.

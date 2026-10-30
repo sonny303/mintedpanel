@@ -92,7 +92,7 @@ export const REPORTS: ReportDef[] = [
     key: "contracts-matrix",
     title: "Group Contracts Matrix",
     description:
-      "Payer × state contract execution, tentative/confirmed effective dates, and cross-payer dependencies per provider group.",
+      "Contract status for every payer, group and state in your organization, one table per specialty.",
     path: "/reporting/contracts-matrix",
     group: "credentialing",
   },

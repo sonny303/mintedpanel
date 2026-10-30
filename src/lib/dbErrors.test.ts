@@ -19,6 +19,29 @@ describe("translateDbError — 23505 unique violations", () => {
     expect(messageOf(result)).toBe("A contract already exists for this group, payer, and state.");
   });
 
+  it("names the 4-part contract grain (group, payer, state, specialty)", () => {
+    const result = translateDbError(
+      pgError(
+        "23505",
+        'duplicate key value violates unique constraint "contracts_group_payer_state_specialty_key"',
+      ),
+    );
+    expect(result).toBeInstanceOf(UniqueViolationError);
+    expect(messageOf(result)).toBe(
+      "A contract already exists for this group, payer, state and specialty.",
+    );
+  });
+
+  it("names the contract specialty set on a check violation", () => {
+    const result = translateDbError(
+      pgError(
+        "23514",
+        'new row for relation "contracts" violates check constraint "contracts_specialty_key_check"',
+      ),
+    );
+    expect(messageOf(result)).toMatch(/^A contract covers all specialties or one of /);
+  });
+
   it("names the duplicate-primary invariant", () => {
     const result = translateDbError(
       pgError(
