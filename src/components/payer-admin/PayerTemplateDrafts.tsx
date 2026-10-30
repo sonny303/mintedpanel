@@ -34,12 +34,12 @@ export function PayerTemplateDrafts({ payerId }: { payerId: string }) {
 
   if (draftsQ.isError) {
     return (
-      <p className="text-[12.5px] text-muted-foreground">
+      <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-[13px] text-[#B91C1C]">
         Couldn&apos;t load saved drafts.{" "}
         <button type="button" className="underline" onClick={() => void draftsQ.refetch()}>
           Retry
         </button>
-      </p>
+      </div>
     );
   }
   if (rows.length === 0) return null;

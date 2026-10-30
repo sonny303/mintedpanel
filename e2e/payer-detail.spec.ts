@@ -39,6 +39,7 @@ const TPL_GLOBAL = "44444444-4444-4444-8444-000000000002";
 const DRAFT_UHC = "55555555-5555-4555-8555-000000000001";
 const DRAFT_CIGNA = "55555555-5555-4555-8555-000000000002";
 const DRAFT_EDIT = "55555555-5555-4555-8555-000000000003";
+const DRAFT_UHC_CO = "55555555-5555-4555-8555-000000000004";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -339,6 +340,8 @@ interface RecordedCall {
 let db: Record<string, Row[]> | null = null;
 const rpcCalls: RecordedCall[] = [];
 const tableWrites: Array<{ table: string; method: string }> = [];
+// The filters of each DELETE on sop_template_drafts, e.g. { id: "eq.<id>" }.
+const draftDeletes: Array<{ id: string | null; org_id: string | null }> = [];
 let archiveError: string | null = null;
 let mergeError: string | null = null;
 
@@ -464,6 +467,13 @@ async function fulfillSupabase(route: Route) {
     return json(wantsObject ? row : [row], 201);
   }
 
+  if (table === "sop_template_drafts" && req.method() === "DELETE") {
+    tableWrites.push({ table, method: req.method() });
+    draftDeletes.push({ id: url.searchParams.get("id"), org_id: url.searchParams.get("org_id") });
+    db.sop_template_drafts = db.sop_template_drafts.filter((d) => !matchFilters(d));
+    return route.fulfill({ status: 204, body: "" });
+  }
+
   if (req.method() !== "GET" && req.method() !== "HEAD") {
     tableWrites.push({ table, method: req.method() });
     return json(wantsObject ? {} : [{}], 201);
@@ -482,6 +492,7 @@ async function seed(context: import("@playwright/test").BrowserContext, role = "
   db.memberships[0].role = role;
   rpcCalls.length = 0;
   tableWrites.length = 0;
+  draftDeletes.length = 0;
   archiveError = null;
   mergeError = null;
   await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
@@ -766,10 +777,17 @@ test("templates — a first draft save writes ?draftId=, so reload and Back reop
   // The open editor stays mounted on its step (no loading swap back to Basics).
   await expect(page.getByRole("button", { name: /Add action/ })).toBeVisible();
 
-  // Replace, not push: the same entry now carries the id and the payer context.
+  // The same history entry now carries the id and the payer context.
   await expect(page).toHaveURL(/draftId=55555555-5555-4555-8555-/);
   await expect(page).toHaveURL(new RegExp(`payerId=${UHC_ID}`));
   const draftUrl = page.url();
+
+  // Replace, not push: one Back leaves the editor for the Templates tab, never
+  // for a blank create URL.
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${UHC_ID}\\?tab=templates$`));
+  await page.goForward();
+  await expect(page).toHaveURL(draftUrl);
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Resume draft" })).toBeVisible({ timeout: 30000 });
@@ -785,6 +803,47 @@ test("templates — a first draft save writes ?draftId=, so reload and Back reop
   await expect(page).toHaveURL(draftUrl);
   await expect(page.getByRole("heading", { name: "Resume draft" })).toBeVisible({ timeout: 30000 });
   await expect(templateNameInput(page)).toHaveValue("UHC AZ credentialing");
+});
+
+test("templates — Discard confirms first: Keep draft deletes nothing, Discard draft deletes the one row (MINT-74)", async ({
+  context,
+  page,
+}) => {
+  await seed(context);
+  db!.sop_template_drafts.push(
+    draftRow(DRAFT_UHC, UHC_ID, "UHC AZ enrollment (draft)"),
+    draftRow(DRAFT_UHC_CO, UHC_ID, "UHC CO enrollment (draft)", {
+      updated_at: "2026-10-28T12:00:00Z",
+    }),
+  );
+  await openDetail(page, UHC_ID);
+  await tab(page, "Templates").click();
+
+  const drafts = page.getByRole("region", { name: "Drafts" });
+  await expect(drafts.getByRole("listitem")).toHaveCount(2);
+  const discard = drafts.getByRole("button", {
+    name: "Discard UHC AZ enrollment (draft)",
+    exact: true,
+  });
+  const dialog = page.getByRole("dialog", { name: "Discard this draft?" });
+
+  // Keep draft closes the confirmation without any DELETE.
+  await discard.click();
+  await expect(dialog).toContainText("UHC AZ enrollment (draft)");
+  await dialog.getByRole("button", { name: "Keep draft" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(tableWrites.filter((w) => w.method === "DELETE")).toEqual([]);
+  await expect(drafts.getByRole("listitem")).toHaveCount(2);
+
+  // Discard draft deletes exactly that row, org-scoped, and it leaves the list.
+  await discard.click();
+  await dialog.getByRole("button", { name: "Discard draft" }).click();
+  await expect(page.getByText("Draft discarded")).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  expect(draftDeletes).toEqual([{ id: `eq.${DRAFT_UHC}`, org_id: `eq.${ORG_ID}` }]);
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+  await expect(drafts).toContainText("UHC CO enrollment (draft)");
+  await expect(drafts).not.toContainText("UHC AZ enrollment (draft)");
 });
 
 test("templates — saved drafts are admin-only (RLS), so a specialist sees no Drafts group", async ({

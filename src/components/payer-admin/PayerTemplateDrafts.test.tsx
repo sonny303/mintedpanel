@@ -95,5 +95,7 @@ describe("PayerTemplateDrafts", () => {
     const html = renderToStaticMarkup(<PayerTemplateDrafts payerId={PAYER_ID} />);
     expect(html).toContain("load saved drafts");
     expect(html).toContain("Retry");
+    // The same destructive tone as the tab's own "Couldn't load templates."
+    expect(html).toContain("text-[#B91C1C]");
   });
 });
