@@ -8,6 +8,56 @@ export type Database = {
   };
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string;
+          actor_email: string | null;
+          actor_user_id: string;
+          after: Json | null;
+          before: Json | null;
+          description: string | null;
+          id: string;
+          org_id: string | null;
+          target_id: string | null;
+          target_type: string;
+          ts: string;
+        };
+        Insert: {
+          action: string;
+          actor_email?: string | null;
+          actor_user_id: string;
+          after?: Json | null;
+          before?: Json | null;
+          description?: string | null;
+          id?: string;
+          org_id?: string | null;
+          target_id?: string | null;
+          target_type: string;
+          ts?: string;
+        };
+        Update: {
+          action?: string;
+          actor_email?: string | null;
+          actor_user_id?: string;
+          after?: Json | null;
+          before?: Json | null;
+          description?: string | null;
+          id?: string;
+          org_id?: string | null;
+          target_id?: string | null;
+          target_type?: string;
+          ts?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       audit_log: {
         Row: {
           action_type: string;
@@ -2580,6 +2630,39 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      platform_admins: {
+        Row: {
+          created_at: string;
+          granted_at: string;
+          granted_by: string | null;
+          note: string | null;
+          revoked_at: string | null;
+          revoked_by: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          granted_at?: string;
+          granted_by?: string | null;
+          note?: string | null;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          granted_at?: string;
+          granted_by?: string | null;
+          note?: string | null;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
       };
       portal_field_maps: {
         Row: {
@@ -5492,6 +5575,16 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      grant_platform_admin: {
+        Args: { p_note: string; p_user_id: string };
+        Returns: Json;
+      };
+      is_platform_admin: { Args: never; Returns: boolean };
+      platform_metrics: { Args: never; Returns: Json };
+      revoke_platform_admin: {
+        Args: { p_note: string; p_user_id: string };
+        Returns: Json;
       };
       user_is_admin_anywhere: { Args: never; Returns: boolean };
       user_org_ids: { Args: never; Returns: string[] };
