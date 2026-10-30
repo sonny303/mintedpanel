@@ -20,6 +20,7 @@ import type {
   Payer,
   PayerCatalogStatus,
   SOPTemplate,
+  SopTemplateDraft,
 } from "@/types";
 
 export const PAYER_DETAIL_TABS = [
@@ -120,6 +121,50 @@ export function payerTemplateRows(
         (a.states[0] ?? "").localeCompare(b.states[0] ?? "") ||
         a.name.localeCompare(b.name),
     );
+}
+
+/** A saved new-template draft as the payer's Templates tab lists it. */
+export interface PayerTemplateDraftRow {
+  id: string;
+  /** The draft's name, or `UNTITLED_DRAFT_LABEL` when it was saved unnamed. */
+  name: string;
+  updatedAt: string;
+  updatedByName: string | null;
+}
+
+export const UNTITLED_DRAFT_LABEL = "Untitled draft";
+
+/** One string field of the wizard's draft payload (jsonb, so unknown here). */
+function draftPayloadString(payload: unknown, key: "name" | "payerId"): string | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+/** The payer's saved drafts of NEW templates, most recently saved first. The
+ * payer lives in the wizard payload (`payload.payerId`), not in a column. A
+ * draft of an existing template (`templateId` set) is left out: the create
+ * route resumes drafts, and resuming that one there would author a second
+ * template instead of editing the first. */
+export function payerTemplateDraftRows(
+  drafts: readonly SopTemplateDraft[],
+  payerId: string,
+): PayerTemplateDraftRow[] {
+  return drafts
+    .filter((d) => !d.templateId && draftPayloadString(d.payload, "payerId") === payerId)
+    .map((d) => ({
+      id: d.id,
+      name: draftPayloadString(d.payload, "name")?.trim() || UNTITLED_DRAFT_LABEL,
+      updatedAt: d.updatedAt,
+      updatedByName: d.updatedByName ?? null,
+    }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** Search params that reopen a saved draft in the Template Editor — the same
+ * payer context and legacy `tier` spelling as the tab's "+ New template". */
+export function draftResumeSearch(payerId: string, draftId: string) {
+  return { payerId, tier: "global" as const, draftId };
 }
 
 export interface TemplateStateCoverage {

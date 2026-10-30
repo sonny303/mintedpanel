@@ -34,7 +34,13 @@ export function useSaveSopTemplateDraft() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (input: SopTemplateDraftInput) => saveSopTemplateDraft(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sopTemplateDrafts(orgId) }),
+    onSuccess: (saved) => {
+      // The create route reads ?draftId= through useSopTemplateDraft. Seeding it
+      // keeps the open wizard mounted when a first save writes the id into the
+      // URL, instead of swapping it for the route's loading skeleton.
+      qc.setQueryData(queryKeys.sopTemplateDraft(orgId, saved.id), saved);
+      return qc.invalidateQueries({ queryKey: queryKeys.sopTemplateDrafts(orgId) });
+    },
   });
 }
 
@@ -43,6 +49,9 @@ export function useDeleteSopTemplateDraft() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (id: string) => deleteSopTemplateDraft(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sopTemplateDrafts(orgId) }),
+    onSuccess: (_void, id) => {
+      qc.removeQueries({ queryKey: queryKeys.sopTemplateDraft(orgId, id) });
+      return qc.invalidateQueries({ queryKey: queryKeys.sopTemplateDrafts(orgId) });
+    },
   });
 }

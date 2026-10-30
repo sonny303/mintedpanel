@@ -768,6 +768,18 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       });
       setDraftId(saved.id);
       setDirty(false);
+      // MINT-74: a new template's first draft save puts its id in the URL, so
+      // reload and Back reopen the draft. Replace keeps the other search params
+      // and adds no history entry. The blocker still holds this render's
+      // `dirty`, so the navigation bypasses it.
+      if (!isEdit && draftId !== saved.id) {
+        void navigate({
+          to: "/admin/templates/new",
+          search: (prev) => ({ ...prev, draftId: saved.id }),
+          replace: true,
+          ignoreBlocker: true,
+        });
+      }
       toast.success("Draft saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save the draft");
