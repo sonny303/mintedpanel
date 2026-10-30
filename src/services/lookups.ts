@@ -40,14 +40,22 @@ export interface OrgLicenseSummaryRow {
   verifiedStatus: "unverified" | "verified" | "failed";
 }
 
+const ORG_LICENSE_SUMMARY_COLUMNS =
+  "id, provider_id, state, license_number, issue_date, expiration_date, verified_status";
+
 export async function listOrgStateLicenses(): Promise<OrgLicenseSummaryRow[]> {
   const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+  // Read to completion (never cut at PostgREST's max-rows); the id order keeps
+  // page boundaries stable.
+  const query = supabase
     .from("state_licenses")
-    .select("id, provider_id, state, license_number, issue_date, expiration_date, verified_status")
-    .eq("org_id", orgId);
-  if (error) throw error;
-  return camelizeRow<OrgLicenseSummaryRow[]>(data ?? []);
+    .select(ORG_LICENSE_SUMMARY_COLUMNS, { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const rows = await readCompletePages(async (from, to) => await query.range(from, to), {
+    label: "License list",
+  });
+  return camelizeRow<OrgLicenseSummaryRow[]>(rows);
 }
 
 export async function getStateLicensesByProvider(providerId: string): Promise<StateLicense[]> {

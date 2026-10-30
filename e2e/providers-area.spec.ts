@@ -958,3 +958,116 @@ test("F05: license editor blocks reversed dates inline and accepts equal dates",
     ]),
   );
 });
+
+// MINT-14 (CRUD-03): the roster's reads page past the hosted PostgREST
+// max-rows cap. This stand-in honors offset/limit, caps EVERY response (an
+// unranged read included) at 1,000 rows, answers the exact count in
+// content-range, and fails the reads `failAt` picks with a non-retryable 500.
+const SERVER_MAX_ROWS = 1000;
+
+async function servePagedTable(
+  context: { route: (url: RegExp, handler: (route: Route) => Promise<void>) => Promise<void> },
+  table: string,
+  rows: () => Record<string, unknown>[],
+  failAt: (offset: number) => boolean,
+) {
+  const offsets: number[] = [];
+  await context.route(new RegExp(`/rest/v1/${table}(?:\\?|$)`), async (route) => {
+    const req = route.request();
+    const accept = req.headers()["accept"] ?? "";
+    if (req.method() !== "GET" || accept.includes("vnd.pgrst.object")) return route.fallback();
+    const url = new URL(req.url());
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    offsets.push(offset);
+    if (failAt(offset)) {
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "statement timeout" }),
+      });
+    }
+    const source = rows().filter((row) =>
+      [...url.searchParams].every(
+        ([key, value]) =>
+          !(key in row) || !value.startsWith("eq.") || String(row[key]) === value.slice(3),
+      ),
+    );
+    const limit = Math.min(
+      Number(url.searchParams.get("limit") ?? SERVER_MAX_ROWS),
+      SERVER_MAX_ROWS,
+    );
+    const page = source.slice(offset, offset + limit);
+    const contentRange =
+      page.length === 0
+        ? `*/${source.length}`
+        : `${offset}-${offset + page.length - 1}/${source.length}`;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "content-range": contentRange },
+      body: JSON.stringify(page),
+    });
+  });
+  return offsets;
+}
+
+test("MINT-14: the roster lists every provider past the 1,000-row cap; a failed page shows the error state, never a partial roster", async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const fixtures = baseFixtures();
+  for (let i = 0; i < 1050; i += 1) {
+    const n = String(i).padStart(4, "0");
+    fixtures.providers.push(providerRow(`pr-bulk-${n}`, "Bulk", `Zz${n}`));
+  }
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  let failMiddlePage = true;
+  const offsets = await servePagedTable(
+    context,
+    "providers",
+    () => fixtures.providers,
+    (offset) => failMiddlePage && offset === 500,
+  );
+  await seedAuth(context);
+
+  // The second page fails: the roster says so instead of listing page one.
+  await page.goto("/providers");
+  await expect(page.getByText("Couldn't load the roster.")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await expect(page.getByText("No providers match", { exact: false })).toHaveCount(0);
+
+  // Retry with the page healthy: every provider, past the cap, in A→Z order.
+  failMiddlePage = false;
+  offsets.length = 0;
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(1052, { timeout: 30000 });
+  await expect(page.locator("tbody tr").first()).toContainText("Chen, Alex");
+  await expect(page.locator("tbody tr").last()).toContainText("Zz1049, Bulk");
+  expect(offsets).toEqual([0, 500, 1000]);
+});
+
+for (const table of ["provider_group_assignments", "state_licenses"]) {
+  test(`MINT-14: a failed ${table} read shows the roster error state, not empty columns`, async ({
+    context,
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    const fixtures = baseFixtures();
+    const { handler } = makeHandler(fixtures);
+    await context.route(/\/(rest|auth)\/v1\//, handler);
+    await servePagedTable(
+      context,
+      table,
+      () => fixtures[table],
+      () => true,
+    );
+    await seedAuth(context);
+
+    await page.goto("/providers");
+    await expect(page.getByText("Couldn't load the roster.")).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+    await expect(page.locator("tbody tr")).toHaveCount(0);
+  });
+}

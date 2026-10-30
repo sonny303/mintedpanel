@@ -88,11 +88,26 @@ function ProvidersRoster() {
 
   const today = localTodayIso();
 
+  // Every read a roster row is built from. A pending or failed one would
+  // otherwise render as an empty column or a false gap pill, so the rows wait
+  // for all of them and any failure shows the error state instead.
+  const rosterQueries = [providersQ, groupAssignQ, facilityAssignQ, licensesQ, groupsQ, casesQ];
+  const rosterFailed = rosterQueries.some((q) => q.isError);
+
   const rows = useMemo<RosterRow[] | undefined>(() => {
-    if (!providersQ.data) return undefined;
-    const groupNameById = new Map((groupsQ.data ?? []).map((g) => [g.id, g.name]));
+    if (
+      !providersQ.data ||
+      !groupsQ.data ||
+      !groupAssignQ.data ||
+      !facilityAssignQ.data ||
+      !licensesQ.data ||
+      !casesQ.data
+    ) {
+      return undefined;
+    }
+    const groupNameById = new Map(groupsQ.data.map((g) => [g.id, g.name]));
     const groupsByProvider = new Map<string, { id: string; name: string; isPrimary: boolean }[]>();
-    for (const a of groupAssignQ.data ?? []) {
+    for (const a of groupAssignQ.data) {
       if (!a.providerId || !a.groupId) continue;
       const list = groupsByProvider.get(a.providerId) ?? [];
       list.push({
@@ -103,12 +118,12 @@ function ProvidersRoster() {
       groupsByProvider.set(a.providerId, list);
     }
     const facilityCount = new Map<string, number>();
-    for (const a of facilityAssignQ.data ?? []) {
+    for (const a of facilityAssignQ.data) {
       if (!a.providerId) continue;
       facilityCount.set(a.providerId, (facilityCount.get(a.providerId) ?? 0) + 1);
     }
     const licensesByProvider = new Map<string, { states: Set<string>; soonest: string | null }>();
-    for (const l of licensesQ.data ?? []) {
+    for (const l of licensesQ.data) {
       if (!l.providerId) continue;
       const entry = licensesByProvider.get(l.providerId) ?? { states: new Set(), soonest: null };
       if (l.state) entry.states.add(l.state);
@@ -118,7 +133,7 @@ function ProvidersRoster() {
       licensesByProvider.set(l.providerId, entry);
     }
     const progress = providerCaseProgress(
-      (casesQ.data ?? []).map((c) => ({ providerId: c.providerId, status: c.caseStatus })),
+      casesQ.data.map((c) => ({ providerId: c.providerId, status: c.caseStatus })),
     );
     return sortRosterAz(providersQ.data).map((provider) => {
       const groups = groupsByProvider.get(provider.id) ?? [];
@@ -228,11 +243,21 @@ function ProvidersRoster() {
     downloadCsvText(`roster-${format(new Date(), "yyyy-MM-dd")}.csv`, buildRosterCsv(exportRows));
   }
 
-  if (providersQ.isError) {
+  if (rosterFailed) {
     return (
       <div className="space-y-4">
         <PageHeader title="Providers" />
         <p className="text-[13px] text-[#B91C1C]">Couldn&apos;t load the roster.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8"
+          onClick={() => {
+            for (const q of rosterQueries) if (q.isError) void q.refetch();
+          }}
+        >
+          Retry
+        </Button>
       </div>
     );
   }
