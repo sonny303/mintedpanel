@@ -329,6 +329,111 @@ The single case-activity spine (Story 1, migration `20260707120000_touchlog_entr
 
 `id, org_id, ts, user_id, user_name, action_type, entity_type, entity_id, before jsonb, after jsonb, description, created_at`. No edit, no delete, by anyone — including admins. `action_type` is check-constrained to `CREATE | UPDATE | STATUS_CHANGE | TOUCH_LOGGED | TERMINATION | READ` (`READ` added 2026-07-05 for profile-endpoint read auditing — migration `20260705190000_audit_log_read_action_type.sql`).
 
+## Mission Control (platform administration)
+
+Migration `20261030180000_mission_control_platform_admins.sql` (applied on
+staging 2026-10-30, ledger `20261030204806`; production unverified). A
+platform admin is a Minted operator who works across organizations. This is a
+platform role, separate from per-org `memberships` roles and from E6.12's
+per-org `private.internal_staff` manifest. Security packet:
+`supabase/tests/mission-control-security.sql`, run by
+`scripts/security/verify-mission-control.mjs` in CI's P01 job.
+
+### platform_admins
+
+`user_id (PK → auth.users ON DELETE CASCADE), granted_by, granted_at,
+revoked_at, revoked_by, note, created_at, updated_at`. Active means
+`revoked_at IS NULL`; revocation is a soft flip, and the history of every
+change lives in `admin_audit_log`. RLS on (not forced). `authenticated` holds
+SELECT only, with one policy, `mc_platform_admins_select_self` (`user_id =
+auth.uid()`): the browser can ask "am I one" and nothing else. No client
+write grant or policy. Writes go through the two RPCs below or an operator
+with the service role. There is no self-bootstrap path: the first row is an
+operator insert (`docs/ops/mission-control-bootstrap.md`).
+
+### admin_audit_log (APPEND-ONLY, immutable)
+
+`id, ts, actor_user_id (NOT NULL → auth.users), actor_email, action,
+target_type, target_id text, org_id (nullable → organizations), before jsonb,
+after jsonb, description`. Indexes on `ts DESC`, `(actor_user_id, ts DESC)`,
+`(org_id, ts DESC)`, `(action, ts DESC)`. The platform-scoped ledger beside
+`audit_log`, which stays untouched (its `org_id` is NOT NULL and its
+`action_type` CHECK is case-centric). `action` is a dotted string with no
+CHECK: `platform_admin.grant`, `platform_admin.revoke`, and later `org.*`,
+`membership.*`, `user.*`. SELECT policy `mc_admin_audit_log_select_platform_admin`
+(`is_platform_admin()`); `authenticated` holds SELECT and no other privilege,
+`anon` holds nothing. Rows are written only inside SECURITY DEFINER RPCs or by
+the service role, which keeps its elevated table privileges like `audit_log`.
+The foreign keys have no ON DELETE action, so a user who has acted or an
+organization with ledger rows cannot be hard-deleted until those rows are
+dealt with (the same posture as `audit_log`; the teardown scripts in
+`docs/ops/` will need a line once org-scoped rows exist).
+
+### Helper and RPCs
+
+All four are SECURITY DEFINER with `search_path` pinned to `public`, have no
+defaulted arguments, and grant EXECUTE to `authenticated` and `service_role`
+only (`PUBLIC` and `anon` revoked).
+
+- `is_platform_admin() RETURNS boolean` (STABLE SQL) — the caller has an
+  active row. Policies call it as `(SELECT public.is_platform_admin())` so it
+  runs once per query.
+- `grant_platform_admin(p_user_id uuid, p_note text) RETURNS jsonb` and
+  `revoke_platform_admin(p_user_id uuid, p_note text) RETURNS jsonb` — caller
+  must be a platform admin (`42501`, `platform_admin_required`); target must
+  exist in `auth.users` (`P0002`, `user_not_found`). Both take one
+  transaction-scoped advisory lock and re-check the caller after it, so two
+  admins revoking each other cannot leave zero. Grant inserts or re-activates
+  a revoked row (clears `revoked_*`, sets `granted_by = auth.uid()`,
+  `granted_at = now()`); revoke stamps `revoked_at`/`revoked_by` and refuses
+  the last active admin (`23514`, `last_platform_admin`). `p_note` (trimmed,
+  blank → NULL) becomes the row's `note`. Each change writes one ledger row
+  (`actor_user_id = auth.uid()`, `actor_email` from `auth.users`,
+  `target_type = 'user'`, `target_id = p_user_id::text`, `before`/`after` =
+  the row as jsonb) in the same transaction. A call that changes nothing
+  (grant of an active admin, revoke of an inactive or absent one) returns
+  `changed: false` and writes no row. The return is
+  `{ userId, active, grantedBy, grantedAt, revokedBy, revokedAt, note,
+changed, auditId }`, never the table row (the self-only SELECT policy would
+  re-apply to a returned row).
+- `platform_metrics() RETURNS jsonb` (STABLE plpgsql) — raises `42501` unless
+  `is_platform_admin()`, otherwise returns the Mission Control Home contract.
+  Every key is always present and every leaf except `generatedAt` is an
+  integer:
+
+  ```text
+  {
+    "generatedAt": "<UTC ISO 8601, e.g. 2026-10-30T20:48:06.123Z>",
+    "organizations": { "total", "active", "prospect", "inactive" },   -- by lifecycle_state
+    "users": { "total", "platformAdmins" },     -- auth.users WHERE deleted_at IS NULL; active platform_admins
+    "providers": { "total", "active", "onboarding", "pendingVerification" },  -- status; verification_state = 'pending_verification'
+    "cases": { "total", "open" },
+    "pendingInvites": n                         -- count(pending_invites)
+  }
+  ```
+
+  `cases.open` counts `credential_cases.case_status` in the five open unified
+  statuses (`not_started`, `in_progress`, `submitted`, `in_review`,
+  `action_required`), the same set as `OPEN_CASE_STATUSES` in
+  `src/lib/caseStatus.ts`. `approved`, `denied` and `not_pursuing` are
+  terminal. It reads the E6.0 `case_status` column, not the legacy
+  `credentialing_status_id` → `status_configs` mirror, whose per-org rows are
+  no longer a user-facing machine.
+
+### Additive metadata policies
+
+One permissive SELECT policy per table, each `TO authenticated USING ((SELECT
+public.is_platform_admin()))`: `mc_organizations_select_platform_admin`,
+`mc_memberships_select_platform_admin`, `mc_profiles_select_platform_admin`,
+`mc_pending_invites_select_platform_admin`. Permissive policies OR together,
+so the existing member policies are neither copied nor changed and a
+non-admin sees exactly what their memberships allowed before. Nothing else is
+widened: providers, cases, documents, `audit_log` and every other tenant table
+still require a membership, so a platform admin works inside an organization
+only through a membership of their own. A browser read of these four tables
+that means "my orgs" must filter by membership rather than rely on RLS (see
+the Portfolio wart in CLAUDE.md).
+
 ## E6.12 restricted client access context (2026-09-25)
 
 E6.12 adds a private, service-only authorization graph for the Enrollment

@@ -355,6 +355,13 @@ before any schema work.
   `isMissingContractSpecialtyKeyError` in `src/lib/dbErrors.ts`); contract
   saves fail until it is applied. Verify the objects listed in the
   migration header.
+- `20261030180000_mission_control_platform_admins.sql` — Mission Control
+  M1: `platform_admins`, `admin_audit_log`, four RPCs, six `mc_*` SELECT
+  policies. Applied on staging 2026-10-30 (ledger `20261030204806`; all
+  four function bodies md5-match the repo); production unverified. Verify:
+  the four functions in `pg_proc` and six `pg_policies` rows named `mc_%`
+  (queries in `docs/ops/mission-control-bootstrap.md`, which also holds the
+  operator insert for the first platform admin).
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 
@@ -372,7 +379,11 @@ text; both function bodies md5-match the repo) and
 `20261014154527`), not the filenames.
 
 Because some are unapplied, a `types.ts` regen may **delete** types for columns
-the repo just added. Check before regenerating.
+the repo just added. Check before regenerating. The reverse also bites: the
+checked-in file carries deliberate hand edits (nullable RPC args, merged
+overloads, `Json` returns), so a raw staging regen (2026-10-30) changes 28
+signatures, adds staging-only backup tables, and fails `tsc` in three
+services. Splice new blocks from the generated output instead.
 
 ### Key RPCs
 
@@ -424,6 +435,20 @@ All are repo migrations unless noted.
   where), not values. **Not curated** — it reads `information_schema.columns`
   over nine tables, so any new column on a card-eligible table becomes a token
   automatically.
+- **`is_platform_admin()`** — Mission Control's authorization helper (STABLE
+  SECURITY DEFINER, `auth.uid()` has an active `platform_admins` row). The
+  only way a policy or RPC asks "platform admin?". No flag on `profiles`, no
+  JWT claim.
+- **`grant_platform_admin(p_user_id, p_note)` / `revoke_platform_admin(p_user_id, p_note)`**
+  — the only browser write path to `platform_admins`. Caller must already be
+  a platform admin (`42501 platform_admin_required`); one advisory lock
+  serializes both; revoking the last active admin raises
+  `last_platform_admin` (23514); each change writes one `admin_audit_log`
+  row in the same transaction; a no-op returns `changed: false` and writes
+  nothing. Return jsonb, never the row.
+- **`platform_metrics()`** — the Mission Control Home tiles, one jsonb
+  document whose keys are a pinned contract (SCHEMA.md › Mission Control).
+  Raises `42501` for anyone but a platform admin.
 - `claim_invites()`, `set_default_party_role`, `set_primary_assignment`,
   `archive_org_payer_assignment`, `advance_payer_pipeline` (dormant).
 
@@ -807,6 +832,13 @@ control silently dates a break to a fill that never touched it.**
   `src/lib/providerDossier.ts`; a conflicting expiration is shown, not
   dropped. DEA, SSN, and home address are not in the select. Analysis:
   `docs/ops/provider-dossier-spike.md`.
+- A platform admin's Portfolio lists **every** organization: `listPortfolioOrgs`
+  (`src/services/portfolio.ts`) reads `organizations` with no filter and
+  relies on RLS, and `mc_organizations_select_platform_admin` widens that
+  read for platform admins. Tenant tables are not widened, so a non-member
+  org opens empty. Any browser read of `organizations`, `memberships`,
+  `profiles` or `pending_invites` that means "my orgs" must filter by
+  membership, not lean on RLS.
 - `PROVIDER_LIST_COLUMNS` is a **partial projection**; list rows are typed
   `Provider` but omit unlisted columns. `getProvider` selects `*`.
 - `provider_facility_assignments.practice_frequency` is never written.
