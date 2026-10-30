@@ -20,6 +20,7 @@ import { Route as GetStartedRouteImport } from './routes/get-started'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MissionControlRouteImport } from './routes/mission-control'
 import { Route as OrgDetailRouteImport } from './routes/org-detail'
 import { Route as OutcomesRouteImport } from './routes/outcomes'
 import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
@@ -54,6 +55,7 @@ import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
 import { Route as IntakeTokenRouteImport } from './routes/intake.$token'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
+import { Route as MissionControlIndexRouteImport } from './routes/mission-control.index'
 import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
@@ -157,6 +159,11 @@ const LaunchesRoute = LaunchesRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MissionControlRoute = MissionControlRouteImport.update({
+  id: '/mission-control',
+  path: '/mission-control',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrgDetailRoute = OrgDetailRouteImport.update({
@@ -328,6 +335,11 @@ const LaunchesIdRoute = LaunchesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => LaunchesRoute,
+} as any)
+const MissionControlIndexRoute = MissionControlIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MissionControlRoute,
 } as any)
 const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
   id: '/onboarding/',
@@ -601,6 +613,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/mission-control': typeof MissionControlRouteWithChildren
   '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
@@ -652,6 +665,7 @@ export interface FileRoutesByFullPath {
   '/cases/': typeof CasesIndexRoute
   '/groups/': typeof GroupsIndexRoute
   '/launches/': typeof LaunchesIndexRoute
+  '/mission-control/': typeof MissionControlIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
@@ -739,6 +753,7 @@ export interface FileRoutesByTo {
   '/cases': typeof CasesIndexRoute
   '/groups': typeof GroupsIndexRoute
   '/launches': typeof LaunchesIndexRoute
+  '/mission-control': typeof MissionControlIndexRoute
   '/onboarding': typeof OnboardingIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/reporting': typeof ReportingIndexRoute
@@ -785,6 +800,7 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/mission-control': typeof MissionControlRouteWithChildren
   '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
@@ -836,6 +852,7 @@ export interface FileRoutesById {
   '/cases/': typeof CasesIndexRoute
   '/groups/': typeof GroupsIndexRoute
   '/launches/': typeof LaunchesIndexRoute
+  '/mission-control/': typeof MissionControlIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
@@ -883,6 +900,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/mission-control'
     | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
@@ -934,6 +952,7 @@ export interface FileRouteTypes {
     | '/cases/'
     | '/groups/'
     | '/launches/'
+    | '/mission-control/'
     | '/onboarding/'
     | '/providers/'
     | '/reporting/'
@@ -1021,6 +1040,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/groups'
     | '/launches'
+    | '/mission-control'
     | '/onboarding'
     | '/providers'
     | '/reporting'
@@ -1066,6 +1086,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/mission-control'
     | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
@@ -1117,6 +1138,7 @@ export interface FileRouteTypes {
     | '/cases/'
     | '/groups/'
     | '/launches/'
+    | '/mission-control/'
     | '/onboarding/'
     | '/providers/'
     | '/reporting/'
@@ -1163,6 +1185,7 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
+  MissionControlRoute: typeof MissionControlRouteWithChildren
   OrgDetailRoute: typeof OrgDetailRoute
   OutcomesRoute: typeof OutcomesRoute
   PayerDirectoryRoute: typeof PayerDirectoryRoute
@@ -1299,6 +1322,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mission-control': {
+      id: '/mission-control'
+      path: '/mission-control'
+      fullPath: '/mission-control'
+      preLoaderRoute: typeof MissionControlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/org-detail': {
@@ -1538,6 +1568,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/launches/$id'
       preLoaderRoute: typeof LaunchesIdRouteImport
       parentRoute: typeof LaunchesRoute
+    }
+    '/mission-control/': {
+      id: '/mission-control/'
+      path: '/'
+      fullPath: '/mission-control/'
+      preLoaderRoute: typeof MissionControlIndexRouteImport
+      parentRoute: typeof MissionControlRoute
     }
     '/onboarding/': {
       id: '/onboarding/'
@@ -1911,6 +1948,18 @@ const LaunchesRouteWithChildren = LaunchesRoute._addFileChildren(
   LaunchesRouteChildren,
 )
 
+interface MissionControlRouteChildren {
+  MissionControlIndexRoute: typeof MissionControlIndexRoute
+}
+
+const MissionControlRouteChildren: MissionControlRouteChildren = {
+  MissionControlIndexRoute: MissionControlIndexRoute,
+}
+
+const MissionControlRouteWithChildren = MissionControlRoute._addFileChildren(
+  MissionControlRouteChildren,
+)
+
 interface ProvidersIdRouteChildren {
   ProvidersIdEditRoute: typeof ProvidersIdEditRoute
   ProvidersIdIndexRoute: typeof ProvidersIdIndexRoute
@@ -2037,6 +2086,7 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
+  MissionControlRoute: MissionControlRouteWithChildren,
   OrgDetailRoute: OrgDetailRoute,
   OutcomesRoute: OutcomesRoute,
   PayerDirectoryRoute: PayerDirectoryRoute,

@@ -87,6 +87,7 @@ npx playwright test e2e/<spec>.spec.ts
 | Sidebar IA v2, org switcher, nav counts                                                                                                                                                                               | `sidebar-ia.spec.ts`             |
 | Global provider lookup (shell palette, cross-org NPI)                                                                                                                                                                 | `global-provider-search.spec.ts` |
 | Provider footprint inspector (`/dev/global-search`, on-demand NPI dossier)                                                                                                                                            | `provider-dossier.spec.ts`       |
+| Mission Control (`/mission-control`: platform-admin guard on hard load and client navigation, sidebar entry, Home tiles, membership-less admin)                                                                       | `mission-control.spec.ts`        |
 | Legacy/flat route sweep (`/home`, `/providers`, `/launches`, `/reports`, `/fix-it`, `/client-progress`, `/admin/*`, `/work`, redirects `/portfolio` `/progress` `/admin/sops`, reserved `/soon` `/scope` `/outcomes`) | `legacy-routes.spec.ts`          |
 
 ### Onboarding & org intake

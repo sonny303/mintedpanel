@@ -78,9 +78,15 @@ const FIXTURES: Record<string, unknown[]> = {
   user_table_prefs: [],
 };
 
+// Every organizations read, as sent. The Portfolio must scope itself to the
+// caller's memberships in the query (a platform admin's organizations policy
+// admits every row), so the test checks the wire, not just the render.
+const organizationsReads: URL[] = [];
+
 async function fulfillSupabase(route: Route) {
   const req = route.request();
   const url = new URL(req.url());
+  if (url.pathname.endsWith("/rest/v1/organizations")) organizationsReads.push(url);
   const json = (body: unknown, status = 200) =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
@@ -130,4 +136,13 @@ test("all-inactive portfolio shows the Inactive group + create CTA (TS-12)", asy
   // Never a dead end: the create-org next action is present.
   await expect(page.getByRole("button", { name: "Create organization" })).toBeVisible();
   await expect(page.getByText("No organizations in motion")).toBeVisible();
+
+  // The Portfolio read is membership-scoped on the wire: an inner embed on the
+  // caller's own memberships row, in name order.
+  const portfolioRead = organizationsReads.find((url) =>
+    (url.searchParams.get("select") ?? "").includes("memberships!inner(user_id)"),
+  );
+  expect(portfolioRead, "the Portfolio organizations read").toBeDefined();
+  expect(portfolioRead?.searchParams.get("memberships.user_id")).toBe(`eq.${USER_ID}`);
+  expect(portfolioRead?.searchParams.get("order")).toBe("name.asc,id.asc");
 });

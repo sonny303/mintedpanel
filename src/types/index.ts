@@ -103,6 +103,18 @@ export interface PortfolioOrg {
   createdAt: string;
 }
 
+// Mission Control Home (platform_metrics() RPC): cross-org counts for platform
+// admins. Counts only — no names, no PHI. Pinned to the RPC's jsonb shape;
+// src/services/platformAdmin.ts validates it and fills a missing count with 0.
+export interface PlatformMetrics {
+  generatedAt: string;
+  organizations: { total: number; active: number; prospect: number; inactive: number };
+  users: { total: number; platformAdmins: number };
+  providers: { total: number; active: number; onboarding: number; pendingVerification: number };
+  cases: { total: number; open: number };
+  pendingInvites: number;
+}
+
 // Party model (redesign Stage 0, canonical E0.3 §5). One reusable record per
 // stakeholder; roles are scoped assignment rows, never fields on the org.
 export type PartyType = "person" | "organization";

@@ -1,6 +1,6 @@
 // Pure permission helpers and hooks derived from the active membership role.
 // Centralizes all role-based UI gating so intent is explicit and future-proof.
-import { useRole, type AppRole } from "./auth-store";
+import { useAuthStore, useRole, type AppRole } from "./auth-store";
 
 /** Display labels for the three membership roles. Lives here (the role-semantics
  * module) rather than in a component, so the sidebar footer and the /account
@@ -33,4 +33,28 @@ export function useCanWrite(): boolean {
 
 export function useIsAdmin(): boolean {
   return isAdmin(useRole());
+}
+
+/** Mission Control: whether the signed-in user is a platform admin. `null`
+ * means not known yet (the membership load for this actor has not finished).
+ * Independent of the active org — a platform admin may belong to none. */
+export function usePlatformAdmin(): boolean | null {
+  return useAuthStore((s) => s.isPlatformAdmin);
+}
+
+export type MissionControlAccess = "allow" | "deny" | "pending";
+
+/**
+ * The one Mission Control entry decision, shared by the layout route's
+ * client-side `beforeLoad` and the render-time `RequirePlatformAdmin`
+ * backstop. "pending" until the store has initialized and the flag is known —
+ * on a hard load `beforeLoad` runs before the store has anything, so it must
+ * never treat "unknown" as "no". Only an explicit `false` denies.
+ */
+export function canEnterMissionControl(
+  isPlatformAdmin: boolean | null,
+  initialized: boolean,
+): MissionControlAccess {
+  if (!initialized || isPlatformAdmin === null) return "pending";
+  return isPlatformAdmin ? "allow" : "deny";
 }

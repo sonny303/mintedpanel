@@ -10,7 +10,10 @@
 import type { LifecycleState, PortfolioOrg } from "@/types";
 
 export type LandingDecision =
-  { kind: "first-run" } | { kind: "workspace"; orgId: string } | { kind: "portfolio" };
+  | { kind: "first-run" }
+  | { kind: "workspace"; orgId: string }
+  | { kind: "portfolio" }
+  | { kind: "mission-control" };
 
 // Given orgs (with lifecycle + createdAt) and the persisted last-active id, pick
 // the org that should be ACTIVE: the valid non-inactive last-active, else the
@@ -28,9 +31,17 @@ export function selectActiveOrgId(
   return live.reduce((a, b) => (b.createdAt > a.createdAt ? b : a)).id; // TE-1 rule 4
 }
 
-export function resolveLanding(orgs: PortfolioOrg[], activeOrgId: string | null): LandingDecision {
-  // (1) Brand-new user with no orgs — the shell bootstraps the first org.
-  if (orgs.length === 0) return { kind: "first-run" };
+export function resolveLanding(
+  orgs: PortfolioOrg[],
+  activeOrgId: string | null,
+  isPlatformAdmin = false,
+): LandingDecision {
+  // (1) No orgs. A platform admin may belong to none and works in Mission
+  // Control, so never strand one on the create-first-org screen; anyone else
+  // is a brand-new user and the shell bootstraps the first org.
+  if (orgs.length === 0) {
+    return isPlatformAdmin ? { kind: "mission-control" } : { kind: "first-run" };
+  }
   // (2)/(4) A usable workspace org (valid last-active, or the most recent live one).
   const picked = selectActiveOrgId(orgs, activeOrgId);
   if (picked) return { kind: "workspace", orgId: picked };

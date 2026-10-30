@@ -29,7 +29,12 @@ export function useLandingRedirect() {
       navigate({ to: "/reporting/portfolio" });
       return;
     }
-    const decision = resolveLanding(orgs, useAuthStore.getState().activeOrgId);
+    const { activeOrgId, isPlatformAdmin } = useAuthStore.getState();
+    const decision = resolveLanding(orgs, activeOrgId, isPlatformAdmin === true);
+    if (decision.kind === "mission-control") {
+      navigate({ to: "/mission-control" });
+      return;
+    }
     if (decision.kind === "workspace") {
       setActiveOrg(decision.orgId);
       // E6.1 F6.1.2 — the login landing is the Cases surface (to-do pivot);
