@@ -2,7 +2,9 @@
 // surface, for platform admins only (is_platform_admin()). It mounts at
 // /mission-control because /admin/* is the per-organization payer admin
 // namespace. This layout owns the guard and the page chrome; each section is
-// its own child file so later milestones replace a body without touching it.
+// its own child route file (Home is mission-control.index.tsx), and a later
+// milestone adds its section's file plus its entry in src/lib/missionControl.ts
+// without touching this layout.
 //
 // Two guards, deliberately:
 //   - beforeLoad redirects to / on CLIENT navigation once the store knows the

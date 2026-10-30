@@ -12,8 +12,10 @@ import {
 //   platform_metrics()  -> { generatedAt, organizations{…}, users{…},
 //                            providers{…}, cases{…}, pendingInvites }
 // Covers:
-//   (a) a platform admin hard-loads /mission-control: breadcrumb, section
-//       navigation, the six tiles with the fixture numbers, the sidebar entry
+//   (a) a platform admin hard-loads /mission-control: breadcrumb (Home is the
+//       only section, so no section strip), the six tiles with the fixture
+//       numbers, the sidebar entry; a Mission Control path with no page is
+//       the generic not-found view
 //   (b) a non-admin hard-load gets the generic not-found view (identical to an
 //       unknown URL) and no sidebar entry; a client-side navigation is
 //       redirected back to /
@@ -68,14 +70,6 @@ const TILES: Array<{ label: string; value: string; detail: string }> = [
   { label: "Pending verifications", value: "65", detail: "Providers awaiting verification" },
   { label: "Open cases", value: "8,312", detail: "of 12,480 cases in total" },
   { label: "Pending invites", value: "3", detail: "Invites not yet accepted" },
-];
-
-const SECTIONS: Array<{ name: string; href: string }> = [
-  { name: "Home", href: "/mission-control" },
-  { name: "Organizations", href: "/mission-control/organizations" },
-  { name: "Users", href: "/mission-control/users" },
-  { name: "Audit", href: "/mission-control/audit" },
-  { name: "Cashboard", href: "/mission-control/cashboard" },
 ];
 
 type Scenario = {
@@ -210,14 +204,14 @@ async function expectNotFound(page: Page) {
     timeout: 30000,
   });
   await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Mission Control sections" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
 }
 
 function sidebar(page: Page) {
   return page.locator("aside").first();
 }
 
-test("(a) a platform admin hard-loads Mission Control: header, sections, six tiles, sidebar entry", async ({
+test("(a) a platform admin hard-loads Mission Control: header, six tiles, sidebar entry", async ({
   context,
   page,
 }) => {
@@ -229,20 +223,12 @@ test("(a) a platform admin hard-loads Mission Control: header, sections, six til
   await expect(crumbs).toBeVisible({ timeout: 30000 });
   await expect(crumbs).toContainText("Mission Control");
   await expect(crumbs.getByText("Home", { exact: true })).toHaveAttribute("aria-current", "page");
+  // On Home the root crumb is text, not a link to the current page.
+  await expect(crumbs.getByRole("link")).toHaveCount(0);
+  await expect(crumbs.locator('[aria-current="page"]')).toHaveCount(1);
   await expect(page.getByRole("heading", { level: 1, name: "Mission Control" })).toBeVisible();
-
-  const sections = page.getByRole("navigation", { name: "Mission Control sections" });
-  await expect(sections.getByRole("link")).toHaveCount(SECTIONS.length);
-  for (const section of SECTIONS) {
-    await expect(sections.getByRole("link", { name: section.name, exact: true })).toHaveAttribute(
-      "href",
-      section.href,
-    );
-  }
-  await expect(sections.getByRole("link", { name: "Home", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  // Home is the only section, so there is no section strip to choose from.
+  await expect(page.getByRole("navigation", { name: "Mission Control sections" })).toHaveCount(0);
 
   await expectTiles(page);
   await expect(page.getByText("Generated Oct 30, 2026 · 1:15 PM")).toBeVisible();
@@ -256,29 +242,10 @@ test("(a) a platform admin hard-loads Mission Control: header, sections, six til
   expect(rpcCalls).toContain("is_platform_admin");
   expect(rpcCalls).toContain("platform_metrics");
 
-  // The section navigation is client-side and keeps the shell.
-  await sections.getByRole("link", { name: "Organizations", exact: true }).click();
-  await expect(page).toHaveURL(/\/mission-control\/organizations$/);
-  await expect(crumbs.getByText("Organizations", { exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(page.getByText("This page arrives with Mission Control milestone 3.")).toBeVisible();
-  await expect(crumbs.getByRole("link", { name: "Mission Control" })).toHaveAttribute(
-    "href",
-    "/mission-control",
-  );
-  // Exactly one current page in each nav: a parent path never claims it.
-  await expect(crumbs.locator('[aria-current="page"]')).toHaveCount(1);
-  await expect(sections.locator('[aria-current="page"]')).toHaveCount(1);
-  await expect(sections.getByRole("link", { name: "Organizations", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(sections.getByRole("link", { name: "Home", exact: true })).not.toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  // A Mission Control path with no page yet is an ordinary unknown URL, even
+  // for a platform admin: no placeholder page ships.
+  await page.goto("/mission-control/organizations");
+  await expectNotFound(page);
 });
 
 test("(b) a non-admin gets the generic not-found view, no sidebar entry, and client navigation lands on /", async ({
