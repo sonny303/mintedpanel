@@ -585,7 +585,7 @@ test("P02: collapsing blocked rows preserves the wire exclusion and commits one 
       stagedRow(line, {
         provider_first_name: "Nora",
         provider_last_name: "Newton",
-        npi: "3333333333",
+        npi: "3333333334",
         group_tin: tin,
         facility_name: facilityName,
         license_state: state,
@@ -611,7 +611,7 @@ test("P02: collapsing blocked rows preserves the wire exclusion and commits one 
   await expect(blockedButton).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("button", { name: "New providers (1)", exact: true }).click();
   const safeRow = page.getByRole("row").filter({ hasText: "Nora Newton" });
-  await expect(safeRow.getByRole("cell", { name: "3333333333", exact: true })).toBeVisible();
+  await expect(safeRow.getByRole("cell", { name: "3333333334", exact: true })).toBeVisible();
   await expect(safeRow.getByRole("cell", { name: "3", exact: true })).toHaveCount(3);
 
   await page.getByRole("button", { name: "Commit Changes", exact: true }).click();
@@ -633,7 +633,7 @@ test("P02: collapsing blocked rows preserves the wire exclusion and commits one 
   };
   expect(plan.updates).toEqual([]);
   expect(plan.creates).toHaveLength(1);
-  expect(plan.creates[0].provider.npi).toBe("3333333333");
+  expect(plan.creates[0].provider.npi).toBe("3333333334");
   expect(plan.creates[0].group_ids).toEqual([G1, G2, G3]);
   expect(plan.creates[0].facility_ids).toEqual([F1, F2, F3]);
   expect(plan.creates[0].licenses).toEqual([
@@ -646,7 +646,7 @@ test("P02: collapsing blocked rows preserves the wire exclusion and commits one 
     expect(entry.column).toBe("npi");
     expect(entry.reason).toMatch(/Multiple incoming NPIs.*same.*provider/i);
   }
-  const safeProvider = fixtures.providers.find((p) => p.npi === "3333333333");
+  const safeProvider = fixtures.providers.find((p) => p.npi === "3333333334");
   expect(safeProvider).toBeDefined();
   expect(fixtures.providers.find((p) => p.id === JANE_ID)?.npi).toBeNull();
   expect(fixtures.provider_group_assignments.filter((a) => a.provider_id === JANE_ID)).toEqual([]);
@@ -665,6 +665,8 @@ test("TS-61: preview summary + five-part dedupe (create / skip / multi-group upd
 }) => {
   const fixtures = baseFixtures();
   const wire: WireLog = { writes: [], commitCalls: [] };
+  // Jane's and Brooke's stored NPIs fail the CMS check digit on purpose
+  // (MINT-7): rows matched to them still skip/update; only new NPIs are checked.
   fixtures.providers = [
     provider({
       id: JANE_ID,
@@ -743,7 +745,7 @@ test("TS-61: preview summary + five-part dedupe (create / skip / multi-group upd
       credentials: "PT DPT",
       email: "nora.newton@example.test",
       phone: "9105550100",
-      npi: "1112223334",
+      npi: "1112223338",
       caqh_id: "12345678",
       caqh_last_attested_date: "2026-09-01",
       is_new_grad: "true",
@@ -872,7 +874,7 @@ test("TS-62: per-field conflict review blocks only its row; resolve + commit →
       credentials: "PT DPT",
       email: "nora.newton@example.test",
       phone: "9105550100",
-      npi: "1112223334",
+      npi: "1112223338",
       caqh_id: "12345678",
       caqh_last_attested_date: "2026-09-01",
       is_new_grad: "true",
@@ -957,7 +959,7 @@ test("TS-62: per-field conflict review blocks only its row; resolve + commit →
   expect(plan.updates[0].set).toEqual({});
 
   // Nora landed Pending Verification; Jane's specialty was NOT overwritten.
-  const nora = fixtures.providers.find((p) => p.npi === "1112223334");
+  const nora = fixtures.providers.find((p) => p.npi === "1112223338");
   expect(nora?.verification_state).toBe("pending_verification");
   expect(nora).toMatchObject({
     credentials: "PT DPT",

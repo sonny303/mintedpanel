@@ -31,7 +31,9 @@ export function normalizeNpi(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-export function isValidNpi(value: string): boolean {
+/** Length-only (10 digits after stripping) — the group Type 2 NPI rule. The
+ * provider NPI check digit lives in isValidNpi (src/lib/providerIdentity). */
+export function isTenDigitNpi(value: string): boolean {
   return normalizeNpi(value).length === 10;
 }
 
@@ -228,7 +230,7 @@ export function groupFormErrors(v: GroupFormValue): GroupFormErrors {
   if (!v.name.trim()) e.name = "Legal name is required";
   if (!v.tin.trim()) e.tin = "TIN is required";
   else if (!isValidTin(v.tin)) e.tin = "TIN must be 9 digits";
-  if (v.npiType2.trim() && !isValidNpi(v.npiType2)) e.npiType2 = "Type 2 NPI must be 10 digits";
+  if (v.npiType2.trim() && !isTenDigitNpi(v.npiType2)) e.npiType2 = "Type 2 NPI must be 10 digits";
   if (v.states.length === 0) e.states = "Select at least one operating state";
   if (v.websiteUrl.trim() && !isValidWebsiteUrl(v.websiteUrl)) {
     e.websiteUrl = "Enter a valid website URL";

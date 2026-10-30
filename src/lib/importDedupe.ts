@@ -1,4 +1,5 @@
 import { matchGroupLocator } from "@/lib/groupLocator";
+import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi } from "@/lib/providerIdentity";
 
 // E3.1 — the pure five-part dedupe / conflict-review / commit-plan core
 // (TE-3/TE-4). NO I/O: the service layer batch-reads the org's existing data
@@ -605,6 +606,21 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
           );
         }
       }
+      continue;
+    }
+
+    // MINT-7: the CMS check digit binds only a NEW identity — a new provider,
+    // or an NPI filled onto an existing provider with none. A row matched by
+    // NPI (above) keeps today's behavior, so re-importing a provider whose
+    // stored NPI predates the check never newly blocks.
+    if (!isValidNpi(npi)) {
+      ordered.push({
+        kind: "blocked",
+        line: row.line,
+        column: "npi",
+        displayName,
+        reason: NPI_CHECK_DIGIT_MESSAGE,
+      });
       continue;
     }
 

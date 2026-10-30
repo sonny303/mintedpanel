@@ -4,27 +4,11 @@ import {
   getRosterSourceValue,
   getRosterSourceFieldsForTarget,
   isSsnLast4,
-  isValidNpi,
   formatRosterDate,
   transformRosterValue,
 } from "./rosterTransforms";
 
 describe("roster transforms", () => {
-  it("checks the full ten digit NPI and CMS Luhn check digit", () => {
-    expect(isValidNpi("1234567893")).toBe(true);
-    expect(isValidNpi(" 1234567893 ")).toBe(true);
-    for (const value of [
-      "1234567890",
-      "123456789",
-      "12345678934",
-      "123-456-7893",
-      "abcdefghij",
-      null,
-    ]) {
-      expect(isValidNpi(value)).toBe(false);
-    }
-  });
-
   it("formats real calendar dates and rejects invalid or overflow dates", () => {
     expect(formatRosterDate("2024-02-29", "date_mm_dd_yyyy")).toBe("02/29/2024");
     expect(formatRosterDate("02/29/2024", "date_yyyy_mm_dd")).toBe("2024-02-29");
