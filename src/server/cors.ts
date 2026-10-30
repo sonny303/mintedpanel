@@ -6,9 +6,14 @@
 // CORS, so this allowlist mostly protects against random web pages; it must
 // still answer OPTIONS preflights because an Authorization header always
 // triggers one.
+import { REQUEST_ID_HEADER } from "./safeLog";
+
 const ALLOWED_METHODS = "GET, POST, PATCH, OPTIONS";
 const ALLOWED_HEADERS =
   "authorization, content-type, x-org-id, x-enrollment-audience, x-minted-context-revision";
+// Response headers a cross-origin caller may read: the correlation id of a
+// logged server fault (./safeLog.ts).
+const EXPOSED_HEADERS = REQUEST_ID_HEADER;
 
 function allowedOrigins(): Set<string> {
   const raw = process.env.API_CORS_ORIGINS ?? "";
@@ -47,6 +52,7 @@ export function withCors(response: Response, request: Request): Response {
   const origin = allowedOriginFor(request);
   if (!origin) return response;
   response.headers.set("access-control-allow-origin", origin);
+  response.headers.set("access-control-expose-headers", EXPOSED_HEADERS);
   response.headers.append("vary", "Origin");
   return response;
 }
