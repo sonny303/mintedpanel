@@ -331,9 +331,14 @@ before any schema work.
 - `20261015130000_fill_sessions_system_today_date.sql` — additive nullable
   `fill_sessions.system_today_date`; the service probes for the column and
   drops only the date when it is absent, so the apply can follow the merge.
+- `20261021120000_provider_enrollment_letter_documents.sql` — nullable
+  `provider_documents.payer_id` and `provider_enrollment_letter` in the
+  doc_type CHECK. Every document upload writes `payer_id`, so apply it before
+  deploying a `main` that includes #535. Object-verified on staging 2026-10-30
+  (ledger `20261030031732`); production unverified.
 - `20261025120000_provider_intake_invites.sql` — provider onboarding slice 1
-  (three token tables + seven RPCs). Not applied anywhere yet; staging first.
-  Verify: `pg_proc.proname = 'verify_intake_code'` exists, then run
+  (three token tables + seven RPCs). Applied on staging 2026-10-30 (ledger
+  `20261030031837`, smoke passed); production unverified. Verify: `pg_proc.proname = 'verify_intake_code'` exists, then run
   `scripts/sql/provider-intake-smoke.sql` (every RPC, rolled back).
 - `20261017120000_case_creation_primary_location.sql` — **needs PM
   sign-off.** `create_case_with_tasks` writes the primary `case_facilities`
