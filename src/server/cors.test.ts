@@ -61,10 +61,11 @@ describe("withCors", () => {
     expect(res.headers.get("vary")).toBeNull();
   });
 
-  it("attaches allow-origin + vary for an allowlisted origin", () => {
+  it("attaches allow-origin, expose-headers + vary for an allowlisted origin", () => {
     vi.stubEnv("API_CORS_ORIGINS", EXT_ORIGIN);
     const res = withCors(new Response("{}", { status: 200 }), request(EXT_ORIGIN, "GET"));
     expect(res.headers.get("access-control-allow-origin")).toBe(EXT_ORIGIN);
+    expect(res.headers.get("access-control-expose-headers")).toBe("x-request-id");
     expect(res.headers.get("vary")).toBe("Origin");
   });
 
@@ -75,6 +76,7 @@ describe("withCors", () => {
       request("https://evil.example", "GET"),
     );
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
+    expect(res.headers.get("access-control-expose-headers")).toBeNull();
     expect(res.headers.get("vary")).toBeNull();
   });
 });

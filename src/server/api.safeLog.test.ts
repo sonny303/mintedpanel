@@ -1,10 +1,13 @@
+import { format } from "node:util";
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import type { ApiEnvelope } from "./envelope";
 
-// MINT-30 / SEC-03 at the /api boundary. Only auth and the access-context
-// service are stubbed: the provider route, provider service and
-// translateDbError run for real, so an untranslated CHECK failure travels the
-// same path as in production, all the way to toErrorResponse.
+// MINT-30 / SEC-03 at the /api boundary. Only auth, the access-context
+// service and the browser Supabase client (absent env in CI) are stubbed: the
+// provider route, provider service and translateDbError run for real, so an
+// untranslated CHECK failure travels the same path as in production, all the
+// way to toErrorResponse.
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
 vi.mock("./guard", async () => {
   const actual = await vi.importActual<typeof import("./guard")>("./guard");
   return { ...actual, authenticate: vi.fn(), authenticateUser: vi.fn() };
@@ -67,12 +70,13 @@ afterEach(() => {
   for (const spy of consoleSpies) spy.mockRestore();
 });
 
+// Rendered the way Node prints it: util.format expands an Error's stack and an
+// object's fields, so a raw leak cannot hide behind "[object Object]" or
+// JSON.stringify(new Error()) === "{}".
 function consoleOutput(): string {
   return consoleSpies
     .flatMap((spy) => spy.mock.calls)
-    .map((args) =>
-      args.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg))).join(" "),
-    )
+    .map((args) => format(...args))
     .join("\n");
 }
 

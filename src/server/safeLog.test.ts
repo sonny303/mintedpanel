@@ -1,3 +1,4 @@
+import { format } from "node:util";
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 
 // src/server.ts lazy-imports this router for /api; mock it so the entry's own
@@ -6,17 +7,13 @@ vi.mock("./api", () => ({ handleApiRequest: vi.fn() }));
 
 import { handleApiRequest } from "./api";
 import serverEntry from "../server";
-import {
-  describeError,
-  logServerError,
-  REQUEST_ID_HEADER,
-  requestSite,
-  routeTemplate,
-} from "./safeLog";
+import { describeError } from "@/lib/errorIdentifiers";
+import { logServerError, REQUEST_ID_HEADER, requestSite, routeTemplate } from "./safeLog";
 
 // SEC-03 sentinels: none of these may ever reach a production log line.
 const SENTINELS = ["1961-04-12", "742 Evergreen Terrace", "AB1234563"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const LEVELS = ["error", "warn", "info", "log", "debug"] as const;
 
 // A PostgREST CHECK failure as supabase-js returns it: a plain object, not an
 // Error, with the rejected row in `details`. The message and hint carry the
@@ -30,19 +27,28 @@ const PG_CHECK_ERROR = {
   hint: "742 Evergreen Terrace",
 };
 
-let errorSpy: MockInstance<(...args: unknown[]) => void>;
+let spies: Record<(typeof LEVELS)[number], MockInstance<(...args: unknown[]) => void>>;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("DEV", false);
-  errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  spies = {} as typeof spies;
+  for (const level of LEVELS) {
+    spies[level] = vi.spyOn(console, level).mockImplementation(() => {});
+  }
 });
 afterEach(() => {
   vi.unstubAllEnvs();
-  errorSpy.mockRestore();
+  for (const spy of Object.values(spies)) spy.mockRestore();
 });
 
+// Every console level, rendered the way Node prints it: util.format expands
+// an Error's stack and an object's fields, so a raw leak cannot hide behind
+// "[object Object]" or JSON.stringify(new Error()) === "{}".
 function logged(): string {
-  return errorSpy.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+  return Object.values(spies)
+    .flatMap((spy) => spy.mock.calls)
+    .map((args) => format(...args))
+    .join("\n");
 }
 
 describe("describeError", () => {
@@ -78,7 +84,7 @@ describe("describeError", () => {
 });
 
 describe("routeTemplate / requestSite", () => {
-  it("keeps static route words and collapses ids and caller text", () => {
+  it("keeps known route words and collapses ids and caller text", () => {
     expect(routeTemplate("/api/providers/5b2c0e4e-0000-4000-a000-000000000001/profile")).toBe(
       "/api/providers/:param/profile",
     );
@@ -86,6 +92,11 @@ describe("routeTemplate / requestSite", () => {
     expect(routeTemplate("/api/rosters/mappings/m1/preview")).toBe(
       "/api/rosters/mappings/:param/preview",
     );
+  });
+
+  it("collapses a lowercase slug in an id slot, not only ids with digits", () => {
+    expect(routeTemplate("/api/providers/jane-doe")).toBe("/api/providers/:param");
+    expect(routeTemplate("/api/intake/evergreen")).toBe("/api/intake/:param");
   });
 
   it("never carries the query string", () => {
@@ -103,8 +114,8 @@ describe("logServerError", () => {
       route: "/api/providers",
     });
     expect(requestId).toMatch(UUID_RE);
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    const [scope, line, ...rest] = errorSpy.mock.calls[0];
+    expect(spies.error).toHaveBeenCalledTimes(1);
+    const [scope, line, ...rest] = spies.error.mock.calls[0];
     expect(scope).toBe("[api] internal error");
     expect(rest).toEqual([]);
     expect(JSON.parse(line as string)).toEqual({
@@ -122,7 +133,7 @@ describe("logServerError", () => {
     vi.stubEnv("DEV", true);
     const error = new Error("dev-only detail");
     logServerError("[api] internal error", error, { method: "GET", route: "/api/providers" });
-    expect(errorSpy.mock.calls[0][2]).toBe(error);
+    expect(spies.error.mock.calls[0][2]).toBe(error);
   });
 });
 

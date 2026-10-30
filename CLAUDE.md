@@ -161,8 +161,11 @@ other throw becomes a generic 500 and one log line from `safeLog.ts`. The line
 holds allowlisted identifiers only: SQLSTATE, the constraint name, the error
 class, the route template, the method and a `crypto.randomUUID()` correlation
 id. It never holds a message, details, hint or stack, except under `vite dev`.
-The 500 carries the same id in an `x-request-id` header. The id is not in the
-envelope, because that would be a wire change (TD-55).
+The 500 carries the same id in an `x-request-id` header, which CORS exposes.
+The id is not in the envelope, because that would be a wire change (TD-55).
+Route segments outside `safeLog.ts`'s `ROUTE_WORDS` log as `:param`. The SSR
+paths (`src/server.ts`, the `src/start.ts` middleware, the root error boundary
+via `@/lib/errorIdentifiers`) log the same identifiers.
 
 **Guard:** `authenticate()` verifies the JWT, resolves membership
 (`x-org-id` header or `?orgId` — **required** for multi-org callers; omitting

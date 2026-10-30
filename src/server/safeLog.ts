@@ -6,26 +6,89 @@
 // with PHI included, and its `message` can quote an input back ("invalid input
 // syntax for type date: ..."). So a thrown value is never logged as it is.
 // Each fault becomes one JSON line of identifiers that cannot carry row data:
-// the SQLSTATE, the violated constraint's name (read from `message`, never
-// `details`), the error class, the route template and method, and a
-// correlation id that the client also receives as `x-request-id`.
+// the SQLSTATE, constraint name and error class (@/lib/errorIdentifiers), the
+// route template and method, and a correlation id that the client also
+// receives as `x-request-id`.
 //
 // A dev server (`import.meta.env.DEV`) also passes the raw error, so a local
 // stack trace survives. Production builds compile that branch out.
+import { describeError, type ErrorIdentifiers } from "@/lib/errorIdentifiers";
 
 export const REQUEST_ID_HEADER = "x-request-id";
 
-// A Postgres SQLSTATE (5 characters) or a PostgREST PGRSTnnn code.
-const ERROR_CODE_RE = /^(?:[0-9A-Z]{5}|PGRST\d{3})$/;
-// Postgres names the constraint in the primary message of a class-23
-// (integrity) violation. Only a lowercase identifier is accepted; every
-// constraint in supabase/migrations is one.
-const CONSTRAINT_RE =
-  /violates (?:check|unique|foreign key|exclusion) constraint "([a-z_][a-z0-9_]{0,62})"/;
-const CLASS_NAME_RE = /^[A-Za-z_$][\w$]{0,63}$/;
-// A path segment is logged only when it is a static lowercase route word. Ids,
-// tokens and anything else a caller typed collapse to `:param`.
-const ROUTE_WORD_RE = /^[a-z][a-z-]{0,39}$/;
+// The static words of the /api routes (api.ts and the route modules it
+// dispatches to). A path segment is logged only when it is one of these. Ids,
+// slugs and anything else a caller typed collapse to `:param`, and so does a
+// word missing here: the list fails safe.
+const ROUTE_WORDS: ReadonlySet<string> = new Set([
+  "api",
+  "access-context",
+  "batch-learn",
+  "caqh-attestation",
+  "cases",
+  "catalog",
+  "claim",
+  "client-access",
+  "client-invites",
+  "code",
+  "context",
+  "contracts",
+  "documents",
+  "download",
+  "enrollment-explorer",
+  "export",
+  "exports",
+  "fill-events",
+  "finalize",
+  "form-context",
+  "groups",
+  "health",
+  "history",
+  "intake",
+  "internal",
+  "link",
+  "mappings",
+  "me",
+  "next-best-action",
+  "orgs",
+  "overrides",
+  "page",
+  "payer-forms",
+  "portal-field-maps",
+  "portals",
+  "preview",
+  "products",
+  "profile",
+  "proofs",
+  "prove",
+  "provider-invites",
+  "providers",
+  "publications",
+  "report",
+  "report.csv",
+  "resend",
+  "revoke",
+  "rosters",
+  "scopes",
+  "select",
+  "session",
+  "shared-field-maps",
+  "shared-portals",
+  "shared-test-fills",
+  "signout",
+  "ssn-release",
+  "steps",
+  "summary",
+  "targets",
+  "tasks",
+  "templates",
+  "touches",
+  "unresolved",
+  "upload-intent",
+  "validate",
+  "view-prefs",
+  "work-context",
+]);
 const METHOD_RE = /^[A-Z]{1,10}$/;
 const MAX_ROUTE_SEGMENTS = 12;
 
@@ -34,16 +97,13 @@ export interface ErrorLogSite {
   route: string;
 }
 
-export interface SafeErrorLog extends ErrorLogSite {
+export interface SafeErrorLog extends ErrorLogSite, ErrorIdentifiers {
   requestId: string;
-  errorClass: string;
-  sqlstate?: string;
-  constraint?: string;
 }
 
 export function routeTemplate(pathname: string): string {
   const segments = pathname.split("/").filter(Boolean).slice(0, MAX_ROUTE_SEGMENTS);
-  return `/${segments.map((s) => (ROUTE_WORD_RE.test(s) ? s : ":param")).join("/")}`;
+  return `/${segments.map((s) => (ROUTE_WORDS.has(s) ? s : ":param")).join("/")}`;
 }
 
 /** A request reduced to its method and route template; never the query. */
@@ -52,32 +112,6 @@ export function requestSite(request: Request): ErrorLogSite {
   return {
     method: METHOD_RE.test(method) ? method : "OTHER",
     route: routeTemplate(new URL(request.url).pathname),
-  };
-}
-
-function errorClassOf(error: unknown): string {
-  if (error === null) return "null";
-  if (typeof error !== "object") return typeof error;
-  const name = (error as { constructor?: { name?: unknown } }).constructor?.name;
-  return typeof name === "string" && CLASS_NAME_RE.test(name) ? name : "Object";
-}
-
-/** The allowlisted identifiers of a thrown value. Never its text. */
-export function describeError(
-  error: unknown,
-): Pick<SafeErrorLog, "errorClass" | "sqlstate" | "constraint"> {
-  const errorClass = errorClassOf(error);
-  if (typeof error !== "object" || error === null) return { errorClass };
-  const { code, message } = error as { code?: unknown; message?: unknown };
-  const sqlstate = typeof code === "string" && ERROR_CODE_RE.test(code) ? code : undefined;
-  const constraint =
-    sqlstate?.startsWith("23") && typeof message === "string"
-      ? CONSTRAINT_RE.exec(message)?.[1]
-      : undefined;
-  return {
-    errorClass,
-    ...(sqlstate ? { sqlstate } : {}),
-    ...(constraint ? { constraint } : {}),
   };
 }
 
