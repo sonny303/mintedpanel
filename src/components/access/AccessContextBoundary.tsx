@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { LogOut, ShieldCheck } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
 import type { EnrollmentClientOrg, EnrollmentStaffOrg } from "@/services/clientAccess";
@@ -225,10 +225,11 @@ function ClientContextSurface({
             Sign out
           </button>
         </div>
-        <h1 className="mt-4 text-[17px] font-semibold">Client access context ready</h1>
+        <h1 className="mt-4 text-[17px] font-semibold">
+          This page isn't available with client access
+        </h1>
         <p className="mt-2 text-[13px] text-muted-foreground">
-          Access is limited to the verified organization and provider groups below. The report
-          surface is enabled by the later enrollment explorer slice.
+          Client access covers the Reporting Center for the organization and provider groups below.
         </p>
         <div className="mt-5 rounded-md border border-border bg-muted/40 p-4">
           <div className="text-[13px] font-semibold">{selected.orgName}</div>
@@ -243,6 +244,9 @@ function ClientContextSurface({
             ))}
           </div>
         </div>
+        <Button asChild className="mt-5 h-9">
+          <Link to="/reporting">Open Reporting Center</Link>
+        </Button>
         {canSwitchToStaff ? (
           <div className="mt-5">
             <div className="text-[12px] font-semibold text-muted-foreground">
@@ -266,6 +270,18 @@ function ClientContextSurface({
       </div>
     </BoundaryFrame>
   );
+}
+
+/** A client audience has no home page of its own: "/" lands on the Reporting
+ * Center, the one surface the E6.12 fence gives it an outlet for. Any other
+ * fenced path keeps its card, one click from the same place. */
+function ClientLanding({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  const isLanding = useRouterState({ select: (state) => state.location.pathname === "/" });
+  useEffect(() => {
+    if (isLanding) void navigate({ to: "/reporting", replace: true });
+  }, [isLanding, navigate]);
+  return isLanding ? <LoadingState /> : <>{children}</>;
 }
 
 function ClientReportSurface({
@@ -406,11 +422,13 @@ export function AccessContextBoundary({
   }
   if (hasClient && (context.audience === "client" || context.restrictedExternal)) {
     return (
-      <ClientContextSurface
-        orgs={context.clientOrgs}
-        canSwitchToStaff={hasStaff && !context.restrictedExternal}
-        staffOrgs={context.staffOrgs}
-      />
+      <ClientLanding>
+        <ClientContextSurface
+          orgs={context.clientOrgs}
+          canSwitchToStaff={hasStaff && !context.restrictedExternal}
+          staffOrgs={context.staffOrgs}
+        />
+      </ClientLanding>
     );
   }
   if (context.restrictedExternal) {
