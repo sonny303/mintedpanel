@@ -76,7 +76,7 @@ import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddT
 import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import { isValidEmail } from "@/lib/contactValidation";
-import { isValidNpi } from "@/lib/providerGroup";
+import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi } from "@/lib/providerIdentity";
 import { hasValidLicenseDateOrder, LICENSE_DATE_ORDER_ERROR } from "@/lib/licenseDates";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -419,7 +419,11 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
           key: "npi",
           value: provider.npi ?? null,
           mono: true,
-          validate: (v) => (isValidNpi(v) ? null : "NPI is 10 digits."),
+          // Runs only when the NPI changed (see save) — MINT-7 check digit.
+          validate: (v) => {
+            if (!/^\d{10}$/.test(v)) return "NPI is 10 digits.";
+            return isValidNpi(v) ? null : NPI_CHECK_DIGIT_MESSAGE;
+          },
         },
         { label: "CAQH ID", key: "caqhId", value: provider.caqhId ?? null, mono: true },
         { label: "Specialty", key: "specialty", value: provider.specialty ?? null },

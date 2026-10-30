@@ -63,6 +63,14 @@ describe("isValidDea", () => {
     expect(isValidDea("MQ1234563")).toBe(true);
   });
 
+  it("accepts 9 as the second character (business and mid-level registrants)", () => {
+    expect(isValidDea("A91234563")).toBe(true);
+    expect(isValidDea("m91234563")).toBe(true);
+    expect(deaProblem("A91234564")).toBe("check_digit");
+    expect(deaProblem("9A1234563")).toBe("format");
+    expect(deaProblem("A81234563")).toBe("format");
+  });
+
   it("reports a wrong check digit separately from a bad shape", () => {
     expect(deaProblem("AB1234564")).toBe("check_digit");
     expect(deaProblem("AB123456")).toBe("format");

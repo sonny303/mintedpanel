@@ -10,7 +10,7 @@ import {
   groupFormErrors,
   groupToFormValue,
   hasGroupFormErrors,
-  isValidNpi,
+  isTenDigitNpi,
   isValidTin,
   normalizeTin,
   type GroupFormValue,
@@ -53,10 +53,10 @@ describe("TIN / NPI format helpers", () => {
   });
 
   it("validates Type 2 NPI as exactly 10 digits", () => {
-    expect(isValidNpi("1234567890")).toBe(true);
-    expect(isValidNpi("123-456-7890")).toBe(true);
-    expect(isValidNpi("123456789")).toBe(false);
-    expect(isValidNpi("12345678901")).toBe(false);
+    expect(isTenDigitNpi("1234567890")).toBe(true);
+    expect(isTenDigitNpi("123-456-7890")).toBe(true);
+    expect(isTenDigitNpi("123456789")).toBe(false);
+    expect(isTenDigitNpi("12345678901")).toBe(false);
   });
 });
 

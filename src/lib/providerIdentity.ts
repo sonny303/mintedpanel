@@ -1,16 +1,19 @@
 // Provider identity rules (MINT-7 / audit CRUD-01): the ONE implementation of
 // the NPI check digit, the DEA checksum, and the strict ISO calendar-date
-// check. Pure and I/O-free; the Add Provider form, the roster form, the CSV
-// import scans, and roster export all call these instead of re-declaring
-// regexes. Blank-value policy stays with each caller (NPI is optional on Add
-// Provider, required on the roster form and the provider import).
+// check. Pure and I/O-free; the Add Provider form, the roster form, the
+// provider record's inline edit, the import dedupe (new identities only), and
+// roster export call these instead of re-declaring regexes. Blank-value policy
+// stays with each caller (NPI is optional on Add Provider, required on the
+// roster form and the provider import).
 
 const NPI_DIGITS_RE = /^\d{10}$/;
-const DEA_RE = /^[A-Z]{2}\d{7}$/i;
+// Second character: the registrant's last-name/business initial, or 9 (business
+// and mid-level registrants). No first-letter allowlist.
+const DEA_RE = /^[A-Z][A-Z9]\d{7}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const NPI_CHECK_DIGIT_MESSAGE = "NPI check digit is invalid — re-check the number";
-export const DEA_FORMAT_MESSAGE = "DEA must be 2 letters followed by 7 digits";
+export const DEA_FORMAT_MESSAGE = "DEA must be a letter, then a letter or 9, then 7 digits";
 export const DEA_CHECK_DIGIT_MESSAGE = "DEA check digit is invalid — re-check the number";
 
 /** The NPI check digit for its first nine digits: Luhn over the CMS `80840`
@@ -44,10 +47,10 @@ export function isValidNpi(value: unknown): boolean {
 
 export type DeaProblem = "format" | "check_digit";
 
-/** Why a DEA number fails, or null when it passes: 2 letters + 7 digits, and
- * the 7th digit equals the last digit of (d1 + d3 + d5) + 2 × (d2 + d4 + d6).
- * The second letter is NOT matched to the registrant's last name (open PM
- * question), so any two letters pass the format. */
+/** Why a DEA number fails, or null when it passes: a letter, a letter or 9,
+ * then 7 digits whose 7th equals the last digit of
+ * (d1 + d3 + d5) + 2 × (d2 + d4 + d6). The second character is NOT matched to
+ * the registrant's last name (open PM question). */
 export function deaProblem(value: unknown): DeaProblem | null {
   if (typeof value !== "string") return "format";
   const dea = value.trim();

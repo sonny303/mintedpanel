@@ -996,3 +996,48 @@ test("MINT-7: Add Provider blocks a wrong NPI check digit inline; the corrected 
   expect(createWrites).toHaveLength(1);
   expect((createWrites[0].body as Record<string, unknown>).npi).toBe("1234567893");
 });
+
+test("MINT-7: record inline edit checks only a changed NPI's check digit", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  // The stored NPI (1093817465) fails the CMS check digit on purpose.
+  const { handler, requests } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+  const providerPatches = () =>
+    requests.filter((request) => request.method === "PATCH" && request.path === "providers");
+
+  await page.goto("/providers/pr-brooke");
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
+
+  // Unchanged legacy NPI: an unrelated edit still saves.
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByLabel("Phone", { exact: true }).fill("252-555-0142");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
+  expect(providerPatches().map((request) => request.body)).toEqual([{ phone: "252-555-0142" }]);
+
+  // A changed NPI with a wrong check digit is an inline error and no write.
+  await page.getByRole("button", { name: "Edit details" }).click();
+  const npi = page.locator("#identity-npi");
+  await npi.fill("1234567890");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("alert")).toContainText("NPI check digit is invalid");
+  expect(providerPatches()).toHaveLength(1);
+
+  await npi.fill("1234567893");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible({
+    timeout: 15000,
+  });
+  expect(providerPatches().map((request) => request.body)).toEqual([
+    { phone: "252-555-0142" },
+    { npi: "1234567893" },
+  ]);
+});
