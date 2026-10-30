@@ -227,7 +227,9 @@ describe("handleApiRequest error handling — 500 for internal faults, no mask, 
     const b = await body(res);
     expect(b.error).toBe("Internal server error");
     expect(JSON.stringify(b)).not.toContain("kaboom");
-    // the real error is logged server-side, not returned to the caller
+    // Vitest runs as a dev server, so the raw error is passed to the log and
+    // never to the caller. Production logs carry identifiers only; that
+    // contract is pinned in api.safeLog.test.ts.
     expect(errorSpy.mock.calls.flat().join(" ")).toContain("kaboom");
   });
 

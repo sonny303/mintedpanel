@@ -1,5 +1,6 @@
 import { fail, ok } from "./envelope";
 import { GuardError, type UserContext } from "./guard";
+import { logServerError, withRequestId, type ErrorLogSite } from "./safeLog";
 import {
   claimClientInvite,
   createClientInvite,
@@ -38,7 +39,18 @@ function groupIdsValue(body: Record<string, unknown>): string[] | null {
   return groupIds.length > 0 && groupIds.every((id) => UUID_RE.test(id)) ? groupIds : null;
 }
 
-function rpcFailure(error: unknown): Response {
+// The handlers receive no Request and each serves exactly one route, so the
+// log site for an unmapped RPC failure is named here.
+const SITES = {
+  getContext: { method: "GET", route: "/api/me/access-context" },
+  selectContext: { method: "POST", route: "/api/me/access-context/select" },
+  claimInvite: { method: "POST", route: "/api/me/client-invites/claim" },
+  createInvite: { method: "POST", route: "/api/internal/client-invites" },
+  setGroups: { method: "PUT", route: "/api/internal/client-access/:param/groups" },
+  revoke: { method: "POST", route: "/api/internal/client-access/:param/revoke" },
+} satisfies Record<string, ErrorLogSite>;
+
+function rpcFailure(error: unknown, site: ErrorLogSite): Response {
   const raw = error instanceof Error ? error.message : "";
   const message = raw.toLowerCase();
   if (message.includes("not authenticated") || message.includes("verified actor")) {
@@ -69,8 +81,8 @@ function rpcFailure(error: unknown): Response {
   ) {
     return fail(422, "The access request is invalid");
   }
-  console.error("[client-access] RPC failure:", error);
-  return fail(500, "Access request failed");
+  const requestId = logServerError("[client-access] RPC failure", error, site);
+  return withRequestId(fail(500, "Access request failed"), requestId);
 }
 
 function withRevision(response: Response, revision: string): Response {
@@ -95,7 +107,7 @@ export async function handleGetAccessContext(user: UserContext): Promise<Respons
     const context = await resolveEnrollmentContext({ db: user.db, actorUserId: user.userId });
     return withRevision(ok(context), context.contextRevision);
   } catch (error) {
-    return rpcFailure(error);
+    return rpcFailure(error, SITES.getContext);
   }
 }
 
@@ -130,7 +142,7 @@ export async function handleSelectAccessContext(
     }
     return withRevision(ok(context), context.contextRevision);
   } catch (error) {
-    return rpcFailure(error);
+    return rpcFailure(error, SITES.selectContext);
   }
 }
 
@@ -143,7 +155,7 @@ export async function handleClaimClientInvite(body: unknown, user: UserContext):
     const result = await claimClientInvite({ db: user.db, actorUserId: user.userId }, token);
     return await mutationResponse(result, user);
   } catch (error) {
-    return rpcFailure(error);
+    return rpcFailure(error, SITES.claimInvite);
   }
 }
 
@@ -170,7 +182,7 @@ export async function handleCreateClientInvite(
       : undefined;
     return await mutationResponse({ ...result, ...(inviteUrl ? { inviteUrl } : {}) }, user, 201);
   } catch (error) {
-    return rpcFailure(error);
+    return rpcFailure(error, SITES.createInvite);
   }
 }
 
@@ -190,7 +202,7 @@ export async function handleSetClientGroupGrants(
     );
     return await mutationResponse(result, user);
   } catch (error) {
-    return rpcFailure(error);
+    return rpcFailure(error, SITES.setGroups);
   }
 }
 
@@ -207,6 +219,6 @@ export async function handleRevokeClientAccess(
     const result = await revokeClientAccess({ db: user.db, actorUserId: user.userId }, accessId);
     return await mutationResponse(result, user);
   } catch (error) {
-    return rpcFailure(error);
+    return rpcFailure(error, SITES.revoke);
   }
 }

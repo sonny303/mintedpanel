@@ -156,6 +156,14 @@ file-based server routes. Unknown `/api/*` is a JSON 404, not SSR. Keep the
 List meta carries `{ total, page, pageSize }`; `meta.notes` carries non-fatal
 resolution notes.
 
+**Errors:** a `GuardError` passes through with its own status and message. Any
+other throw becomes a generic 500 and one log line from `safeLog.ts`. The line
+holds allowlisted identifiers only: SQLSTATE, the constraint name, the error
+class, the route template, the method and a `crypto.randomUUID()` correlation
+id. It never holds a message, details, hint or stack, except under `vite dev`.
+The 500 carries the same id in an `x-request-id` header. The id is not in the
+envelope, because that would be a wire change (TD-55).
+
 **Guard:** `authenticate()` verifies the JWT, resolves membership
 (`x-org-id` header or `?orgId` — **required** for multi-org callers; omitting
 it is a loud 400, never a guess), and returns a ctx scoped to that org with a
