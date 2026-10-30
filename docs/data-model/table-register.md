@@ -54,6 +54,7 @@ routes, lib). RPC-mediated tables note the RPC.
 | memberships | tenant | core | 6 | the M:N house pattern |
 | profiles | tenant | core | 8 | mirrors `auth.users`; 2026-08-16 gained `first_name`/`last_name`/`title` (edited on `/account`, source of truth for `{{user.*}}`) — `full_name` retained as a frozen mirror, never backfilled by splitting |
 | pending_invites | tenant | support | 1 + `claim_invites` RPC | RPC-mediated by design |
+| platform_admins | tenant | core | 0 + `grant_platform_admin` / `revoke_platform_admin` RPCs | Mission Control M1 (`20261030180000`): one row per Minted operator who works across organizations; `revoked_at` soft-revokes, history lives in `admin_audit_log`. Authenticated SELECT of the caller's own row only (`mc_platform_admins_select_self`); no client write grant or policy. Read through `is_platform_admin()`. First row is an operator insert (`docs/ops/mission-control-bootstrap.md`). Not org-scoped by design. |
 | party_capture_links | tenant | support | 1 | one-time owner capture links (E0.5); org-scoped; token stored as hash only |
 | inbound_leads | tenant | support | 1 | public contact-us leads (E0.5); intentionally NOT org-scoped (leads pre-date any org) |
 | report_shares | tenant | support | 1 | tokenized read-only portfolio/report shares (E0.6); scoped by `created_by = auth.uid()` |
@@ -100,6 +101,7 @@ routes, lib). RPC-mediated tables note the RPC.
 | denial_reason_codes | party | support | 1 | E4.0 TE-4 governed denial/return reason vocabulary (`20260715120200`); `org_id NULL` = global default (six seeded), non-NULL = org-added; **E4.2 F4.2.3 CRUD now built** (`denialReasonCodes.ts` — add/deactivate org codes; global defaults non-deletable and non-deactivatable by orgs); `UNIQUE NULLS NOT DISTINCT (org_id, code)`; member SELECT (global + own-org), admin INSERT/UPDATE; deactivate (`active=false`), never delete, so history references never dangle |
 | communication_event | ledger | support | 2 | batch-call parent |
 | audit_log | ledger | core | 2 + RPC writes | append-only, immutable |
+| admin_audit_log | ledger | core | 0 + RPC writes | Mission Control M1 (`20261030180000`): the platform-scoped ledger beside `audit_log` (whose `org_id` is NOT NULL). `actor_user_id` NOT NULL, `org_id` nullable, dotted `action` (`platform_admin.grant`, `platform_admin.revoke`; later `org.*`, `membership.*`, `user.*`), `before`/`after` jsonb. Platform-admin SELECT only; authenticated holds SELECT and nothing else; written inside SECURITY DEFINER RPCs or by the service role. Append-only, never updated or deleted. |
 | notes | ledger | frozen-mirror (case/task) / support (provider) | 1 | case/task rows migrated to `touches` (2026-07-07); still the live store for provider notes |
 | notes_pre_touchlog_backup | ledger | dormant | 0 | migration backup |
 | launches | work | dead | 0 | replaced by facilities location track; only inbound ref is the dead `providers.launch_id` |
