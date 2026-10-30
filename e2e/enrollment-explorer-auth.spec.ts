@@ -152,6 +152,9 @@ async function installMockNetwork(browserContext: BrowserContext, state: Fixture
     }
     if (url.pathname.includes("/auth/v1/")) return json(route, SESSION());
     if (url.pathname.endsWith("/rpc/claim_invites")) return json(route, 0);
+    // Mission Control: every sign-in also asks is_platform_admin(); this
+    // fixture's actor is never one, and the call is not a table read.
+    if (url.pathname.endsWith("/rpc/is_platform_admin")) return json(route, false);
 
     const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
     state.seenTables.push(table);

@@ -1,11 +1,14 @@
 // Six-item sidebar (redesign E6.1 F6.1.1 — the epic's authorized
 // src/components/layout/* edit, superseding the E0.9/E4.2 IA v2 nav).
 //
-// Exactly six primary items, mirroring the four journeys:
+// Six primary items for every user, mirroring the four journeys, plus a
+// seventh for platform admins only:
 //   Workspace zone (cross-org): Cases (the merged F6.1.3 surface + open-case
 //   count chip) · Payer Setup (→ /admin/payer-admin, visible to ALL roles per
 //   the interim two-trusted-users posture; needs-attention chip = the drift
-//   deck size until E6.5's derivation supersedes it) · Reporting Center.
+//   deck size until E6.5's derivation supersedes it) · Reporting Center ·
+//   Mission Control (→ /mission-control, rendered ONLY when the auth store's
+//   isPlatformAdmin is true; unspecced, logged in DESIGN-DEBT.md).
 //   Org zone (below the org switcher tile): Org Detail · Groups · Providers.
 // NO Admin section exists for any role — MSO Routing, Statuses, Data Import,
 // and Settings are retired per their owning epics (F6.1.6 redirect table);
@@ -34,7 +37,7 @@ import { useAuthStore, useActiveMembership, type MembershipEntry } from "@/lib/a
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { useFormDrift } from "@/hooks/useFormDrift";
-import { ROLE_LABELS } from "@/lib/permissions";
+import { ROLE_LABELS, usePlatformAdmin } from "@/lib/permissions";
 // The approved white layered-jack mark (E1.0 F1.0.4 / TE-8), copied from
 // docs/redesign/design-system/design-system-reference/assets/logo-white.png —
 // pinned untouched by E6.1 F6.1.1 (the decision-mock gradient square is a
@@ -54,6 +57,7 @@ import {
   Search,
   Settings,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 
 type Icon = typeof FolderKanban;
@@ -147,6 +151,7 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
+  const isPlatformAdmin = usePlatformAdmin();
   const openCases = useOpenCaseCount();
   // E6.5 F6.5.4 — the chip is DRIFT-ONLY now: mappings the last real fill
   // couldn't find on the live page (the one repair signal), derived from two
@@ -218,7 +223,8 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
         </button>
       </div>
 
-      {/* Workspace — the three cross-org journey entries (F6.1.1) */}
+      {/* Workspace — the three cross-org journey entries (F6.1.1), plus
+          Mission Control for platform admins */}
       <div className="px-3 pt-1.5">
         <div className={sectionLabelClass}>Workspace</div>
         <nav className="space-y-0.5" aria-label="Workspace">
@@ -237,6 +243,9 @@ export function Sidebar({ onNavigate, onOpenSearch }: SidebarProps) {
             ) : undefined,
           )}
           {renderNavItem({ to: "/reporting", label: "Reporting Center", icon: BarChart3 })}
+          {isPlatformAdmin === true
+            ? renderNavItem({ to: "/mission-control", label: "Mission Control", icon: ShieldCheck })
+            : null}
         </nav>
       </div>
 

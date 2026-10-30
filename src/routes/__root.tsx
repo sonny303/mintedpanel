@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
-  Link,
   createRootRouteWithContext,
   useRouter,
   useRouterState,
@@ -14,31 +13,11 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/layout/AppShell";
 import { NoOrgScreen } from "@/components/org/NoOrgScreen";
+import { NotFoundView } from "@/components/NotFoundView";
 import { AccessContextBoundary } from "@/components/access/AccessContextBoundary";
 import { useAuthStore, registerQueryClient } from "@/lib/auth-store";
+import { isMissionControlPath } from "@/lib/missionControl";
 import { Toaster } from "@/components/ui/sonner";
-
-function NotFoundComponent() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
@@ -124,7 +103,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   }),
   shellComponent: RootShell,
   component: RootComponent,
-  notFoundComponent: NotFoundComponent,
+  notFoundComponent: NotFoundView,
   errorComponent: ErrorComponent,
 });
 
@@ -187,6 +166,13 @@ function RootComponent() {
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const accessContext = useAuthStore((s) => s.accessContext);
+  const isPlatformAdmin = useAuthStore((s) => s.isPlatformAdmin);
+  // Mission Control: a platform admin may belong to no organization and must
+  // still reach /mission-control*. Only those paths, and only a known platform
+  // admin, skip the first-run screen; the pages self-guard and run no
+  // org-scoped hook. Everywhere else zero memberships still means NoOrgScreen.
+  const isOrgLessMissionControl =
+    memberships.length === 0 && isPlatformAdmin === true && isMissionControlPath(pathname);
   const isRestrictedReportingPath =
     pathname === "/reporting" ||
     pathname === "/reporting/" ||
@@ -250,7 +236,7 @@ function RootComponent() {
         >
           {isRootRoute && session ? (
             <AuthenticatedHome />
-          ) : memberships.length === 0 ? (
+          ) : memberships.length === 0 && !isOrgLessMissionControl ? (
             // Signed in but part of no org yet — bootstrap the first org before the
             // app shell (which mounts org-scoped hooks) ever renders.
             <NoOrgScreen />
@@ -276,10 +262,21 @@ function AuthenticatedHome() {
   const context = useAuthStore((state) => state.accessContext);
   const activeOrgId = useAuthStore((state) => state.activeOrgId);
   const memberships = useAuthStore((state) => state.memberships);
+  const isPlatformAdmin = useAuthStore((state) => state.isPlatformAdmin);
   const setActiveOrg = useAuthStore((state) => state.setActiveOrg);
 
   useEffect(() => {
     if (!context) return;
+    if (context.staffOrgs.length === 0 && memberships.length === 0) {
+      // No organization: a platform admin works in Mission Control rather than
+      // on the first-run screen. Wait until the flag has loaded (it commits
+      // together with memberships) instead of guessing.
+      if (isPlatformAdmin === null) return;
+      if (isPlatformAdmin) {
+        void router.navigate({ to: "/mission-control", replace: true });
+        return;
+      }
+    }
     if (context.staffOrgs.length === 0) {
       // Preserve the existing first-run/all-inactive landing. A genuinely
       // org-less verified trainer still keeps its global API capability, but
@@ -303,7 +300,7 @@ function AuthenticatedHome() {
     if (!orgId) return;
     setActiveOrg(orgId);
     void router.navigate({ to: "/cases", replace: true });
-  }, [activeOrgId, context, memberships, router, setActiveOrg]);
+  }, [activeOrgId, context, isPlatformAdmin, memberships, router, setActiveOrg]);
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-background text-[13px] text-muted-foreground">

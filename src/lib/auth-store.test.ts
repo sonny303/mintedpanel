@@ -371,3 +371,81 @@ describe("auth-store access context lifecycle", () => {
     expect(getLastContextRefreshTime()).toBe(0);
   });
 });
+
+describe("auth-store platform-admin flag", () => {
+  function mockMembershipReads(rows: unknown[] = []) {
+    vi.mocked(supabase.from).mockImplementation(
+      () =>
+        ({
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          maybeSingle: async () => ({ data: { full_name: "Platform User" }, error: null }),
+          then: (resolve: (value: unknown) => unknown) =>
+            Promise.resolve({ data: rows, error: null }).then(resolve),
+        }) as never,
+    );
+  }
+
+  function mockRpc(isPlatformAdmin: () => Promise<unknown>) {
+    vi.mocked(supabase.rpc).mockImplementation(((name: string) =>
+      name === "is_platform_admin"
+        ? isPlatformAdmin()
+        : Promise.resolve({ data: 0, error: null })) as never);
+  }
+
+  beforeEach(() => {
+    useAuthStore.setState({ isPlatformAdmin: null, authGeneration: 0 });
+  });
+
+  it("loads true alongside memberships, even with zero memberships", async () => {
+    mockMembershipReads([]);
+    mockRpc(() => Promise.resolve({ data: true, error: null }));
+
+    await useAuthStore.getState().loadMemberships();
+
+    expect(supabase.rpc).toHaveBeenCalledWith("is_platform_admin");
+    expect(useAuthStore.getState()).toMatchObject({ memberships: [], isPlatformAdmin: true });
+  });
+
+  it("reads an RPC error, a thrown call, or a non-boolean as false", async () => {
+    mockMembershipReads([]);
+    for (const answer of [
+      () => Promise.resolve({ data: null, error: { message: "function does not exist" } }),
+      () => Promise.reject(new Error("network down")),
+      () => Promise.resolve({ data: 0, error: null }),
+      () => Promise.resolve({ data: "true", error: null }),
+    ]) {
+      useAuthStore.setState({ isPlatformAdmin: null });
+      mockRpc(answer);
+      await useAuthStore.getState().loadMemberships();
+      expect(useAuthStore.getState().isPlatformAdmin).toBe(false);
+    }
+  });
+
+  it("drops a stale answer when a newer auth event won the race", async () => {
+    mockMembershipReads([]);
+    let answer!: (value: unknown) => void;
+    mockRpc(() => new Promise((resolve) => (answer = resolve)));
+
+    const load = useAuthStore.getState().loadMemberships();
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    useAuthStore.setState({ authGeneration: useAuthStore.getState().authGeneration + 1 });
+    answer({ data: true, error: null });
+    await load;
+
+    expect(useAuthStore.getState().isPlatformAdmin).toBeNull();
+  });
+
+  it("resets to unknown on sign-out", async () => {
+    useAuthStore.setState({ isPlatformAdmin: true });
+    vi.mocked(supabase.auth.signOut).mockResolvedValue({ error: null } as never);
+
+    await useAuthStore.getState().signOut();
+
+    expect(useAuthStore.getState().isPlatformAdmin).toBeNull();
+  });
+});

@@ -36,7 +36,15 @@ type LegacyContext = {
   contextRevision: string;
 };
 
-function installLegacyAccessContext(authStorageKey: string): void {
+type InstallOptions = {
+  authStorageKey: string;
+  answerPlatformAdminRpc: boolean;
+};
+
+function installLegacyAccessContext({
+  authStorageKey,
+  answerPlatformAdminRpc,
+}: InstallOptions): void {
   const nativeFetch = window.fetch.bind(window);
   const membershipCache = new Map<string, { accessToken: string; rows: unknown[] }>();
 
@@ -176,6 +184,15 @@ function installLegacyAccessContext(authStorageKey: string): void {
       typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const url = new URL(rawUrl, window.location.href);
 
+    // Mission Control: every authenticated boot also asks is_platform_admin().
+    // Answer it here, in the page, with false, so legacy specs never see the
+    // platform-admin-only sidebar entry and their recorded RPC/table lists stay
+    // exactly as they were. A spec that exercises Mission Control opts out with
+    // test.use({ platformAdminRpc: "passthrough" }) and answers it itself.
+    if (answerPlatformAdminRpc && url.pathname.endsWith("/rest/v1/rpc/is_platform_admin")) {
+      return response(false);
+    }
+
     // Observe the existing per-spec memberships response. This keeps the
     // access fixture tied to the same actor, orgs, names, and roles as the
     // legacy shell fixture instead of inventing a parallel authorization set.
@@ -267,9 +284,17 @@ function installLegacyAccessContext(authStorageKey: string): void {
   };
 }
 
-export const test = base.extend({
-  context: async ({ context }, runTest) => {
-    await context.addInitScript(installLegacyAccessContext, "sb-example-auth-token");
+export const test = base.extend<{
+  /** "default-false" answers is_platform_admin() with false in the page;
+   * "passthrough" lets the spec's own Supabase route handler answer it. */
+  platformAdminRpc: "default-false" | "passthrough";
+}>({
+  platformAdminRpc: ["default-false", { option: true }],
+  context: async ({ context, platformAdminRpc }, runTest) => {
+    await context.addInitScript(installLegacyAccessContext, {
+      authStorageKey: "sb-example-auth-token",
+      answerPlatformAdminRpc: platformAdminRpc === "default-false",
+    });
     await runTest(context);
   },
 });

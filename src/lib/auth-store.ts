@@ -6,6 +6,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
 import { selectActiveOrgId } from "@/lib/landing";
+import { fetchIsPlatformAdmin } from "@/services/platformAdmin";
 import type { LifecycleState } from "@/types";
 import {
   ClientAccessApiError,
@@ -98,6 +99,12 @@ interface AuthState {
   fullName: string | null;
   memberships: MembershipEntry[];
   membershipsLoading: boolean;
+  // Mission Control: whether the signed-in user is a platform admin
+  // (is_platform_admin() RPC). null = not known yet (signed out, or the
+  // membership load for this actor has not finished). Loaded and reset in
+  // lockstep with `memberships`; never persisted. UI gating only — the
+  // database authorizes every platform read itself.
+  isPlatformAdmin: boolean | null;
   activeOrgId: string | null;
   initialized: boolean;
   initError: string | null;
@@ -136,6 +143,7 @@ export const useAuthStore = create<AuthState>()(
       fullName: null,
       memberships: [],
       membershipsLoading: false,
+      isPlatformAdmin: null,
       activeOrgId: null,
       initialized: false,
       initError: null,
@@ -157,6 +165,7 @@ export const useAuthStore = create<AuthState>()(
             session: data.session,
             user: data.session?.user ?? null,
             memberships: [],
+            isPlatformAdmin: null,
             membershipsLoading: Boolean(data.session),
             activeOrgId: data.session ? get().activeOrgId : null,
             fullName: data.session ? get().fullName : null,
@@ -181,7 +190,13 @@ export const useAuthStore = create<AuthState>()(
               }
             }
           } else {
-            set({ membershipsLoading: false, memberships: [], activeOrgId: null, fullName: null });
+            set({
+              membershipsLoading: false,
+              memberships: [],
+              isPlatformAdmin: null,
+              activeOrgId: null,
+              fullName: null,
+            });
           }
         } catch {
           set({ initError: "Can't reach Minted Panel. Check your connection." });
@@ -243,15 +258,26 @@ export const useAuthStore = create<AuthState>()(
         if (error) {
           if (get().user?.id !== requestUserId) return;
           if (get().authGeneration === requestAuthGeneration) {
-            set({ memberships: [], activeOrgId: null, fullName: null, membershipsLoading: false });
+            set({
+              memberships: [],
+              isPlatformAdmin: null,
+              activeOrgId: null,
+              fullName: null,
+              membershipsLoading: false,
+            });
           }
           throw error;
         }
+        // Mission Control: read the platform-admin flag in the same load so it
+        // commits together with memberships (the actor/generation guard below
+        // drops both when a newer auth event won). Errors read as false.
+        const isPlatformAdmin = await fetchIsPlatformAdmin();
         if (get().user?.id !== requestUserId || get().authGeneration !== requestAuthGeneration)
           return;
         if (!data) {
           set({
             memberships: [],
+            isPlatformAdmin,
             activeOrgId: null,
             fullName: profile?.full_name ?? null,
             membershipsLoading: false,
@@ -297,6 +323,7 @@ export const useAuthStore = create<AuthState>()(
           null;
         set({
           memberships,
+          isPlatformAdmin,
           activeOrgId,
           fullName: profile?.full_name ?? null,
           membershipsLoading: false,
@@ -516,6 +543,7 @@ export const useAuthStore = create<AuthState>()(
           session: null,
           user: null,
           memberships: [],
+          isPlatformAdmin: null,
           membershipsLoading: false,
           activeOrgId: null,
           fullName: null,
@@ -597,6 +625,7 @@ export async function applyAuthStateChange(
     session,
     user: session?.user ?? null,
     memberships: sameActor ? current.memberships : [],
+    isPlatformAdmin: sameActor ? current.isPlatformAdmin : null,
     membershipsLoading: Boolean(session),
     activeOrgId: sameActor ? current.activeOrgId : null,
     fullName: sameActor ? current.fullName : null,
@@ -634,6 +663,7 @@ export async function applyAuthStateChange(
   } else {
     useAuthStore.setState({
       memberships: [],
+      isPlatformAdmin: null,
       membershipsLoading: false,
       activeOrgId: null,
       fullName: null,

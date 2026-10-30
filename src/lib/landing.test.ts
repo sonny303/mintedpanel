@@ -16,6 +16,16 @@ describe("resolveLanding (E0.4 TE-1)", () => {
     expect(resolveLanding([], "ghost")).toEqual({ kind: "first-run" });
   });
 
+  it("(1) sends a platform admin with no orgs to Mission Control, never first-run", () => {
+    expect(resolveLanding([], null, true)).toEqual({ kind: "mission-control" });
+    expect(resolveLanding([], null, false)).toEqual({ kind: "first-run" });
+  });
+
+  it("lands a platform admin who has orgs in a workspace as usual", () => {
+    const orgs = [org({ id: "rose", lifecycleState: "active" })];
+    expect(resolveLanding(orgs, null, true)).toEqual({ kind: "workspace", orgId: "rose" });
+  });
+
   it("(2) lands in the valid last-active org's workspace (TS-4)", () => {
     const orgs = [
       org({ id: "ob", lifecycleState: "active" }),
