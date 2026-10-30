@@ -43,6 +43,15 @@ const UNIQUE_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string
     "Someone else is already the default for this role. Make them the default instead, or remove that role from them first.",
   ],
   ["party_role_assignments_unique", "This person already holds that role in this organization."],
+  // The contract key is 4-part since 20261029120000 (PM decision D11): one
+  // record per group, payer, state and specialty (`all` is one of them). The
+  // 3-part row below is kept harmlessly — that constraint no longer exists
+  // once the migration is applied, but a database that predates it still
+  // raises the old name.
+  [
+    "contracts_group_payer_state_specialty_key",
+    "A contract already exists for this group, payer, state and specialty.",
+  ],
   [
     "contracts_group_id_payer_id_state_key",
     "A contract already exists for this group, payer, and state.",
@@ -87,6 +96,10 @@ const CHECK_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]
   ["tasks_owner_check", "A task must belong to a case or a provider."],
   ["contracts_group_id_not_null", "A contract requires a provider group."],
   ["contracts_payer_id_not_null", "A contract requires a payer."],
+  [
+    "contracts_specialty_key_check",
+    "A contract covers all specialties or one of physical therapy, occupational therapy, speech-language pathology, nutrition or chiropractic.",
+  ],
   [
     "provider_facility_assignments_provider_id_not_null",
     "A facility assignment requires a provider.",
@@ -200,4 +213,21 @@ export function toError(error: unknown, fallback = "Save failed"): Error {
 
 export function errorMessage(error: unknown, fallback: string): string {
   return toError(error, fallback).message;
+}
+
+/** Deploy-order safety for READS: true when PostgREST says
+ * `contracts.specialty_key` does not exist, i.e. migration 20261029120000 is
+ * not applied to this database yet — Postgres 42703 from the statement, or
+ * PGRST204 from the schema cache (the fillSessions `system_today_date`
+ * idiom). A reader may then retry once without the column; its rows carry no
+ * `specialtyKey`, which `contractSpecialtyKeyOf` reads as `all` — exactly the
+ * one-record-per-group/payer/state world that database still has. Any other
+ * error (network, permission, 5xx) is NOT this and must propagate. */
+export function isMissingContractSpecialtyKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const namesColumn = [row.message, row.details, row.hint].some(
+    (value) => typeof value === "string" && value.includes("specialty_key"),
+  );
+  return namesColumn && (row.code === "42703" || row.code === "PGRST204");
 }

@@ -11,6 +11,7 @@ import {
   upsertContract,
   type ContractFilters,
   type ContractInput,
+  type ContractPatch,
 } from "@/services/contracts";
 
 const THIRTY_SECONDS = 30_000;
@@ -71,7 +72,7 @@ export function useUpdateContract() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: ({ contractId, patch }: { contractId: string; patch: Partial<ContractInput> }) =>
+    mutationFn: ({ contractId, patch }: { contractId: string; patch: ContractPatch }) =>
       updateContract(contractId, patch),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["contracts", orgId] });
@@ -81,6 +82,9 @@ export function useUpdateContract() {
   });
 }
 
+/** Saves the record at (group, payer, state, specialtyKey ?? "all"). Every
+ * contract list is invalidated, so an `all` record refreshes in each
+ * specialty's table it shows in. */
 export function useUpsertContract() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";

@@ -202,6 +202,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       groupId: c.groupId,
       payerId: c.payerId,
       state: c.state,
+      specialtyKey: c.specialtyKey,
       statusLabel: c.contractingStatusId
         ? (statusById.get(c.contractingStatusId)?.label ?? null)
         : null,

@@ -431,3 +431,117 @@ describe("group contract check (E2.0 TE-8 — optional, additive)", () => {
     expect(c.detail).toBe("No contract");
   });
 });
+
+describe("group contract check by specialty (GCM-35, US-16)", () => {
+  // Three providers on one roster, one target (g-1 × pay-1 × KS): a physical
+  // therapist, a dietitian, and a provider whose taxonomy maps to no contract
+  // specialty.
+  const PT = "pr-pt";
+  const RD = "pr-rd";
+  const UNKNOWN = "pr-unknown";
+  const specialtyInput = (contracts: EnrollmentReadinessInput["contracts"]) =>
+    baseInput({
+      targets: [{ groupId: "g-1", payerId: "pay-1", state: "KS", status: "active" }],
+      groupAssignments: [PT, RD, UNKNOWN].map((providerId) => ({ providerId, groupId: "g-1" })),
+      providers: [
+        facts({ providerId: PT, providerName: "A Therapist", taxonomyCode: "225100000X" }),
+        facts({ providerId: RD, providerName: "B Dietitian", taxonomyCode: "133V00000X" }),
+        facts({ providerId: UNKNOWN, providerName: "C Unknown", taxonomyCode: "207Q00000X" }),
+      ],
+      facilities: [{ groupId: "g-1", state: "KS", isActive: true }],
+      contracts,
+    });
+  const contractCheckFor = (input: EnrollmentReadinessInput, providerId: string) => {
+    const row = evaluateEnrollmentReadiness(input).find((r) => r.providerId === providerId);
+    const c = row?.checks.find((c) => c.key === "group_contract");
+    if (!c) throw new Error(`group_contract check missing for ${providerId}`);
+    return c;
+  };
+  const record = (specialtyKey: string | undefined, statusLabel: string | null) => ({
+    groupId: "g-1",
+    payerId: "pay-1",
+    state: "KS",
+    ...(specialtyKey === undefined ? {} : { specialtyKey }),
+    statusLabel,
+  });
+
+  it("US-16: the PT passes on the PT record while the dietitian fails on the Nutrition record", () => {
+    const input = specialtyInput([record("pt", "Contracted"), record("nutrition", "Denied")]);
+    const pt = contractCheckFor(input, PT);
+    expect(pt.pass).toBe(true);
+    expect(pt.detail).toBe("Contracted (Physical therapy)");
+    const rd = contractCheckFor(input, RD);
+    expect(rd.pass).toBe(false);
+    expect(rd.detail).toBe("Denied (Nutrition)");
+    // No `all` record, and a provider with no contract specialty never
+    // borrows another specialty's record.
+    const unknown = contractCheckFor(input, UNKNOWN);
+    expect(unknown.pass).toBe(false);
+    expect(unknown.detail).toBe("No contract");
+  });
+
+  it("a specialty's own record beats the all-specialties record", () => {
+    const input = specialtyInput([record("all", "Contracted"), record("nutrition", "Denied")]);
+    expect(contractCheckFor(input, RD)).toMatchObject({
+      pass: false,
+      detail: "Denied (Nutrition)",
+    });
+    expect(contractCheckFor(input, PT)).toMatchObject({ pass: true, detail: "Contracted" });
+    expect(contractCheckFor(input, UNKNOWN)).toMatchObject({ pass: true, detail: "Contracted" });
+  });
+
+  it("falls back to the all-specialties record when the specialty has none", () => {
+    const input = specialtyInput([record("all", "In Progress"), record("pt", "Contracted")]);
+    expect(contractCheckFor(input, PT)).toMatchObject({
+      pass: true,
+      detail: "Contracted (Physical therapy)",
+    });
+    expect(contractCheckFor(input, RD)).toMatchObject({ pass: false, detail: "In Progress" });
+    expect(contractCheckFor(input, UNKNOWN)).toMatchObject({ pass: false, detail: "In Progress" });
+  });
+
+  it("a record with no specialty key reads as all specialties (pre-migration rows)", () => {
+    const input = specialtyInput([record(undefined, "Contracted")]);
+    for (const id of [PT, RD, UNKNOWN]) {
+      expect(contractCheckFor(input, id)).toMatchObject({ pass: true, detail: "Contracted" });
+    }
+  });
+
+  it("a provider with no taxonomy code reads only the all-specialties record", () => {
+    const input = specialtyInput([record("pt", "Contracted")]);
+    input.providers = input.providers.map((p) =>
+      p.providerId === UNKNOWN ? { ...p, taxonomyCode: undefined } : p,
+    );
+    expect(contractCheckFor(input, UNKNOWN)).toMatchObject({ pass: false, detail: "No contract" });
+  });
+
+  it("no record at the triple fails for every specialty, as before", () => {
+    const input = specialtyInput([
+      {
+        groupId: "g-1",
+        payerId: "pay-2",
+        state: "KS",
+        specialtyKey: "all",
+        statusLabel: "Contracted",
+      },
+      {
+        groupId: "g-1",
+        payerId: "pay-1",
+        state: "MO",
+        specialtyKey: "pt",
+        statusLabel: "Contracted",
+      },
+    ]);
+    for (const id of [PT, RD, UNKNOWN]) {
+      expect(contractCheckFor(input, id)).toMatchObject({ pass: false, detail: "No contract" });
+    }
+  });
+
+  it("flows into readiness: only the dietitian's row carries the open contract gap", () => {
+    const rows = evaluateEnrollmentReadiness(
+      specialtyInput([record("all", "Contracted"), record("nutrition", "Denied")]),
+    );
+    const gapped = rows.filter((r) => r.checks.some((c) => c.key === "group_contract" && !c.pass));
+    expect(gapped.map((r) => r.providerId)).toEqual([RD]);
+  });
+});

@@ -125,7 +125,8 @@ const readyProvider = (orgId: string, id: string, first: string, last: string) =
   email: null,
   group_id: null,
   caqh_id: "16224897",
-  caqh_last_attested_date: "2026-07-01",
+  // Relative, so the 120-day CAQH window never lapses under the fixture.
+  caqh_last_attested_date: new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10),
   date_of_birth: "1990-01-01",
   ssn_last4: "1234",
   home_street: "4104 S Croatan Hwy",

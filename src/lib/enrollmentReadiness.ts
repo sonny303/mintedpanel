@@ -14,6 +14,14 @@
 import { canonicalLabel } from "@/lib/canonicalStatuses";
 import { CONTRACTED_LABEL } from "@/lib/statusLabels";
 import { isExpiringSoon } from "@/lib/documents";
+import {
+  CONTRACT_SPECIALTY_LABELS,
+  contractSpecialtyForTaxonomy,
+  indexContractsBySpecialty,
+  resolveContractForSpecialty,
+  type ContractSpecialty,
+  type ContractSpecialtyIndex,
+} from "@/lib/contractSpecialty";
 
 /** The locked CAQH freshness window (PM decision 2026-07-11). */
 export const CAQH_CURRENT_DAYS = 120;
@@ -65,6 +73,10 @@ export interface ProviderReadinessFacts {
   /** Presence booleans only — computed at the service boundary (TE-9). */
   dobPresent: boolean;
   ssnLast4Present: boolean;
+  /** `providers.taxonomy_code` (not PHI). Picks which contract record the
+   * group-contract check reads (GCM-35). Absent, blank or outside every
+   * contract specialty: only the group's `all` record applies. */
+  taxonomyCode?: string | null;
 }
 
 export interface ReadinessLicenseInput {
@@ -92,13 +104,16 @@ export interface GroupInsuranceInput {
   policyEndDate: string | null;
 }
 
-/** E2.0 TE-8 — one row per `contracts` entry at the group × payer × state
- * grain, reduced to its resolved contracting-status label (null when the
- * contract carries no status). */
+/** E2.0 TE-8 — one row per `contracts` entry at the group × payer × state ×
+ * specialty grain, reduced to its resolved contracting-status label (null
+ * when the contract carries no status). */
 export interface GroupContractInput {
   groupId: string | null;
   payerId: string | null;
   state: string;
+  /** `contracts.specialty_key`. Missing or null reads as `all` (one agreement
+   * covering every specialty), so pre-migration rows keep today's result. */
+  specialtyKey?: string | null;
   statusLabel: string | null;
 }
 
@@ -309,23 +324,33 @@ function groupChecks(
 }
 
 /** E2.0 TE-8 — the group-contract check, computed PER TARGET (group × payer ×
- * state): contracts vary by payer, so it cannot ride the (group, state) group
- * cache. Pass = a contract row exists at the key whose label canonicalizes to
- * the Contracted label. */
+ * state) and per provider specialty: contracts vary by payer and specialty,
+ * so it cannot ride the (group, state) group cache. GCM-35 — the record read
+ * is the provider's own specialty record, else the group's `all` record (the
+ * same resolution the Group Contracts Matrix shows); a provider with no known
+ * specialty reads only `all`. Pass = that record's label canonicalizes to the
+ * Contracted label. */
 function groupContractCheck(
   target: ReadinessTargetInput,
-  contracts: readonly GroupContractInput[],
+  index: ContractSpecialtyIndex<GroupContractInput>,
+  specialty: ContractSpecialty | null,
 ): ReadinessCheck {
-  const contract = contracts.find(
-    (c) => c.groupId === target.groupId && c.payerId === target.payerId && c.state === target.state,
-  );
-  const label = contract?.statusLabel ?? null;
+  const resolved = resolveContractForSpecialty(index, target, specialty);
+  const label = resolved?.contract.statusLabel ?? null;
+  // A specialty's own record names its specialty; the shared `all` record
+  // reads exactly as every pre-specialty record did.
+  const ownSpecialty = resolved && !resolved.shared && specialty ? specialty : null;
   return {
     key: "group_contract",
     owner: "group",
     label: "Group contract in place",
     pass: label !== null && canonicalLabel(label) === CONTRACTED_LABEL,
-    detail: label ?? "No contract",
+    detail:
+      label === null
+        ? "No contract"
+        : ownSpecialty
+          ? `${label} (${CONTRACT_SPECIALTY_LABELS[ownSpecialty]})`
+          : label,
     fixTarget: "group_screen",
   };
 }
@@ -349,6 +374,19 @@ export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): Re
   const providerCheckCache = new Map<string, ReadinessCheck[]>();
   const rows: ReadinessRow[] = [];
 
+  // GCM-35 — contracts indexed ONCE per evaluation, and each provider's
+  // contract specialty resolved once from their taxonomy code.
+  const contractIndex = input.contracts ? indexContractsBySpecialty(input.contracts) : null;
+  const specialtyById = new Map<string, ContractSpecialty | null>();
+  const specialtyOf = (facts: ProviderReadinessFacts): ContractSpecialty | null => {
+    let specialty = specialtyById.get(facts.providerId);
+    if (specialty === undefined) {
+      specialty = contractSpecialtyForTaxonomy(facts.taxonomyCode);
+      specialtyById.set(facts.providerId, specialty);
+    }
+    return specialty;
+  };
+
   for (const target of input.targets) {
     if (target.status !== "active") continue;
     const roster = providersByGroup.get(target.groupId) ?? [];
@@ -361,9 +399,20 @@ export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): Re
       groupCheckCache.set(groupKey, shared);
     }
 
-    // TE-8: computed once per target and shared by identity across the
-    // target's provider rows; absent entirely when the input is omitted.
-    const contractCheck = input.contracts ? groupContractCheck(target, input.contracts) : null;
+    // TE-8: computed once per (target, specialty) and shared by identity
+    // across that specialty's provider rows; absent entirely when the input
+    // is omitted.
+    const contractCheckBySpecialty = new Map<ContractSpecialty | null, ReadinessCheck>();
+    const contractCheckFor = (facts: ProviderReadinessFacts): ReadinessCheck | null => {
+      if (!contractIndex) return null;
+      const specialty = specialtyOf(facts);
+      let check = contractCheckBySpecialty.get(specialty);
+      if (!check) {
+        check = groupContractCheck(target, contractIndex, specialty);
+        contractCheckBySpecialty.set(specialty, check);
+      }
+      return check;
+    };
 
     for (const facts of roster) {
       // Provider checks depend only on (provider, state) — reuse across the
@@ -374,6 +423,7 @@ export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): Re
         own = providerChecks(facts, target.state, input.licenses, input.today);
         providerCheckCache.set(provKey, own);
       }
+      const contractCheck = contractCheckFor(facts);
       const checks = contractCheck ? [...own, ...shared, contractCheck] : [...own, ...shared];
       const openGaps = checks.filter((c) => !c.pass).length;
       rows.push({

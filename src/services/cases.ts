@@ -24,6 +24,7 @@ import type {
   CaseDetail,
   CaseFacilityWithDetail,
   Contract,
+  ContractSpecialtyKey,
   CredentialCase,
   DenialReasonCode,
   StatusHistoryEntry,
@@ -1187,10 +1188,17 @@ export async function appendCaseTasks(caseId: string, tasks: CaseTaskPayload[]):
 // contracting-track writer in services/contracts.ts (a dormant machine whose
 // UI affordances E6.0 also retired).
 
+/** The ONE contract record at (group, payer, state, specialty). The key is
+ * 4-part since migration 20261029120000 (PM decision D11), so a group/payer/
+ * state can hold several records; the default `all` reads the shared one. For
+ * "which record applies to this specialty, falling back to `all`", list the
+ * contracts and use `resolveContractForSpecialty` (src/lib/contractSpecialty.ts).
+ * A single-row read, so it keeps `*` (the list columns omit `org_id`). */
 export async function getContractFor(
   groupId: string,
   payerId: string,
   state: string,
+  specialtyKey: ContractSpecialtyKey = "all",
 ): Promise<Contract | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
@@ -1199,7 +1207,8 @@ export async function getContractFor(
     .eq("org_id", orgId)
     .eq("group_id", groupId)
     .eq("payer_id", payerId)
-    .eq("state", state)
+    .eq("state", normalizeStateCode(state))
+    .eq("specialty_key", specialtyKey)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Contract>(data) : null;

@@ -1,43 +1,76 @@
-import { useMemo, useState } from "react";
-import { Search, FileText, AlertCircle, ChevronDown } from "lucide-react";
+// Group Contracts Matrix — the organization view (spec "Group Contracts
+// Matrix: Organization View", Oct 29, 2026). Every provider group's contracts
+// sit under the organization's name, one table per specialty, with payers down
+// the side and each group's states across the top. The whole derivation is
+// buildContractsMatrix (src/lib/groupContractsMatrix.ts); this component wires
+// the hooks, holds the view's choices, and renders the result.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/EmptyState";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AddButton } from "@/components/providers/RecordSectionCard";
 import { useContracts } from "@/hooks/useContracts";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { useProviderGroups, useFacilities } from "@/hooks/useLookups";
+import { localTodayIso, useProviderReadinessFacts } from "@/hooks/useEnrollmentReadiness";
+import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
-import { resolveActiveGroupIds } from "@/lib/groupContractsMatrixSelection";
-import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
-import { fmtDate } from "@/lib/format";
-import type { Contract, Payer } from "@/types";
+import { useProviderAssignments, useProviderGroupAssignments } from "@/hooks/useProviders";
+import { useActiveMembership } from "@/lib/auth-store";
+import {
+  CONTRACT_SPECIALTY_LABELS,
+  MATRIX_SPECIALTIES,
+  contractSpecialtyKeyOf,
+  contractTripleKey,
+  type ContractSpecialty,
+} from "@/lib/contractSpecialty";
+import {
+  buildContractsMatrix,
+  locateMatrixCell,
+  specialtiesShowingContract,
+  type ContractsMatrixAddedColumn,
+  type ContractsMatrixArrangement,
+  type ContractsMatrixCell,
+  type ContractsMatrixRow,
+  type ContractsMatrixStatusFilter,
+  type ContractsMatrixTable as MatrixTable,
+} from "@/lib/groupContractsMatrix";
+import { useCanWrite } from "@/lib/permissions";
+import type { Contract } from "@/types";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
-
-const ALL_SPECIALTIES = "__all_specialties__";
-const UNSPECIFIED_SPECIALTY = "__unspecified_specialty__";
+import { AddPayerDialog, AddStateDialog } from "./ContractsMatrixAddDialogs";
+import { SharedTag } from "./ContractsMatrixCell";
+import { ContractsMatrixFilters } from "./ContractsMatrixFilters";
+import { ContractsMatrixTable } from "./ContractsMatrixTable";
+import type { AlsoApplyTarget } from "./contractDetailPlan";
+import { contractsMatrixCellDomId, countLabel } from "./contractsMatrixView";
 
 interface ContractsMatrixContext {
   groupId?: string;
   payerId?: string;
   state?: string;
+  /** The case's specialty, when the link knows it: its table is preferred. */
+  specialty?: ContractSpecialty;
 }
 
-function specialtyKey(value: string | null | undefined) {
-  return value?.trim().toLocaleLowerCase() ?? "";
+interface OpenCell {
+  specialty: ContractSpecialty;
+  groupId: string;
+  groupName: string;
+  groupTin: string | null;
+  payerId: string;
+  payerName: string;
+  state: string;
+  contract: Contract | null;
+  alsoApplyTargets: AlsoApplyTarget[];
+  /** Tables showing `contract` right now (only when it is the shared record). */
+  sharedIn: ContractSpecialty[];
+  allRecordExists: boolean;
+}
+
+function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 export function GroupContractsMatrix({
@@ -45,171 +78,220 @@ export function GroupContractsMatrix({
 }: {
   initialContext?: ContractsMatrixContext;
 }) {
+  const canWrite = useCanWrite();
+  const membership = useActiveMembership();
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
   const contractsQ = useContracts();
   const statusesQ = useStatusConfigs("contracting");
   const facilitiesQ = useFacilities();
   const targetsQ = usePayerNetworkTargets();
+  const facilityAssignmentsQ = useProviderAssignments();
+  const licensesQ = useOrgStateLicenses();
+  const groupAssignmentsQ = useProviderGroupAssignments();
+  const providerFactsQ = useProviderReadinessFacts();
+  const queries = [
+    groupsQ,
+    payersQ,
+    contractsQ,
+    statusesQ,
+    facilitiesQ,
+    targetsQ,
+    facilityAssignmentsQ,
+    licensesQ,
+    groupAssignmentsQ,
+    providerFactsQ,
+  ];
 
+  const [specialties, setSpecialties] = useState<ContractSpecialty[]>([...MATRIX_SPECIALTIES]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[] | null>(null);
-  const [selectedSpecialty, setSelectedSpecialty] = useState(ALL_SPECIALTIES);
-  const [payerSearch, setPayerSearch] = useState<string>("");
+  const [selectedStates, setSelectedStates] = useState<string[] | null>(null);
+  const [statusFilter, setStatusFilter] = useState<ContractsMatrixStatusFilter>(null);
+  const [payerSearch, setPayerSearch] = useState("");
+  const [arrange, setArrange] = useState<ContractsMatrixArrangement>("group");
+  const [addedPayerIds, setAddedPayerIds] = useState<string[]>([]);
+  const [addedColumns, setAddedColumns] = useState<ContractsMatrixAddedColumn[]>([]);
+  const [openCell, setOpenCell] = useState<OpenCell | null>(null);
+  const [addPayerOpen, setAddPayerOpen] = useState(false);
+  const [addStateFor, setAddStateFor] = useState<ContractSpecialty | null>(null);
 
-  // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeCell, setActiveCell] = useState<{
-    contract: Contract | null;
-    groupId: string;
-    groupName: string;
-    payerId: string;
-    payerName: string;
-    state: string;
-  } | null>(null);
+  // Date-only, read once per mount; the derivation never reads a clock.
+  const today = useMemo(() => localTodayIso(), []);
+  const contracts = useMemo(() => contractsQ.data ?? [], [contractsQ.data]);
 
-  const groups = useMemo(() => groupsQ.data ?? [], [groupsQ.data]);
-  const activeGroupIds = useMemo(
+  const providers = useMemo(
     () =>
-      resolveActiveGroupIds({
-        groups,
-        selectedGroupIds,
-        contextGroupId: initialContext?.groupId,
-      }),
-    [selectedGroupIds, groups, initialContext?.groupId],
-  );
-  const activeGroups = useMemo(
-    () => groups.filter((group) => activeGroupIds.includes(group.id)),
-    [groups, activeGroupIds],
-  );
-  const contextPayer = (payersQ.data ?? []).find((payer) => payer.id === initialContext?.payerId);
-  const contextGroup = useMemo(
-    () => groups.find((group) => group.id === initialContext?.groupId),
-    [groups, initialContext?.groupId],
+      (providerFactsQ.data ?? []).map((fact) => ({
+        id: fact.providerId,
+        taxonomyCode: fact.taxonomyCode ?? null,
+      })),
+    [providerFactsQ.data],
   );
 
-  const specialtyOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    (contractsQ.data ?? []).forEach((contract) => {
-      const label = contract.specialty?.trim();
-      if (label) options.set(specialtyKey(label), label);
-      else options.set(UNSPECIFIED_SPECIALTY, "Multi-Specialty / Unspecified");
-    });
-    return Array.from(options, ([key, label]) => ({ key, label })).sort((a, b) =>
-      a.label.localeCompare(b.label),
-    );
-  }, [contractsQ.data]);
-
-  const statusById = useMemo(
-    () => new Map((statusesQ.data ?? []).map((s) => [s.id, s])),
-    [statusesQ.data],
-  );
-
-  const matrixGroups = useMemo(() => {
-    const payers = (payersQ.data ?? []).filter((p) => p.name !== PRE_CRED_PAYER_NAME);
-    const payerMap = new Map(payers.map((payer) => [payer.id, payer.name]));
-    const search = payerSearch.trim().toLocaleLowerCase();
-
-    return activeGroups.map((group) => {
-      const contracts = (contractsQ.data ?? []).filter(
-        (contract) =>
-          contract.groupId === group.id &&
-          (selectedSpecialty === ALL_SPECIALTIES ||
-            (selectedSpecialty === UNSPECIFIED_SPECIALTY
-              ? !specialtyKey(contract.specialty)
-              : specialtyKey(contract.specialty) === selectedSpecialty)),
-      );
-      const contractsByKey = new Map<string, Contract>();
-      const states = new Set<string>();
-      contracts.forEach((contract) => {
-        if (contract.state) states.add(contract.state.toUpperCase());
-        if (contract.payerId && contract.state) {
-          contractsByKey.set(`${contract.payerId}|${contract.state.toUpperCase()}`, contract);
-        }
-      });
-      if (selectedSpecialty === ALL_SPECIALTIES) {
-        (facilitiesQ.data ?? []).forEach((facility) => {
-          if (facility.groupId === group.id && facility.state) {
-            states.add(facility.state.toUpperCase());
-          }
-        });
-        (targetsQ.data ?? []).forEach((target) => {
-          if (target.groupId === group.id && target.state) {
-            states.add(target.state.toUpperCase());
-          }
-        });
-      }
-
-      const matchedPayerIds = new Set(contracts.map((contract) => contract.payerId));
-      const filteredPayers = payers.filter(
-        (payer) =>
-          (selectedSpecialty === ALL_SPECIALTIES || matchedPayerIds.has(payer.id)) &&
-          (!search || payer.name.toLocaleLowerCase().includes(search)),
-      );
-      const filteredPayerIds = new Set(filteredPayers.map((payer) => payer.id));
-      const notes = contracts
-        .filter(
-          (contract) =>
-            contract.notes?.trim() &&
-            (!search || (contract.payerId && filteredPayerIds.has(contract.payerId))),
-        )
-        .map((contract) => ({
-          contract,
-          payerName: contract.payerId
-            ? (payerMap.get(contract.payerId) ?? "Unknown Payer")
-            : "Unknown Payer",
-        }));
-      return {
-        group,
-        states: Array.from(states).sort(),
-        contractsByKey,
-        filteredPayers,
-        notes,
-      };
-    });
-  }, [
-    activeGroups,
-    contractsQ.data,
-    facilitiesQ.data,
-    targetsQ.data,
-    payersQ.data,
-    payerSearch,
-    selectedSpecialty,
-  ]);
-
-  const visibleContractCount = matrixGroups.reduce(
-    (count, matrixGroup) =>
-      count +
-      matrixGroup.filteredPayers.reduce(
-        (payerCount, payer) =>
-          payerCount +
-          matrixGroup.states.filter((state) =>
-            matrixGroup.contractsByKey.has(`${payer.id}|${state}`),
-          ).length,
-        0,
+  const matrix = useMemo(
+    () =>
+      buildContractsMatrix<Contract>(
+        {
+          today,
+          groups: groupsQ.data ?? [],
+          payers: payersQ.data ?? [],
+          contracts,
+          targets: targetsQ.data ?? [],
+          statuses: statusesQ.data ?? [],
+          facilities: facilitiesQ.data ?? [],
+          facilityAssignments: facilityAssignmentsQ.data ?? [],
+          licenses: licensesQ.data ?? [],
+          providers,
+          groupAssignments: groupAssignmentsQ.data ?? [],
+        },
+        {
+          specialties,
+          selectedGroupIds,
+          selectedStates,
+          statusFilter,
+          payerSearch,
+          arrange,
+          addedPayerIds,
+          addedColumns,
+          // GCM-20: a case link's group is shown even when inactive; the link
+          // never narrows the selection.
+          contextGroupId: initialContext?.groupId ?? null,
+        },
       ),
-    0,
+    [
+      today,
+      groupsQ.data,
+      payersQ.data,
+      contracts,
+      targetsQ.data,
+      statusesQ.data,
+      facilitiesQ.data,
+      facilityAssignmentsQ.data,
+      licensesQ.data,
+      providers,
+      groupAssignmentsQ.data,
+      specialties,
+      selectedGroupIds,
+      selectedStates,
+      statusFilter,
+      payerSearch,
+      arrange,
+      addedPayerIds,
+      addedColumns,
+      initialContext?.groupId,
+    ],
   );
 
-  const isLoading = groupsQ.isLoading || payersQ.isLoading || contractsQ.isLoading;
-  const isError = groupsQ.isError || payersQ.isError || contractsQ.isError;
+  // GCM-20: a case link opens the full view and only highlights its cell.
+  const linkGroupId = initialContext?.groupId;
+  const linkPayerId = initialContext?.payerId;
+  const linkState = initialContext?.state;
+  const linkSpecialty = initialContext?.specialty ?? null;
+  const link = useMemo(
+    () =>
+      linkGroupId && linkPayerId && linkState
+        ? {
+            groupId: linkGroupId,
+            payerId: linkPayerId,
+            state: linkState,
+            specialty: linkSpecialty,
+          }
+        : null,
+    [linkGroupId, linkPayerId, linkState, linkSpecialty],
+  );
+  const hasLink = link !== null;
+  const location = useMemo(() => (link ? locateMatrixCell(matrix, link) : null), [link, matrix]);
+  const scrolledToLink = useRef(false);
+  useEffect(() => {
+    if (!location || scrolledToLink.current) return;
+    const element = document.getElementById(
+      contractsMatrixCellDomId(location.specialty, location.columnKey, location.payerId),
+    );
+    if (!element) return;
+    scrolledToLink.current = true;
+    element.scrollIntoView({ block: "center", inline: "center" });
+  }, [location]);
+
+  const allRecordKeys = useMemo(
+    () =>
+      new Set(
+        contracts
+          .filter((contract) => contractSpecialtyKeyOf(contract) === "all")
+          .map((contract) => contractTripleKey(contract)),
+      ),
+    [contracts],
+  );
+
+  const handleOpenCell = useCallback(
+    (
+      table: MatrixTable<Contract>,
+      row: ContractsMatrixRow<Contract>,
+      cell: ContractsMatrixCell<Contract>,
+    ) => {
+      if (cell.kind === "outside") return;
+      if (cell.kind === "empty" && !canWrite) return;
+      const column = table.columns.find((candidate) => candidate.key === cell.columnKey);
+      // GCM-27: the payer's other open states for this group in this table,
+      // with what each cell shows now, so "Also apply" changes that cell.
+      const alsoApplyTargets = row.cells.flatMap<AlsoApplyTarget>((other) =>
+        other.groupId !== cell.groupId || other.state === cell.state || other.kind === "outside"
+          ? []
+          : [
+              {
+                state: other.state,
+                current: other.kind === "record" ? (other.shared ? "shared" : "own") : "empty",
+              },
+            ],
+      );
+      setOpenCell({
+        specialty: table.specialty,
+        groupId: cell.groupId,
+        groupName: column?.groupName ?? "",
+        groupTin: column?.groupTin ?? null,
+        payerId: cell.payerId,
+        payerName: row.payerName,
+        state: cell.state,
+        contract: cell.kind === "record" ? cell.contract : null,
+        alsoApplyTargets,
+        sharedIn:
+          cell.kind === "record" && cell.shared
+            ? specialtiesShowingContract(matrix, cell.contract.id)
+            : [],
+        allRecordExists: allRecordKeys.has(
+          contractTripleKey({ groupId: cell.groupId, payerId: cell.payerId, state: cell.state }),
+        ),
+      });
+    },
+    [allRecordKeys, canWrite, matrix],
+  );
+
+  const isLoading = queries.some((query) => query.isLoading);
+  const isError = queries.some((query) => query.isError);
 
   if (isLoading) {
-    return <div className="h-64 rounded-lg bg-muted animate-pulse" />;
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <span className="sr-only">Loading the contracts matrix…</span>
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   if (isError) {
     return (
-      <div className="rounded-lg border border-border bg-card p-8 text-center">
+      <div className="rounded-md border border-[var(--mp-border)] bg-[var(--mp-card)] p-8">
         <EmptyState
-          message="Failed to load group contracts matrix"
+          message="The contracts matrix could not load."
+          description="Check your connection and try again."
           action={
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                contractsQ.refetch();
-                groupsQ.refetch();
-                payersQ.refetch();
+                for (const query of queries) {
+                  if (query.isError) void query.refetch();
+                }
               }}
             >
               Retry
@@ -220,377 +302,305 @@ export function GroupContractsMatrix({
     );
   }
 
-  if (groups.length === 0) {
+  const orgName = membership?.orgName ?? "Organization";
+
+  if ((groupsQ.data ?? []).length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card p-8 text-center">
-        <EmptyState message="No provider groups found in this organization" />
+      <div className="rounded-md border border-[var(--mp-border)] bg-[var(--mp-card)] p-8">
+        <EmptyState
+          message={`${orgName} has no provider groups yet.`}
+          description="Add a provider group to start tracking its payer contracts."
+        />
       </div>
     );
   }
 
-  function handleCellClick(
-    matrixGroup: (typeof matrixGroups)[number],
-    payer: Payer,
-    state: string,
-  ) {
-    const contract = matrixGroup.contractsByKey.get(`${payer.id}|${state}`) ?? null;
-    if (selectedSpecialty !== ALL_SPECIALTIES && !contract) return;
-    setActiveCell({
-      contract,
-      groupId: matrixGroup.group.id,
-      groupName: matrixGroup.group.name,
-      payerId: payer.id,
-      payerName: payer.name,
-      state,
-    });
-    setDrawerOpen(true);
+  const { counts } = matrix;
+  const selectedGroups = matrix.groupOptions.filter((group) => group.selected);
+  const anyOutside = matrix.tables.some((table) =>
+    table.rows.some((row) => row.cells.some((cell) => cell.kind === "outside")),
+  );
+  const anyShared = matrix.tables.some((table) =>
+    table.rows.some((row) => row.cells.some((cell) => cell.kind === "record" && cell.shared)),
+  );
+  const unplacedSpecialties = [
+    ...new Set(
+      matrix.unplacedRecords.map(
+        (contract) => CONTRACT_SPECIALTY_LABELS[contractSpecialtyKeyOf(contract)],
+      ),
+    ),
+  ].sort();
+
+  let emptyView: { message: string; description?: string } | null = null;
+  if (matrix.selectedGroupIds.length === 0) {
+    emptyView = { message: "Select at least one group to see its contracts." };
+  } else if (specialties.length === 0) {
+    emptyView = { message: "Turn on at least one specialty to see its table." };
+  } else if (selectedStates !== null && selectedStates.length === 0) {
+    emptyView = { message: "Select at least one state to see its columns." };
+  } else if (matrix.tables.length === 0) {
+    emptyView = {
+      message: "No contract tables to show yet.",
+      description:
+        "A specialty's table appears once a selected group has a provider of that specialty with a clinic or license in a state, or holds a contract record there.",
+    };
   }
+
+  const emptyRowsMessage = payerSearch.trim()
+    ? "No payers in this table match the search."
+    : statusFilter !== null
+      ? "No payers in this table match the status filter."
+      : "No payers yet. Add a network target for one of these groups, or add a payer.";
+
+  const linkBanner = hasLink
+    ? location
+      ? `Opened from a case: ${[location.payerName, location.specialtyLabel, location.groupName, location.state].join(" · ")}. The cell is highlighted below.`
+      : `Opened from a case: ${[
+          (payersQ.data ?? []).find((payer) => payer.id === initialContext?.payerId)?.name ??
+            "Payer",
+          (groupsQ.data ?? []).find((group) => group.id === initialContext?.groupId)?.name ??
+            "Group",
+          initialContext?.state ?? "",
+        ].join(" · ")}. That cell is not in the tables shown.`
+    : null;
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="space-y-6">
-        {initialContext?.groupId || initialContext?.payerId || initialContext?.state ? (
-          <div className="rounded-md border border-emerald-700/30 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-950">
-            Matrix context: {contextGroup?.name ?? "selected group"}
-            {contextPayer ? ` · ${contextPayer.name}` : ""}
-            {initialContext?.state ? ` · ${initialContext.state}` : ""}
-            {initialContext?.groupId &&
-            activeGroupIds.includes(initialContext.groupId) &&
-            contextPayer &&
-            initialContext?.state ? (
-              <span className="ml-2 text-emerald-800">Matching cell highlighted below.</span>
+      <div className="space-y-4">
+        <section
+          aria-labelledby="contracts-matrix-org"
+          className="rounded-md border border-[var(--mp-border)] bg-[var(--mp-card)]"
+        >
+          <header className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--mp-border)] p-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--mp-ink-secondary)]">
+                Organization
+              </p>
+              <h2
+                id="contracts-matrix-org"
+                className="truncate text-[20px] font-semibold text-[var(--mp-ink)]"
+              >
+                {orgName}
+              </h2>
+              <p className="text-[13px] text-[var(--mp-ink-secondary)]" data-testid="matrix-scope">
+                {[
+                  countLabel(counts.groups, "group"),
+                  countLabel(counts.specialties, "specialty", "specialties"),
+                  countLabel(counts.states, "state"),
+                  countLabel(counts.payers, "payer"),
+                ].join(" · ")}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[13px] text-[var(--mp-ink-secondary)]" data-testid="matrix-totals">
+                <span className="font-semibold text-[var(--mp-ink)]">{counts.records}</span>{" "}
+                {counts.records === 1 ? "contract record" : "contract records"} ·{" "}
+                <span className="font-semibold text-[var(--mp-ok-ink)]">{counts.inNetwork}</span> in
+                network
+              </p>
+              {canWrite ? (
+                <AddButton label="Add payer" onClick={() => setAddPayerOpen(true)} />
+              ) : null}
+            </div>
+          </header>
+
+          <div className="space-y-4 p-4">
+            <ContractsMatrixFilters
+              specialties={specialties}
+              onToggleSpecialty={(specialty) =>
+                setSpecialties((current) =>
+                  current.includes(specialty)
+                    ? current.filter((s) => s !== specialty)
+                    : MATRIX_SPECIALTIES.filter((s) => s === specialty || current.includes(s)),
+                )
+              }
+              groupOptions={matrix.groupOptions}
+              onToggleGroup={(groupId) => {
+                const current = matrix.selectedGroupIds;
+                setSelectedGroupIds(
+                  current.includes(groupId)
+                    ? current.filter((id) => id !== groupId)
+                    : [...current, groupId],
+                );
+              }}
+              stateOptions={matrix.stateOptions}
+              selectedStates={selectedStates}
+              onToggleState={(state) => {
+                const current = selectedStates ?? matrix.stateOptions;
+                const next = current.includes(state)
+                  ? current.filter((s) => s !== state)
+                  : [...current, state];
+                const coversAll = matrix.stateOptions.every((s) => next.includes(s));
+                setSelectedStates(coversAll ? null : next);
+              }}
+              onAllStates={() => setSelectedStates(null)}
+              payerSearch={payerSearch}
+              onPayerSearch={setPayerSearch}
+              arrange={arrange}
+              onArrange={setArrange}
+              statusFilter={statusFilter}
+              onStatusFilter={setStatusFilter}
+            />
+
+            {linkBanner ? (
+              <p
+                role="status"
+                className="rounded-md border border-[var(--mp-border)] bg-[var(--mp-primary-tint)] px-3 py-2 text-[13px] text-[var(--mp-ink)]"
+              >
+                {linkBanner}
+              </p>
+            ) : null}
+
+            {matrix.groupsWithoutColumns.length > 0 ? (
+              <p className="text-[13px] text-[var(--mp-ink-secondary)]">
+                Not shown: {joinNames(matrix.groupsWithoutColumns.map((group) => group.name))}{" "}
+                {matrix.groupsWithoutColumns.length === 1 ? "has" : "have"} no states yet.
+              </p>
+            ) : null}
+
+            {matrix.unplacedRecords.length > 0 ? (
+              <p className="text-[13px] text-[var(--mp-ink-secondary)]">
+                {countLabel(matrix.unplacedRecords.length, "contract record")}{" "}
+                {matrix.unplacedRecords.length === 1 ? "belongs" : "belong"} to{" "}
+                {joinNames(unplacedSpecialties)}, which{" "}
+                {unplacedSpecialties.length === 1 ? "has" : "have"} no table yet.
+              </p>
+            ) : null}
+
+            {matrix.supersededSharedRecords.length > 0 ? (
+              <p className="text-[13px] text-[var(--mp-ink-secondary)]">
+                Not shown:{" "}
+                {countLabel(
+                  matrix.supersededSharedRecords.length,
+                  "all-specialties agreement",
+                  "all-specialties agreements",
+                )}{" "}
+                where Physical therapy and Nutrition each have their own record (
+                {joinNames(matrix.supersededSharedRecords.map((record) => record.label))}).{" "}
+                {matrix.supersededSharedRecords.length === 1
+                  ? "It still applies"
+                  : "They still apply"}{" "}
+                to other specialties.
+              </p>
+            ) : null}
+
+            {emptyView ? (
+              <div className="rounded-md border border-[var(--mp-border)] p-8">
+                <EmptyState message={emptyView.message} description={emptyView.description} />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {matrix.tables.map((table) => (
+                  <ContractsMatrixTable
+                    key={table.specialty}
+                    table={table}
+                    canWrite={canWrite}
+                    highlight={location}
+                    emptyRowsMessage={emptyRowsMessage}
+                    onOpenCell={handleOpenCell}
+                    onAddState={canWrite ? () => setAddStateFor(table.specialty) : undefined}
+                  />
+                ))}
+              </div>
+            )}
+
+            {!emptyView && (anyShared || anyOutside) ? (
+              <div className="space-y-1.5 text-[13px] text-[var(--mp-ink-secondary)]">
+                {anyShared ? (
+                  <p className="flex items-start gap-2">
+                    <SharedTag />
+                    <span>
+                      One agreement that covers every specialty for that group and state. It shows
+                      in each specialty&apos;s table, and changing it changes it in all of them.
+                    </span>
+                  </p>
+                ) : null}
+                {anyOutside ? (
+                  <p className="flex items-start gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="mt-0.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] border border-[var(--mp-border)] bg-[var(--mp-muted)]"
+                    />
+                    <span>
+                      Shaded cells are states the plan does not serve (from the payer catalog). They
+                      cannot be edited and are left out of the totals.
+                    </span>
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </div>
-        ) : null}
-        {/* Top Control Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                Provider Groups
-              </span>
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-[260px] h-9 justify-between font-medium">
-                    {activeGroups.length === 1
-                      ? activeGroups[0].name
-                      : `${activeGroups.length} groups selected`}
-                    <ChevronDown className="h-4 w-4 shrink-0" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-64 w-[260px] overflow-y-auto">
-                  {groups.map((group) => (
-                    <DropdownMenuCheckboxItem
-                      key={group.id}
-                      checked={activeGroupIds.includes(group.id)}
-                      onSelect={(event) => event.preventDefault()}
-                      onCheckedChange={(checked) => {
-                        const next =
-                          checked === true
-                            ? [...activeGroupIds, group.id]
-                            : activeGroupIds.filter((id) => id !== group.id);
-                        setSelectedGroupIds(next);
-                      }}
-                    >
-                      <span className="truncate">{group.name}</span>
-                      {group.tin ? <span className="ml-1 text-xs">({group.tin})</span> : null}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+        </section>
 
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                Specialty
-              </span>
-              <Select value={selectedSpecialty} onValueChange={setSelectedSpecialty}>
-                <SelectTrigger aria-label="Specialty" className="w-[240px] h-9 font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_SPECIALTIES}>All Specialties</SelectItem>
-                  {specialtyOptions.map((option) => (
-                    <SelectItem key={option.key} value={option.key}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <section
+          aria-labelledby="contracts-matrix-notes"
+          className="rounded-md border border-[var(--mp-border)] bg-[var(--mp-card)] p-4"
+        >
+          <h2
+            id="contracts-matrix-notes"
+            className="text-[11px] font-medium uppercase tracking-wider text-[var(--mp-ink-secondary)]"
+          >
+            Cross-payer dependencies &amp; contract notes
+          </h2>
+          {matrix.notes.length === 0 ? (
+            <p className="mt-2 text-[13px] text-[var(--mp-ink-secondary)]">
+              No notes on the contracts shown. Notes saved in a contract&apos;s dialog appear here.
+            </p>
+          ) : (
+            <ul className="mt-2 divide-y divide-[var(--mp-border-subtle)]">
+              {matrix.notes.map((note) => (
+                <li
+                  key={note.contract.id}
+                  className="flex flex-col gap-1 py-2 text-[13px] sm:flex-row sm:gap-3"
+                >
+                  <span className="shrink-0 font-semibold text-[var(--mp-ink)]">{note.label}</span>
+                  <span className="whitespace-pre-wrap break-words text-[var(--mp-ink-secondary)]">
+                    {note.note}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                Filter Payers
-              </span>
-              <div className="relative w-[200px]">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="pl-8 h-9 text-xs"
-                  placeholder="Search payer..."
-                  value={payerSearch}
-                  onChange={(e) => setPayerSearch(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <div className="text-xs text-muted-foreground text-right mr-2 hidden md:block">
-              <span className="font-semibold text-foreground">{visibleContractCount}</span> active
-              contracts mapped
-            </div>
-          </div>
-        </div>
-
-        {/* Status Legend Bar */}
-        <div className="bg-muted/40 border border-border/80 rounded-md p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[11px]">
-            Legend:
-          </span>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
-                x
-              </span>
-              <span>In-Network</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold border border-amber-300">
-                x
-              </span>
-              <span>In Progress (Signed)</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <span className="h-2 w-2 rounded-full bg-blue-600" />
-              <span>Application Submitted</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <span className="h-2 w-2 rounded-full bg-orange-600" />
-              <span>Appealed</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <span className="h-2 w-2 rounded-full bg-red-600" />
-              <span>Denied</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <span className="h-2 w-2 rounded-full bg-slate-500" />
-              <span>OON</span>
-            </span>
-            <span className="inline-flex items-center gap-1 text-muted-foreground">
-              <span>—</span>
-              <span>Not Started</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Matrix Grid Table */}
-        {activeGroups.length === 0 ? (
-          <div className="rounded-md border border-border bg-card p-8 text-center">
-            <EmptyState message="Select a provider group to view contracts" />
-          </div>
-        ) : (
-          matrixGroups.map((matrixGroup) => {
-            const { group, states, contractsByKey, filteredPayers, notes } = matrixGroup;
-            return (
-              <section key={group.id} aria-label={`${group.name} contracts`} className="space-y-3">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {group.name}
-                  {group.tin ? ` (${group.tin})` : ""}
-                </h3>
-                {states.length === 0 || filteredPayers.length === 0 ? (
-                  <div className="rounded-lg border border-border bg-card p-12 text-center">
-                    <EmptyState
-                      message={
-                        selectedSpecialty !== ALL_SPECIALTIES
-                          ? payerSearch.trim()
-                            ? "No contracts match this specialty and payer search"
-                            : "No contracts match this specialty"
-                          : states.length === 0
-                            ? "No states or facilities assigned to this group"
-                            : payerSearch.trim()
-                              ? "No payers match this search"
-                              : "No payers available"
-                      }
-                      description={
-                        selectedSpecialty === ALL_SPECIALTIES && states.length === 0
-                          ? "Attach payers or facilities in the onboarding wizard to expand contracting states."
-                          : undefined
-                      }
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border bg-card shadow-sm overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/60">
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground sticky left-0 bg-muted/90 backdrop-blur z-10 w-[240px]">
-                            Payer
-                          </th>
-                          {states.map((s) => (
-                            <th
-                              key={s}
-                              className="px-3 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[110px] border-l border-border/60"
-                            >
-                              {s}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {filteredPayers.map((payer) => (
-                          <tr key={payer.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3 font-medium text-foreground sticky left-0 bg-card z-10 whitespace-nowrap shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
-                              <span className="block truncate max-w-[220px]" title={payer.name}>
-                                {payer.name}
-                              </span>
-                            </td>
-                            {states.map((s) => {
-                              const contract = contractsByKey.get(`${payer.id}|${s}`);
-                              const isContextCell =
-                                initialContext?.groupId === group.id &&
-                                initialContext?.payerId === payer.id &&
-                                initialContext?.state?.toUpperCase() === s;
-                              const status = contract?.contractingStatusId
-                                ? statusById.get(contract.contractingStatusId)
-                                : null;
-                              const statusLabel = status?.label ?? "";
-
-                              return (
-                                <td
-                                  key={s}
-                                  onClick={() => handleCellClick(matrixGroup, payer, s)}
-                                  aria-current={isContextCell ? "location" : undefined}
-                                  className={`px-2 py-2.5 text-center border-l border-border/60 transition-colors ${
-                                    selectedSpecialty === ALL_SPECIALTIES || contract
-                                      ? "cursor-pointer hover:bg-muted/50"
-                                      : ""
-                                  }${isContextCell ? " bg-emerald-100 ring-2 ring-inset ring-emerald-700" : ""}`}
-                                >
-                                  {contract ? (
-                                    <div className="inline-flex flex-col items-center justify-center gap-0.5">
-                                      {/* Primary symbol / badge */}
-                                      {statusLabel === "In-Network" ? (
-                                        <span className="font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-1.5 py-0.5 text-xs">
-                                          x
-                                        </span>
-                                      ) : statusLabel === "In Progress (Contract Signed)" ? (
-                                        <span className="font-bold text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5 text-xs">
-                                          x
-                                        </span>
-                                      ) : status ? (
-                                        <span
-                                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded border"
-                                          style={{
-                                            backgroundColor: `${status.color}15`,
-                                            borderColor: `${status.color}40`,
-                                            color: status.color,
-                                          }}
-                                        >
-                                          {status.label}
-                                        </span>
-                                      ) : (
-                                        <span className="font-semibold text-muted-foreground text-xs">
-                                          x
-                                        </span>
-                                      )}
-
-                                      {/* Tentative Date */}
-                                      {contract.tentativeEffectiveDate ? (
-                                        <span className="text-[10px] text-amber-700 font-medium whitespace-nowrap">
-                                          tent {fmtDate(contract.tentativeEffectiveDate)}
-                                        </span>
-                                      ) : null}
-
-                                      {/* Effective Date */}
-                                      {contract.effectiveDate && statusLabel === "In-Network" ? (
-                                        <span className="text-[10px] text-emerald-700 font-medium whitespace-nowrap">
-                                          eff {fmtDate(contract.effectiveDate)}
-                                        </span>
-                                      ) : null}
-
-                                      {/* Notes indicator icon */}
-                                      {contract.notes?.trim() ? (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <span className="inline-block mt-0.5 text-muted-foreground hover:text-foreground">
-                                              <FileText className="h-3 w-3" />
-                                            </span>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="top" className="max-w-xs text-xs">
-                                            <p className="font-semibold">
-                                              {payer.name} ({s}) Note:
-                                            </p>
-                                            <p>{contract.notes}</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      ) : null}
-                                    </div>
-                                  ) : (
-                                    <span className="text-muted-foreground/50 hover:text-foreground text-sm font-light select-none">
-                                      —
-                                    </span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Footer Notes: Cross-Payer Dependencies Card */}
-                <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Cross-Payer Dependencies & Contract Notes
-                    </h4>
-                  </div>
-                  {notes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">
-                      No cross-payer dependencies or notes recorded for {group.name}. Click any cell
-                      in the matrix to record prerequisites.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                      {notes.map(({ contract, payerName }) => (
-                        <div
-                          key={contract.id}
-                          className="bg-muted/30 border border-border/70 rounded p-2.5 flex items-start gap-2"
-                        >
-                          <span className="font-bold text-foreground shrink-0">
-                            {payerName} ({contract.state}):
-                          </span>
-                          <span className="text-muted-foreground break-words">
-                            {contract.notes}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
-            );
-          })
-        )}
-
-        {/* Edit Drawer */}
-        {activeCell ? (
+        {openCell ? (
           <ContractDetailDrawer
-            open={drawerOpen}
-            onClose={() => {
-              setDrawerOpen(false);
-              setActiveCell(null);
-            }}
-            contract={activeCell.contract}
-            groupId={activeCell.groupId}
-            payerId={activeCell.payerId}
-            state={activeCell.state}
-            groupName={activeCell.groupName}
-            payerName={activeCell.payerName}
+            open
+            onClose={() => setOpenCell(null)}
+            contract={openCell.contract}
+            groupId={openCell.groupId}
+            payerId={openCell.payerId}
+            state={openCell.state}
+            groupName={openCell.groupName}
+            groupTin={openCell.groupTin}
+            payerName={openCell.payerName}
+            specialty={openCell.specialty}
+            allRecordExists={openCell.allRecordExists}
+            alsoApplyTargets={openCell.alsoApplyTargets}
+            sharedIn={openCell.sharedIn}
+          />
+        ) : null}
+
+        {addPayerOpen ? (
+          <AddPayerDialog
+            payers={matrix.addablePayers}
+            onAdd={(payerId) =>
+              setAddedPayerIds((current) =>
+                current.includes(payerId) ? current : [...current, payerId],
+              )
+            }
+            onClose={() => setAddPayerOpen(false)}
+          />
+        ) : null}
+
+        {addStateFor ? (
+          <AddStateDialog
+            specialtyLabel={CONTRACT_SPECIALTY_LABELS[addStateFor]}
+            groups={selectedGroups}
+            onAdd={(groupId, state) =>
+              setAddedColumns((current) => [...current, { specialty: addStateFor, groupId, state }])
+            }
+            onClose={() => setAddStateFor(null)}
           />
         ) : null}
       </div>

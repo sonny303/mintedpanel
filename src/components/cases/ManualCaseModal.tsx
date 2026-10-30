@@ -48,6 +48,7 @@ import { isAllStates, templateStates } from "@/lib/sopMatchKey";
 import { US_STATES } from "@/lib/usStates";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
+import { contractSpecialtyForTaxonomy } from "@/lib/contractSpecialty";
 
 interface ManualCaseModalProps {
   onClose: () => void;
@@ -154,11 +155,14 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     [caseType, providerId, groupId, payerId, state],
   );
 
-  const matrixContext = useMemo(
-    () =>
-      groupId !== NONE && payerId !== NONE && state !== NONE ? { groupId, payerId, state } : null,
-    [groupId, payerId, state],
-  );
+  // The picked provider's specialty opens that specialty's matrix table
+  // (GCM-20); none picked, or no contract specialty, opens the first table.
+  const matrixContext = useMemo(() => {
+    if (groupId === NONE || payerId === NONE || state === NONE) return null;
+    const provider = roster.find((p) => p.id === providerId);
+    const specialty = contractSpecialtyForTaxonomy(provider?.taxonomyCode) ?? undefined;
+    return { groupId, payerId, state, specialty };
+  }, [groupId, payerId, state, providerId, roster]);
 
   // The TE-5 dedupe read: the full key set regardless of status — a denied
   // case still occupies its key.
