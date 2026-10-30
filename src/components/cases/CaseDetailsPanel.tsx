@@ -10,7 +10,6 @@
 //                  (Slice D's derivation, reused verbatim — never re-derived).
 //   Provenance   — the E2.4 origin + SOP version lines + reapply cycles
 //                  (CaseProvenancePanel composed, never re-implemented).
-import { differenceInDays, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { CopyButton } from "@/components/CopyButton";
@@ -18,6 +17,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { CaseDateField } from "@/components/cases/CaseDateField";
 import { CaseLocationsSection } from "@/components/cases/CaseLocationsSection";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
+import { caseDaysOpen } from "@/lib/caseAge";
 import { enrollmentIdBadge } from "@/lib/payerIssuedIds";
 import { resolveGroupIdentifierConfig } from "@/lib/payerResolutionIdentifier";
 import type { CaseDetail, CaseFacilityWithDetail, Facility, Task } from "@/types";
@@ -62,7 +62,8 @@ export function CaseDetailsPanel({
   savingDates?: boolean;
   onSaveDates?: (input: SetCaseDatesInput) => Promise<void>;
 }) {
-  const daysOpen = c.submittedDate ? differenceInDays(new Date(), parseISO(c.submittedDate)) : null;
+  // Same definition as the Cases list and Matrix: calendar days since creation.
+  const daysOpen = caseDaysOpen(c.createdAt, new Date());
   const approved = c.caseStatus === "approved";
   // The provider-side badge is Slice D's shared derivation; the group side
   // mirrors it against the payer's own group-ID expectation.
@@ -119,7 +120,7 @@ export function CaseDetailsPanel({
               (onSaveDates ?? (async () => undefined))({ contractExecutedDate: next })
             }
           />
-          <Row label="Days open" value={<Num>{daysOpen !== null ? `${daysOpen}d` : "—"}</Num>} />
+          <Row label="Days open" value={<Num>{`${daysOpen}d`}</Num>} />
           <Separator className="my-2" />
           <Row
             label="Case type"
