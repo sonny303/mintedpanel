@@ -50,6 +50,7 @@ import {
   filterGridRows,
   GRID_BLOCKER_LABELS,
   groupGridRows,
+  inGridScope,
   reconcileGrid,
   splitGridSelection,
   type GridBlocker,
@@ -175,7 +176,10 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   const ambiguous = (preview.ambiguous ?? []).filter((r) => blockedKeys.has(previewRowKey(r)));
   const unmatched = (preview.unmatched ?? []).filter((r) => blockedKeys.has(previewRowKey(r)));
   const unmetByKey = new Map(gated.map((g) => [previewRowKey(g.row), g.unmet]));
-  const skips = preview.skips ?? [];
+  // Skip rows sit outside the count, but they follow the grid's scope too.
+  const skips = (preview.skips ?? []).filter((s) =>
+    inGridScope(s, scope, preview.providerFacilities),
+  );
   const groups = groupGridRows(gridRows, pivot);
 
   const toggleKeys = (keys: readonly string[], check: boolean) => {

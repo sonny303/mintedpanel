@@ -7,6 +7,7 @@ import {
   bucketGridRows,
   filterGridRows,
   groupGridRows,
+  inGridScope,
   reconcileGrid,
   splitGridSelection,
   type GridBlocker,
@@ -194,6 +195,22 @@ describe("splitGridSelection", () => {
     expect(confirmed.map((r) => r.payerId)).toEqual(["a"]);
     expect(groupGridRows(rows, "provider")[0].candidateKeys).toEqual([rows[0].key]);
   });
+
+  it("a blocked row covered by a live fact lands only in enrolledRows — never created or blocked", () => {
+    const rows = bucketGridRows(
+      [row("a", "proposed")],
+      [liveFact("a")],
+      blockersFor({ a: "unmatched" }),
+    );
+    expect(rows[0].bucket).toBe("enrolled");
+    const split = splitGridSelection(rows, new Set(rows.map((r) => r.key)));
+    expect(split.enrolledRows.map((r) => r.payerId)).toEqual(["a"]);
+    expect(split.selectedRows).toHaveLength(0);
+    expect(split.skippedRows).toHaveLength(0);
+    expect(split.existingRows).toHaveLength(0);
+    expect(split.excludedRows).toHaveLength(0);
+    expect(reconcileGrid(rows, new Set()).blocked).toBe(0);
+  });
 });
 
 describe("groupGridRows — pivots", () => {
@@ -237,5 +254,14 @@ describe("filterGridRows — scoped entries", () => {
     const providerFacilities = new Map([["prov1", new Set(["f1"])]]);
     expect(filterGridRows(rows, { facilityId: "f1" }, providerFacilities)).toHaveLength(2);
     expect(filterGridRows(rows, { facilityId: "f2" }, providerFacilities)).toHaveLength(0);
+  });
+
+  it("scopes a skip-shaped row (the banners beside the grid) by the same rule", () => {
+    const skip = { providerId: "prov1", groupId: "g1", payerId: "a" };
+    expect(inGridScope(skip, { groupId: "g1" })).toBe(true);
+    expect(inGridScope(skip, { groupId: "g2" })).toBe(false);
+    expect(inGridScope(skip, { providerId: "prov2" })).toBe(false);
+    // A provider with no facility assignment is outside any facility scope.
+    expect(inGridScope(skip, { facilityId: "f1" }, new Map())).toBe(false);
   });
 });

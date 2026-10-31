@@ -77,21 +77,29 @@ export interface GridScope {
   facilityId?: string;
 }
 
+/** One scope test for grid rows and the banners beside them (skip rows
+ * carry the same provider / group / payer keys). */
+export function inGridScope(
+  row: Pick<GenerationPreviewRow, "providerId" | "groupId" | "payerId">,
+  scope: GridScope,
+  providerFacilities?: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  if (scope.groupId && row.groupId !== scope.groupId) return false;
+  if (scope.payerId && row.payerId !== scope.payerId) return false;
+  if (scope.providerId && row.providerId !== scope.providerId) return false;
+  if (scope.facilityId) {
+    const set = providerFacilities?.get(row.providerId);
+    if (!set || !set.has(scope.facilityId)) return false;
+  }
+  return true;
+}
+
 export function filterGridRows(
   rows: readonly GridRow[],
   scope: GridScope,
   providerFacilities?: ReadonlyMap<string, ReadonlySet<string>>,
 ): GridRow[] {
-  return rows.filter(({ row }) => {
-    if (scope.groupId && row.groupId !== scope.groupId) return false;
-    if (scope.payerId && row.payerId !== scope.payerId) return false;
-    if (scope.providerId && row.providerId !== scope.providerId) return false;
-    if (scope.facilityId) {
-      const set = providerFacilities?.get(row.providerId);
-      if (!set || !set.has(scope.facilityId)) return false;
-    }
-    return true;
-  });
+  return rows.filter(({ row }) => inGridScope(row, scope, providerFacilities));
 }
 
 export type GridPivot = "provider" | "payer";
