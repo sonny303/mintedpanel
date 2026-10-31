@@ -233,7 +233,8 @@ export function isMissingContractSpecialtyKeyError(error: unknown): boolean {
 }
 
 /** Deploy-order safety for READS: true when PostgREST says a
- * `notification_sequence*` table does not exist, i.e. migration
+ * `notification_sequence*` table (the org's sequences and steps, or Minted's
+ * defaults and default steps) does not exist, i.e. migration
  * 20261031051500 is not applied to this database yet — PGRST205 from the
  * schema cache ("Could not find the table …"), or Postgres 42P01 from the
  * statement. The reader then reports the feature as unavailable rather than

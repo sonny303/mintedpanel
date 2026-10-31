@@ -21,7 +21,19 @@
 //
 // cc'd copies are always emailed, whatever the step's channel: staff have not
 // consented to texts, and the SMS consent table covers providers only.
+//
+// THE DIGEST HAS NO CC LIST (MINT-107 answer, Oct 30). The follow-up digest
+// goes to coordinators only; nobody cc'd gets anything from it. Its templates
+// therefore render no cc copy (`ccFields` empty), `catalogViolations` checks
+// that, and the database refuses a digest step with a cc list.
 import type { NotificationChannel, NotificationPurpose } from "@/types";
+
+/** The purposes whose steps carry a cc list. The digest has none. */
+export const PURPOSES_WITH_CC: readonly NotificationPurpose[] = ["intake_reminder"];
+
+export function purposeHasCcList(purpose: NotificationPurpose): boolean {
+  return PURPOSES_WITH_CC.includes(purpose);
+}
 
 /** The data a notification message may render. Closed on purpose. */
 export type NotificationTemplateField =
@@ -50,7 +62,7 @@ export interface NotificationTemplateEntry {
   channels: readonly NotificationChannel[];
   /** Data the message to the step's own recipient may render. */
   recipientFields: readonly NotificationTemplateField[];
-  /** Data a cc'd copy may render. See the cc rule above. */
+  /** Data a cc'd copy may render. See the cc rule above. Empty for a purpose with no cc list. */
   ccFields: readonly NotificationTemplateField[];
   /** False for a system message a step cannot pick (the bounce notice). */
   selectable: boolean;
@@ -152,13 +164,8 @@ export const NOTIFICATION_TEMPLATES: readonly NotificationTemplateEntry[] = [
       "overdueFollowUpCount",
       "workQueueLink",
     ],
-    ccFields: [
-      "practiceName",
-      "recipientFirstName",
-      "followUpCount",
-      "overdueFollowUpCount",
-      "workQueueLink",
-    ],
+    // Coordinators only: the digest has no cc list, so no cc copy.
+    ccFields: [],
     selectable: true,
   },
 ];
@@ -212,6 +219,9 @@ export function catalogViolations(catalog: readonly NotificationTemplateEntry[])
       if (CC_PERSONAL_FIELDS.includes(field)) {
         problems.push(`${entry.key}: cc copy renders personal field ${field}`);
       }
+    }
+    if (!purposeHasCcList(entry.purpose) && entry.ccFields.length > 0) {
+      problems.push(`${entry.key}: ${entry.purpose} has no cc list, so it renders no cc copy`);
     }
   }
   return problems;

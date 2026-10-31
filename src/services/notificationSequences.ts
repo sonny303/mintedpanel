@@ -1,6 +1,10 @@
 // MINT-107 — organization notification sequences (migration 20261031051500).
 //
-// Reads go straight to the two tables under RLS (any member of the org).
+// Reads go straight to the tables under RLS: the org's own rows (any member
+// of the org) and Minted's platform defaults (any member of any org). The
+// card gets both, because an org row only overrides the default field by
+// field; resolveNotificationSequence() in src/lib/notificationSequences.ts
+// turns them into the effective sequence.
 // Saves go through save_notification_sequence, a SECURITY INVOKER RPC that
 // replaces the sequence and its steps in one transaction, checks the caller
 // is an admin of the org, enforces the revision for concurrent editors, and
@@ -26,11 +30,13 @@ import {
   parseCcRecipients,
   saveErrorMessage,
   type NotificationSequenceConfig,
+  type NotificationSequenceDefaultConfig,
   type SaveSequencePayload,
 } from "@/lib/notificationSequences";
 import type {
   NotificationChannel,
   NotificationPurpose,
+  NotificationSequenceDefaultStep,
   NotificationSequenceStep,
   NotificationStopCondition,
 } from "@/types";
@@ -45,9 +51,13 @@ function browserCtx(): NotificationSequenceServiceCtx {
 }
 
 const SEQUENCE_COLUMNS =
-  "id, org_id, purpose, enabled, stop_conditions, target_days_to_ready, compress_toward_start_date, revision, created_at, updated_at, updated_by";
+  "id, org_id, purpose, enabled, stop_conditions, target_days_to_ready, compress_toward_start_date, send_hour, send_time_zone, revision, created_at, updated_at, updated_by";
 const STEP_COLUMNS =
   "id, sequence_id, org_id, position, offset_days, channel, template_key, cc_recipients, created_at, updated_at";
+const DEFAULT_COLUMNS =
+  "purpose, stop_conditions, target_days_to_ready, compress_toward_start_date, send_hour, send_time_zone, created_at, updated_at";
+const DEFAULT_STEP_COLUMNS =
+  "id, purpose, position, offset_days, channel, template_key, created_at, updated_at";
 
 type SequenceRow = Pick<
   Database["public"]["Tables"]["notification_sequences"]["Row"],
@@ -58,6 +68,8 @@ type SequenceRow = Pick<
   | "stop_conditions"
   | "target_days_to_ready"
   | "compress_toward_start_date"
+  | "send_hour"
+  | "send_time_zone"
   | "revision"
   | "created_at"
   | "updated_at"
@@ -76,9 +88,23 @@ type StepRow = Pick<
   | "created_at"
   | "updated_at"
 >;
+type DefaultRow = Database["public"]["Tables"]["notification_sequence_defaults"]["Row"];
+type DefaultStepRow = Database["public"]["Tables"]["notification_sequence_default_steps"]["Row"];
 
 function isPurpose(value: string): value is NotificationPurpose {
   return (NOTIFICATION_PURPOSES as readonly string[]).includes(value);
+}
+
+function toChannel(value: string): NotificationChannel {
+  return value === "sms" ? "sms" : "email";
+}
+
+/** Unknown values are dropped; null stays null (Minted's default). */
+function toStopConditions(value: string[] | null): NotificationStopCondition[] | null {
+  if (value == null) return null;
+  return value.filter((c): c is NotificationStopCondition =>
+    (STOP_CONDITIONS as readonly string[]).includes(c),
+  );
 }
 
 function toStep(row: StepRow): NotificationSequenceStep {
@@ -88,7 +114,7 @@ function toStep(row: StepRow): NotificationSequenceStep {
     orgId: row.org_id,
     position: row.position,
     offsetDays: row.offset_days,
-    channel: (row.channel === "sms" ? "sms" : "email") satisfies NotificationChannel,
+    channel: toChannel(row.channel),
     templateKey: row.template_key,
     ccRecipients: parseCcRecipients(row.cc_recipients),
     createdAt: row.created_at,
@@ -103,11 +129,11 @@ function toConfig(row: SequenceRow, steps: StepRow[]): NotificationSequenceConfi
     orgId: row.org_id,
     purpose: row.purpose,
     enabled: row.enabled,
-    stopConditions: (row.stop_conditions ?? []).filter((c): c is NotificationStopCondition =>
-      (STOP_CONDITIONS as readonly string[]).includes(c),
-    ),
+    stopConditions: toStopConditions(row.stop_conditions),
     targetDaysToReady: row.target_days_to_ready,
     compressTowardStartDate: row.compress_toward_start_date,
+    sendHour: row.send_hour,
+    sendTimeZone: row.send_time_zone,
     revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -123,38 +149,105 @@ export type NotificationSequencesByPurpose = Partial<
   Record<NotificationPurpose, NotificationSequenceConfig>
 >;
 
+/** Minted's platform default for every purpose. */
+export type NotificationSequenceDefaults = Record<
+  NotificationPurpose,
+  NotificationSequenceDefaultConfig
+>;
+
 /**
- * `available`: the org's saved sequences keyed by purpose; a purpose with no
- * row is absent (off). `unavailable`: this database does not have the
- * notification tables yet (the migration is not applied).
+ * `available`: the org's saved sequences keyed by purpose (a purpose with no
+ * row is absent, which means off) and Minted's default for every purpose.
+ * `unavailable`: this database does not have the notification tables yet
+ * (the migration is not applied).
  */
 export type NotificationSequencesResult =
-  { status: "available"; sequences: NotificationSequencesByPurpose } | { status: "unavailable" };
+  | {
+      status: "available";
+      sequences: NotificationSequencesByPurpose;
+      defaults: NotificationSequenceDefaults;
+    }
+  | { status: "unavailable" };
+
+function toDefaultStep(row: DefaultStepRow, purpose: NotificationPurpose) {
+  return {
+    id: row.id,
+    purpose,
+    position: row.position,
+    offsetDays: row.offset_days,
+    channel: toChannel(row.channel),
+    templateKey: row.template_key,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } satisfies NotificationSequenceDefaultStep;
+}
+
+/** Every purpose's default; a missing one is a broken database, not "off". */
+function toDefaults(rows: DefaultRow[], steps: DefaultStepRow[]): NotificationSequenceDefaults {
+  const byPurpose: Partial<NotificationSequenceDefaults> = {};
+  for (const row of rows) {
+    const purpose = row.purpose;
+    if (!isPurpose(purpose)) continue;
+    byPurpose[purpose] = {
+      purpose,
+      stopConditions: toStopConditions(row.stop_conditions),
+      targetDaysToReady: row.target_days_to_ready,
+      compressTowardStartDate: row.compress_toward_start_date,
+      sendHour: row.send_hour,
+      sendTimeZone: row.send_time_zone,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      steps: steps
+        .filter((step) => step.purpose === purpose)
+        .sort((a, b) => a.position - b.position)
+        .map((step) => toDefaultStep(step, purpose)),
+    };
+  }
+  const missing = NOTIFICATION_PURPOSES.filter((purpose) => !byPurpose[purpose]);
+  if (missing.length > 0) {
+    throw new Error(`Minted's default notification settings are missing (${missing.join(", ")})`);
+  }
+  return byPurpose as NotificationSequenceDefaults;
+}
 
 export async function listNotificationSequences(
   ctx: NotificationSequenceServiceCtx = browserCtx(),
 ): Promise<NotificationSequencesResult> {
-  const [sequences, steps] = await Promise.all([
+  const [sequences, steps, defaults, defaultSteps] = await Promise.all([
     ctx.db.from("notification_sequences").select(SEQUENCE_COLUMNS).eq("org_id", ctx.orgId),
     ctx.db
       .from("notification_sequence_steps")
       .select(STEP_COLUMNS)
       .eq("org_id", ctx.orgId)
       .order("position", { ascending: true }),
+    // Platform rows: no org_id to filter on. RLS lets any member read them.
+    ctx.db.from("notification_sequence_defaults").select(DEFAULT_COLUMNS),
+    ctx.db
+      .from("notification_sequence_default_steps")
+      .select(DEFAULT_STEP_COLUMNS)
+      .order("position", { ascending: true }),
   ]);
-  for (const result of [sequences, steps]) {
+  for (const result of [sequences, steps, defaults, defaultSteps]) {
     if (result.error && isMissingNotificationSequenceTablesError(result.error)) {
       return { status: "unavailable" };
     }
   }
-  if (sequences.error) throw sequences.error;
-  if (steps.error) throw steps.error;
+  for (const result of [sequences, steps, defaults, defaultSteps]) {
+    if (result.error) throw result.error;
+  }
   const out: NotificationSequencesByPurpose = {};
   for (const row of (sequences.data ?? []) as SequenceRow[]) {
     const config = toConfig(row, (steps.data ?? []) as StepRow[]);
     if (config) out[config.purpose] = config;
   }
-  return { status: "available", sequences: out };
+  return {
+    status: "available",
+    sequences: out,
+    defaults: toDefaults(
+      (defaults.data ?? []) as DefaultRow[],
+      (defaultSteps.data ?? []) as DefaultStepRow[],
+    ),
+  };
 }
 
 export interface SaveNotificationSequenceInput {

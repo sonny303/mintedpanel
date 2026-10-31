@@ -10,9 +10,9 @@ import {
 } from "@/services/notificationSequences";
 
 /**
- * The org's sequences, or `{ status: "unavailable" }` while this database has
- * no notification tables yet. That is a result, not an error, so it is never
- * retried and never shows the card's load-error box.
+ * The org's own sequences and Minted's defaults, or `{ status: "unavailable" }`
+ * while this database has no notification tables yet. That is a result, not
+ * an error, so it is never retried and never shows the card's load-error box.
  */
 export function useNotificationSequences() {
   const orgId = useActiveOrgId() ?? "no-org";
@@ -34,7 +34,7 @@ export function useSaveNotificationSequence() {
       // the server's state instead of as a change by someone else.
       qc.setQueryData<NotificationSequencesResult>(key, (old) =>
         old?.status === "available"
-          ? { status: "available", sequences: { ...old.sequences, [config.purpose]: config } }
+          ? { ...old, sequences: { ...old.sequences, [config.purpose]: config } }
           : old,
       );
       await qc.invalidateQueries({ queryKey: key });

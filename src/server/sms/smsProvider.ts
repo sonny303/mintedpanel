@@ -1,7 +1,10 @@
-// MINT-107 — the server-side SMS seam. No vendor is chosen or integrated:
-// `resolveSmsProvider` always returns the disabled provider, which refuses
-// every message without reading it. A later PR picks a vendor (HIPAA BAA,
-// 10DLC registration) and adds an implementation of `SmsProvider` behind it.
+// MINT-107 — the server-side SMS seam. `resolveSmsProvider` always returns
+// the disabled provider, which refuses every message without reading it.
+//
+// Vendor: Twilio (Sowmya, Oct 30), subject to Sowmya confirming the HIPAA BAA
+// tier and the 10DLC registration before anything is signed. Until both are
+// confirmed there is no Twilio adapter and SMS stays disabled. The PR that
+// adds the adapter implements `SmsProvider` behind `resolveSmsProvider`.
 //
 // Rules any implementation, and any caller, must keep:
 //   * A text goes only to a provider with a live sms_consents row for that
@@ -61,8 +64,9 @@ export const disabledSmsProvider: SmsProvider = Object.freeze({
 
 /**
  * The provider the server should use. Today that is always the disabled one:
- * SMS ships switched off until a vendor is chosen. The env parameter is the
- * seam the vendor PR fills in (keys, sender id); it is unread now.
+ * SMS ships switched off until Twilio's HIPAA BAA tier and 10DLC registration
+ * are confirmed. The env parameter is the seam the Twilio PR fills in (keys,
+ * sender id); it is unread now, so no environment can switch SMS on.
  */
 export function resolveSmsProvider(
   _env: Readonly<Record<string, string | undefined>> = {},

@@ -1,10 +1,13 @@
 // MINT-107 — the Org Detail Notifications card over the mock harness. An
-// admin sets up intake reminders from the starter, edits an offset, fills
-// and orders step 1's cc list, moves a step from the keyboard, switches it on
-// and saves; the spec asserts the exact save_notification_sequence payload,
-// not just the UI. Another admin saving under an open draft keeps the edits
-// and makes the save a 409 conflict. A specialist sees the schedule
-// read-only, and before the migration is applied the card says the feature
+// admin sets up intake reminders from Minted's default, customizes the steps,
+// edits an offset, fills and orders step 1's cc list, moves a step from the
+// keyboard, switches it on and saves; the spec asserts the exact
+// save_notification_sequence payload, not just the UI: settings left alone
+// go as null (Minted's default) and nothing platform-managed is ever sent.
+// An admin overrides a default and goes back to it. Another admin saving
+// under an open draft keeps the edits and makes the save a 409 conflict. A
+// specialist sees the schedule read-only, the digest with Minted's send time
+// and no cc, and before the migration is applied the card says the feature
 // is not switched on yet.
 import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
@@ -71,6 +74,44 @@ function fixtures(role: "admin" | "specialist"): Rows {
     ],
     notification_sequences: [],
     notification_sequence_steps: [],
+    // Minted's seeded defaults (migration 20261031051500).
+    notification_sequence_defaults: [
+      {
+        purpose: "intake_reminder",
+        stop_conditions: ["submitted", "paused", "withdrawn", "provider_replied"],
+        target_days_to_ready: 14,
+        compress_toward_start_date: false,
+        send_hour: null,
+        send_time_zone: null,
+        created_at: "2026-10-31T00:00:00Z",
+        updated_at: "2026-10-31T00:00:00Z",
+      },
+      {
+        purpose: "followup_digest",
+        stop_conditions: null,
+        target_days_to_ready: null,
+        compress_toward_start_date: null,
+        send_hour: 8,
+        send_time_zone: "America/Chicago",
+        created_at: "2026-10-31T00:00:00Z",
+        updated_at: "2026-10-31T00:00:00Z",
+      },
+    ],
+    notification_sequence_default_steps: [
+      ["intake_reminder", 1, 2, "intake_reminder_first"],
+      ["intake_reminder", 2, 4, "intake_reminder_second"],
+      ["intake_reminder", 3, 7, "intake_reminder_final"],
+      ["followup_digest", 1, 0, "followup_digest_daily"],
+    ].map(([purpose, position, offset, key]) => ({
+      id: `default-${purpose}-${position}`,
+      purpose,
+      position,
+      offset_days: offset,
+      channel: "email",
+      template_key: key,
+      created_at: "2026-10-31T00:00:00Z",
+      updated_at: "2026-10-31T00:00:00Z",
+    })),
     party_role_assignments: [],
     party_role_types: [],
     parties: [],
@@ -100,7 +141,7 @@ function fixtures(role: "admin" | "specialist"): Rows {
   };
 }
 
-function savedIntake(rows: Rows) {
+function savedIntake(rows: Rows, over: Record<string, unknown> = {}) {
   rows.notification_sequences = [
     {
       id: "seq-intake",
@@ -108,12 +149,15 @@ function savedIntake(rows: Rows) {
       purpose: "intake_reminder",
       enabled: true,
       stop_conditions: ["submitted", "withdrawn"],
-      target_days_to_ready: 14,
-      compress_toward_start_date: true,
+      target_days_to_ready: null,
+      compress_toward_start_date: null,
+      send_hour: null,
+      send_time_zone: null,
       revision: 4,
       created_at: "2026-10-30T00:00:00Z",
       updated_at: "2026-10-30T00:00:00Z",
       updated_by: USER_ID,
+      ...over,
     },
   ];
   rows.notification_sequence_steps = [2, 4, 7].map((offset, i) => ({
@@ -136,17 +180,18 @@ interface SaveCall {
   p_payload: {
     enabled: boolean;
     expected_revision: number | null;
-    stop_conditions: string[];
+    stop_conditions: string[] | null;
     target_days_to_ready: number | null;
-    compress_toward_start_date: boolean;
     steps: Array<{
       offset_days: number;
       channel: string;
       template_key: string;
       cc_recipients: unknown[];
-    }>;
+    }> | null;
   };
 }
+
+const PLATFORM_KEYS = ["compress_toward_start_date", "send_hour", "send_time_zone"];
 
 function makeHandler(rows: Rows, options: { missingTables?: boolean } = {}) {
   const saves: SaveCall[] = [];
@@ -169,7 +214,16 @@ function makeHandler(rows: Rows, options: { missingTables?: boolean } = {}) {
           409,
         );
       }
-      // Write through, as the RPC does: replace the row and its steps.
+      // The RPC refuses a platform-managed setting.
+      const sent = Object.keys(call.p_payload);
+      if (sent.some((key) => PLATFORM_KEYS.includes(key))) {
+        return json(
+          { code: "42501", details: null, hint: null, message: "notification_platform_setting" },
+          403,
+        );
+      }
+      // Write through, as the RPC does: replace the row and its steps; a null
+      // setting stays null (Minted's default) and Minted's overrides are kept.
       const id = (existing?.id as string | undefined) ?? `seq-${call.p_purpose}`;
       const sequence = {
         id,
@@ -177,9 +231,10 @@ function makeHandler(rows: Rows, options: { missingTables?: boolean } = {}) {
         purpose: call.p_purpose,
         enabled: call.p_payload.enabled,
         stop_conditions: call.p_payload.stop_conditions,
-        target_days_to_ready:
-          call.p_purpose === "intake_reminder" ? (call.p_payload.target_days_to_ready ?? 14) : null,
-        compress_toward_start_date: call.p_payload.compress_toward_start_date,
+        target_days_to_ready: call.p_payload.target_days_to_ready,
+        compress_toward_start_date: existing?.compress_toward_start_date ?? null,
+        send_hour: existing?.send_hour ?? null,
+        send_time_zone: existing?.send_time_zone ?? null,
         revision: existing ? (existing.revision as number) + 1 : 1,
         created_at: "2026-10-31T00:00:00Z",
         updated_at: "2026-10-31T00:00:00Z",
@@ -189,7 +244,7 @@ function makeHandler(rows: Rows, options: { missingTables?: boolean } = {}) {
         ...rows.notification_sequences.filter((r) => r.purpose !== call.p_purpose),
         sequence,
       ];
-      const steps = call.p_payload.steps.map((step, i) => ({
+      const steps = (call.p_payload.steps ?? []).map((step, i) => ({
         id: `${id}-step-${i + 1}`,
         sequence_id: id,
         org_id: call.p_org_id,
@@ -263,7 +318,7 @@ function seedAuth(context: {
   );
 }
 
-test("MINT-107: an admin sets up intake reminders from the starter, fills the cc list in order and saves", async ({
+test("MINT-107: an admin sets up intake reminders from Minted's default, customizes the steps, fills the cc list in order and saves", async ({
   context,
   page,
 }) => {
@@ -279,10 +334,29 @@ test("MINT-107: an admin sets up intake reminders from the starter, fills the cc
   const intake = page.getByRole("region", { name: "Provider intake reminders" });
   await expect(intake.getByText("Not set up")).toBeVisible();
   await expect(
-    intake.getByText(/3 emails, on day 2, day 4 and day 7 after the invite/),
+    intake.getByText(
+      /Set up starts you with Minted's default: 3 emails, on day 2, day 4 and day 7 after the invite/,
+    ),
   ).toBeVisible();
 
   await intake.getByRole("button", { name: "Set up provider intake reminders" }).click();
+  // Minted's default, read-only until the admin customizes it.
+  await expect(intake.getByRole("heading", { name: "Minted's default steps" })).toBeVisible();
+  await expect(
+    intake.getByText("Step 3 · day 7 after the invite · Email · Final reminder"),
+  ).toBeVisible();
+  await expect(intake.getByLabel("Target days from invite to ready")).toHaveValue("");
+  await expect(intake.getByLabel("Target days from invite to ready")).toHaveAttribute(
+    "placeholder",
+    "14",
+  );
+  // Compression is Minted's: no switch, just what it does (answer 4).
+  await expect(intake.getByRole("switch")).toHaveCount(1);
+  await expect(
+    intake.getByText("Near a start date: reminders keep their days. Minted sets this."),
+  ).toBeVisible();
+
+  await intake.getByRole("button", { name: "Customize steps" }).click();
   await expect(intake.getByLabel("Step 1 days after invite")).toHaveValue("2");
   await expect(intake.getByLabel("Step 3 days after invite")).toHaveValue("7");
   await expect(intake.getByText("No one is cc'd on this step.")).toHaveCount(3);
@@ -317,14 +391,15 @@ test("MINT-107: an admin sets up intake reminders from the starter, fills the cc
   await expect(page.getByText("Provider intake reminders saved")).toBeVisible();
 
   expect(saves).toHaveLength(1);
+  // Exactly these keys: the target and stop conditions go as null (Minted's
+  // default) and no platform-managed setting is ever sent.
   expect(saves[0]).toEqual({
     p_org_id: ORG_ID,
     p_purpose: "intake_reminder",
     p_payload: {
       enabled: true,
-      stop_conditions: ["submitted", "paused", "withdrawn", "provider_replied"],
-      target_days_to_ready: 14,
-      compress_toward_start_date: true,
+      stop_conditions: null,
+      target_days_to_ready: null,
       expected_revision: null,
       steps: [
         {
@@ -364,6 +439,22 @@ test("MINT-107: an admin sets up intake reminders from the starter, fills the cc
 test("MINT-107: a specialist sees the saved schedule read-only", async ({ context, page }) => {
   const rows = fixtures("specialist");
   savedIntake(rows);
+  // The digest is on, with every setting Minted's, and no steps of its own.
+  rows.notification_sequences.push({
+    id: "seq-digest",
+    org_id: ORG_ID,
+    purpose: "followup_digest",
+    enabled: true,
+    stop_conditions: null,
+    target_days_to_ready: null,
+    compress_toward_start_date: null,
+    send_hour: null,
+    send_time_zone: null,
+    revision: 1,
+    created_at: "2026-10-30T00:00:00Z",
+    updated_at: "2026-10-30T00:00:00Z",
+    updated_by: USER_ID,
+  });
   const { handler, saves } = makeHandler(rows);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
@@ -377,11 +468,17 @@ test("MINT-107: a specialist sees the saved schedule read-only", async ({ contex
     intake.getByText("Step 1 · day 2 after the invite · Email · First reminder"),
   ).toBeVisible();
   await expect(intake.getByText("Cc: Jane Doe")).toBeVisible();
+  await expect(intake.getByText("14 days from invite to ready (Minted's default)")).toBeVisible();
   await expect(intake.getByRole("textbox")).toHaveCount(0);
   await expect(intake.getByRole("spinbutton")).toHaveCount(0);
   await expect(intake.getByRole("button")).toHaveCount(0);
   const digest = page.getByRole("region", { name: "Daily follow-up digest" });
-  await expect(digest.getByText("Not set up. An admin can set this up.")).toBeVisible();
+  await expect(
+    digest.getByText("Step 1 · once a day · Email · Daily follow-up digest"),
+  ).toBeVisible();
+  // Answers 2 and 5: coordinators only, at the hour Minted sets.
+  await expect(digest.getByText("Sent around 8 am Central time. Minted sets this.")).toBeVisible();
+  await expect(digest.getByText(/^Cc:/)).toHaveCount(0);
   await expect(digest.getByRole("button")).toHaveCount(0);
   await expect(page.getByText("Only admins can change notifications.")).toBeVisible();
   expect(saves).toHaveLength(0);
@@ -408,11 +505,25 @@ test("MINT-107: another admin's save keeps an open draft, and saving it is a con
   rows.notification_sequences[0].revision = 5;
   rows.notification_sequence_steps[0].offset_days = 3;
 
-  // Saving the digest refetches both purposes.
+  // Saving the digest refetches both purposes. The digest has nothing to
+  // edit but on/off: no cc picker, and Minted's send time read-only.
   const digest = page.getByRole("region", { name: "Daily follow-up digest" });
   await digest.getByRole("button", { name: "Set up daily follow-up digest" }).click();
+  await expect(digest.getByRole("combobox")).toHaveCount(0);
+  await expect(digest.getByText("Sent around 8 am Central time. Minted sets this.")).toBeVisible();
   await digest.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Daily follow-up digest saved")).toBeVisible();
+  expect(saves.at(-1)).toEqual({
+    p_org_id: ORG_ID,
+    p_purpose: "followup_digest",
+    p_payload: {
+      enabled: false,
+      stop_conditions: null,
+      target_days_to_ready: null,
+      expected_revision: null,
+      steps: null,
+    },
+  });
 
   // The intake draft is kept, and the card says why it is now stale.
   await expect(
@@ -432,6 +543,57 @@ test("MINT-107: another admin's save keeps an open draft, and saving it is a con
   await intake.getByRole("button", { name: "Discard changes" }).click();
   await expect(intake.getByLabel("Step 1 days after invite")).toHaveValue("3");
   await expect(intake.getByText("Another admin saved changes.", { exact: false })).toHaveCount(0);
+});
+
+test("MINT-107: an admin overrides Minted's defaults and goes back to them", async ({
+  context,
+  page,
+}) => {
+  const rows = fixtures("admin");
+  savedIntake(rows, { target_days_to_ready: 21 });
+  const { handler, saves } = makeHandler(rows);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/org-detail");
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible({
+    timeout: 30000,
+  });
+  const intake = page.getByRole("region", { name: "Provider intake reminders" });
+  const target = intake.getByLabel("Target days from invite to ready");
+  await expect(target).toHaveValue("21");
+  await expect(
+    intake.getByText("Minted's default is 14 days. Clear the box to use it."),
+  ).toBeVisible();
+
+  // Back to Minted's target, stop conditions and steps.
+  await target.fill("");
+  await expect(
+    intake.getByText("Using Minted's default, 14 days. Enter a number to change it."),
+  ).toBeVisible();
+  await intake.getByRole("button", { name: "Use Minted's default stop conditions" }).click();
+  await expect(intake.getByRole("checkbox", { checked: true })).toHaveCount(4);
+  await intake.getByRole("button", { name: "Use Minted's default steps" }).click();
+  await expect(intake.getByRole("heading", { name: "Minted's default steps" })).toBeVisible();
+  await intake.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Provider intake reminders saved")).toBeVisible();
+
+  expect(saves).toEqual([
+    {
+      p_org_id: ORG_ID,
+      p_purpose: "intake_reminder",
+      p_payload: {
+        enabled: true,
+        stop_conditions: null,
+        target_days_to_ready: null,
+        expected_revision: 4,
+        steps: null,
+      },
+    },
+  ]);
+  // The refetch shows the org now inheriting everything.
+  await expect(intake.getByRole("button", { name: "Customize steps" })).toBeVisible();
+  await expect(intake.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 });
 
 test("MINT-107: before the migration is applied the card says it is not switched on yet", async ({
