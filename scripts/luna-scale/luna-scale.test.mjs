@@ -3,9 +3,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   ID_TAG_SALT,
+  ISOLATION_GATE_LOGINS,
   LUNA_FIXTURE_VERSION,
   LUNA_ORG_ID,
   PRODUCTION_CLUSTER,
@@ -20,9 +24,13 @@ import {
   assertLunaTarget,
   assertMemberEmails,
   confirmationToken,
+  isEntryPoint,
   isLunaOwnedId,
   lunaUuid,
+  maskConnection,
   ownedIdSqlPredicate,
+  parseDatabaseUrl,
+  psqlConnectionEnvironment,
 } from "./luna-fixture.mjs";
 import {
   CASE_STATUS_MIX,
@@ -47,10 +55,11 @@ import {
   buildVerifySql,
   sqlLiteral,
 } from "./luna-sql.mjs";
-import { main, parseArgs } from "./seed-luna-scale.mjs";
+import { main, parseArgs, runPsql } from "./seed-luna-scale.mjs";
 import {
   ROSTER_TEMPLATES_PER_ORG,
   checkSnapshot,
+  lastJsonLine,
   main as verifyMain,
   parseVerifyArgs,
   plannedFromReceipt,
@@ -543,7 +552,7 @@ test("apply SQL inserts every table in chunks under the statement limit, idempot
   assert.ok(sideEffectCheck > applySql.lastIndexOf("INSERT INTO public.enrollment_facts"));
   assert.ok(sideEffectCheck < applySql.lastIndexOf("COMMIT;"));
   for (const table of LUNA_TABLES.filter((t) => t !== "organizations")) {
-    assert.ok(applySql.includes(`SELECT '${table}'::text AS table_name`), table);
+    assert.ok(applySql.includes(`SELECT 'public.${table}'::regclass AS rel`), table);
   }
 });
 
@@ -644,9 +653,22 @@ test("teardown covers every table written, child before parent, and only seed ro
   }
 });
 
-test("SQL literals escape quotes and refuse backslashes", () => {
-  assert.equal(sqlLiteral("O'Hara", "text"), "'O''Hara'");
-  assert.equal(sqlLiteral(null, "text"), "NULL");
+test("SQL literals carry their type, escape quotes and refuse backslashes", () => {
+  assert.equal(sqlLiteral("O'Hara", "text"), "'O''Hara'::text");
+  assert.equal(sqlLiteral(null, "text"), "NULL::text");
+  assert.equal(sqlLiteral(null, "uuid"), "NULL::uuid");
+  assert.equal(sqlLiteral(LUNA_ORG_ID, "uuid"), `'${LUNA_ORG_ID}'::uuid`);
+  assert.equal(sqlLiteral("2026-10-30", "date"), "'2026-10-30'::date");
+  assert.equal(sqlLiteral(null, "date"), "NULL::date");
+  assert.equal(
+    sqlLiteral("2026-10-30T15:00:00Z", "timestamptz"),
+    "'2026-10-30T15:00:00Z'::timestamptz",
+  );
+  assert.equal(sqlLiteral(5, "int"), "5::integer");
+  assert.equal(sqlLiteral(null, "int"), "NULL::integer");
+  assert.equal(sqlLiteral(true, "bool"), "true");
+  assert.equal(sqlLiteral(null, "bool"), "NULL::boolean");
+  assert.equal(sqlLiteral(null, "text[]"), "NULL::text[]");
   assert.equal(sqlLiteral(["AZ", "CA"], "text[]"), "ARRAY['AZ','CA']::text[]");
   assert.equal(sqlLiteral([], "text[]"), "'{}'::text[]");
   assert.equal(sqlLiteral({ a: "b'c" }, "jsonb"), `'{"a":"b''c"}'::jsonb`);
@@ -741,7 +763,7 @@ test("local mode accepts only 127.0.0.1 or localhost, whatever the allowlist say
   ]) {
     assert.throws(
       () => assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs: allowed, allowLocal: true }),
-      /--local-rehearsal: it accepts only 127\.0\.0\.1 or localhost/,
+      /--local-rehearsal: it accepts only 127\.0\.0\.1 or localhost|plain hostname or IPv4 address/,
       `${supabaseUrl} ${databaseUrl}`,
     );
   }
@@ -898,7 +920,20 @@ function spies(identity = STAGING_CLUSTER) {
       executeIdentity: async (command, args, options) => {
         calls.identity += 1;
         assert.equal(command, "psql");
-        assert.ok(!Object.keys(options.env).some((key) => key.startsWith("PG")));
+        // psql never gets the URL: the validated parts travel as PG* variables,
+        // and the inherited PGHOST (production.invalid) is gone.
+        assert.ok(!args.some((arg) => /postgres(ql)?:\/\//.test(arg)));
+        assert.deepEqual(
+          Object.fromEntries(Object.entries(options.env).filter(([key]) => key.startsWith("PG"))),
+          {
+            PGHOST: `db.${STAGING_PROJECT_REF}.supabase.co`,
+            PGPORT: "5432",
+            PGUSER: "postgres",
+            PGDATABASE: "postgres",
+            PGPASSWORD: "private-test-password",
+            PGCONNECT_TIMEOUT: "15",
+          },
+        );
         return { stdout: `${identity}\n` };
       },
       runSql: async (url, sql, variables) => calls.sql.push({ url, sql, variables }),
@@ -1132,12 +1167,16 @@ test("verify and fingerprint SQL are read-only and scoped to the Luna org", () =
     assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE)\b/);
   }
   // Every org-scoped public table is counted for the org, seed-owned or not.
-  assert.match(verifySql, /'org_rows', \(SELECT json_object_agg\(c\.table_name/);
-  assert.match(verifySql, /c\.column_name = 'org_id'/);
+  assert.match(verifySql, /'org_rows', \(SELECT json_object_agg\(c\.relname/);
+  assert.match(verifySql, /a\.attname = 'org_id'/);
+  assert.ok(
+    verifySql.includes(`format('org_id = %L::uuid', '${LUNA_ORG_ID}')`),
+    "uuid compare keeps the org_id index",
+  );
   // Outside: every public table, minus the Luna org's rows and its org row.
-  assert.ok(outside.includes(`format('x.id::text <> %L', '${LUNA_ORG_ID}')`));
-  assert.ok(outside.includes(`format('x.org_id::text IS DISTINCT FROM %L', '${LUNA_ORG_ID}')`));
-  assert.match(outside, /t\.table_schema = 'public' AND t\.table_type = 'BASE TABLE'/);
+  assert.ok(outside.includes(`format('x.id <> %L::uuid', '${LUNA_ORG_ID}')`));
+  assert.ok(outside.includes(`format('x.org_id IS DISTINCT FROM %L::uuid', '${LUNA_ORG_ID}')`));
+  assert.match(outside, /n\.nspname = 'public' AND c\.relkind IN \('r', 'p'\)/);
   // Seed: the org row and every table the seed writes or the members it adds.
   for (const table of [...LUNA_TABLES, "memberships"])
     assert.ok(seed.includes(`'${table}', (SELECT md5(`), table);
@@ -1231,4 +1270,284 @@ test("a failed identity preflight reports psql's error without the credentials",
       return true;
     },
   );
+});
+
+// ---------- fix round: review of #562 ----------
+
+test("no scan resolves a table by name: every catalog query uses OIDs", () => {
+  const sql = [
+    buildApplySql(dataset, { target: STAGING }),
+    buildTeardownSql({ target: STAGING }),
+    buildVerifySql(),
+    buildFingerprintSql("outside"),
+    buildFingerprintSql("seed"),
+  ].join("\n");
+  assert.doesNotMatch(sql, /information_schema/);
+  assert.doesNotMatch(sql, /has_table_privilege\(format\(/);
+  assert.doesNotMatch(sql, /public\.%I/);
+  const privileges = [...sql.matchAll(/has_table_privilege\(([^,]+),/g)].map((m) => m[1]);
+  assert.ok(privileges.length >= 4);
+  for (const argument of privileges) assert.match(argument, /^(c\.oid|con\.conrelid)$/);
+  // org_id compares as uuid, so its index applies; ::text only for a non-uuid column.
+  for (const line of sql.split("\n").filter((l) => l.includes("org_id::text"))) {
+    assert.match(line, /ELSE format\('org_id::text = %L'|WHEN a\.attname IS NOT NULL THEN/, line);
+  }
+});
+
+test("teardown refuses any row that depends on a seed row, whatever --allow-unowned says", () => {
+  for (const sql of [teardownSql, buildTeardownSql({ target: STAGING, allowUnowned: true })]) {
+    assert.match(sql, /FROM pg_catalog\.pg_constraint con/);
+    assert.match(sql, /WHERE con\.contype = 'f' AND con\.confrelid = ANY \(v_targets\)/);
+    assert.match(
+      sql,
+      /unnest\(con\.conkey, con\.confkey\) WITH ORDINALITY AS k \(child_att, parent_att, ord\)/,
+    );
+    assert.match(sql, /rows the seed did not create reference seed rows/);
+    assert.match(sql, /cannot read % \(privilege or forced row security\)/);
+    assert.match(
+      sql,
+      /IF r\.confdeltype IN \('c', 'n', 'd'\) THEN\n\s+v_unreadable := v_unreadable \|\| to_jsonb\(r\.child::regclass::text\);/,
+    );
+    const unreadable = sql.indexOf("IF v_unreadable <> '[]'::jsonb THEN");
+    const dependents = sql.indexOf("IF v_dependents <> '{}'::jsonb THEN");
+    const unowned = sql.indexOf(
+      "IF v_unowned <> '{}'::jsonb AND current_setting('minted.luna_allow_unowned')",
+    );
+    const firstDelete = sql.indexOf("DELETE FROM public.");
+    assert.ok(
+      unreadable > 0 && unreadable < dependents && dependents < unowned && unowned < firstDelete,
+    );
+    assert.doesNotMatch(
+      sql.slice(unreadable, unowned),
+      /luna_allow_unowned/,
+      "no override for dependents",
+    );
+  }
+  for (const table of TEARDOWN_TABLES) {
+    assert.ok(
+      teardownSql.includes(`'public.${table}'::regclass::oid`),
+      `${table} is an FK-scan target`,
+    );
+  }
+  // Tables without a uuid id (the SSN vault, keyed by provider_id) count every row.
+  assert.match(
+    teardownSql,
+    /CASE WHEN r\.has_uuid_id THEN ' AND NOT pg_temp\.luna_owned\(id\)' ELSE '' END/,
+  );
+  // A seed row referencing a seed row is not a dependent; nothing else is excused.
+  assert.ok(
+    teardownSql.includes(
+      "THEN format(' AND NOT (d.org_id = %L::uuid AND pg_temp.luna_owned(d.id))'",
+    ),
+  );
+});
+
+test("inserts add only missing rows, so a repair burns no case_number values", () => {
+  const statements = applySql
+    .split(/(?=INSERT INTO public\.)/)
+    .filter((piece) => /^INSERT INTO public\.(?!organizations|audit_log|memberships)/.test(piece));
+  assert.ok(statements.length > 0);
+  for (const statement of statements) {
+    const table = /^INSERT INTO public\.(\w+) /.exec(statement)[1];
+    const body = statement.slice(0, statement.indexOf(";\n") + 1);
+    assert.match(body, new RegExp(`^INSERT INTO public\\.${table} \\([^)]+\\)\\nSELECT v\\.id, `));
+    assert.ok(
+      body.endsWith(
+        `\nWHERE NOT EXISTS (SELECT 1 FROM public.${table} e WHERE e.id = v.id)\nON CONFLICT (id) DO NOTHING;`,
+      ),
+      table,
+    );
+  }
+  const cases = statements.find((piece) => piece.startsWith("INSERT INTO public.credential_cases"));
+  assert.doesNotMatch(
+    cases.split("\n")[0],
+    /case_number/,
+    "the sequence default stays the database's",
+  );
+  assert.match(cases, /'[0-9a-f-]{36}'::uuid/);
+  assert.match(cases, /NULL::date/);
+  assert.match(cases, /'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z'::timestamptz/);
+});
+
+test("a member already in another org is refused unless --allow-multi-org-member", () => {
+  const members = [{ email: "reviewer@example.test", role: "admin" }];
+  const strict = buildApplySql(dataset, { target: STAGING, members });
+  const allowed = buildApplySql(dataset, { target: STAGING, members, allowMultiOrgMember: true });
+  assert.ok(
+    strict.includes(
+      `m.user_id = v_user AND m.org_id <> '${LUNA_ORG_ID}'::uuid) THEN\n    RAISE EXCEPTION 'Luna-scale seed refused: the member already belongs to another organization`,
+    ),
+  );
+  assert.ok(
+    strict.indexOf("belongs to a UAT fixture org") <
+      strict.indexOf("already belongs to another organization"),
+  );
+  assert.doesNotMatch(allowed, /already belongs to another organization/);
+  assert.match(allowed, /belongs to a UAT fixture org/, "UAT members stay refused with the flag");
+  assert.equal(parseArgs(["--apply", "--allow-multi-org-member"]).allowMultiOrgMember, true);
+  assert.equal(parseArgs(["--dry-run", "--allow-multi-org-member"]).allowMultiOrgMember, true);
+  assert.throws(
+    () => parseArgs(["--teardown", "--allow-multi-org-member"]),
+    /only applies to --apply/,
+  );
+});
+
+test("isolation-gate logins are refused even when no env var names them", async () => {
+  assert.deepEqual(
+    [...ISOLATION_GATE_LOGINS],
+    ["testkansas@minted.com", "testsouthpark@minted.com"],
+  );
+  for (const email of ISOLATION_GATE_LOGINS) {
+    assert.throws(() => assertMemberEmails([email.toUpperCase()], "admin", {}), /isolation-gate/);
+  }
+  const mock = await readFile(new URL("../mock-api-server.mjs", import.meta.url), "utf8");
+  assert.match(mock, /KANSAS_EMAIL: "testkansas@minted\.com"/);
+  assert.match(mock, /SPVIEW_EMAIL: "testsouthpark@minted\.com"/);
+});
+
+test("database URLs that libpq and WHATWG URL read differently are refused in both modes", () => {
+  const localApi = "http://127.0.0.1:54321";
+  for (const url of [
+    "postgresql://postgres:x@evil.example.com,y@127.0.0.1:54322/postgres",
+    `postgresql://postgres:x@db.abcdefghijklmnopqrst.supabase.co,db.${STAGING_PROJECT_REF}.supabase.co:5432/postgres`,
+    `postgres://postgres:x@evil.example.com,x@db.${STAGING_PROJECT_REF}.supabase.co:5432/postgres`,
+    `postgres://postgres.${STAGING_PROJECT_REF}:x@evil.example.com,y@aws-0-ca-central-1.pooler.supabase.com:5432/postgres`,
+    "postgresql://a@b@127.0.0.1:54322/postgres",
+    "postgresql://postgres:x@127.0.0.1,127.0.0.2:54322/postgres",
+    "postgresql://postgres:x@127.0.0.1:54322,10.0.0.1:5432/postgres",
+    "postgresql://post%2Fgres:x@127.0.0.1:54322/postgres",
+    "postgresql://postgres%40evil:x@127.0.0.1:54322/postgres",
+    "postgresql://postgres%2Cevil:x@127.0.0.1:54322/postgres",
+    "postgresql://postgres:x@127.0.0.1%2C10.0.0.1:54322/postgres",
+    "postgresql://postgres:x@[::1]:54322/postgres",
+    "postgresql://postgres:x@127.0.0.1:54322/postgres?host=10.0.0.1",
+    "postgresql://postgres:x@127.0.0.1:54322/postgres?hostaddr=10.0.0.1",
+    "postgresql://postgres:x@127.0.0.1:54322/postgres?sslmode=require&sslmode=disable",
+    "postgresql://127.0.0.1:54322/postgres",
+    "postgresql://postgres:x@127.0.0.1:54322/other",
+  ]) {
+    assert.throws(() => parseDatabaseUrl(url), url);
+    assert.throws(
+      () =>
+        assertLunaTarget({
+          supabaseUrl: localApi,
+          databaseUrl: url,
+          allowedRefs: allowed,
+          allowLocal: true,
+        }),
+      url,
+    );
+    assert.throws(
+      () => assertLunaTarget({ supabaseUrl: api, databaseUrl: url, allowedRefs: allowed }),
+      url,
+    );
+  }
+  assert.throws(
+    () =>
+      assertLunaTarget({
+        supabaseUrl: "http://x@127.0.0.1:54321",
+        databaseUrl: "postgres://postgres:x@127.0.0.1:54322/postgres",
+        allowedRefs: [],
+        allowLocal: true,
+      }),
+    /Invalid SUPABASE_URL/,
+  );
+  // Valid forms parse into discrete parts; a %40 in the password is fine.
+  assert.deepEqual(
+    parseDatabaseUrl(
+      `postgresql://postgres.${STAGING_PROJECT_REF}:p%40ss@aws-0-ca-central-1.pooler.supabase.com:5432/postgres?sslmode=require`,
+    ),
+    {
+      host: "aws-0-ca-central-1.pooler.supabase.com",
+      port: "5432",
+      user: `postgres.${STAGING_PROJECT_REF}`,
+      password: "p@ss",
+      dbname: "postgres",
+      sslmode: "require",
+    },
+  );
+  assert.deepEqual(parseDatabaseUrl("postgres://postgres:x@localhost:54322/postgres"), {
+    host: "localhost",
+    port: "54322",
+    user: "postgres",
+    password: "x",
+    dbname: "postgres",
+    sslmode: null,
+  });
+  // psql's environment: inherited PG* gone, validated parts in.
+  assert.deepEqual(
+    psqlConnectionEnvironment("postgres://postgres:x@127.0.0.1:54322/postgres", {
+      PATH: "/bin",
+      PGHOST: "prod.invalid",
+      PGSERVICE: "prod",
+      PGHOSTADDR: "192.0.2.1",
+    }),
+    {
+      PATH: "/bin",
+      PGHOST: "127.0.0.1",
+      PGPORT: "54322",
+      PGUSER: "postgres",
+      PGDATABASE: "postgres",
+      PGPASSWORD: "x",
+      PGCONNECT_TIMEOUT: "15",
+    },
+  );
+  assert.equal(
+    maskConnection("FATAL p%40ss / p@ss", "postgres://u:p%40ss@localhost:5432/postgres"),
+    "FATAL <password> / <password>",
+  );
+});
+
+test("the teardown dry run prints the teardown token", async () => {
+  const { calls, deps } = spies();
+  await main(["--dry-run", "--teardown"], deps);
+  const output = calls.reports.join("");
+  assert.ok(output.includes(`--confirm "TEAR DOWN LUNA SCALE ON ${STAGING_PROJECT_REF}"`));
+  assert.ok(!output.includes("SEED LUNA SCALE ON"));
+  assert.match(
+    output,
+    /Refuses, always, when any row the seed did not create references a seed row/,
+  );
+});
+
+test("the entry guard follows symlinks and paths with spaces", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "luna entry "));
+  try {
+    const target = new URL("./seed-luna-scale.mjs", import.meta.url);
+    const link = join(dir, "seed link.mjs");
+    await symlink(fileURLToPath(target), link);
+    assert.equal(isEntryPoint(link, target.href), true);
+    const spaced = join(dir, "real file.mjs");
+    await writeFile(spaced, "");
+    assert.equal(isEntryPoint(spaced, pathToFileURL(spaced).href), true);
+    assert.equal(isEntryPoint(spaced, target.href), false);
+    assert.equal(isEntryPoint(join(dir, "missing.mjs"), target.href), false);
+    assert.equal(isEntryPoint(undefined, target.href), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("psql exiting early reports the rollback instead of crashing on EPIPE", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "luna-psql-"));
+  try {
+    const fake = join(dir, "psql");
+    await writeFile(fake, "#!/bin/sh\nexit 3\n");
+    await chmod(fake, 0o755);
+    const environment = { PATH: `${dir}:${process.env.PATH}` };
+    const url = "postgres://postgres:x@127.0.0.1:54322/postgres";
+    await assert.rejects(
+      runPsql(url, "SELECT 1;\n".repeat(400_000), { confirm_token: "x" }, environment),
+      /psql exited 3; the transaction rolled back/,
+    );
+    await writeFile(fake, "#!/bin/sh\ncat > /dev/null\nexit 0\n");
+    await runPsql(url, "SELECT 1;\n".repeat(1000), {}, environment);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the verifier reads the last JSON line of psql output", () => {
+  assert.deepEqual(lastJsonLine('BEGIN\n{"a":1}\nSET\n{"a":2}\nCOMMIT\n', "snapshot"), { a: 2 });
+  assert.throws(() => lastJsonLine("BEGIN\nCOMMIT", "snapshot"), /no snapshot/);
 });

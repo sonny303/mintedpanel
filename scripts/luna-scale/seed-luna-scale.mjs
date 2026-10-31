@@ -15,8 +15,10 @@ import {
   assertLunaTarget,
   assertMemberEmails,
   confirmationToken,
+  isEntryPoint,
   parseAllowedRefs,
-  psqlEnvironment,
+  maskConnection,
+  psqlConnectionEnvironment,
 } from "./luna-fixture.mjs";
 import {
   LUNA_TABLES,
@@ -36,7 +38,8 @@ const USAGE = `Usage:
   node scripts/luna-scale/seed-luna-scale.mjs --dry-run [--teardown] [count flags]
   node scripts/luna-scale/seed-luna-scale.mjs --emit-sql <file> [count flags]
   node scripts/luna-scale/seed-luna-scale.mjs --apply --confirm "SEED LUNA SCALE ON <ref>"
-      [--member-email <email> ...] [--member-role admin|specialist|billing] [count flags]
+      [--member-email <email> ...] [--member-role admin|specialist|billing]
+      [--allow-multi-org-member] [count flags]
   node scripts/luna-scale/seed-luna-scale.mjs --teardown --confirm "TEAR DOWN LUNA SCALE ON <ref>" [--allow-unowned]
 Count flags: --providers N --groups N --locations N --states N --payers N --seed TEXT --anchor-date YYYY-MM-DD
 Target env: SUPABASE_URL, LUNA_DATABASE_URL, LUNA_SCALE_ALLOWED_PROJECT_REFS
@@ -53,6 +56,7 @@ export function parseArgs(argv) {
     memberEmails: [],
     memberRole: "admin",
     allowUnowned: false,
+    allowMultiOrgMember: false,
     localRehearsal: false,
     anchorDate: null,
     emitPath: null,
@@ -93,6 +97,7 @@ export function parseArgs(argv) {
       args.params[name] = Number(raw);
       index += 1;
     } else if (flag === "--allow-unowned") args.allowUnowned = true;
+    else if (flag === "--allow-multi-org-member") args.allowMultiOrgMember = true;
     else if (flag === "--local-rehearsal") args.localRehearsal = true;
     else if (flag === "--help" || flag === "-h") args.modes.push("help");
     else throw new Error(`Unknown argument: ${flag}\n${USAGE}`);
@@ -107,6 +112,9 @@ export function parseArgs(argv) {
     throw new Error(`Choose exactly one of --dry-run, --emit-sql, --apply, --teardown\n${USAGE}`);
   if (args.mode !== "apply" && args.mode !== "dry-run" && args.memberEmails.length > 0) {
     throw new Error("--member-email only applies to --apply (or its --dry-run)");
+  }
+  if (args.mode !== "apply" && args.mode !== "dry-run" && args.allowMultiOrgMember) {
+    throw new Error("--allow-multi-org-member only applies to --apply (or its --dry-run)");
   }
   if (args.mode !== "teardown" && args.allowUnowned) {
     throw new Error("--allow-unowned only applies to --teardown");
@@ -177,11 +185,13 @@ export function formatTeardownPlan(dataset, target) {
     ),
     "  Then sets the organization inactive. It is never deleted: the roster ledger",
     `  (${PRESERVED_ORG_TABLES.filter((t) => t.startsWith("roster")).join(", ")}) is append-only and audit_log is never deleted.`,
-    "  Refuses when the org holds rows the seed did not create, unless --allow-unowned.",
+    "  Refuses, always, when any row the seed did not create references a seed row through a",
+    "  foreign key (cascade, set null, set default or blocking), in any schema.",
+    "  Refuses when the org holds other rows the seed did not create, unless --allow-unowned.",
   ].join("\n")}\n`;
 }
 
-function describeTarget(environment, allowLocal) {
+function describeTarget(environment, allowLocal, action) {
   if (!environment.SUPABASE_URL || !environment.LUNA_DATABASE_URL) {
     return "not checked (SUPABASE_URL / LUNA_DATABASE_URL unset)";
   }
@@ -192,17 +202,18 @@ function describeTarget(environment, allowLocal) {
       allowedRefs: parseAllowedRefs(environment.LUNA_SCALE_ALLOWED_PROJECT_REFS),
       allowLocal,
     });
-    return `${target.kind} ${target.projectRef} (would need --confirm "${confirmationToken("apply", target)}")`;
+    return `${target.kind} ${target.projectRef} (would need --confirm "${confirmationToken(action, target)}")`;
   } catch (error) {
     return `REFUSED: ${error.message}`;
   }
 }
 
 async function readDatabaseIdentity(executeIdentity, databaseUrl, environment) {
+  // The validated parts travel as PG* variables; psql never sees the URL.
+  const env = psqlConnectionEnvironment(databaseUrl, environment);
   const { stdout } = await executeIdentity(
     "psql",
     [
-      databaseUrl,
       "-X",
       "-A",
       "-t",
@@ -211,13 +222,10 @@ async function readDatabaseIdentity(executeIdentity, databaseUrl, environment) {
       "-c",
       "SELECT system_identifier::text FROM pg_control_system()",
     ],
-    { env: psqlEnvironment(environment), timeout: 15000 },
+    { env, timeout: 15000 },
   ).catch((error) => {
-    // execFile's message carries the credential-bearing connection argument;
-    // psql's own stderr does not, once the URL itself is masked.
-    const detail = String(error?.stderr ?? "")
-      .replaceAll(databaseUrl, "<LUNA_DATABASE_URL>")
-      .trim();
+    // psql's own message, with the password masked in case it echoes one.
+    const detail = maskConnection(error?.stderr, databaseUrl).trim();
     throw new Error(
       `Luna database identity preflight failed; nothing was written${detail ? `: ${detail}` : ""}`,
     );
@@ -225,21 +233,32 @@ async function readDatabaseIdentity(executeIdentity, databaseUrl, environment) {
   return String(stdout).trim();
 }
 
-async function runPsql(databaseUrl, sql, variables, environment) {
-  const args = [databaseUrl, "-X", "-q", "-v", "ON_ERROR_STOP=1"];
+export async function runPsql(databaseUrl, sql, variables, environment) {
+  const args = ["-X", "-q", "-v", "ON_ERROR_STOP=1"];
   for (const [key, value] of Object.entries(variables)) args.push("-v", `${key}=${value}`);
   args.push("-f", "-");
+  const env = psqlConnectionEnvironment(databaseUrl, environment);
   await new Promise((resolve, reject) => {
-    const child = spawn("psql", args, {
-      stdio: ["pipe", "inherit", "inherit"],
-      env: psqlEnvironment(environment),
-    });
-    child.once("error", () => reject(new Error("psql could not start; nothing was written")));
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolve();
+    };
+    const child = spawn("psql", args, { stdio: ["pipe", "inherit", "inherit"], env });
+    child.once("error", () => finish(new Error("psql could not start; nothing was written")));
     child.once("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`psql exited ${code}; the transaction rolled back`)),
+      finish(code === 0 ? null : new Error(`psql exited ${code}; the transaction rolled back`)),
     );
+    // psql stops reading at the first error (ON_ERROR_STOP), so the rest of a
+    // 16 MiB script hits a closed pipe. That EPIPE is the rollback, reported by
+    // the exit handler above, not a crash.
+    child.stdin.on("error", (error) => {
+      if (error?.code !== "EPIPE") {
+        finish(new Error("psql's input closed unexpectedly; the transaction rolled back"));
+      }
+    });
     child.stdin.end(sql);
   });
 }
@@ -265,13 +284,18 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
 
   if (args.mode === "dry-run" || args.mode === "dry-run-teardown") {
     const members = assertMemberEmails(args.memberEmails, args.memberRole, environment);
-    const target = describeTarget(environment, args.localRehearsal);
+    const target = describeTarget(
+      environment,
+      args.localRehearsal,
+      args.mode === "dry-run-teardown" ? "teardown" : "apply",
+    );
     if (args.mode === "dry-run-teardown") {
       report(formatTeardownPlan(dataset, target));
     } else {
       const sql = buildApplySql(dataset, {
         target: { kind: "review", projectRef: "REVIEW-ONLY" },
         members: members.map((email) => ({ email, role: args.memberRole })),
+        allowMultiOrgMember: args.allowMultiOrgMember,
       });
       report(formatPlan(dataset, { target, members, sqlBytes: Buffer.byteLength(sql) }));
     }
@@ -309,7 +333,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   );
   const sql =
     args.mode === "apply"
-      ? buildApplySql(dataset, { target, members })
+      ? buildApplySql(dataset, { target, members, allowMultiOrgMember: args.allowMultiOrgMember })
       : buildTeardownSql({ target, allowUnowned: args.allowUnowned });
   await runSql(environment.LUNA_DATABASE_URL, sql, {
     expected_database_identity: identity,
@@ -323,7 +347,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   return { mode: args.mode, target, counts: planCounts(dataset) };
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (isEntryPoint(process.argv[1], import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

@@ -252,12 +252,28 @@ export const PRESERVED_ORG_TABLES = Object.freeze([
   "roster_export_overrides",
 ]);
 
+const PG_TYPES = Object.freeze({
+  uuid: "uuid",
+  text: "text",
+  int: "integer",
+  bool: "boolean",
+  date: "date",
+  timestamptz: "timestamptz",
+  "text[]": "text[]",
+  jsonb: "jsonb",
+});
+
+/** A literal with an explicit cast. The inserts read from a VALUES list in a
+ * subquery, where an uncast literal would resolve to text and then fail the
+ * assignment to a uuid or date column, so every value carries its type. */
 export function sqlLiteral(value, type) {
-  if (value === null || value === undefined) return "NULL";
+  const pgType = PG_TYPES[type];
+  if (!pgType) throw new Error(`Unknown column type ${type}`);
+  if (value === null || value === undefined) return `NULL::${pgType}`;
   switch (type) {
     case "int":
       if (!Number.isSafeInteger(value)) throw new Error(`Not an integer: ${value}`);
-      return String(value);
+      return `${value}::integer`;
     case "bool":
       if (typeof value !== "boolean") throw new Error(`Not a boolean: ${value}`);
       return value ? "true" : "false";
@@ -265,11 +281,11 @@ export function sqlLiteral(value, type) {
       if (!Array.isArray(value)) throw new Error("Expected an array");
       return value.length === 0
         ? "'{}'::text[]"
-        : `ARRAY[${value.map((item) => sqlLiteral(item, "text")).join(",")}]::text[]`;
+        : `ARRAY[${value.map((item) => quote(String(item))).join(",")}]::text[]`;
     case "jsonb":
       return `${quote(JSON.stringify(value))}::jsonb`;
     default:
-      return quote(String(value));
+      return `${quote(String(value))}::${pgType}`;
   }
 }
 
@@ -278,7 +294,15 @@ function quote(text) {
   return `'${text.replaceAll("'", "''")}'`;
 }
 
-export function buildInsertStatements(table, rows, conflict = "(id) DO NOTHING") {
+/**
+ * Inserts only the rows whose id is not there yet. A plain INSERT ... ON
+ * CONFLICT evaluates column defaults before the conflict check, so every
+ * re-run would burn one credential_cases_case_number_seq value per existing
+ * case (sequences never roll back). Filtering on NOT EXISTS first means a
+ * repair touches the sequence only for cases it really adds. ON CONFLICT stays
+ * as the backstop for a concurrent writer.
+ */
+export function buildInsertStatements(table, rows) {
   const spec = TABLE_COLUMNS[table];
   if (!spec) throw new Error(`No column spec for ${table}`);
   const columns = Object.keys(spec);
@@ -293,8 +317,9 @@ export function buildInsertStatements(table, rows, conflict = "(id) DO NOTHING")
     const values = chunk
       .map((row) => `(${columns.map((column) => sqlLiteral(row[column], spec[column])).join(",")})`)
       .join(",\n");
+    const list = columns.join(", ");
     statements.push(
-      `INSERT INTO public.${table} (${columns.join(", ")}) VALUES\n${values}\nON CONFLICT ${conflict};`,
+      `INSERT INTO public.${table} (${list})\nSELECT ${columns.map((column) => `v.${column}`).join(", ")}\nFROM (VALUES\n${values}\n) AS v (${list})\nWHERE NOT EXISTS (SELECT 1 FROM public.${table} e WHERE e.id = v.id)\nON CONFLICT (id) DO NOTHING;`,
     );
   }
   return statements;
@@ -346,7 +371,7 @@ function receipt(event, fields) {
  * every insert (ON CONFLICT (id) DO NOTHING, so a re-run only repairs),
  * memberships, an exact owned-row count per table, and one audit receipt.
  */
-export function buildApplySql(dataset, { target, members = [] }) {
+export function buildApplySql(dataset, { target, members = [], allowMultiOrgMember = false }) {
   const counts = planCounts(dataset);
   const org = quote(LUNA_ORG_ID);
   const parts = [
@@ -376,7 +401,7 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, lifecycle_state = 'active';
     `CREATE TEMP TABLE luna_unowned_before ON COMMIT DROP AS
 ${SEED_TABLES.map(
   (table) =>
-    `SELECT '${table}'::text AS table_name, count(*) AS n FROM public.${table} WHERE org_id = ${org}::uuid AND NOT pg_temp.luna_owned(id)`,
+    `SELECT 'public.${table}'::regclass AS rel, count(*) AS n FROM public.${table} WHERE org_id = ${org}::uuid AND NOT pg_temp.luna_owned(id)`,
 ).join("\nUNION ALL\n")};`,
   ];
   for (const table of LUNA_TABLES) {
@@ -399,7 +424,14 @@ BEGIN
                AND m.org_id = ANY (ARRAY[${UAT_ORGANIZATION_IDS.map((id) => `${quote(id)}::uuid`).join(", ")}])) THEN
     RAISE EXCEPTION 'Luna-scale seed refused: the member belongs to a UAT fixture org';
   END IF;
-  INSERT INTO public.memberships (id, org_id, user_id, role)
+${
+  allowMultiOrgMember
+    ? "  -- --allow-multi-org-member: membership in other orgs was accepted by the operator.\n"
+    : `  IF EXISTS (SELECT 1 FROM public.memberships m WHERE m.user_id = v_user AND m.org_id <> ${org}::uuid) THEN
+    RAISE EXCEPTION 'Luna-scale seed refused: the member already belongs to another organization; re-run with --allow-multi-org-member to add them anyway';
+  END IF;
+`
+}  INSERT INTO public.memberships (id, org_id, user_id, role)
   VALUES (${quote(membershipId(member.email))}::uuid, ${org}::uuid, v_user, ${quote(member.role)})
   ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role;
 END
@@ -424,11 +456,11 @@ $luna$;`);
   parts.push(`DO $luna$
 DECLARE r record; v_count bigint;
 BEGIN
-  FOR r IN SELECT table_name, n FROM pg_temp.luna_unowned_before LOOP
-    EXECUTE format('SELECT count(*) FROM public.%I WHERE org_id = $1 AND NOT pg_temp.luna_owned(id)', r.table_name)
+  FOR r IN SELECT rel, n FROM pg_temp.luna_unowned_before LOOP
+    EXECUTE format('SELECT count(*) FROM %s WHERE org_id = $1 AND NOT pg_temp.luna_owned(id)', r.rel)
       INTO v_count USING ${org}::uuid;
     IF v_count <> r.n THEN
-      RAISE EXCEPTION 'Luna-scale seed refused: the database added % row(s) to % that the seed does not own (a trigger side effect); nothing was committed', v_count - r.n, r.table_name;
+      RAISE EXCEPTION 'Luna-scale seed refused: the database added % row(s) to % that the seed does not own (a trigger side effect); nothing was committed', v_count - r.n, r.rel;
     END IF;
   END LOOP;
 END
@@ -454,6 +486,8 @@ VALUES (${org}::uuid, NULL, 'Luna-scale seed (MINT-82)', 'CREATE', 'organization
  */
 export function buildTeardownSql({ target, allowUnowned = false }) {
   const org = quote(LUNA_ORG_ID);
+  const targets = TEARDOWN_TABLES.map((table) => `'public.${table}'::regclass::oid`).join(", ");
+  const preserved = PRESERVED_ORG_TABLES.map(quote).join(", ");
   const deletes = TEARDOWN_TABLES.map(
     (
       table,
@@ -468,6 +502,11 @@ DO $luna$
 DECLARE
   r record;
   v_count bigint;
+  v_me oid := (SELECT ro.oid FROM pg_catalog.pg_roles ro WHERE ro.rolname = current_user);
+  v_bypass boolean := (SELECT ro.rolsuper OR ro.rolbypassrls FROM pg_catalog.pg_roles ro WHERE ro.rolname = current_user);
+  v_targets oid[] := ARRAY[${targets}];
+  v_unreadable jsonb := '[]'::jsonb;
+  v_dependents jsonb := '{}'::jsonb;
   v_unowned jsonb := '{}'::jsonb;
   v_preserved jsonb := '{}'::jsonb;
   v_deleted jsonb := '{}'::jsonb;
@@ -476,29 +515,90 @@ BEGIN
     RAISE NOTICE 'Luna-scale teardown: the synthetic org does not exist; nothing to do';
     RETURN;
   END IF;
-  -- Every public table with an org_id and a uuid id: anything in the Luna org
-  -- that the seed did not create (a reviewer's note, upload or new case).
+  -- 1. Rows in the Luna org the seed did not create: every public table with
+  -- an org_id, whatever its key. A table without a uuid id (the SSN vault is
+  -- keyed by provider_id) holds no seed rows, so every row there counts.
+  -- Catalog OIDs, never names, so a row from another schema cannot raise.
   FOR r IN
-    SELECT c.table_name
-      FROM information_schema.columns c
-      JOIN information_schema.tables t
-        ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
-      JOIN information_schema.columns i
-        ON i.table_schema = c.table_schema AND i.table_name = c.table_name
-       AND i.column_name = 'id' AND i.data_type = 'uuid'
-     WHERE c.table_schema = 'public' AND c.column_name = 'org_id'
-       AND has_table_privilege(format('public.%I', c.table_name), 'SELECT')
-     ORDER BY c.table_name
+    SELECT c.oid AS rel, c.relname,
+           a.atttypid = 'uuid'::regtype AS org_is_uuid,
+           EXISTS (SELECT 1 FROM pg_catalog.pg_attribute i
+                    WHERE i.attrelid = c.oid AND i.attname = 'id' AND i.attnum > 0
+                      AND NOT i.attisdropped AND i.atttypid = 'uuid'::regtype) AS has_uuid_id,
+           has_table_privilege(c.oid, 'SELECT')
+             AND (NOT c.relrowsecurity OR v_bypass
+                  OR (NOT c.relforcerowsecurity AND c.relowner = v_me)) AS readable
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_catalog.pg_attribute a
+        ON a.attrelid = c.oid AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped
+     WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+     ORDER BY c.relname
   LOOP
-    EXECUTE format('SELECT count(*) FROM public.%I WHERE org_id::text = $1 AND NOT pg_temp.luna_owned(id)', r.table_name)
-      INTO v_count USING ${org};
+    IF NOT r.readable THEN
+      v_unreadable := v_unreadable || to_jsonb(r.rel::regclass::text);
+      CONTINUE;
+    END IF;
+    EXECUTE format('SELECT count(*) FROM %s WHERE %s%s', r.rel::regclass,
+        CASE WHEN r.org_is_uuid THEN format('org_id = %L::uuid', ${org}) ELSE format('org_id::text = %L', ${org}) END,
+        CASE WHEN r.has_uuid_id THEN ' AND NOT pg_temp.luna_owned(id)' ELSE '' END)
+      INTO v_count;
     CONTINUE WHEN v_count = 0;
-    IF r.table_name = ANY (ARRAY[${PRESERVED_ORG_TABLES.map(quote).join(", ")}]) THEN
-      v_preserved := v_preserved || jsonb_build_object(r.table_name, v_count);
+    IF r.relname = ANY (ARRAY[${preserved}]) THEN
+      v_preserved := v_preserved || jsonb_build_object(r.relname, v_count);
     ELSE
-      v_unowned := v_unowned || jsonb_build_object(r.table_name, v_count);
+      v_unowned := v_unowned || jsonb_build_object(r.relname, v_count);
     END IF;
   END LOOP;
+  -- 2. Rows anywhere, in any schema, that reference a seed row through a
+  -- foreign key into a table the teardown deletes from, other than seed rows
+  -- themselves. Deleting would cascade into them, null or default them out,
+  -- or be blocked by them, so --allow-unowned never overrides this.
+  FOR r IN
+    SELECT con.conname, con.conrelid AS child, con.confrelid AS parent, con.confdeltype,
+           con.conrelid = ANY (v_targets) AS child_is_seed_table,
+           has_table_privilege(con.conrelid, 'SELECT')
+             AND (NOT ch.relrowsecurity OR v_bypass
+                  OR (NOT ch.relforcerowsecurity AND ch.relowner = v_me)) AS readable,
+           (SELECT string_agg(format('d.%I = p.%I', ca.attname, pa.attname), ' AND ' ORDER BY k.ord)
+              FROM unnest(con.conkey, con.confkey) WITH ORDINALITY AS k (child_att, parent_att, ord)
+              JOIN pg_catalog.pg_attribute ca ON ca.attrelid = con.conrelid AND ca.attnum = k.child_att
+              JOIN pg_catalog.pg_attribute pa ON pa.attrelid = con.confrelid AND pa.attnum = k.parent_att
+           ) AS join_condition
+      FROM pg_catalog.pg_constraint con
+      JOIN pg_catalog.pg_class ch ON ch.oid = con.conrelid
+     WHERE con.contype = 'f' AND con.confrelid = ANY (v_targets)
+     ORDER BY con.conrelid::regclass::text, con.conname
+  LOOP
+    IF NOT r.readable THEN
+      -- A RESTRICT / NO ACTION dependent blocks the DELETE itself, which rolls
+      -- the whole teardown back; only an unreadable cascade, set null or set
+      -- default FK could change rows silently, so only that refuses here.
+      IF r.confdeltype IN ('c', 'n', 'd') THEN
+        v_unreadable := v_unreadable || to_jsonb(r.child::regclass::text);
+      END IF;
+      CONTINUE;
+    END IF;
+    EXECUTE format(
+        'SELECT count(*) FROM %s d WHERE EXISTS (SELECT 1 FROM %s p WHERE p.org_id = %L::uuid AND pg_temp.luna_owned(p.id) AND %s)%s',
+        r.child::regclass, r.parent::regclass, ${org}, r.join_condition,
+        CASE WHEN r.child_is_seed_table
+          THEN format(' AND NOT (d.org_id = %L::uuid AND pg_temp.luna_owned(d.id))', ${org})
+          ELSE '' END)
+      INTO v_count;
+    CONTINUE WHEN v_count = 0;
+    v_dependents := v_dependents || jsonb_build_object(
+      format('%s.%s (on delete %s)', r.child::regclass, r.conname,
+        CASE r.confdeltype WHEN 'c' THEN 'cascade' WHEN 'n' THEN 'set null'
+          WHEN 'd' THEN 'set default' WHEN 'r' THEN 'restrict' ELSE 'no action' END),
+      v_count);
+  END LOOP;
+  IF v_unreadable <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'Luna-scale teardown refused: this role cannot read % (privilege or forced row security), so it cannot prove no other row depends on the seed', v_unreadable;
+  END IF;
+  IF v_dependents <> '{}'::jsonb THEN
+    RAISE EXCEPTION 'Luna-scale teardown refused: rows the seed did not create reference seed rows: %. Deleting would cascade into, null out or be blocked by them. Remove or re-point them first; --allow-unowned does not override this', v_dependents;
+  END IF;
   IF v_unowned <> '{}'::jsonb AND current_setting('minted.luna_allow_unowned') <> 'true' THEN
     RAISE EXCEPTION 'Luna-scale teardown refused: the synthetic org holds rows the seed did not create: %. Review them, then re-run with --allow-unowned to keep them and remove only seed rows', v_unowned;
   END IF;
@@ -568,14 +668,17 @@ COMMIT;
 // Every row in the Luna org, per public table with an org_id, seed-owned or
 // not: after a teardown only the roster templates and audit receipts remain.
 // query_to_xml runs one count per table inside a single read-only SELECT.
-const ORG_ROWS_SQL = `SELECT json_object_agg(c.table_name, (xpath('/row/n/text()', query_to_xml(
-       format('SELECT count(*) AS n FROM public.%I WHERE org_id::text = %L', c.table_name, $ORG),
-       false, true, '')))[1]::text::bigint ORDER BY c.table_name)
-     FROM information_schema.columns c
-     JOIN information_schema.tables t
-       ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
-     WHERE c.table_schema = 'public' AND c.column_name = 'org_id'
-       AND has_table_privilege(format('public.%I', c.table_name), 'SELECT')`;
+const ORG_ROWS_SQL = `SELECT json_object_agg(c.relname, (xpath('/row/n/text()', query_to_xml(
+       format('SELECT count(*) AS n FROM %s WHERE %s', c.oid::regclass,
+         CASE WHEN a.atttypid = 'uuid'::regtype THEN format('org_id = %L::uuid', $ORG)
+              ELSE format('org_id::text = %L', $ORG) END),
+       false, true, '')))[1]::text::bigint ORDER BY c.relname)
+     FROM pg_catalog.pg_class c
+     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     JOIN pg_catalog.pg_attribute a
+       ON a.attrelid = c.oid AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped
+     WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+       AND has_table_privilege(c.oid, 'SELECT')`;
 
 /**
  * Read-only md5 fingerprints, one per table, for the CI job:
@@ -590,19 +693,21 @@ export function buildFingerprintSql(scope) {
   if (scope === "outside") {
     return `BEGIN READ ONLY;
 SET LOCAL statement_timeout = '120s';
-SELECT json_object_agg(t.table_name, (xpath('/row/h/text()', query_to_xml(format(
-    'SELECT md5(coalesce(string_agg(r, %L ORDER BY r), %L)) AS h FROM (SELECT row_to_json(x)::text AS r FROM public.%I x WHERE %s) s',
-    ',', '', t.table_name,
+SELECT json_object_agg(c.relname, (xpath('/row/h/text()', query_to_xml(format(
+    'SELECT md5(coalesce(string_agg(r, %L ORDER BY r), %L)) AS h FROM (SELECT row_to_json(x)::text AS r FROM %s x WHERE %s) s',
+    ',', '', c.oid::regclass,
     CASE
-      WHEN t.table_name = 'organizations' THEN format('x.id::text <> %L', ${org})
-      WHEN o.column_name IS NOT NULL THEN format('x.org_id::text IS DISTINCT FROM %L', ${org})
+      WHEN c.relname = 'organizations' THEN format('x.id <> %L::uuid', ${org})
+      WHEN a.atttypid = 'uuid'::regtype THEN format('x.org_id IS DISTINCT FROM %L::uuid', ${org})
+      WHEN a.attname IS NOT NULL THEN format('x.org_id::text IS DISTINCT FROM %L', ${org})
       ELSE 'true'
-    END), false, true, '')))[1]::text ORDER BY t.table_name)
-FROM information_schema.tables t
-LEFT JOIN information_schema.columns o
-  ON o.table_schema = t.table_schema AND o.table_name = t.table_name AND o.column_name = 'org_id'
-WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-  AND has_table_privilege(format('public.%I', t.table_name), 'SELECT');
+    END), false, true, '')))[1]::text ORDER BY c.relname)
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_attribute a
+  ON a.attrelid = c.oid AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped
+WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+  AND has_table_privilege(c.oid, 'SELECT');
 COMMIT;
 `;
   }

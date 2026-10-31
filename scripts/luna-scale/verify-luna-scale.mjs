@@ -15,8 +15,10 @@ import {
   LUNA_FIXTURE_VERSION,
   assertDatabaseIdentity,
   assertLunaTarget,
+  isEntryPoint,
+  maskConnection,
   parseAllowedRefs,
-  psqlEnvironment,
+  psqlConnectionEnvironment,
 } from "./luna-fixture.mjs";
 import { LUNA_TABLES, buildLunaDataset, planCounts } from "./luna-dataset.mjs";
 import { PRESERVED_ORG_TABLES, buildFingerprintSql, buildVerifySql } from "./luna-sql.mjs";
@@ -115,8 +117,13 @@ export function parseVerifyArgs(argv) {
   return args;
 }
 
-function lastJsonLine(raw, what) {
-  const line = raw.split("\n").find((text) => text.trim().startsWith("{"));
+/** The last line of psql output that is a JSON object: the query result,
+ * after any command tags psql printed for BEGIN or SET. */
+export function lastJsonLine(raw, what) {
+  const line = String(raw)
+    .split("\n")
+    .map((text) => text.trim())
+    .findLast((text) => text.startsWith("{"));
   if (!line) throw new Error(`Luna verification returned no ${what}`);
   return JSON.parse(line);
 }
@@ -133,16 +140,16 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     allowLocal: args.allowLocal,
   });
   const databaseUrl = environment.LUNA_DATABASE_URL;
+  // The validated parts travel as PG* variables; psql never sees the URL.
+  const env = psqlConnectionEnvironment(databaseUrl, environment);
   const query = async (sql) => {
     const { stdout } = await execute(
       "psql",
-      [databaseUrl, "-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-c", sql],
-      { env: psqlEnvironment(environment), timeout: 120000, maxBuffer: 16 * 1024 * 1024 },
+      ["-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-c", sql],
+      { env, timeout: 120000, maxBuffer: 16 * 1024 * 1024 },
     ).catch((error) => {
-      // psql's own message, never the credential-bearing command line.
-      const detail = String(error?.stderr ?? "")
-        .replaceAll(databaseUrl, "<LUNA_DATABASE_URL>")
-        .trim();
+      // psql's own message, with the password masked in case it echoes one.
+      const detail = maskConnection(error?.stderr, databaseUrl).trim();
       throw new Error(`Luna verification query failed${detail ? `: ${detail}` : ""}`);
     });
     return String(stdout).trim();
@@ -177,7 +184,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   return snapshot;
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (isEntryPoint(process.argv[1], import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

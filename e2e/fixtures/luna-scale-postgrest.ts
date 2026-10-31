@@ -398,8 +398,12 @@ export class PostgrestStandIn {
       }
       return { status: 200, headers: { "content-range": contentRange }, body: window[0] };
     }
+    // PostgREST answers 206 Partial Content when it knows the total and the
+    // window does not cover it, and 200 otherwise (including an uncounted read
+    // the max-rows cap cut short, which is what makes that cut silent).
+    const partial = counted && (offset > 0 || offset + window.length < total);
     return {
-      status: 200,
+      status: partial ? 206 : 200,
       headers: { "content-range": contentRange },
       body: method === "HEAD" ? null : window,
     };

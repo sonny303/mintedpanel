@@ -199,7 +199,11 @@ jobs:
           api_url="$(jq -r '.API_URL // empty' <<<"$status_json")"
           db_url="$(jq -r '.DB_URL // empty' <<<"$status_json")"
           service_key="$(jq -r '.SERVICE_ROLE_KEY // empty' <<<"$status_json")"
-          test -n "$api_url" && test -n "$db_url" && test -n "$service_key"
+          # One check per line: under set -e a failed test inside an && chain
+          # does not stop the script.
+          test -n "$api_url"
+          test -n "$db_url"
+          test -n "$service_key"
           echo "::add-mask::$service_key"
           luna_org="$(node -e 'import("./scripts/luna-scale/luna-fixture.mjs").then((m) => console.log(m.LUNA_ORG_ID))')"
           {
@@ -229,6 +233,9 @@ jobs:
           }
           member_id="$(create_user ci.luna.member@example.test)"
           uat_member_id="$(create_user ci.luna.uat-member@example.test)"
+          uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          [[ "$member_id" =~ $uuid_re ]]
+          [[ "$uat_member_id" =~ $uuid_re ]]
           uat_org="$(node -e 'import("./scripts/uat/uat-fixture.mjs").then((m) => console.log(m.ids.organizations[0]))')"
           psql "$LUNA_DATABASE_URL" -X -q -v ON_ERROR_STOP=1 \
             -v member_id="$member_id" -v uat_member_id="$uat_member_id" -v uat_org="$uat_org" <<'SQL'
@@ -269,10 +276,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if npm run seed:luna-scale -- --apply --local-rehearsal --confirm "SEED LUNA SCALE ON local" --member-email ci.luna.uat-member@example.test; then
+          if output="$(npm run seed:luna-scale -- --apply --local-rehearsal --confirm "SEED LUNA SCALE ON local" --member-email ci.luna.uat-member@example.test 2>&1)"; then
+            echo "$output"
             echo "::error::the seed accepted a member of a UAT org"
             exit 1
           fi
+          echo "$output"
+          # The refusal must be the UAT-org guard, not some other failure.
+          grep -q "the member belongs to a UAT fixture org" <<<"$output"
           npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint seed > "$RUNNER_TEMP/seed-3.json"
           diff "$RUNNER_TEMP/seed-1.json" "$RUNNER_TEMP/seed-3.json"
       - name: Data outside the Luna org is unchanged after the applies

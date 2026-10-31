@@ -100,17 +100,26 @@ group". The planning session asked for about 50 groups, so 50 is the default;
   - The payers are org-scoped, so no other org's catalog grows.
   - No row in another organization is read or written. The isolation-gate
     expected counts (Kansas / South Park providers) are untouched.
-  - `--member-email` refuses the UAT personas (`@minted.invalid`). It also
-    refuses `KANSAS_EMAIL`, `SPVIEW_EMAIL` and anything in
-    `LUNA_SCALE_PROTECTED_EMAILS`, because the gate's single-org assertions fail
-    the moment one of those logins joins a second org.
-  - The SQL also refuses a member of a UAT org.
+  - `--member-email` refuses the UAT personas (`@minted.invalid`) and the
+    isolation-gate logins, which are hard-coded (`testkansas@minted.com`,
+    `testsouthpark@minted.com`), plus `KANSAS_EMAIL`, `SPVIEW_EMAIL` and anything
+    in `LUNA_SCALE_PROTECTED_EMAILS` when set. The gate's single-org assertions
+    fail the moment one of those logins joins a second org.
+  - The SQL refuses a member of a UAT org, always. It also refuses a member who
+    already belongs to any other org, unless you pass `--allow-multi-org-member`
+    (your own staging login usually does belong to other orgs).
 - **Target guards**, all before any connection:
   - `SUPABASE_URL` and `LUNA_DATABASE_URL` must name the same project.
   - That project must be in `LUNA_SCALE_ALLOWED_PROJECT_REFS`.
   - The production ref is refused even if it is listed.
-  - Routing overrides (`host=`, `hostaddr=`, `sslmode=disable`) are refused,
-    and inherited `PG*` variables are stripped.
+  - `LUNA_DATABASE_URL` is parsed strictly: exactly one `@` (percent-encode an
+    `@` in the password as `%40`), no `,` anywhere in the host part (no libpq host
+    lists), a plain hostname or IPv4 host, path `/postgres`, and at most
+    `sslmode=require|verify-full`. Routing overrides (`host=`, `hostaddr=`) are
+    refused.
+  - psql never receives the URL. The validated host, port, user, password and
+    database are passed one by one as `PG*` variables, after every inherited
+    `PG*` variable is stripped, so libpq cannot read the URL differently.
   - `--confirm` must be the exact token for the action and the project.
 - **Database identity.** Before writing, the runner reads `pg_control_system()`:
   - pinned staging must be cluster `7662742571317219726`;
@@ -141,8 +150,15 @@ axis that matters here:
 - **No service-role key.** The REST path needs a service-role key; this only
   needs the database URL the UAT seed already uses.
 
-Inserts are batched 500 rows per statement, each well under 1 MB. Every insert
-is `ON CONFLICT (id) DO NOTHING`.
+Inserts are batched 500 rows per statement, each well under 1 MB. Each one
+inserts only the rows whose id is missing (`WHERE NOT EXISTS`, with
+`ON CONFLICT (id) DO NOTHING` as a backstop), so a repair run takes no
+`credential_cases_case_number_seq` values for cases that already exist.
+
+One cost remains: sequences never roll back. An apply that fails after the case
+insert, for example on the final count check, has still used one case number per
+case it tried to add, about 6,100 on a first apply. Case numbers stay unique; the
+range just has a gap.
 
 ## Prerequisites
 
@@ -167,12 +183,14 @@ export LUNA_SCALE_ALLOWED_PROJECT_REFS=vmznysvietfaddakkegt
 npm run seed:luna-scale -- --dry-run --member-email you@yourdomain.com
 
 # 2. Apply, and give your own staging login access (admin by default; --member-role specialist|billing).
+#    Add --allow-multi-org-member if that login already belongs to another org.
 npm run seed:luna-scale -- --apply \
   --confirm "SEED LUNA SCALE ON vmznysvietfaddakkegt" \
-  --member-email you@yourdomain.com
+  --member-email you@yourdomain.com --allow-multi-org-member
 
-# 3. Verify: one read-only transaction comparing every table with the receipt.
-npm run verify:luna-scale
+# 3. Verify, strictly: read-only; every table against the regenerated plan, and no
+#    row in the org the seed did not create.
+npm run verify:luna-scale -- --strict
 ```
 
 Sign in as that user and switch to **Luna Demo (synthetic)**.
@@ -192,7 +210,7 @@ Sign in as that user and switch to **Luna Demo (synthetic)**.
 ```sh
 npm run seed:luna-scale -- --dry-run --teardown        # what it would remove
 npm run seed:luna-scale -- --teardown --confirm "TEAR DOWN LUNA SCALE ON vmznysvietfaddakkegt"
-npm run verify:luna-scale                              # expects zero seed rows
+npm run verify:luna-scale -- --strict                  # only the inactive shell may remain
 ```
 
 The teardown deletes only seed-owned rows (`pg_temp.luna_owned(id)`) in the Luna
@@ -207,11 +225,22 @@ org, children first:
 
 It then sets the organization `inactive` and writes a receipt.
 
-It **refuses** when the org holds rows the seed did not create, such as a
-reviewer's new case, note or upload. It lists them by table. Look at them, then
-re-run with `--allow-unowned` to keep them and remove only seed rows. A kept row
-that references a seed row makes the delete fail, and the whole transaction
-rolls back.
+Before it deletes anything it checks two things, and lists what it finds:
+
+1. **Dependents: always refused.** It finds every foreign key, in any schema,
+   that points into a table the teardown deletes from (`pg_constraint`, all
+   actions: cascade, set null, set default, restrict, no action). If any row the
+   seed did not create references a seed row, the teardown refuses. A reviewer's
+   case history, upload, field verification or SSN-vault row would otherwise be
+   cascaded away or nulled out. Remove or re-point those rows first.
+   `--allow-unowned` does **not** override this. If the role cannot read a table
+   whose foreign key cascades, sets null or sets a default (no privilege, or forced
+   row security), it refuses too; a restricting foreign key blocks the delete by
+   itself, which rolls the whole teardown back.
+2. **Other rows in the org: refused unless `--allow-unowned`.** These are rows in
+   any public table with an `org_id`, whatever its key, that the seed did not
+   create and that reference no seed row (a reviewer's note, say). Review them,
+   then re-run with `--allow-unowned` to keep them and remove only seed rows.
 
 **What stays, by design:**
 

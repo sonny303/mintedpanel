@@ -2,6 +2,8 @@
 // and target guards. Mirrors scripts/uat/uat-fixture.mjs. Pure apart from
 // node:crypto; nothing here opens a connection.
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { ids as uatIds, psqlEnvironment } from "../uat/uat-fixture.mjs";
 
 export { psqlEnvironment };
@@ -113,6 +115,122 @@ function mentionsProduction(...values) {
   return values.some((value) => String(value).toLowerCase().includes(PRODUCTION_PROJECT_REF));
 }
 
+const DB_URL_RE = /^(?:postgres|postgresql):\/\/([^/?#]*)(\/[^?#]*)?(\?[^#]*)?(#.*)?$/;
+const DB_HOST_RE = /^([a-z0-9.-]+)(?::(\d{1,5}))?$/;
+
+/**
+ * Parse LUNA_DATABASE_URL into the parts psql will be handed one by one, or
+ * throw. Strict on purpose: libpq splits the authority at the FIRST "@" and
+ * reads a comma as a host list, while WHATWG URL splits at the LAST "@". So a
+ * URL like postgresql://u:x@evil.example,y@127.0.0.1/postgres reads as local
+ * to one and connects remote with the other. Refused here:
+ *   - anything but exactly one raw "@" (percent-encode an "@" in a password);
+ *   - any "," in the authority (host lists);
+ *   - "/", "@", ",", "\" or whitespace in the user; "%" or anything but a plain
+ *     hostname / IPv4 address in the host;
+ *   - any path but /postgres, any query but one sslmode=require|verify-full.
+ */
+export function parseDatabaseUrl(raw) {
+  const text = String(raw ?? "");
+  const match = DB_URL_RE.exec(text);
+  if (!match) {
+    throw new Error("LUNA_DATABASE_URL must be postgresql://user:password@host[:port]/postgres");
+  }
+  const [, authority, path = "", query = "", hash = ""] = match;
+  if ((authority.match(/@/g) ?? []).length !== 1) {
+    throw new Error(
+      "Refusing LUNA_DATABASE_URL: it must hold exactly one @ between the user and the host (percent-encode an @ in the password as %40)",
+    );
+  }
+  if (authority.includes(",")) {
+    throw new Error(
+      "Refusing LUNA_DATABASE_URL: host lists (a comma in the host part) are refused",
+    );
+  }
+  const at = authority.indexOf("@");
+  const userinfo = authority.slice(0, at);
+  const hostport = authority.slice(at + 1);
+  const colon = userinfo.indexOf(":");
+  let user;
+  let password;
+  try {
+    user = decodeURIComponent(colon === -1 ? userinfo : userinfo.slice(0, colon));
+    password = decodeURIComponent(colon === -1 ? "" : userinfo.slice(colon + 1));
+  } catch {
+    throw new Error(
+      "Refusing LUNA_DATABASE_URL: the user or password is not valid percent-encoding",
+    );
+  }
+  if (!user || /[/@,\\\s]/.test(user)) {
+    throw new Error("Refusing LUNA_DATABASE_URL: the user must not contain / @ , \\ or spaces");
+  }
+  const host = DB_HOST_RE.exec(hostport.toLowerCase());
+  if (!host) {
+    throw new Error(
+      "Refusing LUNA_DATABASE_URL: the host must be a plain hostname or IPv4 address with an optional port",
+    );
+  }
+  if (path !== "/postgres") {
+    throw new Error("LUNA_DATABASE_URL must target the PostgreSQL postgres database");
+  }
+  if (hash) throw new Error("Refusing LUNA_DATABASE_URL: a #fragment is not allowed");
+  const parameters = [...new URLSearchParams(query.replace(/^\?/, ""))];
+  if (
+    parameters.length > 1 ||
+    parameters.some(
+      ([key, value]) => key !== "sslmode" || !["require", "verify-full"].includes(value),
+    )
+  ) {
+    throw new Error(
+      "Refusing database connection overrides: only sslmode=require or verify-full is allowed",
+    );
+  }
+  return {
+    host: host[1],
+    port: host[2] ?? "",
+    user,
+    password,
+    dbname: "postgres",
+    sslmode: parameters[0]?.[1] ?? null,
+  };
+}
+
+/**
+ * The environment psql runs with: every inherited PG* variable stripped, then
+ * the validated parts set one by one. psql is never handed the URL, so libpq
+ * never parses it.
+ */
+export function psqlConnectionEnvironment(databaseUrl, environment = {}) {
+  const connection = parseDatabaseUrl(databaseUrl);
+  return {
+    ...psqlEnvironment(environment),
+    PGHOST: connection.host,
+    ...(connection.port ? { PGPORT: connection.port } : {}),
+    PGUSER: connection.user,
+    PGDATABASE: connection.dbname,
+    ...(connection.password ? { PGPASSWORD: connection.password } : {}),
+    ...(connection.sslmode ? { PGSSLMODE: connection.sslmode } : {}),
+    PGCONNECT_TIMEOUT: "15",
+  };
+}
+
+/** Mask the password (and the raw URL) in any text psql or Node produced. */
+export function maskConnection(text, databaseUrl) {
+  let out = String(text ?? "");
+  if (databaseUrl) out = out.replaceAll(databaseUrl, "<LUNA_DATABASE_URL>");
+  try {
+    const { password } = parseDatabaseUrl(databaseUrl);
+    if (password) {
+      out = out
+        .replaceAll(password, "<password>")
+        .replaceAll(encodeURIComponent(password), "<password>");
+    }
+  } catch {
+    // An unparseable URL never reached psql.
+  }
+  return out;
+}
+
 /**
  * Classify the target or throw. Production is refused before anything else.
  * A hosted target must be the same project on both URLs and be named in the
@@ -128,17 +246,14 @@ export function assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs, allowL
       "Refusing production: LUNA_SCALE_ALLOWED_PROJECT_REFS must never name production",
     );
   }
+  if (mentionsProduction(supabaseUrl, databaseUrl)) {
+    throw new Error("Refusing production: the Luna-scale seed never targets production");
+  }
   let api;
-  let db;
   try {
     api = new URL(supabaseUrl);
-    db = new URL(databaseUrl);
   } catch {
-    throw new Error("Invalid SUPABASE_URL or LUNA_DATABASE_URL");
-  }
-  const dbUser = decodeURIComponent(db.username);
-  if (mentionsProduction(api.hostname, db.hostname, dbUser, db.search)) {
-    throw new Error("Refusing production: the Luna-scale seed never targets production");
+    throw new Error("Invalid SUPABASE_URL");
   }
   if (
     api.username ||
@@ -146,31 +261,15 @@ export function assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs, allowL
     !["http:", "https:"].includes(api.protocol) ||
     api.search ||
     api.hash ||
-    !["", "/"].includes(api.pathname)
+    !["", "/"].includes(api.pathname) ||
+    (supabaseUrl.match(/@/g) ?? []).length > 0
   ) {
     throw new Error("Invalid SUPABASE_URL");
   }
-  if (
-    !["postgres:", "postgresql:"].includes(db.protocol) ||
-    db.pathname !== "/postgres" ||
-    db.hash
-  ) {
-    throw new Error("LUNA_DATABASE_URL must target the PostgreSQL postgres database");
-  }
-  const parameters = [...db.searchParams];
-  if (
-    parameters.length > 1 ||
-    parameters.some(
-      ([key, value]) => key !== "sslmode" || !["require", "verify-full"].includes(value),
-    )
-  ) {
-    throw new Error(
-      "Refusing database connection overrides: only sslmode=require or verify-full is allowed",
-    );
-  }
+  const db = parseDatabaseUrl(databaseUrl);
 
   const localApi = LOOPBACK.has(api.hostname);
-  const localDb = LOOPBACK.has(db.hostname);
+  const localDb = LOOPBACK.has(db.host);
   if (allowLocal) {
     if (!(localApi && localDb)) {
       throw new Error(
@@ -197,11 +296,11 @@ export function assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs, allowL
   if (!(db.port === "" || db.port === "5432")) {
     throw new Error("Refusing unsafe target: the database must be reached on port 5432");
   }
-  const direct = db.hostname === `db.${projectRef}.supabase.co` && dbUser === "postgres";
+  const direct = db.host === `db.${projectRef}.supabase.co` && db.user === "postgres";
   const pooled =
-    POOLER_RE.test(db.hostname) &&
-    dbUser === `postgres.${projectRef}` &&
-    (projectRef !== STAGING_PROJECT_REF || db.hostname === STAGING_POOLER_HOST);
+    POOLER_RE.test(db.host) &&
+    db.user === `postgres.${projectRef}` &&
+    (projectRef !== STAGING_PROJECT_REF || db.host === STAGING_POOLER_HOST);
   if (!direct && !pooled) {
     throw new Error(
       "Refusing unsafe target: the database URL is not the same project as SUPABASE_URL",
@@ -264,19 +363,31 @@ export const MEMBER_ROLES = ["admin", "specialist", "billing"];
 /** UAT persona orgs: adding one of their users here breaks the UAT verifier's
  * "cannot read another organization" assertion, so the SQL refuses them too. */
 export const UAT_ORGANIZATION_IDS = uatIds.organizations;
+/** The isolation gate's single-org logins (scripts/verify-org-isolation.mjs
+ * header, scripts/mock-api-server.mjs FIXTURES). Refused even when the env
+ * vars that name them are not set. */
+export const ISOLATION_GATE_LOGINS = Object.freeze([
+  "testkansas@minted.com",
+  "testsouthpark@minted.com",
+]);
 
 /**
  * Normalise the --member-email list. Refuses the UAT personas (minted.invalid)
- * and every isolation-gate login (KANSAS_EMAIL, SPVIEW_EMAIL, plus any
- * LUNA_SCALE_PROTECTED_EMAILS): the gate's single-org assertions fail the
- * moment one of them belongs to a second organization.
+ * and every isolation-gate login (the two hard-coded ones, KANSAS_EMAIL,
+ * SPVIEW_EMAIL, plus any LUNA_SCALE_PROTECTED_EMAILS): the gate's single-org
+ * assertions fail the moment one of them belongs to a second organization.
  */
 export function assertMemberEmails(emails, role, environment = {}) {
   if (!MEMBER_ROLES.includes(role)) {
     throw new Error(`--member-role must be one of ${MEMBER_ROLES.join(", ")}`);
   }
   const protectedEmails = new Set(
-    [environment.KANSAS_EMAIL, environment.SPVIEW_EMAIL, environment.LUNA_SCALE_PROTECTED_EMAILS]
+    [
+      ...ISOLATION_GATE_LOGINS,
+      environment.KANSAS_EMAIL,
+      environment.SPVIEW_EMAIL,
+      environment.LUNA_SCALE_PROTECTED_EMAILS,
+    ]
       .flatMap((value) => String(value ?? "").split(","))
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
@@ -300,4 +411,16 @@ export function assertMemberEmails(emails, role, environment = {}) {
 
 export function membershipId(email) {
   return lunaUuid("membership", email.toLowerCase());
+}
+
+/** True when this file is the process entry point. realpath on both sides, so
+ * a path with spaces (percent-encoded in the URL) or a symlinked checkout
+ * still runs main() instead of exiting 0 having done nothing. */
+export function isEntryPoint(argv1, moduleUrl) {
+  if (!argv1) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
 }
