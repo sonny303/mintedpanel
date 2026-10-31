@@ -186,7 +186,7 @@ npm run seed:luna-scale -- --dry-run --member-email you@yourdomain.com
 #    Add --allow-multi-org-member if that login already belongs to another org.
 npm run seed:luna-scale -- --apply \
   --confirm "SEED LUNA SCALE ON vmznysvietfaddakkegt" \
-  --member-email you@yourdomain.com --allow-multi-org-member
+  --member-email you@yourdomain.com
 
 # 3. Verify, strictly: read-only; every table against the regenerated plan, and no
 #    row in the org the seed did not create.

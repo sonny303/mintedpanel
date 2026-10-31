@@ -184,6 +184,9 @@ jobs:
           mkdir -p "$luna_workdir"
           cp -R supabase "$luna_workdir/supabase"
           printf '\n[db.seed]\nenabled = false\n' >> "$luna_workdir/supabase/config.toml"
+          # The seed sends no mail; skipping the mail catcher avoids its fixed
+          # host port (54324), which collided on a runner, and one image pull.
+          printf '\n[inbucket]\nenabled = false\n' >> "$luna_workdir/supabase/config.toml"
           # Same duplicate-version workaround as the UAT seed job: the isolated
           # copy gives the second 20260903210000 file its next timestamp.
           mv "$luna_workdir/supabase/migrations/20260903210000_delete_org_sop_template.sql" \
