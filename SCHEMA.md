@@ -698,9 +698,13 @@ effective sequence is `resolveNotificationSequence()` in
   `purpose` (PK) ∈ `followup_digest | intake_reminder`. No `org_id`, no PHI,
   and no `enabled` column, so a default can never switch an org on. Intake:
   `stop_conditions`, `target_days_to_ready`, `compress_toward_start_date`
-  all set; digest: `send_hour` (0 to 23) and `send_time_zone` (IANA, CHECK
-  `private.notification_time_zone_valid`) set; each purpose's other columns
-  NULL (CHECK). Seeded: intake = all four stop conditions, 14 days,
+  all set; digest: `send_hour` (0 to 23) and `send_time_zone` (IANA) set;
+  each purpose's other columns NULL (CHECK). The zone is checked when it is
+  written, by the `notification_send_time_zone_check` trigger
+  (`private.notification_time_zone_valid`: Area/Location shape and listed in
+  `pg_timezone_names`), not by a CHECK: a later tzdata release could drop a
+  stored name, and a CHECK would then fail a restore and every update of the
+  row. Seeded: intake = all four stop conditions, 14 days,
   compression off; digest = 8 in America/Chicago (the old 13:00 UTC cron in
   CDT). Any member of any org reads it; only service_role writes it
   (Mission Control M6 adds the platform-admin write policy).
@@ -708,8 +712,9 @@ effective sequence is `resolveNotificationSequence()` in
   `(purpose, position)` unique, FK `purpose → notification_sequence_defaults`
   ON DELETE CASCADE, the same position/offset/channel/key bounds as an org's
   steps, `template_key` prefixed by `purpose` (row CHECK). No `cc_recipients`:
-  a default names no one. A deferred constraint trigger enforces offsets
-  strictly increasing and at most one digest step. Seeded: intake 2/4/7
+  a default names no one. Deferred constraint triggers on both default
+  tables keep each default complete: at least one step, exactly one for the
+  digest, offsets strictly increasing. Seeded: intake 2/4/7
   (`intake_reminder_first|second|final`), digest one step at 0
   (`followup_digest_daily`), all email.
 - **`notification_sequences`**: one org row per `(org_id, purpose)`. No row
@@ -723,10 +728,15 @@ effective sequence is `resolveNotificationSequence()` in
 enabled, stop_conditions, target_days_to_ready)`, UPDATE `(enabled,
 stop_conditions, target_days_to_ready, updated_at)`; the platform-managed
   columns are service_role's (Mission Control later), and the stamp trigger
-  refuses an authenticated change to them as a second wall (42501
-  `notification_platform_setting`). `revision` starts at 1; every update
-  bumps it, and so does a direct write to its steps (once per transaction).
-  `updated_by` is stamped from `auth.uid()` for browser writes.
+  is a second wall, an allow-list: only `service_role`, `postgres` and
+  `supabase_admin` may change them (42501 `notification_platform_setting`
+  for anyone else). Mission Control M6 writes through a SECURITY DEFINER RPC
+  owned by `postgres`, so it passes. `revision`, `updated_at` and
+  `updated_by` describe the org's own settings: `revision` starts at 1,
+  every update bumps it except one that changes only platform-managed
+  columns, and so does a direct write to its steps (once per transaction).
+  `updated_by` is the org admin (`auth.uid()`) or NULL when the writer is
+  not an org member; Minted's writers keep their own audit trail.
 - **`notification_sequence_steps`**: an org's own steps; none means it uses
   Minted's default steps. `(sequence_id, position)` unique, `position` 1 to
   10, `offset_days` 0 to 90, `channel` email | sms, `template_key`

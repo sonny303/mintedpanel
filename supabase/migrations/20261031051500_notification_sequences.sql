@@ -37,9 +37,12 @@
 --   * send_hour (0-23) and send_time_zone (an IANA zone) (digest). The default
 --     is 8 in America/Chicago, the old fixed cron's 13:00 UTC in CDT.
 -- On notification_sequences, authenticated holds no INSERT or UPDATE privilege
--- on those three columns (column grants), the stamp trigger refuses a change
--- to them from authenticated as a second wall, and save_notification_sequence
--- refuses a payload that names them.
+-- on those three columns (column grants); the stamp trigger, as a second wall,
+-- refuses a change to them from any role but Minted's own (an allow-list:
+-- service_role, postgres, supabase_admin), and save_notification_sequence
+-- refuses a payload that names them. A change to them alone does not bump the
+-- org's revision or touch updated_by: those describe the org's own settings,
+-- so an admin editing at that moment is not told someone else saved.
 --
 -- Other product rules this schema encodes:
 --   * No default escalation chain. cc_recipients is an ordered jsonb array of
@@ -104,7 +107,7 @@
 --     -> p_org_id uuid, p_purpose text, p_payload jsonb | false
 --   SELECT tablename, policyname, cmd FROM pg_policies
 --    WHERE tablename LIKE 'notification_sequence%' OR tablename = 'sms_consents'
---    ORDER BY 1, 2;                                     -- 11 policies
+--    ORDER BY 1, 2;                                     -- 10 policies
 --   Then run supabase/tests/mint107-notification-sequences.sql (rolled back).
 
 -- ---------------------------------------------------------------------------
@@ -189,6 +192,16 @@ $function$;
 -- lower-case posix/ and right/ trees, which JavaScript's Intl, the other
 -- reader of this value, does not take. STABLE, not IMMUTABLE: it reads
 -- pg_timezone_names.
+--
+-- It backs a BEFORE trigger (notification_send_time_zone_check), not a
+-- CHECK. The answer depends on the server's tz database, which can change
+-- under the data: a tzdata release can drop or move a name (Debian's
+-- tzdata-legacy split did). A CHECK would then fail a restore (pg_restore
+-- loads rows into tables whose CHECKs already exist) and every later update
+-- of the row, even one that leaves the zone alone. The trigger checks only
+-- when the zone is written, and pg_restore creates triggers after loading the
+-- data. A stored zone a later tzdata no longer knows is still possible, so a
+-- sender that cannot format in it uses Minted's default zone instead.
 CREATE OR REPLACE FUNCTION private.notification_time_zone_valid(p_zone text)
 RETURNS boolean
 LANGUAGE sql
@@ -203,22 +216,24 @@ AS $function$
 $function$;
 
 -- A CHECK runs its function as the writing role, so both writers need EXECUTE.
+-- The zone validator runs inside a SECURITY DEFINER trigger instead, so only
+-- service_role (which may call it to check a zone first) is granted it.
 REVOKE ALL ON FUNCTION private.notification_stop_conditions_valid(text[]) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION private.notification_cc_recipients_valid(jsonb) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.notification_time_zone_valid(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.notification_time_zone_valid(text)
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.notification_stop_conditions_valid(text[])
   TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION private.notification_cc_recipients_valid(jsonb)
   TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.notification_time_zone_valid(text)
-  TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION private.notification_time_zone_valid(text) TO service_role;
 
 COMMENT ON FUNCTION private.notification_stop_conditions_valid(text[]) IS
   'MINT-107: true when the array is a duplicate-free, NULL-free subset of submitted, paused, withdrawn, provider_replied. Used by the stop_conditions CHECKs.';
 COMMENT ON FUNCTION private.notification_cc_recipients_valid(jsonb) IS
   'MINT-107: true when the value is an array of at most 20 distinct entries, each exactly {"kind":"user","user_id":<lower-case uuid>} or {"kind":"role","role":"admin"|"specialist"|"billing"}. Used by notification_sequence_steps_cc_recipients_check. Membership is checked by a trigger, not here.';
 COMMENT ON FUNCTION private.notification_time_zone_valid(text) IS
-  'MINT-107: true when the value is an IANA zone name (Area/Location, or UTC) listed in pg_timezone_names. Used by the send_time_zone CHECKs.';
+  'MINT-107: true when the value is an IANA zone name (Area/Location, or UTC) listed in pg_timezone_names. Used by the notification_send_time_zone_check triggers, checked when a zone is written (not a CHECK: tzdata can change under stored rows).';
 
 -- ---------------------------------------------------------------------------
 -- 2. Tables.
@@ -244,8 +259,7 @@ CREATE TABLE IF NOT EXISTS public.notification_sequence_defaults (
     CHECK (target_days_to_ready IS NULL OR target_days_to_ready BETWEEN 1 AND 90),
   CONSTRAINT notification_sequence_defaults_send_hour_check
     CHECK (send_hour IS NULL OR send_hour BETWEEN 0 AND 23),
-  CONSTRAINT notification_sequence_defaults_send_time_zone_check
-    CHECK (send_time_zone IS NULL OR private.notification_time_zone_valid(send_time_zone)),
+  -- send_time_zone is checked by the notification_send_time_zone_check trigger.
   -- A default is complete for its purpose and carries nothing of the other's.
   CONSTRAINT notification_sequence_defaults_purpose_settings_check CHECK (
     (
@@ -318,8 +332,7 @@ CREATE TABLE IF NOT EXISTS public.notification_sequences (
     CHECK (target_days_to_ready IS NULL OR target_days_to_ready BETWEEN 1 AND 90),
   CONSTRAINT notification_sequences_send_hour_check
     CHECK (send_hour IS NULL OR send_hour BETWEEN 0 AND 23),
-  CONSTRAINT notification_sequences_send_time_zone_check
-    CHECK (send_time_zone IS NULL OR private.notification_time_zone_valid(send_time_zone)),
+  -- send_time_zone is checked by the notification_send_time_zone_check trigger.
   -- Each purpose's row carries only its own settings.
   CONSTRAINT notification_sequences_purpose_settings_check CHECK (
     (purpose = 'intake_reminder' AND send_hour IS NULL AND send_time_zone IS NULL)
@@ -408,37 +421,64 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
 AS $function$
+DECLARE
+  -- The platform-managed settings are Minted's to set. The column grants keep
+  -- authenticated out; this is the second wall, an allow-list, so no other
+  -- role gets through whatever grants it is given. Minted's writers are
+  -- service_role and the database owners. Mission Control M6 will write
+  -- through a SECURITY DEFINER RPC owned by postgres that checks the platform
+  -- admin itself: inside it current_user is postgres, so it passes here.
+  v_platform_writer boolean := current_user IN ('service_role', 'postgres', 'supabase_admin');
+  v_platform_changed boolean;
 BEGIN
-  -- The platform-managed settings are Minted's to set (service_role now,
-  -- Mission Control later). authenticated holds no column grant on them;
-  -- this is the second wall, should a grant ever widen.
   IF TG_OP = 'INSERT' THEN
-    IF current_user = 'authenticated'
-       AND (NEW.compress_toward_start_date IS NOT NULL
-            OR NEW.send_hour IS NOT NULL
-            OR NEW.send_time_zone IS NOT NULL) THEN
-      RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'notification_platform_setting';
-    END IF;
+    v_platform_changed := NEW.compress_toward_start_date IS NOT NULL
+                          OR NEW.send_hour IS NOT NULL
+                          OR NEW.send_time_zone IS NOT NULL;
+  ELSE
+    v_platform_changed :=
+      NEW.compress_toward_start_date IS DISTINCT FROM OLD.compress_toward_start_date
+      OR NEW.send_hour IS DISTINCT FROM OLD.send_hour
+      OR NEW.send_time_zone IS DISTINCT FROM OLD.send_time_zone;
+  END IF;
+  IF v_platform_changed AND NOT v_platform_writer THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'notification_platform_setting';
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
     NEW.revision := 1;
+    NEW.created_at := pg_catalog.now();
   ELSE
     -- (org_id, purpose) is the row's identity.
     IF NEW.org_id IS DISTINCT FROM OLD.org_id OR NEW.purpose IS DISTINCT FROM OLD.purpose THEN
       RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'notification_sequence_identity_immutable';
     END IF;
-    IF current_user = 'authenticated'
-       AND (NEW.compress_toward_start_date IS DISTINCT FROM OLD.compress_toward_start_date
-            OR NEW.send_hour IS DISTINCT FROM OLD.send_hour
-            OR NEW.send_time_zone IS DISTINCT FROM OLD.send_time_zone) THEN
-      RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'notification_platform_setting';
-    END IF;
     NEW.created_at := OLD.created_at;
+    -- revision, updated_at and updated_by describe the org's own settings
+    -- (enabled, stop conditions, target, steps). A change by Minted to its
+    -- settings alone leaves them as they are, so an admin editing at that
+    -- moment saves cleanly instead of getting the conflict; the save RPC never
+    -- names these columns, so that save cannot undo Minted's change.
+    IF v_platform_changed
+       AND NEW.enabled IS NOT DISTINCT FROM OLD.enabled
+       AND NEW.stop_conditions IS NOT DISTINCT FROM OLD.stop_conditions
+       AND NEW.target_days_to_ready IS NOT DISTINCT FROM OLD.target_days_to_ready THEN
+      NEW.revision := OLD.revision;
+      NEW.updated_at := OLD.updated_at;
+      NEW.updated_by := OLD.updated_by;
+      RETURN NEW;
+    END IF;
     NEW.revision := OLD.revision + 1;
   END IF;
   NEW.updated_at := pg_catalog.now();
-  -- Browser writes are attributed to the verified caller, never to a value
-  -- the client sent.
+  -- Attributed to the verified caller, never to a value the client sent. A
+  -- writer who is not an org member (service_role, Mission Control) is named
+  -- by no one here: updated_by is an org admin or NULL. Those writers keep
+  -- their own audit trail; only save_notification_sequence writes audit_log.
   IF current_user = 'authenticated' THEN
     NEW.updated_by := auth.uid();
+  ELSE
+    NEW.updated_by := NULL;
   END IF;
   RETURN NEW;
 END;
@@ -456,6 +496,9 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'notification_step_identity_immutable';
     END IF;
     NEW.created_at := OLD.created_at;
+  ELSE
+    -- Never a value the client sent.
+    NEW.created_at := pg_catalog.now();
   END IF;
   NEW.updated_at := pg_catalog.now();
 
@@ -592,15 +635,20 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'notification_default_identity_immutable';
     END IF;
     NEW.created_at := OLD.created_at;
+  ELSE
+    NEW.created_at := pg_catalog.now();
   END IF;
   NEW.updated_at := pg_catalog.now();
   RETURN NEW;
 END;
 $function$;
 
--- The default steps' cross-row rules, as for an org's steps (the template
--- prefix is a row CHECK here, since the purpose is on the row).
-CREATE OR REPLACE FUNCTION private.notification_sequence_default_steps_check_set()
+-- A default's cross-row rules, checked at commit (or at SET CONSTRAINTS ...
+-- IMMEDIATE). Fired by the default row (insert, update) and by its steps, so
+-- a default is never left without steps: at least one, exactly one for the
+-- digest, offsets strictly increasing. The template prefix is a row CHECK on
+-- the steps, since the purpose is on the row.
+CREATE OR REPLACE FUNCTION private.notification_default_check_set()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -608,6 +656,7 @@ SET search_path = ''
 AS $function$
 DECLARE
   v_purpose text;
+  v_count bigint;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     v_purpose := OLD.purpose;
@@ -621,10 +670,13 @@ BEGIN
     RETURN NULL;  -- the default itself was deleted (cascade)
   END IF;
 
-  IF v_purpose = 'followup_digest' AND (
-    SELECT pg_catalog.count(*) FROM public.notification_sequence_default_steps AS st
-     WHERE st.purpose = v_purpose
-  ) > 1 THEN
+  SELECT pg_catalog.count(*) INTO v_count
+    FROM public.notification_sequence_default_steps AS st
+   WHERE st.purpose = v_purpose;
+  IF v_count = 0 THEN
+    RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'notification_default_needs_a_step';
+  END IF;
+  IF v_purpose = 'followup_digest' AND v_count > 1 THEN
     RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'notification_digest_single_step';
   END IF;
 
@@ -643,6 +695,26 @@ BEGIN
   END IF;
 
   RETURN NULL;
+END;
+$function$;
+
+-- The digest's send_time_zone, on an org row or the default, checked when it
+-- is written (see private.notification_time_zone_valid for why not a CHECK).
+-- SECURITY DEFINER only so the lookup of the `private` validator works for
+-- every writer (authenticated has no USAGE on `private`); it reads NEW and
+-- nothing else.
+CREATE OR REPLACE FUNCTION private.notification_send_time_zone_check()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF NEW.send_time_zone IS NOT NULL
+     AND NOT private.notification_time_zone_valid(NEW.send_time_zone) THEN
+    RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'notification_invalid_time_zone';
+  END IF;
+  RETURN NEW;
 END;
 $function$;
 
@@ -677,7 +749,9 @@ REVOKE ALL ON FUNCTION private.notification_sequence_steps_touch_parent()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.notification_defaults_stamp()
   FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION private.notification_sequence_default_steps_check_set()
+REVOKE ALL ON FUNCTION private.notification_default_check_set()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.notification_send_time_zone_check()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.sms_consents_guard_update()
   FROM PUBLIC, anon, authenticated, service_role;
@@ -719,7 +793,27 @@ DROP TRIGGER IF EXISTS notification_sequence_default_steps_set_check
 CREATE CONSTRAINT TRIGGER notification_sequence_default_steps_set_check
   AFTER INSERT OR UPDATE OR DELETE ON public.notification_sequence_default_steps
   DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION private.notification_sequence_default_steps_check_set();
+  FOR EACH ROW EXECUTE FUNCTION private.notification_default_check_set();
+
+-- The default row too, so a default inserted without steps is refused.
+DROP TRIGGER IF EXISTS notification_sequence_defaults_set_check
+  ON public.notification_sequence_defaults;
+CREATE CONSTRAINT TRIGGER notification_sequence_defaults_set_check
+  AFTER INSERT OR UPDATE ON public.notification_sequence_defaults
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION private.notification_default_check_set();
+
+DROP TRIGGER IF EXISTS notification_sequences_send_time_zone_check
+  ON public.notification_sequences;
+CREATE TRIGGER notification_sequences_send_time_zone_check
+  BEFORE INSERT OR UPDATE OF send_time_zone ON public.notification_sequences
+  FOR EACH ROW EXECUTE FUNCTION private.notification_send_time_zone_check();
+
+DROP TRIGGER IF EXISTS notification_sequence_defaults_send_time_zone_check
+  ON public.notification_sequence_defaults;
+CREATE TRIGGER notification_sequence_defaults_send_time_zone_check
+  BEFORE INSERT OR UPDATE OF send_time_zone ON public.notification_sequence_defaults
+  FOR EACH ROW EXECUTE FUNCTION private.notification_send_time_zone_check();
 
 DROP TRIGGER IF EXISTS sms_consents_guard_update ON public.sms_consents;
 CREATE TRIGGER sms_consents_guard_update
@@ -1138,7 +1232,7 @@ COMMENT ON COLUMN public.notification_sequence_defaults.send_hour IS
 COMMENT ON COLUMN public.notification_sequence_defaults.send_time_zone IS
   'Digest: the IANA time zone of send_hour. Platform-managed; America/Chicago by default.';
 COMMENT ON TABLE public.notification_sequence_default_steps IS
-  'MINT-107: the ordered steps of a platform default. An org with no steps of its own uses these. No cc list: a default names no one. Same bounds as notification_sequence_steps; offsets strictly increase and the digest has at most one step (deferred constraint trigger).';
+  'MINT-107: the ordered steps of a platform default. An org with no steps of its own uses these. No cc list: a default names no one. Same bounds as notification_sequence_steps; every default has at least one step, the digest exactly one, offsets strictly increasing (deferred constraint triggers on both default tables).';
 
 COMMENT ON TABLE public.notification_sequences IS
   'MINT-107: one org''s notification settings for one purpose (followup_digest | intake_reminder). No row = off. A NULL setting uses Minted''s default (notification_sequence_defaults); enabled is never inherited. Members read; admins write the org-owned columns, normally through save_notification_sequence. Config only; nothing sends from this table yet.';
@@ -1155,9 +1249,9 @@ COMMENT ON COLUMN public.notification_sequences.send_hour IS
 COMMENT ON COLUMN public.notification_sequences.send_time_zone IS
   'Digest only, platform-managed: an org override of the IANA zone of send_hour. NULL uses Minted''s default (America/Chicago).';
 COMMENT ON COLUMN public.notification_sequences.revision IS
-  'Optimistic-concurrency counter: 1 on insert, +1 on every update (trigger), and +1 when a direct write changes its steps (once per transaction). save_notification_sequence refuses a save whose expected_revision is stale with PT409 (HTTP 409).';
+  'Optimistic-concurrency counter for the org''s own settings: 1 on insert, +1 on every update (trigger) except one that changes only the platform-managed columns, and +1 when a direct write changes its steps (once per transaction). save_notification_sequence refuses a save whose expected_revision is stale with PT409 (HTTP 409).';
 COMMENT ON COLUMN public.notification_sequences.updated_by IS
-  'The last browser writer (auth.uid(), stamped by trigger). An actor id, not a foreign key.';
+  'Who last changed the org''s own settings: the org admin (auth.uid(), stamped by trigger), or NULL when the writer was not an org member (service_role, Mission Control). Not changed by a platform-only change. An actor id, not a foreign key.';
 
 COMMENT ON TABLE public.notification_sequence_steps IS
   'MINT-107: an org''s own ordered messages for a sequence; none means the org uses Minted''s default steps. offset_days strictly increase with position; the digest has at most one step and no cc; template_key starts with the sequence''s purpose (deferred constraint trigger notification_sequence_steps_set_check).';

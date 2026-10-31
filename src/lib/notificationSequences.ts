@@ -701,7 +701,7 @@ export interface ReconcileInput {
  *   adopt_server  reload the draft from the server: nothing unsaved would be
  *                 lost (the draft is untouched, already equals the server's
  *                 copy, or the change is this editor's own save).
- *   keep_draft    another admin saved while this draft has unsaved edits.
+ *   keep_draft    someone else saved while this draft has unsaved edits.
  *                 Keep the edits and say so; saving then sends the old
  *                 revision and gets the conflict, as designed.
  */

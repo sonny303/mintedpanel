@@ -26,6 +26,7 @@ import { requireActiveOrg } from "@/lib/audit";
 import { isMissingNotificationSequenceTablesError, pgWireText } from "@/lib/dbErrors";
 import {
   NOTIFICATION_PURPOSES,
+  PURPOSE_RULES,
   STOP_CONDITIONS,
   parseCcRecipients,
   saveErrorMessage,
@@ -206,6 +207,14 @@ function toDefaults(rows: DefaultRow[], steps: DefaultStepRow[]): NotificationSe
   const missing = NOTIFICATION_PURPOSES.filter((purpose) => !byPurpose[purpose]);
   if (missing.length > 0) {
     throw new Error(`Minted's default notification settings are missing (${missing.join(", ")})`);
+  }
+  // The database keeps every default complete (at least one step, exactly one
+  // for the digest); a read that says otherwise is broken, not "no steps".
+  for (const purpose of NOTIFICATION_PURPOSES) {
+    const count = byPurpose[purpose]?.steps.length ?? 0;
+    if (count === 0 || count > PURPOSE_RULES[purpose].maxSteps) {
+      throw new Error(`Minted's default notification steps are incomplete (${purpose})`);
+    }
   }
   return byPurpose as NotificationSequenceDefaults;
 }

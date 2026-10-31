@@ -245,6 +245,28 @@ describe("notification sequences service", () => {
     });
   });
 
+  it("fails loudly when a default has no steps, or the digest more than one", async () => {
+    const empty = fakeReads({
+      notification_sequence_defaults: DEFAULT_ROWS,
+      notification_sequence_default_steps: DEFAULT_STEP_ROWS.filter(
+        (row) => row.purpose !== "intake_reminder",
+      ),
+    });
+    await expect(listNotificationSequences(ctxFor({ from: empty.from }))).rejects.toThrow(
+      /default notification steps are incomplete \(intake_reminder\)/,
+    );
+    const twoDigest = fakeReads({
+      notification_sequence_defaults: DEFAULT_ROWS,
+      notification_sequence_default_steps: [
+        ...DEFAULT_STEP_ROWS,
+        defaultStep("followup_digest", 2, 1, "followup_digest_daily"),
+      ],
+    });
+    await expect(listNotificationSequences(ctxFor({ from: twoDigest.from }))).rejects.toThrow(
+      /default notification steps are incomplete \(followup_digest\)/,
+    );
+  });
+
   it("fails loudly when a default is missing rather than calling the purpose off", async () => {
     const { from } = fakeReads({
       notification_sequence_defaults: [DEFAULT_ROWS[0]],

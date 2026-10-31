@@ -128,7 +128,7 @@ export interface NotificationSequenceEditorProps {
   isNew: boolean;
   dirty: boolean;
   saving: boolean;
-  /** Another admin saved while this draft had unsaved edits. */
+  /** Someone else saved while this draft had unsaved edits. */
   staleNotice?: boolean;
   /** The polite live-region text, e.g. "Moved to step 2". */
   announcement?: string;
@@ -183,7 +183,7 @@ export function NotificationSequenceEditor({
           role="status"
           className="rounded-md border border-[var(--mp-warn-tint)] bg-[var(--mp-warn-tint)] px-3 py-2 text-[13px] text-[var(--mp-warn-ink)]"
         >
-          Another admin saved changes. Reload to see them; your edits aren't saved.
+          Someone else saved changes. Reload to see them; your edits aren't saved.
         </p>
       ) : null}
       <p aria-live="polite" className="sr-only">
@@ -381,7 +381,18 @@ export function NotificationSequenceEditor({
             <h4 className="text-[13px] font-semibold text-foreground">
               {ownSteps ? "Steps" : `${PLATFORM_DEFAULT_LABEL} steps`}
             </h4>
-            {rules.stepsEditable ? (
+            {ownSteps ? (
+              // Steps of its own on a purpose the card does not edit (the
+              // digest; written outside the card): it can still go back.
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onChange({ ...draft, steps: null })}
+              >
+                {`Use ${PLATFORM_DEFAULT_LABEL} steps`}
+              </Button>
+            ) : rules.stepsEditable ? (
               <Button
                 type="button"
                 variant="outline"

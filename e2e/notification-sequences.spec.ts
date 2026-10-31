@@ -527,7 +527,7 @@ test("MINT-107: another admin's save keeps an open draft, and saving it is a con
 
   // The intake draft is kept, and the card says why it is now stale.
   await expect(
-    intake.getByText("Another admin saved changes. Reload to see them; your edits aren't saved."),
+    intake.getByText("Someone else saved changes. Reload to see them; your edits aren't saved."),
   ).toBeVisible();
   await expect(intake.getByLabel("Step 1 days after invite")).toHaveValue("1");
 
@@ -542,7 +542,7 @@ test("MINT-107: another admin's save keeps an open draft, and saving it is a con
   // Discarding takes the other admin's version.
   await intake.getByRole("button", { name: "Discard changes" }).click();
   await expect(intake.getByLabel("Step 1 days after invite")).toHaveValue("3");
-  await expect(intake.getByText("Another admin saved changes.", { exact: false })).toHaveCount(0);
+  await expect(intake.getByText("Someone else saved changes.", { exact: false })).toHaveCount(0);
 });
 
 test("MINT-107: an admin overrides Minted's defaults and goes back to them", async ({

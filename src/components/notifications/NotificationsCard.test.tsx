@@ -443,6 +443,32 @@ describe("NotificationSequenceEditor: an admin edits and saves", () => {
 });
 
 describe("NotificationSequenceEditor: Minted's default and going back to it (answer 3)", () => {
+  it("lets a digest row with steps of its own go back to Minted's step", () => {
+    const own: SequenceDraft = { ...starterDraft(), steps: stepsFromDefault(DIGEST_DEFAULT) };
+    const props = editorProps({
+      purpose: "followup_digest",
+      draft: own,
+      issues: validateDraft("followup_digest", own),
+      platformDefault: DIGEST_DEFAULT,
+    });
+    const tree = NotificationSequenceEditor(props);
+    expect(findAll(tree, (e) => e.props.children === "Customize steps")).toHaveLength(0);
+    (byText(tree, "Use Minted's default steps").props.onClick as () => void)();
+    expect((props.onChange.mock.calls[0][0] as SequenceDraft).steps).toBeNull();
+    // On Minted's step there is nothing to reset.
+    const inherited = renderToStaticMarkup(
+      <NotificationSequenceEditor
+        {...editorProps({
+          purpose: "followup_digest",
+          draft: starterDraft(),
+          issues: [],
+          platformDefault: DIGEST_DEFAULT,
+        })}
+      />,
+    );
+    expect(inherited).not.toContain("Use Minted&#x27;s default steps");
+  });
+
   it("shows Minted's default steps and settings when the org has none of its own", () => {
     const html = renderToStaticMarkup(
       <NotificationSequenceEditor {...editorProps({ draft: starterDraft(), isNew: true })} />,
@@ -612,11 +638,11 @@ describe("NotificationSequenceEditor: concurrent edits and keyboard moves", () =
       <NotificationSequenceEditor {...editorProps({ staleNotice: true, dirty: true })} />,
     );
     expect(html).toContain(
-      "Another admin saved changes. Reload to see them; your edits aren&#x27;t saved.",
+      "Someone else saved changes. Reload to see them; your edits aren&#x27;t saved.",
     );
     expect(html).toContain('role="status"');
     expect(renderToStaticMarkup(<NotificationSequenceEditor {...editorProps()} />)).not.toContain(
-      "Another admin saved changes",
+      "Someone else saved changes",
     );
   });
 
