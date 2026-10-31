@@ -1524,6 +1524,39 @@ export type Database = {
           },
         ];
       };
+      job_runs: {
+        Row: {
+          counts: Json;
+          error_code: string | null;
+          finished_at: string | null;
+          id: string;
+          job: string;
+          outcome: string;
+          run_key: string;
+          started_at: string;
+        };
+        Insert: {
+          counts?: Json;
+          error_code?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          job: string;
+          outcome?: string;
+          run_key: string;
+          started_at?: string;
+        };
+        Update: {
+          counts?: Json;
+          error_code?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          job?: string;
+          outcome?: string;
+          run_key?: string;
+          started_at?: string;
+        };
+        Relationships: [];
+      };
       launches: {
         Row: {
           address: string | null;
@@ -4494,6 +4527,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_job_run: {
+        Args: { p_job: string; p_run_key: string };
+        Returns: string;
+      };
+      finish_job_run: {
+        Args: {
+          p_counts: Json;
+          p_error_code?: string;
+          p_id: string;
+          p_outcome: string;
+        };
+        Returns: boolean;
+      };
       create_provider_intake_invite: {
         Args: {
           p_actor_id: string;

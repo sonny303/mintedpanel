@@ -386,6 +386,9 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Run MINT-106 job_runs SQL packet
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint106-job-runs.sql
+
       - name: Verify portal field-map flywheel RPC on disposable PostgreSQL
         run: node scripts/security/verify-portal-field-map-learning.mjs
 

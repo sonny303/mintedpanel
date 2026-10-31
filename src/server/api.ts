@@ -6,7 +6,11 @@
 // (kept in sync with the check in src/server.ts): every data route goes through
 // the shared `authenticate` guard, only /api/health is public, unknown /api
 // paths get a JSON 404, and OPTIONS preflights are answered for the
-// API_CORS_ORIGINS allowlist (see ./cors.ts).
+// API_CORS_ORIGINS allowlist (see ./cors.ts). Two surfaces carry no user JWT:
+// /api/jobs/* (Vercel cron, authenticated by the CRON_SECRET bearer in
+// ./jobs/route.ts), dispatched first, before the preflight and every user
+// guard, with no CORS headers; and /api/intake/* (the provider's HttpOnly
+// session cookie).
 import { ok, fail } from "./envelope";
 import {
   authenticate,
@@ -37,6 +41,7 @@ const loadDocumentRoutes = () => import("./documentRoutes");
 const loadPayerFormRoutes = () => import("./payerFormRoutes");
 const loadRosterRoutes = () => import("./rosterRoutes");
 const loadProviderIntakeRoutes = () => import("./providerIntakeRoutes");
+const loadJobRoutes = () => import("./jobs/route");
 
 // `/api/providers/:id/profile` — must be matched before the generic :id route.
 const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
@@ -182,10 +187,20 @@ function toErrorResponse(error: unknown, request: Request): Response {
 }
 
 export async function handleApiRequest(request: Request): Promise<Response> {
+  const requestPath = new URL(request.url).pathname;
+  // Scheduled jobs (Vercel cron) carry the CRON_SECRET bearer, not a user JWT,
+  // and are never called from a browser: dispatched ahead of the preflight and
+  // every user guard, and answered without CORS headers (./jobs/route.ts).
+  if (requestPath === "/api/jobs" || requestPath.startsWith("/api/jobs/")) {
+    try {
+      return await (await loadJobRoutes()).handleJobRequest(request);
+    } catch (error) {
+      return toErrorResponse(error, request);
+    }
+  }
   // Authorization/x-org-id always trigger a browser preflight; answer it
   // before auth (a preflight carries no credentials by definition).
   if (request.method.toUpperCase() === "OPTIONS") return handlePreflight(request);
-  const requestPath = new URL(request.url).pathname;
   if (
     requestPath === "/api/enrollment-explorer" ||
     requestPath.startsWith("/api/enrollment-explorer/")
