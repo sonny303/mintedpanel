@@ -44,6 +44,7 @@ import {
   type PayerAttachReview,
 } from "@/lib/groupPayerAttach";
 import { PAYER_KIND_LABELS } from "@/lib/payerDirectory";
+import { countLabel } from "@/lib/countLabel";
 import type { Facility, Payer, PayerNetworkTarget, ProviderGroup } from "@/types";
 
 /** Above this many eligible payers the picker earns a filter box. */
@@ -225,7 +226,7 @@ export function GroupAttachPayerDialog({
                 {attachMut.isPending
                   ? "Saving…"
                   : totals.payerCount > 1
-                    ? `Save targets (${totals.payerCount} payers, ${totals.stateCount} states)`
+                    ? `Save targets (${totals.payerCount} payers, ${countLabel(totals.stateCount, "state")})`
                     : "Save targets"}
               </Button>
             </DialogFooter>

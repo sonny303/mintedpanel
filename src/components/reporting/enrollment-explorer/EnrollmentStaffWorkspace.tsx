@@ -18,6 +18,7 @@ import {
   setEnrollmentProductTarget,
 } from "@/lib/enrollmentExplorerApi";
 import { useAuthStore } from "@/lib/auth-store";
+import { countLabel } from "@/lib/countLabel";
 import { EnrollmentScopeDrawer } from "@/components/reporting/enrollment-explorer/EnrollmentScopeDrawer";
 import type {
   EnrollmentActionOwner,
@@ -674,8 +675,10 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
                       </span>
                       {item.unmappedCoordinates.length || item.unmappedFacilityIds.length ? (
                         <span className="block text-amber-800">
-                          Incomplete mapping: {item.unmappedCoordinates.length} coordinate(s),{" "}
-                          {item.unmappedFacilityIds.length} facility(ies) still unresolved.
+                          Incomplete mapping:{" "}
+                          {countLabel(item.unmappedCoordinates.length, "coordinate")},{" "}
+                          {countLabel(item.unmappedFacilityIds.length, "facility", "facilities")}{" "}
+                          still unresolved.
                         </span>
                       ) : null}
                     </span>
@@ -732,7 +735,7 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
               </select>
             </label>
             <span className="text-[11px] text-muted-foreground">
-              {unresolved.length} source records loaded
+              {countLabel(unresolved.length, "source record")} loaded
             </span>
           </div>
           {unresolved.map((item) => (
@@ -746,8 +749,8 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
                 </span>
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Observed {new Date(item.observedAt).toLocaleString()} · {item.mappedScopeIds.length}{" "}
-                existing link(s)
+                Observed {new Date(item.observedAt).toLocaleString()} ·{" "}
+                {countLabel(item.mappedScopeIds.length, "existing link")}
               </p>
               <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 text-[10px]">
                 {JSON.stringify(item.sourceSnapshot, null, 2)}
@@ -756,9 +759,10 @@ export function EnrollmentStaffWorkspace({ filters }: { filters: EnrollmentRepor
               item.unmappedCoordinates.length ||
               item.unmappedFacilityIds.length ? (
                 <p className="mt-2 text-[11px] text-amber-900">
-                  Partial mapping remains unresolved: {item.unmappedCoordinates.length}{" "}
-                  product/location coordinate(s), {item.unmappedFacilityIds.length} facility
-                  mapping(s). Configure every true coordinate explicitly before linking.
+                  Partial mapping remains unresolved:{" "}
+                  {countLabel(item.unmappedCoordinates.length, "product/location coordinate")},{" "}
+                  {countLabel(item.unmappedFacilityIds.length, "facility mapping")}. Configure every
+                  true coordinate explicitly before linking.
                 </p>
               ) : null}
             </article>

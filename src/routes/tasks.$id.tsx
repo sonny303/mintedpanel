@@ -25,6 +25,7 @@ import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from "@/hooks/useTas
 import { useCase } from "@/hooks/useCases";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
+import { countLabel } from "@/lib/countLabel";
 import type { SOPStep, TaskStatus } from "@/types";
 
 export const Route = createFileRoute("/tasks/$id")({
@@ -335,7 +336,7 @@ function TaskDetailPage() {
               />
             </div>
             <span className="tabular-nums font-medium text-foreground">
-              {completedCount} / {totalSteps} steps
+              {completedCount} / {countLabel(totalSteps, "step")}
             </span>
           </div>
         </div>

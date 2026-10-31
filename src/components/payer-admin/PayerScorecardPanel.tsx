@@ -9,6 +9,7 @@ import { useStatusConfigs } from "@/hooks/useAdmin";
 import { useCases } from "@/hooks/useCases";
 import { usePortalFieldMaps, usePortals, useRecentFills } from "@/hooks/usePortals";
 import { useRole } from "@/lib/auth-store";
+import { countLabel } from "@/lib/countLabel";
 import {
   computePayerScorecard,
   type BucketDuration,
@@ -81,7 +82,7 @@ function FirstPassTile({ i }: { i: ScorecardIndicator }) {
       value={i.available && i.ratio != null ? pct(i.ratio) : "n/a"}
       detail={
         i.available
-          ? `${i.numerator} of ${i.denominator} cases filled without a re-fill`
+          ? `${i.numerator} of ${countLabel(i.denominator ?? 0, "case")} filled without a re-fill`
           : "No fills logged for this payer's cases"
       }
     />

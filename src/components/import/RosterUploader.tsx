@@ -32,6 +32,7 @@ import {
   type SectionEntityKind,
   type SectionScanContext,
 } from "@/lib/importSections";
+import { countLabel } from "@/lib/countLabel";
 import type { ImportRunSource } from "@/types";
 
 type Phase =
@@ -179,8 +180,8 @@ export function RosterUploader({
             </table>
           </div>
           <p className="text-[12px] text-muted-foreground">
-            First {Math.min(5, phase.parsed.records.length)} rows shown. Rows are validated during
-            the scan; nothing is written to live records.
+            First {countLabel(Math.min(5, phase.parsed.records.length), "row")} shown. Rows are
+            validated during the scan; nothing is written to live records.
           </p>
           <div className="flex items-center gap-2">
             <Button

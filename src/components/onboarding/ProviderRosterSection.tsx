@@ -38,6 +38,7 @@ import { useOrgStateLicenses } from "@/hooks/useLookups";
 import { useCanWrite } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
+import { pluralize } from "@/lib/countLabel";
 import type { Provider } from "@/types";
 import type { SectionBodyProps } from "@/components/onboarding/sectionBodies";
 
@@ -141,7 +142,11 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
           `${n} provider${n === 1 ? "" : "s"} verified — now in readiness & generation`,
         ),
       onError: (e) =>
-        toast.error(e instanceof Error ? e.message : "Couldn't verify the provider(s)"),
+        toast.error(
+          e instanceof Error
+            ? e.message
+            : `Couldn't verify the ${pluralize(ids.length, "provider")}`,
+        ),
     });
   };
 

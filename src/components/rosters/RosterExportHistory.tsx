@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { useDownloadRosterExport, useRosterExportHistory } from "@/hooks/useRosterEngine";
 import { useActiveOrgId } from "@/lib/auth-store";
+import { countLabel } from "@/lib/countLabel";
 import { downloadRosterBlob, formatRosterDisplayDate } from "@/lib/rosterDisplay";
 import {
   NoRosterOrganization,
@@ -86,7 +87,7 @@ export function RosterExportHistory() {
                     </div>
                   </TableCell>
                   <TableCell className="text-[12px] tabular-nums">
-                    <div>{snapshot.totalRows} rows</div>
+                    <div>{countLabel(snapshot.totalRows, "row")}</div>
                     <RosterStatus>{snapshot.format.toUpperCase()}</RosterStatus>
                   </TableCell>
                   <TableCell className="text-[12px] tabular-nums">

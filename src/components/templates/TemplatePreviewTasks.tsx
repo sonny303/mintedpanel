@@ -5,6 +5,7 @@
 // E1.7b step fields (turnaround/cadence/artifacts) render as metadata lines.
 import { EmptyState } from "@/components/EmptyState";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { countLabel } from "@/lib/countLabel";
 import type { Portal, SOPEmailRecipient, SOPTaskDefinition } from "@/types";
 
 const STEP_TYPE_LABELS: Record<string, string> = {
@@ -92,7 +93,7 @@ export function TemplatePreviewTasks({
                 cadence.push(`~${s.expectedTurnaroundDays} day turnaround`);
               }
               if (typeof s.followUpEveryDays === "number") {
-                cadence.push(`follow up every ${s.followUpEveryDays} days`);
+                cadence.push(`follow up every ${countLabel(s.followUpEveryDays, "day")}`);
               }
               const artifacts = s.requiredArtifacts ?? [];
               return (

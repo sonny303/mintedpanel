@@ -36,6 +36,7 @@ import {
   runExclusivePdfFill,
 } from "@/lib/pdfFillRun";
 import { useAuthStore } from "@/lib/auth-store";
+import { countLabel } from "@/lib/countLabel";
 import type { PdfActorContext } from "@/lib/fillRunGuard";
 import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import { useFieldDictionary } from "@/hooks/useMappingReview";
@@ -583,10 +584,10 @@ function StepCadenceMeta({
 }) {
   const parts: string[] = [];
   if (typeof step.expectedTurnaroundDays === "number") {
-    parts.push(`Expected turnaround ~${step.expectedTurnaroundDays} days`);
+    parts.push(`Expected turnaround ~${countLabel(step.expectedTurnaroundDays, "day")}`);
   }
   if (typeof step.followUpEveryDays === "number") {
-    parts.push(`follow up every ${step.followUpEveryDays} days`);
+    parts.push(`follow up every ${countLabel(step.followUpEveryDays, "day")}`);
   }
   // Render the panel whenever the step DEFINES an artifact checklist, or when
   // it already carries an orphan attachment (a name outside requiredArtifacts

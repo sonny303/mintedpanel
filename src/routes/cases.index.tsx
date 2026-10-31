@@ -51,6 +51,7 @@ import { fmtDate } from "@/lib/format";
 import { useCanWrite } from "@/lib/permissions";
 import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
 import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import { countLabel } from "@/lib/countLabel";
 import {
   CASES_KPIS,
   filterRows,
@@ -358,12 +359,12 @@ function CasesPage() {
 
   const subtitle =
     view === "flat"
-      ? `${counts.total} ${counts.total === 1 ? "case" : "cases"}`
+      ? countLabel(counts.total, "case")
       : view === "provider"
-        ? `${groups.length} ${groups.length === 1 ? "provider" : "providers"} · ${counts.total} cases`
+        ? `${countLabel(groups.length, "provider")} · ${countLabel(counts.total, "case")}`
         : view === "payer"
-          ? `${groups.length} ${groups.length === 1 ? "payer" : "payers"} · ${counts.total} cases`
-          : `${matrixQ.matrix?.sections.length ?? 0} sections · ${counts.total} cases`;
+          ? `${countLabel(groups.length, "payer")} · ${countLabel(counts.total, "case")}`
+          : `${countLabel(matrixQ.matrix?.sections.length ?? 0, "section")} · ${countLabel(counts.total, "case")}`;
 
   return (
     <div className="mx-auto max-w-6xl">

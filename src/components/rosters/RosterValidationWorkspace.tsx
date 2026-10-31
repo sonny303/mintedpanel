@@ -19,6 +19,7 @@ import {
   useSaveRosterOverride,
 } from "@/hooks/useRosterEngine";
 import { useCanWrite } from "@/lib/permissions";
+import { countLabel } from "@/lib/countLabel";
 import type { RosterMappingDetail, RosterPreviewRow, RosterValidationIssue } from "@/types";
 import { RosterEmpty, RosterError, RosterLoading, RosterStatus } from "./shared";
 
@@ -122,7 +123,7 @@ export function RosterValidationWorkspace({ detail }: { detail: RosterMappingDet
         <div>
           <div className="text-[13px] font-semibold">{detail.mapping.name}</div>
           <div className="text-[11px] text-muted-foreground">
-            {validation.rowCount} output rows · revision {validation.revision}
+            {countLabel(validation.rowCount, "output row")} · revision {validation.revision}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
