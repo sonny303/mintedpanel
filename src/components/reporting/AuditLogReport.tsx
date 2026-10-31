@@ -9,6 +9,8 @@ import { Link } from "@tanstack/react-router";
 import { fmtDateTime } from "@/lib/format";
 import { auditUserOptions } from "@/lib/auditUserOptions";
 import { auditDateBounds } from "@/lib/auditDateRange";
+import { auditEntityTarget } from "@/lib/auditEntityLink";
+import { auditActionLabel, auditEntityLabel, auditFieldLabel } from "@/lib/auditLabels";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
@@ -58,40 +60,28 @@ function ActionPill({ action }: { action: AuditActionType }) {
     TERMINATION: "red",
     READ: "neutral",
   };
-  return <StatusPill status={tones[action]} label={action} />;
+  return (
+    <span title={action}>
+      <StatusPill status={tones[action]} label={auditActionLabel(action)} />
+    </span>
+  );
 }
 
 function EntityLink({ entry }: { entry: AuditLogEntry }) {
   const { entityType, entityId } = entry;
   const label = (
-    <span className="text-muted-foreground">
-      <span className="font-medium text-foreground">{entityType}</span>
+    <span className="text-muted-foreground" title={entityType}>
+      <span className="font-medium text-foreground">{auditEntityLabel(entityType)}</span>
       {entityId ? <span className="ml-1 text-[12px]">#{entityId.slice(0, 8)}</span> : null}
     </span>
   );
-  if (!entityId) return label;
-  if (entityType === "case") {
-    return (
-      <Link to="/cases/$id" params={{ id: entityId }} className="hover:underline">
-        {label}
-      </Link>
-    );
-  }
-  if (entityType === "provider") {
-    return (
-      <Link to="/providers/$id" params={{ id: entityId }} className="hover:underline">
-        {label}
-      </Link>
-    );
-  }
-  if (entityType === "task") {
-    return (
-      <Link to="/tasks/$id" params={{ id: entityId }} className="hover:underline">
-        {label}
-      </Link>
-    );
-  }
-  return label;
+  const target = auditEntityTarget(entry);
+  if (!target) return label;
+  return (
+    <Link to={target.to} params={{ id: target.id }} className="hover:underline">
+      {label}
+    </Link>
+  );
 }
 
 function formatValue(v: unknown): string {
@@ -154,7 +144,9 @@ function DiffView({ before, after }: { before: unknown; after: unknown }) {
           key={k}
           className="grid grid-cols-[180px_1fr_1fr] text-[12px] font-mono border-b border-border last:border-b-0"
         >
-          <div className="px-3 py-2 font-sans font-medium text-foreground">{k}</div>
+          <div className="px-3 py-2 font-sans font-medium text-foreground" title={k}>
+            {auditFieldLabel(k)}
+          </div>
           <div className="px-3 py-2 border-l border-border whitespace-pre-wrap break-words text-[#B91C1C]">
             {formatValue(b[k])}
           </div>
@@ -202,7 +194,9 @@ export function AuditLogReport() {
   const users = useMemo(() => auditUserOptions(rows), [rows]);
 
   const entityTypes = useMemo(() => {
-    return Array.from(new Set(rows.map((r) => r.entityType))).sort();
+    return Array.from(new Set(rows.map((r) => r.entityType))).sort((a, b) =>
+      auditEntityLabel(a).localeCompare(auditEntityLabel(b)),
+    );
   }, [rows]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -242,8 +236,11 @@ export function AuditLogReport() {
 
       <div className="border border-border rounded-md p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>
-          <Label className="text-[12px]">From</Label>
+          <Label htmlFor="audit-filter-from" className="text-[12px]">
+            From
+          </Label>
           <Input
+            id="audit-filter-from"
             type="date"
             value={dateFrom}
             onChange={(e) => {
@@ -253,8 +250,11 @@ export function AuditLogReport() {
           />
         </div>
         <div>
-          <Label className="text-[12px]">To</Label>
+          <Label htmlFor="audit-filter-to" className="text-[12px]">
+            To
+          </Label>
           <Input
+            id="audit-filter-to"
             type="date"
             value={dateTo}
             onChange={(e) => {
@@ -264,7 +264,9 @@ export function AuditLogReport() {
           />
         </div>
         <div>
-          <Label className="text-[12px]">User</Label>
+          <Label htmlFor="audit-filter-user" className="text-[12px]">
+            User
+          </Label>
           <Select
             value={userId}
             onValueChange={(v) => {
@@ -272,7 +274,7 @@ export function AuditLogReport() {
               setPage(0);
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="audit-filter-user">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -286,7 +288,9 @@ export function AuditLogReport() {
           </Select>
         </div>
         <div>
-          <Label className="text-[12px]">Action</Label>
+          <Label htmlFor="audit-filter-action" className="text-[12px]">
+            Action
+          </Label>
           <Select
             value={actionType}
             onValueChange={(v) => {
@@ -294,21 +298,23 @@ export function AuditLogReport() {
               setPage(0);
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="audit-filter-action">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All actions</SelectItem>
               {ACTION_TYPES.map((a) => (
                 <SelectItem key={a} value={a}>
-                  {a}
+                  {auditActionLabel(a)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <div>
-          <Label className="text-[12px]">Entity</Label>
+          <Label htmlFor="audit-filter-entity" className="text-[12px]">
+            Entity
+          </Label>
           <Select
             value={entityType}
             onValueChange={(v) => {
@@ -316,14 +322,14 @@ export function AuditLogReport() {
               setPage(0);
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="audit-filter-entity">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All entities</SelectItem>
               {entityTypes.map((t) => (
                 <SelectItem key={t} value={t}>
-                  {t}
+                  {auditEntityLabel(t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -383,15 +389,30 @@ export function AuditLogReport() {
             ) : (
               pageRows.map((r) => {
                 const isOpen = expanded.has(r.id);
+                const detailId = `audit-detail-${r.id}`;
                 return (
                   <Fragment key={r.id}>
+                    {/* The chevron button is the keyboard control; the row
+                        click stays as a mouse convenience. */}
                     <TableRow className="h-10 cursor-pointer" onClick={() => toggleExpand(r.id)}>
                       <TableCell className="px-3">
-                        {isOpen ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        )}
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-controls={isOpen ? detailId : undefined}
+                          aria-label={`Show changes: ${r.description ?? auditEntityLabel(r.entityType)}`}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(r.id);
+                          }}
+                        >
+                          {isOpen ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
                       </TableCell>
                       <TableCell className="px-3 tabular-nums text-[13px]">
                         {fmtDateTime(r.ts)}
@@ -409,8 +430,10 @@ export function AuditLogReport() {
                         {r.description ?? <span className="text-muted-foreground">—</span>}
                       </TableCell>
                     </TableRow>
+                    {/* Rendered only while open (aria-controls is set only
+                        then), so the last visible row stays tr:last-child. */}
                     {isOpen ? (
-                      <TableRow className="bg-[#FAFAF9] hover:bg-[#FAFAF9]">
+                      <TableRow id={detailId} className="bg-[#FAFAF9] hover:bg-[#FAFAF9]">
                         <TableCell colSpan={6} className="p-4">
                           <DiffView before={r.before} after={r.after} />
                         </TableCell>
