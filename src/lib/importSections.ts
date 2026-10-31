@@ -410,7 +410,7 @@ function scanWith(descriptor: SectionDescriptor, record: CsvRecord, headers: str
       fail(h, `${h} must be a single letter, got "${v}"`);
     }
     if (spec.npiColumns.includes(h) && v && !isNpi(v)) {
-      fail(h, `${h} must be exactly 10 digits, got "${v}"`);
+      fail(h, `${h} must be exactly 10 digits, got "${raw[h] ?? ""}"`);
     }
     if (spec.addProviderNpiColumns?.includes(h) && v && !NPI_RE.test(v)) {
       fail(h, "NPI must be 10 digits and start with 1");

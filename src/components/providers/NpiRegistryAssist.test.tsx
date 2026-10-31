@@ -59,6 +59,7 @@ function renderAssist(props: Partial<Parameters<typeof NpiRegistryAssist>[0]> = 
       lastName="Doe"
       verify
       onPick={() => undefined}
+      noticeId="npi-note"
       {...props}
     />,
   );
@@ -114,9 +115,16 @@ describe("NpiRegistryAssist verification", () => {
     expect(expired).toContain("NPI Registry is unavailable");
   });
 
-  it("keeps the verification line in a mounted polite live region", () => {
-    const idle = renderToStaticMarkup(<NpiVerificationNotice view={null} />);
-    expect(idle).toBe('<div role="status" aria-live="polite" class="text-[12px]"></div>');
+  it("renders the note under the id the NPI input describes itself with", () => {
+    const idle = renderToStaticMarkup(<NpiVerificationNotice id="npi-note" view={null} />);
+    expect(idle).toBe('<div id="npi-note" class="text-[12px]"></div>');
+    lookupResult.current = { data: { record: jane } };
+    expect(renderAssist()).toMatch(/<div id="npi-note"[^>]*>.*Found in the NPI Registry/);
+  });
+
+  it("keeps a separate mounted polite live region for result changes", () => {
+    const html = renderAssist({ npi: "" });
+    expect(html).toContain('<p role="status" aria-live="polite" class="sr-only"></p>');
   });
 });
 
@@ -124,9 +132,20 @@ describe("NpiRegistryAssist search", () => {
   it("disables Search until both names are typed", () => {
     const blank = renderAssist({ firstName: "", lastName: "Doe" });
     expect(blank).toMatch(/<button[^>]*disabled=""[^>]*>.*Search NPI Registry/);
-    expect(blank).toContain("Enter a first and last name to search by name.");
+    expect(blank).toContain("Enter a first and last name to search the NPI Registry");
     const ready = renderAssist();
     expect(ready).not.toMatch(/<button[^>]*disabled=""[^>]*>.*Search NPI Registry/);
+  });
+
+  it("shows why a typed name can't be searched, and accepts curly apostrophes and suffixes", () => {
+    const html = renderAssist({ firstName: "Wei", lastName: "\u674e" });
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>.*Search NPI Registry/);
+    expect(html).toContain("can&#x27;t be searched");
+    for (const lastName of ["O\u2019Brien", "Smith, Jr."]) {
+      expect(renderAssist({ lastName })).not.toMatch(
+        /<button[^>]*disabled=""[^>]*>.*Search NPI Registry/,
+      );
+    }
   });
 
   it("labels the optional state picker", () => {
@@ -159,9 +178,10 @@ describe("NpiRegistryAssist search", () => {
       <NpiRegistryResultList results={[jane]} onPick={() => undefined} />,
     );
     expect(html).toContain('<ul aria-label="NPI Registry matches"');
-    expect(html).toContain(
-      'aria-label="Use NPI 1234567893 — JANE DOE, PT, Physical Therapist, DENVER, CO"',
-    );
+    // The name is the visible text, name first (WCAG 2.5.3), not an aria-label.
+    expect(html).not.toMatch(/<button[^>]*aria-label/);
+    const text = html.replace(/<[^>]+>/g, "");
+    expect(text).toBe("JANE DOE, PT NPI 1234567893 Physical Therapist · DENVER, CO, use this NPI");
     expect(html).toContain('type="button"');
     expect(renderToStaticMarkup(<NpiRegistryResultList results={[]} onPick={() => 0} />)).toBe("");
   });
@@ -177,6 +197,10 @@ describe("Add Provider credentials step", () => {
       />,
     );
     expect(html).toContain("Search NPI Registry");
+    // The NPI input names the verification note.
+    const describedBy = /<input[^>]*aria-describedby="([^"]+)"/.exec(html)?.[1];
+    expect(describedBy).toBeTruthy();
+    expect(html).toContain(`<div id="${describedBy}" class="text-[12px]">`);
     // A 10-character cap would cut "123-456-7893" to "123-456-78" before the
     // dashes are stripped.
     expect(html).not.toContain('maxLength="10"');

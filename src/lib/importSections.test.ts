@@ -488,6 +488,12 @@ describe("provider scan (TE-2/TE-6)", () => {
     expect(dashesOnly.errorReason).toBe("npi is required");
   });
 
+  it("quotes a bad group NPI as uploaded, not as stripped (MINT-110)", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, group_npi: "190-283-374" });
+    expect(row.rowState).toBe("error");
+    expect(row.errorReason).toBe('group_npi must be exactly 10 digits, got "190-283-374"');
+  });
+
   it("strips a dashed group Type 2 NPI the same way (MINT-110)", () => {
     const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, group_npi: "190-283-3742" });
     expect(row.rowState).toBe("staged");

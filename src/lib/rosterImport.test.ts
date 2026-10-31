@@ -222,6 +222,8 @@ describe("scanRosterRecord — typed NPI separators (MINT-110)", () => {
     const [junk] = scanRoster(parseCsv(csvWith([rowLine({ npi: "123.456.7893" })])));
     expect(junk.rowState).toBe("error");
     expect(junk.errorColumn).toBe("npi");
+    const [short] = scanRoster(parseCsv(csvWith([rowLine({ npi: "123-456-789" })])));
+    expect(short.errorReason).toBe('NPI must be exactly 10 digits, got "123-456-789"');
   });
 });
 

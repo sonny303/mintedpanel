@@ -149,6 +149,27 @@ describe("POST /api/npi-registry/lookup", () => {
     }
   });
 
+  it("422s a query the registry refuses and does not call it an outage", async () => {
+    const fetchFn = registry({
+      Errors: [{ description: "special character(s)", field: "last_name", number: "10" }],
+    });
+    const res = await handleNpiRegistrySearch({ firstName: "Ana", lastName: "Doe" }, ctx(), {
+      fetch: fetchFn,
+    });
+    expect(res.status).toBe(422);
+    expect((await envelope(res)).error).toMatch(/would not run that search/);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("422s a non-Latin name before any registry call", async () => {
+    const fetchFn = registry();
+    const res = await handleNpiRegistrySearch({ firstName: "Wei", lastName: "\u674e" }, ctx(), {
+      fetch: fetchFn,
+    });
+    expect(res.status).toBe(422);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("does not cache a failure", async () => {
     const fetchFn = vi
       .fn<typeof fetch>()

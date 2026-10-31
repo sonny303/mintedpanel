@@ -64,6 +64,12 @@ describe("stripNpiSeparators (MINT-110)", () => {
     expect(stripNpiSeparators("123\u2212456\u00a07893")).toBe("1234567893");
   });
 
+  it("strips invisible zero-width characters and the fullwidth hyphen", () => {
+    expect(stripNpiSeparators("\ufeff123\u200b456\u200c789\u200d3")).toBe("1234567893");
+    expect(stripNpiSeparators("123\uff0d456\uff0d7893")).toBe("1234567893");
+    expect(isValidNpi(stripNpiSeparators("1234567893\u200b"))).toBe(true);
+  });
+
   it("keeps other junk so the NPI rule still fails it", () => {
     for (const value of ["123.456.7893", "(123)4567893", "NPI 1234567893", "12345678x3"]) {
       expect(isValidNpi(stripNpiSeparators(value))).toBe(false);

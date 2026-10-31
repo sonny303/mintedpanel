@@ -1,5 +1,6 @@
 // Four field-section bodies shared by the Add stepper and single-page Edit.
 // Each takes (form, errors, update); Licenses/Employment also mutate arrays via update.
+import { useId } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,12 +104,14 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
 }
 
 export function CredentialsSection({ form, errors, update }: SectionProps) {
+  const npiNoticeId = useId();
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Field label="NPI" error={errors.npi}>
         <Input
           inputMode="numeric"
           maxLength={20}
+          aria-describedby={npiNoticeId}
           value={form.npi}
           onChange={(e) => update("npi", stripNpiSeparators(e.target.value))}
         />
@@ -120,6 +123,7 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
           lastName={form.lastName}
           verify
           onPick={(npi) => update("npi", npi)}
+          noticeId={npiNoticeId}
         />
       </div>
       <Field label="CAQH ID" error={errors.caqhId}>

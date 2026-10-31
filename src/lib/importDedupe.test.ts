@@ -386,6 +386,24 @@ describe("dedupeImportRows — five-part matching", () => {
   });
 });
 
+describe("stored NPIs with separators (MINT-110)", () => {
+  it("matches a legacy dashed stored NPI instead of creating a duplicate", () => {
+    const inputs = baseInputs([janeRow(2, { group_name: GROUP2.name, group_tin: GROUP2.tin })]);
+    inputs.providers = [{ ...JANE, npi: "123-456-7893" }];
+    const out = dedupeImportRows(inputs);
+    expect(only(out, "create")).toHaveLength(0);
+    expect(only(out, "update")[0]?.providerId).toBe(JANE.id);
+  });
+
+  it("does not flag a spaced stored NPI as a different NPI for the same name", () => {
+    const inputs = baseInputs([janeRow(2)]);
+    inputs.providers = [{ ...JANE, npi: " 123 456 7893 " }];
+    const out = dedupeImportRows(inputs);
+    expect(only(out, "create")).toHaveLength(0);
+    expect(JSON.stringify(out)).not.toContain("has a different NPI");
+  });
+});
+
 describe("conflict detection + resolution (TS-62)", () => {
   it("flags a specialty conflict with the existing value as the shown default", () => {
     const out = dedupeImportRows(baseInputs([janeRow(2, { specialty: "Occupational Therapy" })]));

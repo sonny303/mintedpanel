@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FixedWindowRateLimiter,
   NPPES_API_URL,
+  NpiRegistryQueryRejectedError,
   NpiRegistryUnavailableError,
   TtlCache,
   lookupNppes,
@@ -149,6 +150,35 @@ describe("parseNppesResponse", () => {
     ).toThrow(NpiRegistryUnavailableError);
   });
 
+  it("reads an Errors body about a field we sent as a rejected query, not an outage", () => {
+    const body = {
+      Errors: [
+        {
+          description:
+            "Field first_name contains special character(s) or wrong number of characters",
+          field: "first_name",
+          number: "10",
+        },
+      ],
+    };
+    expect(() => parseNppesResponse(body)).toThrow(NpiRegistryQueryRejectedError);
+    expect(() =>
+      parseNppesResponse({ Errors: [{ description: "x", field: "first_name" }, { field: "db" }] }),
+    ).toThrow(NpiRegistryUnavailableError);
+    expect(() => parseNppesResponse({ Errors: [] })).toThrow(NpiRegistryUnavailableError);
+  });
+
+  it("keeps at most five other names", () => {
+    const record = toNpiRegistryRecord({
+      ...NPPES_INDIVIDUAL,
+      other_names: Array.from({ length: 9 }, (_, i) => ({
+        first_name: "JANE",
+        last_name: `N${i}`,
+      })),
+    });
+    expect(record?.otherNames).toHaveLength(5);
+  });
+
   it("accepts an empty result and rejects any other shape", () => {
     expect(parseNppesResponse({ result_count: 0, results: [] })).toEqual([]);
     expect(parseNppesResponse({ result_count: 0 })).toEqual([]);
@@ -176,7 +206,7 @@ describe("searchNppes", () => {
       state: "CO",
       limit: "11",
     });
-    expect(fetchFn.mock.calls[0][1]).toMatchObject({ method: "GET" });
+    expect(fetchFn.mock.calls[0][1]).toMatchObject({ method: "GET", redirect: "error" });
     expect(fetchFn.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -195,6 +225,19 @@ describe("searchNppes", () => {
     expect(result.results).toHaveLength(10);
     expect(result.truncated).toBe(true);
     expect(calledUrl(fetchFn).searchParams.has("state")).toBe(false);
+  });
+});
+
+describe("searchNppes folding", () => {
+  it("sends transliterated, suffix-free names upstream", async () => {
+    const fetchFn = fetchReturning(reply({ result_count: 0, results: [] }));
+    await searchNppes(
+      { firstName: "\u0141ukasz", lastName: "Strau\u00df Jr.", state: null },
+      { fetch: fetchFn },
+    );
+    const params = calledUrl(fetchFn).searchParams;
+    expect(params.get("first_name")).toBe("Lukasz");
+    expect(params.get("last_name")).toBe("Strauss");
   });
 });
 
@@ -231,6 +274,27 @@ describe("upstream failures", () => {
       expect((error as Error).message).toBe(NPI_REGISTRY_UNAVAILABLE_MESSAGE);
     });
   }
+
+  it("refuses an oversized reply, declared or streamed, without parsing it", async () => {
+    const big = JSON.stringify({ result_count: 1, results: [NPPES_INDIVIDUAL] });
+    const streamed = await lookupNppes("1234567893", {
+      fetch: fetchReturning(new Response(big)),
+      maxResponseBytes: 100,
+    }).catch((e: unknown) => e);
+    expect((streamed as NpiRegistryUnavailableError).kind).toBe("invalid_response");
+    const declared = await lookupNppes("1234567893", {
+      fetch: fetchReturning(new Response("{}", { headers: { "content-length": "999999999" } })),
+    }).catch((e: unknown) => e);
+    expect((declared as NpiRegistryUnavailableError).kind).toBe("invalid_response");
+    expect(
+      (
+        await lookupNppes("1234567893", {
+          fetch: fetchReturning(new Response(big)),
+          maxResponseBytes: 100_000,
+        })
+      ).record?.npi,
+    ).toBe("1234567893");
+  });
 
   it("gives up after the timeout", async () => {
     const hang = vi.fn<typeof fetch>(

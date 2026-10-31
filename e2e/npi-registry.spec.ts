@@ -6,6 +6,8 @@
 //      one, which fills the NPI only; the save carries the picked NPI.
 //   2. Roster form (/onboarding/wizard → Add provider): a name that differs
 //      and a registry outage are both warnings — the provider still saves;
+//      the note describes the NPI input and is announced only when the
+//      result changes, not on a name keystroke;
 //      a failed name search can be retried; junk that is not a dash or space
 //      still fails.
 import { test, expect, type BrowserContext, type Route } from "./fixtures/legacy-access-context";
@@ -309,7 +311,13 @@ test("MINT-110: Add Provider strips and verifies a typed NPI, then picks a regis
   await npi.fill("123-456-7893");
   await expect(npi).toHaveValue("1234567893");
   await expect(page.getByText("Found in the NPI Registry", { exact: true })).toBeVisible();
-  await expect(page.getByText("JANE DOE, PT · Physical Therapist · DENVER, CO")).toBeVisible();
+  // The input is described by the note, and the result is announced once.
+  await expect(npi).toHaveAccessibleDescription(
+    /Found in the NPI Registry.*JANE DOE, PT · Physical Therapist · DENVER, CO/,
+  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "Found in the NPI Registry. JANE DOE, PT" }),
+  ).toHaveCount(1);
   expect(registry.calls).toEqual([
     { path: "lookup", body: { npi: "1234567893" }, authorization: "Bearer fake-access-token" },
   ]);
@@ -334,7 +342,8 @@ test("MINT-110: Add Provider strips and verifies a typed NPI, then picks a regis
   const matches = page.getByRole("list", { name: "NPI Registry matches" });
   await matches.getByRole("button").first().focus();
   await page.keyboard.press("ArrowDown");
-  const boulder = matches.getByRole("button", { name: /^Use NPI 1902833742/ });
+  // The button's name starts with its visible text (WCAG 2.5.3).
+  const boulder = matches.getByRole("button", { name: /^JANE M DOE, DPT NPI 1902833742/ });
   await expect(boulder).toBeFocused();
   await page.keyboard.press("Enter");
 
@@ -342,7 +351,9 @@ test("MINT-110: Add Provider strips and verifies a typed NPI, then picks a regis
   await expect(attested).toHaveValue("2026-07-01");
   await expect(matches).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Search NPI Registry" })).toBeFocused();
-  await expect(page.getByText("JANE M DOE, DPT · Physical Therapist · BOULDER, CO")).toBeVisible();
+  await expect(npi).toHaveAccessibleDescription(
+    /Found in the NPI Registry.*JANE M DOE, DPT · Physical Therapist · BOULDER, CO/,
+  );
   // The picked record seeds the check: no second lookup call.
   expect(registry.calls.filter((call) => call.path === "lookup")).toHaveLength(1);
 
@@ -390,14 +401,31 @@ test("MINT-110: roster form saves through a name mismatch and a registry outage;
   expect(fixtures.providers).toHaveLength(0);
 
   // A spaced NPI is checked; the registry's name differs — a warning only.
-  await dialog.locator("#prov-npi").fill("123 456 7893");
-  await expect(dialog.getByText("Found in the NPI Registry, but the name differs")).toBeVisible();
-  await expect(dialog.getByText(/The registry lists JANE DOE/)).toBeVisible();
+  const npi = dialog.locator("#prov-npi");
+  await npi.fill("123 456 7893");
+  await expect(
+    dialog.getByText("Found in the NPI Registry, but the name differs", { exact: true }),
+  ).toBeVisible();
+  await expect(npi).toHaveAccessibleDescription(
+    /but the name differs.*The registry lists JANE DOE/,
+  );
+  const announced = dialog.getByRole("status").filter({ hasText: "but the name differs" });
+  await expect(announced).toHaveCount(1);
+
+  // Fixing the name updates the note but is not announced again.
+  await dialog.locator("#prov-last").fill("Doe");
+  await expect(dialog.getByText("Found in the NPI Registry", { exact: true })).toBeVisible();
+  await expect(announced).toHaveCount(1);
+  await expect(
+    dialog.getByRole("status").filter({ hasText: "Found in the NPI Registry." }),
+  ).toHaveCount(0);
 
   // The registry is down for the next number — still a warning only.
-  await dialog.locator("#prov-npi").fill("190-283-3742");
+  await npi.fill("190-283-3742");
   await expect(dialog.getByText("NPI Registry is unavailable", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("You can still save this provider.")).toBeVisible();
+  await expect(npi).toHaveAccessibleDescription(
+    /NPI Registry is unavailable.*You can still save this provider\./,
+  );
   expect(registry.calls.map((call) => call.body)).toEqual([
     { npi: "1234567893" },
     { npi: "1902833742" },
@@ -416,7 +444,11 @@ test("MINT-110: roster form saves through a name mismatch and a registry outage;
   expect(registry.calls.filter((call) => call.path === "search")).toHaveLength(2);
 
   await dialog.getByRole("button", { name: "Save provider" }).click();
-  await expect(card).toContainText("Jane Roe", { timeout: 15000 });
+  await expect(card).toContainText("Jane Doe", { timeout: 15000 });
   expect(fixtures.providers).toHaveLength(1);
-  expect(fixtures.providers[0]).toMatchObject({ first_name: "Jane", npi: "1902833742" });
+  expect(fixtures.providers[0]).toMatchObject({
+    first_name: "Jane",
+    last_name: "Doe",
+    npi: "1902833742",
+  });
 });

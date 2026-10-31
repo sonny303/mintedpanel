@@ -37,9 +37,10 @@ export function npiCheckDigit(first9: string): number | null {
 }
 
 // MINT-110: the separators staff paste from documents and spreadsheets — any
-// whitespace, the ASCII hyphen, the Unicode hyphens and dashes (U+2010–U+2015)
-// and the minus sign (U+2212). Nothing else is removed.
-const NPI_SEPARATORS_RE = /[-\s\u2010-\u2015\u2212]/g;
+// whitespace, the ASCII hyphen, the Unicode hyphens and dashes (U+2010–U+2015),
+// the minus sign (U+2212), the fullwidth hyphen (U+FF0D), and the invisible
+// zero-width characters (U+200B–U+200D, U+FEFF). Nothing else is removed.
+const NPI_SEPARATORS_RE = /[-\s\u2010-\u2015\u2212\uFF0D\u200B-\u200D\uFEFF]/g;
 
 /** A typed or imported NPI with its dashes and spaces removed, so
  * "123-456-7890" and "123 456 7890" both become "1234567890". Letters, dots and

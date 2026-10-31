@@ -10,6 +10,7 @@
 // This module logs nothing; the route logs the failure kind, never the query.
 import { isIsoDate } from "@/lib/providerIdentity";
 import {
+  NPI_REGISTRY_QUERY_REJECTED_MESSAGE,
   NPI_REGISTRY_RESULT_CAP,
   NPI_REGISTRY_UNAVAILABLE_MESSAGE,
   foldNameForRegistry,
@@ -22,7 +23,20 @@ import {
 
 export const NPPES_API_URL = "https://npiregistry.cms.hhs.gov/api/";
 export const NPPES_TIMEOUT_MS = 5_000;
+/** A reply of 11 records is tens of KB; anything past this is not NPPES. */
+export const NPPES_MAX_RESPONSE_BYTES = 512 * 1024;
+/** Former and other names kept per record. */
+export const NPPES_OTHER_NAMES_MAX = 5;
 const MAX_TEXT = 120;
+// The query parameters we send. An `Errors` body that names only these is the
+// registry refusing the query, not the registry being down.
+const QUERY_FIELDS: ReadonlySet<string> = new Set([
+  "first_name",
+  "last_name",
+  "state",
+  "number",
+  "enumeration_type",
+]);
 
 export type NpiRegistryFailureKind =
   "network" | "timeout" | "http" | "invalid_response" | "registry_error";
@@ -39,9 +53,55 @@ export class NpiRegistryUnavailableError extends Error {
   }
 }
 
+/** The registry refused the query itself (an `Errors` body about a field we
+ * sent, such as a character it will not search). A 422, not an outage. */
+export class NpiRegistryQueryRejectedError extends Error {
+  constructor() {
+    super(NPI_REGISTRY_QUERY_REJECTED_MESSAGE);
+    this.name = "NpiRegistryQueryRejectedError";
+  }
+}
+
 export interface NppesDeps {
   fetch?: typeof fetch;
   timeoutMs?: number;
+  maxResponseBytes?: number;
+}
+
+function isAbort(error: unknown): boolean {
+  const name = error instanceof Error ? error.name : "";
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+// Reads the body up to `maxBytes`; a longer (or longer-declared) body is
+// refused without buffering the rest.
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new NpiRegistryUnavailableError("invalid_response");
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new NpiRegistryUnavailableError("invalid_response");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 async function callNppes(params: Record<string, string>, deps: NppesDeps): Promise<unknown> {
@@ -54,25 +114,28 @@ async function callNppes(params: Record<string, string>, deps: NppesDeps): Promi
     response = await doFetch(url.toString(), {
       method: "GET",
       headers: { accept: "application/json" },
+      // The registry answers directly; a redirect is never followed.
+      redirect: "error",
       signal: AbortSignal.timeout(deps.timeoutMs ?? NPPES_TIMEOUT_MS),
     });
   } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    throw new NpiRegistryUnavailableError(
-      name === "TimeoutError" || name === "AbortError" ? "timeout" : "network",
-    );
+    throw new NpiRegistryUnavailableError(isAbort(error) ? "timeout" : "network");
   }
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined);
     throw new NpiRegistryUnavailableError("http", response.status);
   }
+  let body: string;
   try {
-    return (await response.json()) as unknown;
+    body = await readBoundedText(response, deps.maxResponseBytes ?? NPPES_MAX_RESPONSE_BYTES);
   } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    throw new NpiRegistryUnavailableError(
-      name === "TimeoutError" || name === "AbortError" ? "timeout" : "invalid_response",
-    );
+    if (error instanceof NpiRegistryUnavailableError) throw error;
+    throw new NpiRegistryUnavailableError(isAbort(error) ? "timeout" : "network");
+  }
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    throw new NpiRegistryUnavailableError("invalid_response");
   }
 }
 
@@ -106,7 +169,8 @@ function otherNames(value: unknown): NpiRegistryName[] {
   return value
     .filter(isObject)
     .map((row) => ({ firstName: text(row.first_name), lastName: text(row.last_name) }))
-    .filter((name) => name.firstName !== null && name.lastName !== null);
+    .filter((name) => name.firstName !== null && name.lastName !== null)
+    .slice(0, NPPES_OTHER_NAMES_MAX);
 }
 
 /** One registry result narrowed to public fields; null when it is not a
@@ -138,11 +202,23 @@ export function toNpiRegistryRecord(raw: unknown): NpiRegistryRecord | null {
   };
 }
 
+// True when every registry error names one of the query fields we sent.
+function isQueryRejection(errors: unknown): boolean {
+  if (!Array.isArray(errors) || errors.length === 0) return false;
+  return errors.every(
+    (error) => isObject(error) && typeof error.field === "string" && QUERY_FIELDS.has(error.field),
+  );
+}
+
 /** The records in a registry response. An `Errors` body (the registry's own
- * rejection, sent with HTTP 200) or any other shape is a failure. */
+ * rejection, sent with HTTP 200) about a field we sent is a rejected query;
+ * any other `Errors` body or shape is the registry failing. */
 export function parseNppesResponse(json: unknown): NpiRegistryRecord[] {
   if (!isObject(json)) throw new NpiRegistryUnavailableError("invalid_response");
-  if ("Errors" in json) throw new NpiRegistryUnavailableError("registry_error");
+  if ("Errors" in json) {
+    if (isQueryRejection(json.Errors)) throw new NpiRegistryQueryRejectedError();
+    throw new NpiRegistryUnavailableError("registry_error");
+  }
   if (!Array.isArray(json.results)) {
     // Tolerate a zero count sent without a results array.
     if (json.result_count === 0) return [];

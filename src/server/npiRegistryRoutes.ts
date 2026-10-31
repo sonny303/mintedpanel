@@ -14,11 +14,15 @@
 // cache, both in memory. On Vercel every function instance keeps its own
 // copies and loses them on a cold start, so the limit is best effort, not a
 // guarantee (TECH-DEBT.md). The cache is shared across users and orgs on
-// purpose: an answer depends only on the query, never on who asked.
+// purpose: an answer depends only on the query, never on who asked. That makes
+// a cache hit faster than a miss, so response timing can hint that someone
+// searched the same public name recently; accepted, because the cache holds
+// only public registry data and no caller, org or provider detail.
 import { fail, ok } from "./envelope";
 import { isWriter, type AuthContext } from "./guard";
 import {
   FixedWindowRateLimiter,
+  NpiRegistryQueryRejectedError,
   NpiRegistryUnavailableError,
   TtlCache,
   lookupNppes,
@@ -83,6 +87,11 @@ async function answer<T extends CachedAnswer>(
     cache.set(key, result);
     return privateResponse(ok(result));
   } catch (error) {
+    // The registry refused the query itself (for example a character it
+    // will not search): the caller can fix it, so a 422, not an outage.
+    if (error instanceof NpiRegistryQueryRejectedError) {
+      return privateResponse(fail(422, error.message));
+    }
     if (error instanceof NpiRegistryUnavailableError) {
       // The failure kind and upstream status only — never the query.
       console.warn(

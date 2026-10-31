@@ -261,7 +261,7 @@ export function scanRosterRecord(record: CsvRecord, headers: string[]): ScannedR
   // MINT-110: dashes and spaces are stripped; other junk still fails.
   const npi = stripNpiSeparators(raw.npi ?? "");
   if (npi && !NPI_RE.test(npi)) {
-    fail("npi", `NPI must be exactly 10 digits, got "${npi}"`);
+    fail("npi", `NPI must be exactly 10 digits, got "${raw.npi ?? ""}"`);
   }
   for (const h of ["license_state", "facility_state"] as const) {
     const v = raw[h] ?? "";

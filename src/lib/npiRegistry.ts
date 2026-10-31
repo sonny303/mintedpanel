@@ -14,6 +14,8 @@ export const NPI_REGISTRY_RESULT_CAP = 10;
 /** NPPES stores at most 35 characters for a first or last name. */
 export const NPI_REGISTRY_NAME_MAX = 35;
 export const NPI_REGISTRY_UNAVAILABLE_MESSAGE = "NPI Registry is unavailable";
+export const NPI_REGISTRY_QUERY_REJECTED_MESSAGE =
+  "The NPI Registry would not run that search — check the name for unusual characters";
 export const NPI_REGISTRY_RATE_LIMIT_MESSAGE =
   "Too many NPI Registry lookups — wait a minute and try again";
 
@@ -71,35 +73,108 @@ export interface ValidNpiRegistrySearch {
 
 export type Validation<T> = { ok: true; value: T } | { ok: false; error: string };
 
-// A letter first, then letters, accents, spaces, apostrophes, periods and
-// hyphens ("O'Brien", "Smith-Jones", "St. John"). No wildcards.
-const NAME_RE = /^\p{L}[\p{L}\p{M}' .-]*$/u;
 const STATE_SET: ReadonlySet<string> = new Set(US_STATES);
+
+// Letters NFD cannot split into a base letter plus an accent, spelled the way
+// NPPES stores them (plain uppercase ASCII).
+const TRANSLITERATIONS: Readonly<Record<string, string>> = {
+  ß: "ss",
+  ẞ: "SS",
+  æ: "ae",
+  Æ: "AE",
+  œ: "oe",
+  Œ: "OE",
+  ø: "o",
+  Ø: "O",
+  ł: "l",
+  Ł: "L",
+  đ: "d",
+  Đ: "D",
+  ð: "d",
+  Ð: "D",
+  þ: "th",
+  Þ: "TH",
+  ħ: "h",
+  Ħ: "H",
+  ı: "i",
+  ŀ: "l",
+  Ŀ: "L",
+  ŋ: "n",
+  Ŋ: "N",
+  ŧ: "t",
+  Ŧ: "T",
+  ſ: "s",
+};
+const TRANSLITERATE_RE = new RegExp(`[${Object.keys(TRANSLITERATIONS).join("")}]`, "gu");
+// Curly and look-alike apostrophes typed or pasted into a name.
+const APOSTROPHES_RE = /[‘’‛ʼ′`´]/g;
+// Generational suffixes and degree initials staff tack onto a name. Only
+// trailing words go, and never the last remaining one ("Smith Jr" → "Smith").
+const NAME_SUFFIXES: ReadonlySet<string> = new Set([
+  "jr",
+  "sr",
+  "ii",
+  "iii",
+  "iv",
+  "md",
+  "phd",
+  "dpt",
+  "esq",
+]);
+// What NPPES accepts once a name is folded: a letter, then letters, spaces,
+// apostrophes and hyphens (periods are already gone).
+const REGISTRY_NAME_RE = /^[A-Za-z][A-Za-z' -]*$/;
+
+/** A name as the registry spells it: curly apostrophes made straight, letters
+ * like "ł", "ø" and "ß" transliterated, accents and periods removed, and a
+ * trailing suffix dropped. "José" → "Jose", "Łukasz" → "Lukasz",
+ * "Strauß" → "Strauss", "J." → "J", "Smith, Jr." → "Smith". Used for both the
+ * registry query and the name match, so the two always agree. */
+export function foldNameForRegistry(name: string): string {
+  const folded = name
+    .replace(APOSTROPHES_RE, "'")
+    .replace(TRANSLITERATE_RE, (letter) => TRANSLITERATIONS[letter] ?? letter)
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[.,]/g, " ");
+  const words = folded.split(/\s+/).filter(Boolean);
+  while (words.length > 1 && NAME_SUFFIXES.has(words[words.length - 1].toLowerCase())) {
+    words.pop();
+  }
+  return words.join(" ");
+}
 
 function readName(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
 
-function nameProblem(name: string): string | null {
-  if (name.length > NPI_REGISTRY_NAME_MAX) {
-    return `Names must be ${NPI_REGISTRY_NAME_MAX} characters or fewer`;
+function nameProblem(folded: string): string | null {
+  if (!REGISTRY_NAME_RE.test(folded)) {
+    const chars = [...folded];
+    const bad = /[A-Za-z]/.test(chars[0] ?? "")
+      ? (chars.find((char) => !/[A-Za-z' -]/.test(char)) ?? "")
+      : (chars[0] ?? "");
+    return `The NPI Registry takes Latin letters, spaces, apostrophes, periods and hyphens, starting with a letter — "${bad}" can't be searched`;
   }
-  if (!NAME_RE.test(name)) {
-    return "Names may use only letters, spaces, apostrophes, periods and hyphens";
+  if (folded.length > NPI_REGISTRY_NAME_MAX) {
+    return `Names must be ${NPI_REGISTRY_NAME_MAX} characters or fewer`;
   }
   return null;
 }
 
 /** The search input the route accepts (and the button enables on): first and
- * last name required, state optional. */
+ * last name required, state optional. The value carries the folded names
+ * (foldNameForRegistry), which is what goes to the registry. */
 export function validateNpiRegistrySearch(input: unknown): Validation<ValidNpiRegistrySearch> {
   const body = input && typeof input === "object" && !Array.isArray(input) ? input : {};
   const record = body as Record<string, unknown>;
-  const firstName = readName(record.firstName);
-  const lastName = readName(record.lastName);
-  if (!firstName || !lastName) {
+  const rawFirst = readName(record.firstName);
+  const rawLast = readName(record.lastName);
+  if (!rawFirst || !rawLast) {
     return { ok: false, error: "Enter a first and last name to search the NPI Registry" };
   }
+  const firstName = foldNameForRegistry(rawFirst);
+  const lastName = foldNameForRegistry(rawLast);
   const problem = nameProblem(firstName) ?? nameProblem(lastName);
   if (problem) return { ok: false, error: problem };
   const rawState = record.state;
@@ -122,14 +197,8 @@ export function validateNpiRegistryLookup(input: unknown): Validation<string> {
   return { ok: true, value: npi };
 }
 
-/** Accents removed, for the registry query: NPPES stores names in plain
- * uppercase ASCII, so "José" is searched as "Jose". */
-export function foldNameForRegistry(name: string): string {
-  return name.normalize("NFD").replace(/\p{M}/gu, "");
-}
-
-// Accents, case, spaces and punctuation all ignored: "O'Brien" = "OBRIEN",
-// "Smith-Jones" = "SMITH JONES".
+// Case, spaces and punctuation ignored on top of the registry fold:
+// "O'Brien" = "OBRIEN", "Smith-Jones" = "SMITH JONES", "Łukasz" = "LUKASZ".
 function matchKey(value: string | null | undefined): string {
   return foldNameForRegistry(value ?? "")
     .toLowerCase()
@@ -139,9 +208,12 @@ function matchKey(value: string | null | undefined): string {
 export type NpiNameMatch = "match" | "mismatch" | "unchecked";
 
 /** Whether the names staff typed match the registry record. Last names must be
- * equal; a first name may be an initial or a short form of the registry's
- * ("J" or "Chris" against "CHRISTOPHER"). The registry's former and other
- * names count too. "unchecked" when staff have not typed both names yet. */
+ * equal. The typed first name must be the start of the registry's — an
+ * initial or short form ("J" or "Chris" against CHRISTOPHER) — or of its first
+ * and middle names together ("Mary Ann" against MARY ANN); a registry initial
+ * matches any first name with that letter. A longer typed name never matches
+ * a shorter registry one ("Danielle" is not DANIEL). The registry's former and
+ * other names count too. "unchecked" until staff have typed both names. */
 export function compareNpiRegistryName(
   typed: { firstName: string; lastName: string },
   record: NpiRegistryRecord,
@@ -149,14 +221,16 @@ export function compareNpiRegistryName(
   const first = matchKey(typed.firstName);
   const last = matchKey(typed.lastName);
   if (!first || !last) return "unchecked";
-  const names: NpiRegistryName[] = [
-    { firstName: record.firstName, lastName: record.lastName },
-    ...record.otherNames,
+  const names = [
+    { firstName: record.firstName, middleName: record.middleName, lastName: record.lastName },
+    ...record.otherNames.map((name) => ({ ...name, middleName: null })),
   ];
   const matches = names.some((name) => {
     const registryFirst = matchKey(name.firstName);
     if (!registryFirst || matchKey(name.lastName) !== last) return false;
-    return registryFirst.startsWith(first) || first.startsWith(registryFirst);
+    if (registryFirst.startsWith(first)) return true;
+    if (registryFirst.length === 1) return first.startsWith(registryFirst);
+    return `${registryFirst}${matchKey(name.middleName)}`.startsWith(first);
   });
   return matches ? "match" : "mismatch";
 }

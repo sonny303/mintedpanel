@@ -41,11 +41,17 @@ function errorMessage(error: unknown): string {
     : NPI_REGISTRY_UNAVAILABLE_MESSAGE;
 }
 
-/** The verification line. The live region stays mounted so a screen reader
- * hears each change. */
-export function NpiVerificationNotice({ view }: { view: NpiVerificationView | null }) {
+/** The verification line. Not a live region: the NPI input points at it with
+ * aria-describedby, and NpiRegistryAssist announces result changes itself. */
+export function NpiVerificationNotice({
+  id,
+  view,
+}: {
+  id: string;
+  view: NpiVerificationView | null;
+}) {
   return (
-    <div role="status" aria-live="polite" className="text-[12px]">
+    <div id={id} className="text-[12px]">
       {view ? (
         <div className="flex items-start gap-1.5">
           {view.tone === "ok" ? (
@@ -76,16 +82,6 @@ export function NpiVerificationNotice({ view }: { view: NpiVerificationView | nu
   );
 }
 
-function resultLabel(record: NpiRegistryRecord): string {
-  const name = registryDisplayName(record);
-  const parts = [
-    record.credential ? `${name}, ${record.credential}` : name,
-    record.primaryTaxonomy?.description ?? null,
-    [record.practiceCity, record.practiceState].filter(Boolean).join(", ") || null,
-  ].filter((part): part is string => Boolean(part));
-  return `Use NPI ${record.npi} — ${parts.join(", ")}`;
-}
-
 // Up/Down/Home/End move between the result buttons; Enter or Space picks.
 function moveFocus(event: KeyboardEvent<HTMLUListElement>) {
   const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
@@ -102,7 +98,9 @@ function moveFocus(event: KeyboardEvent<HTMLUListElement>) {
   buttons[next]?.focus();
 }
 
-/** The picked-from list: one button per individual. */
+/** The picked-from list: one button per individual. Each button's name is
+ * its visible text (name first, so it matches what sighted users read and say
+ * — WCAG 2.5.3), plus hidden context for screen readers. */
 export function NpiRegistryResultList({
   results,
   onPick,
@@ -121,7 +119,6 @@ export function NpiRegistryResultList({
         <li key={record.npi}>
           <button
             type="button"
-            aria-label={resultLabel(record)}
             onClick={() => onPick(record)}
             className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-[13px] hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
           >
@@ -129,9 +126,12 @@ export function NpiRegistryResultList({
               <span className="font-medium text-foreground">
                 {registryDisplayName(record)}
                 {record.credential ? `, ${record.credential}` : ""}
+              </span>{" "}
+              <span className="font-mono text-[12px] text-muted-foreground">
+                <span className="sr-only">NPI </span>
+                {record.npi}
               </span>
-              <span className="font-mono text-[12px] text-muted-foreground">{record.npi}</span>
-            </span>
+            </span>{" "}
             <span className="text-[12px] text-muted-foreground">
               {[
                 record.primaryTaxonomy?.description,
@@ -140,6 +140,7 @@ export function NpiRegistryResultList({
                 .filter(Boolean)
                 .join(" · ")}
             </span>
+            <span className="sr-only">, use this NPI</span>
           </button>
         </li>
       ))}
@@ -157,6 +158,8 @@ export interface NpiRegistryAssistProps {
   verify: boolean;
   /** Fill the form's NPI. Nothing else on the form changes. */
   onPick: (npi: string) => void;
+  /** The verification note's id; the NPI input names it in aria-describedby. */
+  noticeId: string;
 }
 
 export function NpiRegistryAssist({
@@ -165,6 +168,7 @@ export function NpiRegistryAssist({
   lastName,
   verify,
   onPick,
+  noticeId,
 }: NpiRegistryAssistProps) {
   const stateId = useId();
   const searchButton = useRef<HTMLButtonElement>(null);
@@ -183,6 +187,19 @@ export function NpiRegistryAssist({
           : { status: "loading" };
   const view = npiVerificationView(lookupState, { firstName, lastName });
 
+  // Announce the check only when its result changes (a new NPI, or loading →
+  // found / not found / unavailable) — never on a name keystroke, even though
+  // the note itself follows the typed name. Updated during render from the
+  // previous key, so no effect is needed.
+  const announceKey = checkable === null ? "idle" : `${checkable}:${lookupState.status}`;
+  const [announced, setAnnounced] = useState({ key: announceKey, text: "" });
+  if (announced.key !== announceKey) {
+    setAnnounced({
+      key: announceKey,
+      text: view ? [view.title, view.detail].filter(Boolean).join(". ") : "",
+    });
+  }
+
   const search = useNpiRegistrySearch(submitted);
   const primeLookup = usePrimeNpiRegistryLookup();
   const searchState: NpiSearchState =
@@ -194,11 +211,13 @@ export function NpiRegistryAssist({
           ? { status: "done", result: search.data }
           : { status: "loading" };
 
-  const canSearch = validateNpiRegistrySearch({ firstName, lastName, state }).ok;
+  const searchCheck = validateNpiRegistrySearch({ firstName, lastName, state });
 
   const runSearch = () => {
-    if (!canSearch) return;
-    const next = { firstName: firstName.trim(), lastName: lastName.trim(), state: state || null };
+    if (!searchCheck.ok) return;
+    // The folded names (accents, suffixes and periods removed) are what the
+    // registry is asked for.
+    const next = searchCheck.value;
     // The same search after a failure is a retry: the key does not change,
     // so ask again explicitly.
     const same =
@@ -222,7 +241,10 @@ export function NpiRegistryAssist({
 
   return (
     <div className="mt-2 space-y-2">
-      <NpiVerificationNotice view={view} />
+      <NpiVerificationNotice id={noticeId} view={view} />
+      <p role="status" aria-live="polite" className="sr-only">
+        {announced.text}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor={stateId} className="sr-only">
           NPI Registry search state
@@ -239,16 +261,14 @@ export function NpiRegistryAssist({
           type="button"
           variant="outline"
           size="sm"
-          disabled={!canSearch}
+          disabled={!searchCheck.ok}
           onClick={runSearch}
         >
           <Search aria-hidden="true" className="h-4 w-4" />
           Search NPI Registry
         </Button>
-        {!canSearch ? (
-          <span className="text-[12px] text-muted-foreground">
-            Enter a first and last name to search by name.
-          </span>
+        {!searchCheck.ok ? (
+          <span className="text-[12px] text-muted-foreground">{searchCheck.error}</span>
         ) : null}
       </div>
       <p role="status" aria-live="polite" className="text-[12px] text-muted-foreground">

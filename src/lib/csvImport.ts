@@ -382,14 +382,16 @@ function parseProviders(csv: string, errors: CsvImportError[]): ParsedProvider[]
       });
       continue;
     }
-    // MINT-110: dashes and spaces are stripped; other junk still fails.
-    const npi = stripNpiSeparators(reader.cell(record, "npi"));
+    // MINT-110: dashes and spaces are stripped; other junk still fails, and
+    // the message shows the cell as uploaded.
+    const npiCell = reader.cell(record, "npi");
+    const npi = stripNpiSeparators(npiCell);
     if (npi && !NPI_RE.test(npi)) {
       errors.push({
         file: "providers",
         line: record.line,
         column: "npi",
-        message: `NPI must be 10 digits, got "${npi}"`,
+        message: `NPI must be 10 digits, got "${npiCell}"`,
       });
     }
     const ssn = reader.cell(record, "ssn_last4");

@@ -6,7 +6,7 @@
 // full-SSN vault is R6/R7). No status picker — new providers default to
 // `onboarding`. Work history / disclosures are NOT captured (CAQH
 // attestation is the proxy). Licenses + PSV ride the same save.
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -204,6 +204,7 @@ function FormBody({
   const pending = createMut.isPending || updateMut.isPending;
 
   const set = (patch: Partial<RosterFormState>) => setForm((f) => ({ ...f, ...patch }));
+  const npiNoticeId = useId();
   const npiDigits = stripNpiSeparators(form.npi);
   const npiChanged = identityFieldChanged(
     form.npi,
@@ -289,7 +290,9 @@ function FormBody({
       }
       updateMut.mutate(
         {
-          patch: toProviderInput(form),
+          // An unchanged stored NPI goes back exactly as stored, so a legacy
+          // value is never rewritten by an unrelated edit.
+          patch: { ...toProviderInput(form), ...(npiChanged ? {} : { npi: provider.npi ?? null }) },
           licenseCommands,
           groupAssignments: assignments,
         },
@@ -484,6 +487,7 @@ function FormBody({
                 id="prov-npi"
                 value={form.npi}
                 onChange={(e) => set({ npi: e.target.value })}
+                aria-describedby={npiNoticeId}
                 inputMode="numeric"
                 className="h-9"
               />
@@ -540,6 +544,7 @@ function FormBody({
             lastName={form.lastName}
             verify={npiChanged}
             onPick={(npi) => set({ npi })}
+            noticeId={npiNoticeId}
           />
           <div className="grid grid-cols-3 gap-3">
             <div>
