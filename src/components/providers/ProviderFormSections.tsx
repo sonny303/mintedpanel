@@ -22,8 +22,10 @@ import {
   type ProviderFormState,
   type UpdateProviderField,
 } from "@/components/providers/providerFormShared";
+import { fmtDate } from "@/lib/format";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { PROVIDER_GENDER_OPTIONS, PROVIDER_GENDER_UNSET_VALUE } from "@/lib/providerGender";
+import { localCalendarDate } from "@/lib/systemTokens";
 
 interface SectionProps {
   form: ProviderFormState;
@@ -274,6 +276,13 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
   };
 
   const facilityList = facilities.data ?? [];
+  // MINT-96: a blank Start date stays null on the provider, but
+  // insertAssignmentRows saves the facility assignments as local today. Say so
+  // before save instead of letting the date appear on the record after.
+  const startDateHint =
+    !form.startDate && form.facilityIds.length > 0
+      ? `If left blank, facility assignments start today (${fmtDate(localCalendarDate(new Date()))}).`
+      : undefined;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -328,7 +337,7 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
           </div>
         )}
       </div>
-      <Field label="Start date" error={errors.startDate}>
+      <Field label="Start date" error={errors.startDate} helper={startDateHint}>
         <Input
           type="date"
           value={form.startDate}

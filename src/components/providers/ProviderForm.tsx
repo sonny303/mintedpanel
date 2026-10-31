@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { maskSsn } from "@/lib/ssnMask";
+import { localCalendarDate } from "@/lib/systemTokens";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
   CredentialsSection,
@@ -15,6 +16,7 @@ import {
   PersonalSection,
 } from "@/components/providers/ProviderFormSections";
 import {
+  isBlankLicenseRow,
   validateAll,
   validateCredentials,
   validatePersonal,
@@ -187,12 +189,20 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
     () => groups.data?.find((g) => g.id === form.groupId)?.name ?? "—",
     [groups.data, form.groupId],
   );
+  // MINT-96: name the date the facility assignments will carry. A blank
+  // Start date stays null on the provider, but insertAssignmentRows saves the
+  // assignments as local today, read on every render so it never goes stale.
+  const assignmentStart = form.startDate || localCalendarDate(new Date());
   const facilityNames = useMemo(() => {
     const selected = (facilities.data ?? []).filter((f) => form.facilityIds.includes(f.id));
     if (selected.length === 0) return "—";
     const primaryId = form.facilityIds[0];
-    return selected.map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name)).join(", ");
-  }, [facilities.data, form.facilityIds]);
+    const names = selected
+      .map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name))
+      .join(", ");
+    return `${names} · assignments start ${fmtDate(assignmentStart)}`;
+  }, [facilities.data, form.facilityIds, assignmentStart]);
+  const licenses = form.licenses.filter((l) => !isBlankLicenseRow(l));
 
   const Section = ({
     title,
@@ -254,12 +264,16 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
       </Section>
       <Section title="Licenses" step={3}>
         <div className="md:col-span-2 space-y-1">
-          {form.licenses.map((l, i) => (
-            <div key={i} className="text-sm text-foreground">
-              {l.state || "—"} · {l.number || "—"} · {l.type || "—"} · {fmtDate(l.issueDate)} →{" "}
-              {fmtDate(l.expirationDate)}
-            </div>
-          ))}
+          {licenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No licenses added</p>
+          ) : (
+            licenses.map((l, i) => (
+              <div key={i} className="text-sm text-foreground">
+                {l.state || "—"} · {l.number || "—"} · {l.type || "—"} · {fmtDate(l.issueDate)} →{" "}
+                {fmtDate(l.expirationDate)}
+              </div>
+            ))
+          )}
         </div>
       </Section>
       <Section title="Employment" step={4}>

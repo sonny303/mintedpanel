@@ -20,6 +20,7 @@ import {
   emptyProviderFormState,
   type ProviderFormState,
 } from "@/components/providers/ProviderForm";
+import { isBlankLicenseRow } from "@/components/providers/providerFormShared";
 import type {
   CreateProviderWithDetailsResult,
   LicenseInput,
@@ -72,7 +73,7 @@ function toProviderInput(form: ProviderFormState): ProviderInput {
 
 function toLicenseInputs(form: ProviderFormState): LicenseInput[] {
   return form.licenses
-    .filter((l) => l.state || l.number || l.type || l.issueDate || l.expirationDate)
+    .filter((l) => !isBlankLicenseRow(l))
     .map((l) => ({
       state: l.state,
       licenseNumber: l.number.trim() || null,
