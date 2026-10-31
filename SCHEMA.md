@@ -682,3 +682,49 @@ codes only. RLS on with no policies; service_role has SELECT and nothing else.
 boolean` — records `succeeded` or `failed` on a `running` row; false when the
   row is no longer running. Re-validates the counts and refuses an error code
   outside the closed set.
+
+## MINT-107 notification sequences (repository-only, operator apply pending)
+
+Migration `20261031130000_notification_sequences.sql`. Org-level
+configuration for reminder and digest cadence; nothing sends from it yet.
+
+- **`notification_sequences`**: one row per `(org_id, purpose)`, `purpose` ∈
+  `followup_digest | intake_reminder`. No row means off; `enabled` defaults to
+  false and nothing creates a row on its own. Intake-only columns:
+  `stop_conditions text[]` (subset of submitted, paused, withdrawn,
+  provider_replied, checked by `notification_stop_conditions_valid`),
+  `target_days_to_ready` (1 to 90; the insert trigger fills 14) and
+  `compress_toward_start_date`. The digest row must leave all three empty.
+  `revision` starts at 1 and the update trigger bumps it; `updated_by` is
+  stamped from `auth.uid()` for browser writes.
+- **`notification_sequence_steps`**: `(sequence_id, position)` unique,
+  `position` 1 to 10, `offset_days` 0 to 90, `channel` email | sms,
+  `template_key` (`^[a-z][a-z0-9_]{2,63}$`, from the catalog in
+  `src/lib/notificationTemplates.ts`), `cc_recipients jsonb` (ordered
+  `{kind:'user',user_id}` | `{kind:'role',role}`, at most 20, distinct; CHECK
+  `notification_cc_recipients_valid`). The composite FK
+  `(org_id, sequence_id) → notification_sequences(org_id, id)` ties a step to
+  its sequence's org. A BEFORE trigger refuses a cc'd user who is not a member
+  of the org. A deferred constraint trigger enforces offsets strictly
+  increasing by position, at most one digest step, and a `template_key`
+  prefixed by the sequence's purpose.
+- **`sms_consents`**: `(org_id, provider_id) → providers(org_id, id)`,
+  `phone_e164`, `consented_at`, `source` ∈ intake_form | staff_recorded |
+  sms_keyword, `consent_text_version`, `recorded_by`, `revoked_at` +
+  `revoked_source` (both or neither). One live consent per (org, provider,
+  number). Evidence: the only update allowed stamps a revocation on a live
+  row; no DELETE grant.
+- **Access**: RLS on all three. Members read their org's rows. Only
+  `user_role(org_id) = 'admin'` writes sequences and steps; `sms_consents` has
+  no authenticated write grant. `save_notification_sequence(p_org_id,
+p_purpose, p_payload)` is the save path: SECURITY INVOKER, admin-checked,
+  replaces the sequence and its steps in one transaction, 40001
+  `notification_sequence_conflict` on a stale `expected_revision`, one
+  `audit_log` row (`entity_type = notification_sequence`). Never call it with
+  the service key.
+- **Rules kept in code, not columns**: a bounce on intake step 1 escalates to
+  step 1's cc list (`bounceEscalationRecipients`); the start-date cadence rule
+  (`scheduleSequenceSends`); the digest offset fixed at 0 and intake offsets
+  from day 1 (validation only, so a later PR can relax them without a
+  migration). All in `src/lib/notificationSequences.ts`.
+- Regression packet: `supabase/tests/mint107-notification-sequences.sql`.

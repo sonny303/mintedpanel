@@ -163,6 +163,8 @@ export const queryKeys = {
     ["documents", orgId, "group", groupId] as const,
   orgDocuments: (orgId: string) => ["documents", orgId, "org"] as const,
   documentUploaders: (orgId: string, ids: string) => ["document-uploaders", orgId, ids] as const,
+  // MINT-107 org notification sequences (both purposes, with their steps).
+  notificationSequences: (orgId: string) => ["notification-sequences", orgId] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

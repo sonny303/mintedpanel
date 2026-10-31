@@ -1,0 +1,514 @@
+-- MINT-107 notification sequences regression packet: RLS, grants, CHECKs,
+-- triggers and save_notification_sequence. Run only in a disposable local
+-- database with every migration through 20261031130000 applied:
+--   psql -v ON_ERROR_STOP=1 -f supabase/tests/mint107-notification-sequences.sql
+-- Every row is synthetic and the whole packet is rolled back.
+--
+-- Written without a local Postgres: this packet has NOT been executed yet.
+-- Run it in migration CI (or a local `supabase start`) before relying on it.
+\set ON_ERROR_STOP on
+\set QUIET on
+\pset format unaligned
+\pset tuples_only on
+
+BEGIN;
+SET LOCAL client_min_messages = warning;
+-- Fire the deferred step-set checks at the end of each statement, so a
+-- probe sees them inside this transaction (it never commits).
+SET CONSTRAINTS ALL IMMEDIATE;
+
+CREATE TEMP TABLE m107_results (name text PRIMARY KEY, passed boolean NOT NULL);
+GRANT ALL ON m107_results TO authenticated, service_role;
+
+CREATE FUNCTION pg_temp.m107_mark(p_name text, p_passed boolean) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO pg_temp.m107_results VALUES (p_name, coalesce(p_passed, false));
+END;
+$$;
+
+CREATE FUNCTION pg_temp.m107_expect_state(p_state text, p_statement text) RETURNS boolean
+LANGUAGE plpgsql AS $$
+DECLARE v_state text;
+BEGIN
+  BEGIN
+    EXECUTE p_statement;
+    RETURN false;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE;
+    RETURN v_state = p_state;
+  END;
+END;
+$$;
+
+CREATE FUNCTION pg_temp.m107_expect_message(p_fragment text, p_statement text) RETURNS boolean
+LANGUAGE plpgsql AS $$
+DECLARE v_message text;
+BEGIN
+  BEGIN
+    EXECUTE p_statement;
+    RETURN false;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    RETURN position(p_fragment IN v_message) > 0;
+  END;
+END;
+$$;
+
+CREATE FUNCTION pg_temp.m107_as(p_user uuid) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', p_user::text, true);
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', p_user, 'role', 'authenticated')::text,
+    true
+  );
+END;
+$$;
+
+-- An intake payload: steps on the given offsets, step 3 cc'ing the
+-- specialist and then all admins.
+CREATE FUNCTION pg_temp.m107_intake(p_offsets int[], p_expected int DEFAULT NULL)
+RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+  SELECT jsonb_build_object(
+    'enabled', false,
+    'stop_conditions', jsonb_build_array('submitted', 'withdrawn'),
+    'target_days_to_ready', NULL,
+    'compress_toward_start_date', true,
+    'expected_revision', p_expected,
+    'steps', (
+      SELECT jsonb_agg(jsonb_build_object(
+               'offset_days', o.offset_days,
+               'channel', 'email',
+               'template_key', 'intake_reminder_first',
+               'cc_recipients', CASE WHEN o.ordinal = 3 THEN jsonb_build_array(
+                 jsonb_build_object('kind', 'user', 'user_id', '10700000-0000-4000-a000-000000000002'),
+                 jsonb_build_object('kind', 'role', 'role', 'admin'))
+                 ELSE '[]'::jsonb END)
+             ORDER BY o.ordinal)
+        FROM unnest(p_offsets) WITH ORDINALITY AS o(offset_days, ordinal)
+    )
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION pg_temp.m107_mark(text, boolean) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION pg_temp.m107_expect_state(text, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION pg_temp.m107_expect_message(text, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION pg_temp.m107_as(uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION pg_temp.m107_intake(int[], int) TO authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- Fixtures: org A (admin, specialist, billing), org B (admin), one provider in
+-- each org.
+-- ---------------------------------------------------------------------------
+INSERT INTO auth.users(id, email) VALUES
+  ('10700000-0000-4000-a000-000000000001', 'm107-admin-a@example.invalid'),
+  ('10700000-0000-4000-a000-000000000002', 'm107-specialist-a@example.invalid'),
+  ('10700000-0000-4000-a000-000000000003', 'm107-billing-a@example.invalid'),
+  ('10700000-0000-4000-a000-000000000004', 'm107-admin-b@example.invalid');
+INSERT INTO public.profiles(id, full_name, email) VALUES
+  ('10700000-0000-4000-a000-000000000001', 'MINT-107 Admin A', 'm107-admin-a@example.invalid'),
+  ('10700000-0000-4000-a000-000000000002', 'MINT-107 Specialist A', 'm107-specialist-a@example.invalid'),
+  ('10700000-0000-4000-a000-000000000003', 'MINT-107 Billing A', 'm107-billing-a@example.invalid'),
+  ('10700000-0000-4000-a000-000000000004', 'MINT-107 Admin B', 'm107-admin-b@example.invalid');
+INSERT INTO public.organizations(id, name) VALUES
+  ('10700000-0000-4000-a000-00000000000a', 'MINT-107 Synthetic Org A'),
+  ('10700000-0000-4000-a000-00000000000b', 'MINT-107 Synthetic Org B');
+INSERT INTO public.memberships(org_id, user_id, role) VALUES
+  ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-000000000001', 'admin'),
+  ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-000000000002', 'specialist'),
+  ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-000000000003', 'billing'),
+  ('10700000-0000-4000-a000-00000000000b', '10700000-0000-4000-a000-000000000004', 'admin');
+INSERT INTO public.providers(id, org_id, first_name, last_name, status) VALUES
+  ('10700000-0000-4000-a000-0000000a0001', '10700000-0000-4000-a000-00000000000a',
+   'Synthetic', 'Provider A', 'onboarding'),
+  ('10700000-0000-4000-a000-0000000b0001', '10700000-0000-4000-a000-00000000000b',
+   'Synthetic', 'Provider B', 'onboarding');
+
+-- ---------------------------------------------------------------------------
+-- Grants.
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.m107_mark('rpc_execute_authenticated_only',
+  has_function_privilege('authenticated',
+    'public.save_notification_sequence(uuid,text,jsonb)', 'EXECUTE')
+  AND NOT has_function_privilege('anon',
+    'public.save_notification_sequence(uuid,text,jsonb)', 'EXECUTE')
+  AND NOT has_function_privilege('service_role',
+    'public.save_notification_sequence(uuid,text,jsonb)', 'EXECUTE'));
+SELECT pg_temp.m107_mark('rpc_is_security_invoker_with_empty_search_path',
+  (SELECT NOT prosecdef AND proconfig = ARRAY['search_path=""']
+     FROM pg_proc WHERE oid = 'public.save_notification_sequence(uuid,text,jsonb)'::regprocedure));
+SELECT pg_temp.m107_mark('anon_has_no_table_access',
+  NOT has_table_privilege('anon', 'public.notification_sequences', 'SELECT')
+  AND NOT has_table_privilege('anon', 'public.notification_sequence_steps', 'SELECT')
+  AND NOT has_table_privilege('anon', 'public.sms_consents', 'SELECT'));
+-- One privilege per call: a comma list is true when ANY listed privilege is held.
+SELECT pg_temp.m107_mark('authenticated_table_grants',
+  has_table_privilege('authenticated', 'public.notification_sequences', 'SELECT')
+  AND has_table_privilege('authenticated', 'public.notification_sequences', 'INSERT')
+  AND has_table_privilege('authenticated', 'public.notification_sequences', 'UPDATE')
+  AND NOT has_table_privilege('authenticated', 'public.notification_sequences', 'DELETE')
+  AND has_table_privilege('authenticated', 'public.notification_sequence_steps', 'SELECT')
+  AND has_table_privilege('authenticated', 'public.notification_sequence_steps', 'INSERT')
+  AND has_table_privilege('authenticated', 'public.notification_sequence_steps', 'UPDATE')
+  AND has_table_privilege('authenticated', 'public.notification_sequence_steps', 'DELETE')
+  AND has_table_privilege('authenticated', 'public.sms_consents', 'SELECT')
+  AND NOT has_table_privilege('authenticated', 'public.sms_consents', 'INSERT')
+  AND NOT has_table_privilege('authenticated', 'public.sms_consents', 'UPDATE')
+  AND NOT has_table_privilege('service_role', 'public.sms_consents', 'DELETE'));
+SELECT pg_temp.m107_mark('rls_enabled_on_all_three',
+  (SELECT bool_and(relrowsecurity) FROM pg_class
+    WHERE oid IN ('public.notification_sequences'::regclass,
+                  'public.notification_sequence_steps'::regclass,
+                  'public.sms_consents'::regclass)));
+
+-- ---------------------------------------------------------------------------
+-- Validators (pure).
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.m107_mark('cc_validator_truth_table',
+  public.notification_cc_recipients_valid('[]')
+  AND public.notification_cc_recipients_valid(
+    '[{"kind":"user","user_id":"10700000-0000-4000-a000-000000000002"},{"kind":"role","role":"admin"}]')
+  AND NOT public.notification_cc_recipients_valid('{}')
+  AND NOT public.notification_cc_recipients_valid('[{"kind":"role","role":"owner"}]')
+  AND NOT public.notification_cc_recipients_valid('[{"kind":"role","role":"admin","extra":1}]')
+  AND NOT public.notification_cc_recipients_valid('[{"kind":"user"}]')
+  AND NOT public.notification_cc_recipients_valid(
+    '[{"kind":"user","user_id":"10700000-0000-4000-A000-000000000002"}]')
+  AND NOT public.notification_cc_recipients_valid('[{"kind":"role","role":"admin"},{"kind":"role","role":"admin"}]')
+  AND NOT public.notification_cc_recipients_valid('["admin"]')
+  AND NOT public.notification_cc_recipients_valid(
+    (SELECT jsonb_agg(jsonb_build_object('kind', 'user', 'user_id',
+              lpad(g::text, 8, '0') || '-0000-4000-8000-000000000000'))
+       FROM generate_series(1, 21) AS g)));
+SELECT pg_temp.m107_mark('stop_condition_validator_truth_table',
+  public.notification_stop_conditions_valid('{}')
+  AND public.notification_stop_conditions_valid('{submitted,paused,withdrawn,provider_replied}')
+  AND NOT public.notification_stop_conditions_valid('{submitted,submitted}')
+  AND NOT public.notification_stop_conditions_valid('{bounced}')
+  AND NOT public.notification_stop_conditions_valid(ARRAY['submitted', NULL]::text[])
+  AND NOT coalesce(public.notification_stop_conditions_valid(NULL), false));
+
+-- ---------------------------------------------------------------------------
+-- The save RPC as org A's admin.
+-- ---------------------------------------------------------------------------
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000001');
+
+SELECT public.save_notification_sequence(
+  '10700000-0000-4000-a000-00000000000a', 'intake_reminder', pg_temp.m107_intake('{2,4,7}'));
+SELECT pg_temp.m107_mark('admin_creates_intake_off_with_default_target',
+  (SELECT revision = 1 AND NOT enabled AND target_days_to_ready = 14
+      AND compress_toward_start_date
+      AND stop_conditions = '{submitted,withdrawn}'
+      AND updated_by = '10700000-0000-4000-a000-000000000001'
+     FROM public.notification_sequences
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder'));
+SELECT pg_temp.m107_mark('steps_saved_in_order_with_ordered_cc',
+  (SELECT array_agg(offset_days ORDER BY position) = '{2,4,7}'
+      AND array_agg(position ORDER BY position) = '{1,2,3}'
+     FROM public.notification_sequence_steps
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a')
+  AND (SELECT cc_recipients -> 0 ->> 'kind' = 'user' AND cc_recipients -> 1 ->> 'role' = 'admin'
+         FROM public.notification_sequence_steps
+        WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND position = 3));
+
+SELECT public.save_notification_sequence(
+  '10700000-0000-4000-a000-00000000000a', 'intake_reminder', pg_temp.m107_intake('{3,9}', 1));
+SELECT pg_temp.m107_mark('resave_replaces_steps_and_bumps_revision',
+  (SELECT revision = 2 FROM public.notification_sequences
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder')
+  AND (SELECT array_agg(offset_days ORDER BY position) = '{3,9}'
+         FROM public.notification_sequence_steps
+        WHERE org_id = '10700000-0000-4000-a000-00000000000a'));
+
+SELECT pg_temp.m107_mark('stale_revision_is_a_conflict', pg_temp.m107_expect_message(
+  'notification_sequence_conflict',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'intake_reminder', pg_temp.m107_intake('{3,9}', 1))$$));
+SELECT pg_temp.m107_mark('stale_revision_sqlstate_40001', pg_temp.m107_expect_state(
+  '40001',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'intake_reminder', pg_temp.m107_intake('{3,9}', NULL))$$));
+SELECT pg_temp.m107_mark('create_with_a_revision_is_a_conflict', pg_temp.m107_expect_state(
+  '40001',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'followup_digest', '{"enabled":false,"expected_revision":5,"steps":[{"offset_days":0,"channel":"email","template_key":"followup_digest_daily","cc_recipients":[]}]}')$$));
+
+SELECT public.save_notification_sequence(
+  '10700000-0000-4000-a000-00000000000a', 'followup_digest',
+  '{"enabled":true,"expected_revision":null,"steps":[{"offset_days":0,"channel":"email","template_key":"followup_digest_daily","cc_recipients":[{"kind":"role","role":"specialist"}]}]}');
+SELECT pg_temp.m107_mark('digest_saves_one_step_without_intake_settings',
+  (SELECT enabled AND target_days_to_ready IS NULL AND stop_conditions = '{}'
+      AND NOT compress_toward_start_date
+     FROM public.notification_sequences
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest'));
+SELECT pg_temp.m107_mark('digest_two_steps_rejected', pg_temp.m107_expect_message(
+  'notification_digest_single_step',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'followup_digest', '{"enabled":false,"expected_revision":1,"steps":[
+        {"offset_days":0,"channel":"email","template_key":"followup_digest_daily","cc_recipients":[]},
+        {"offset_days":1,"channel":"email","template_key":"followup_digest_daily","cc_recipients":[]}]}')$$));
+SELECT pg_temp.m107_mark('digest_intake_settings_rejected', pg_temp.m107_expect_state(
+  '22023',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'followup_digest', '{"enabled":false,"expected_revision":1,"stop_conditions":["submitted"],"steps":[
+        {"offset_days":0,"channel":"email","template_key":"followup_digest_daily","cc_recipients":[]}]}')$$));
+SELECT pg_temp.m107_mark('unknown_purpose_rejected', pg_temp.m107_expect_state(
+  '22023',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'payment_reminder', pg_temp.m107_intake('{2}'))$$));
+SELECT pg_temp.m107_mark('cc_non_member_rejected', pg_temp.m107_expect_message(
+  'notification_cc_user_not_member',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'intake_reminder', jsonb_set(pg_temp.m107_intake('{2}', 2), '{steps,0,cc_recipients}',
+        '[{"kind":"user","user_id":"10700000-0000-4000-a000-000000000004"}]'))$$));
+SELECT pg_temp.m107_mark('offsets_must_increase', pg_temp.m107_expect_message(
+  'notification_step_offsets_not_increasing',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'intake_reminder', pg_temp.m107_intake('{4,4}', 2))$$));
+SELECT pg_temp.m107_mark('template_must_match_purpose', pg_temp.m107_expect_message(
+  'notification_step_template_purpose_mismatch',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'intake_reminder', jsonb_set(pg_temp.m107_intake('{2}', 2), '{steps,0,template_key}',
+        '"followup_digest_daily"'))$$));
+SELECT pg_temp.m107_mark('failed_saves_left_the_saved_row_alone',
+  (SELECT revision = 2 FROM public.notification_sequences
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder')
+  AND (SELECT array_agg(offset_days ORDER BY position) = '{3,9}'
+         FROM public.notification_sequence_steps
+        WHERE org_id = '10700000-0000-4000-a000-00000000000a'
+          AND sequence_id = (SELECT id FROM public.notification_sequences
+                              WHERE org_id = '10700000-0000-4000-a000-00000000000a'
+                                AND purpose = 'intake_reminder')));
+
+-- Direct writes are attributed to the verified caller, not to a sent value.
+UPDATE public.notification_sequences
+   SET enabled = true, updated_by = '10700000-0000-4000-a000-000000000004'
+ WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder';
+SELECT pg_temp.m107_mark('updated_by_cannot_be_spoofed_and_revision_bumps',
+  (SELECT updated_by = '10700000-0000-4000-a000-000000000001' AND revision = 3
+     FROM public.notification_sequences
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder'));
+SELECT pg_temp.m107_mark('identity_is_immutable', pg_temp.m107_expect_message(
+  'notification_sequence_identity_immutable',
+  $$UPDATE public.notification_sequences SET purpose = 'followup_digest'
+     WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder'$$));
+SELECT pg_temp.m107_mark('admin_cannot_delete_a_sequence', pg_temp.m107_expect_state(
+  '42501',
+  $$DELETE FROM public.notification_sequences
+     WHERE org_id = '10700000-0000-4000-a000-00000000000a'$$));
+
+-- ---------------------------------------------------------------------------
+-- Other roles in org A.
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000002');
+SELECT pg_temp.m107_mark('specialist_reads_but_cannot_save',
+  (SELECT count(*) = 2 FROM public.notification_sequences)
+  AND pg_temp.m107_expect_message('notification_sequence_not_authorized',
+    $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+        'intake_reminder', pg_temp.m107_intake('{2}', 3))$$));
+
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000003');
+SELECT pg_temp.m107_mark('billing_reads_sequences_and_steps',
+  (SELECT count(*) = 2 FROM public.notification_sequences)
+  AND (SELECT count(*) = 3 FROM public.notification_sequence_steps));
+SELECT pg_temp.m107_mark('billing_cannot_insert', pg_temp.m107_expect_state(
+  '42501',
+  $$INSERT INTO public.notification_sequence_steps
+      (sequence_id, org_id, position, offset_days, channel, template_key)
+    SELECT id, org_id, 5, 50, 'email', 'intake_reminder_first'
+      FROM public.notification_sequences WHERE purpose = 'intake_reminder'$$));
+-- Data-modifying CTEs must be top-level statements.
+WITH changed AS (
+  UPDATE public.notification_sequences SET enabled = false RETURNING 1
+)
+SELECT pg_temp.m107_mark('billing_update_touches_nothing', count(*) = 0) FROM changed;
+WITH gone AS (
+  DELETE FROM public.notification_sequence_steps RETURNING 1
+)
+SELECT pg_temp.m107_mark('billing_delete_touches_nothing', count(*) = 0) FROM gone;
+
+-- ---------------------------------------------------------------------------
+-- Org B's admin sees nothing of org A and cannot write it.
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000004');
+SELECT pg_temp.m107_mark('other_org_reads_nothing',
+  (SELECT count(*) = 0 FROM public.notification_sequences)
+  AND (SELECT count(*) = 0 FROM public.notification_sequence_steps)
+  AND (SELECT count(*) = 0 FROM public.sms_consents));
+SELECT pg_temp.m107_mark('other_org_admin_cannot_save', pg_temp.m107_expect_state(
+  '42501',
+  $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+      'intake_reminder', pg_temp.m107_intake('{2}', 3))$$));
+SELECT pg_temp.m107_mark('other_org_admin_cannot_insert_into_org_a', pg_temp.m107_expect_state(
+  '42501',
+  $$INSERT INTO public.notification_sequences (org_id, purpose)
+    VALUES ('10700000-0000-4000-a000-00000000000a', 'followup_digest')$$));
+
+RESET ROLE;
+
+-- ---------------------------------------------------------------------------
+-- Table CHECKs and keys, as the owner so RLS is out of the way.
+-- ---------------------------------------------------------------------------
+CREATE TEMP TABLE m107_ids AS
+  SELECT id AS intake_id FROM public.notification_sequences
+   WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder';
+
+SELECT pg_temp.m107_mark('check_channel', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000a', 8, 80, 'fax', 'intake_reminder_first'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('check_template_key_format', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000a', 8, 80, 'email', 'Intake Reminder'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('check_offset_bounds', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000a', 8, 91, 'email', 'intake_reminder_first'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('check_position_bounds', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000a', 11, 80, 'email', 'intake_reminder_first'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('check_cc_shape', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key, cc_recipients)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000a', 8, 80, 'email', 'intake_reminder_first',
+         '[{"kind":"role","role":"owner"}]'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('unique_position_per_sequence', pg_temp.m107_expect_state('23505', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000a', 1, 1, 'email', 'intake_reminder_first'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('step_org_must_match_sequence_org', pg_temp.m107_expect_state('23503', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT intake_id, '10700000-0000-4000-a000-00000000000b', 8, 80, 'email', 'intake_reminder_first'
+    FROM m107_ids$$));
+SELECT pg_temp.m107_mark('check_stop_conditions', pg_temp.m107_expect_state('23514', $$
+  UPDATE public.notification_sequences SET stop_conditions = '{submitted,bounced}'
+   WHERE id = (SELECT intake_id FROM m107_ids)$$));
+SELECT pg_temp.m107_mark('check_target_bounds', pg_temp.m107_expect_state('23514', $$
+  UPDATE public.notification_sequences SET target_days_to_ready = 91
+   WHERE id = (SELECT intake_id FROM m107_ids)$$));
+SELECT pg_temp.m107_mark('check_digest_has_no_intake_settings',
+  pg_temp.m107_expect_state('23514', $$
+    UPDATE public.notification_sequences SET stop_conditions = '{submitted}'
+     WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest'$$)
+  AND pg_temp.m107_expect_state('23514', $$
+    UPDATE public.notification_sequences SET target_days_to_ready = 14
+     WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest'$$)
+  AND pg_temp.m107_expect_state('23514', $$
+    UPDATE public.notification_sequences SET compress_toward_start_date = true
+     WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest'$$));
+SELECT pg_temp.m107_mark('unique_org_purpose', pg_temp.m107_expect_state('23505', $$
+  INSERT INTO public.notification_sequences (org_id, purpose)
+  VALUES ('10700000-0000-4000-a000-00000000000a', 'intake_reminder')$$));
+SELECT pg_temp.m107_mark('direct_digest_second_step_rejected', pg_temp.m107_expect_message(
+  'notification_digest_single_step', $$
+  INSERT INTO public.notification_sequence_steps
+    (sequence_id, org_id, position, offset_days, channel, template_key)
+  SELECT id, org_id, 2, 1, 'email', 'followup_digest_daily'
+    FROM public.notification_sequences
+   WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest'$$));
+SELECT pg_temp.m107_mark('no_row_means_off',
+  NOT EXISTS (SELECT 1 FROM public.notification_sequences
+               WHERE org_id = '10700000-0000-4000-a000-00000000000b'));
+
+-- ---------------------------------------------------------------------------
+-- sms_consents.
+-- ---------------------------------------------------------------------------
+SET LOCAL ROLE service_role;
+INSERT INTO public.sms_consents
+  (id, org_id, provider_id, phone_e164, source, consent_text_version)
+VALUES ('10700000-0000-4000-a000-0000000c0001', '10700000-0000-4000-a000-00000000000a',
+        '10700000-0000-4000-a000-0000000a0001', '+15555550123', 'intake_form', 'sms-consent.v1');
+SELECT pg_temp.m107_mark('service_role_records_consent',
+  EXISTS (SELECT 1 FROM public.sms_consents WHERE id = '10700000-0000-4000-a000-0000000c0001'));
+SELECT pg_temp.m107_mark('consent_phone_must_be_e164', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+  VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+          '555-555-0123', 'intake_form', 'sms-consent.v1')$$));
+SELECT pg_temp.m107_mark('consent_source_is_closed', pg_temp.m107_expect_state('23514', $$
+  INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+  VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+          '+15555550199', 'guessed', 'sms-consent.v1')$$));
+SELECT pg_temp.m107_mark('consent_provider_must_be_in_org', pg_temp.m107_expect_state('23503', $$
+  INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+  VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000b0001',
+          '+15555550199', 'intake_form', 'sms-consent.v1')$$));
+SELECT pg_temp.m107_mark('one_live_consent_per_number', pg_temp.m107_expect_state('23505', $$
+  INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+  VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+          '+15555550123', 'sms_keyword', 'sms-consent.v1')$$));
+SELECT pg_temp.m107_mark('consent_evidence_is_immutable', pg_temp.m107_expect_message(
+  'sms_consent_immutable', $$
+  UPDATE public.sms_consents SET phone_e164 = '+15555550124'
+   WHERE id = '10700000-0000-4000-a000-0000000c0001'$$));
+SELECT pg_temp.m107_mark('revocation_needs_both_columns', pg_temp.m107_expect_state('23514', $$
+  UPDATE public.sms_consents SET revoked_at = now()
+   WHERE id = '10700000-0000-4000-a000-0000000c0001'$$));
+UPDATE public.sms_consents SET revoked_at = now(), revoked_source = 'sms_stop'
+ WHERE id = '10700000-0000-4000-a000-0000000c0001';
+SELECT pg_temp.m107_mark('revocation_is_stamped_once',
+  (SELECT revoked_source = 'sms_stop' FROM public.sms_consents
+    WHERE id = '10700000-0000-4000-a000-0000000c0001')
+  AND pg_temp.m107_expect_message('sms_consent_immutable', $$
+    UPDATE public.sms_consents SET revoked_source = 'provider_request'
+     WHERE id = '10700000-0000-4000-a000-0000000c0001'$$));
+INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+        '+15555550123', 'sms_keyword', 'sms-consent.v2');
+SELECT pg_temp.m107_mark('consent_can_be_given_again_after_revocation',
+  (SELECT count(*) = 2 FROM public.sms_consents
+    WHERE provider_id = '10700000-0000-4000-a000-0000000a0001'));
+SELECT pg_temp.m107_mark('service_role_cannot_delete_consent', pg_temp.m107_expect_state('42501', $$
+  DELETE FROM public.sms_consents WHERE id = '10700000-0000-4000-a000-0000000c0001'$$));
+
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000003');
+SELECT pg_temp.m107_mark('member_reads_own_org_consents',
+  (SELECT count(*) = 2 FROM public.sms_consents));
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000004');
+SELECT pg_temp.m107_mark('other_org_reads_no_consents',
+  (SELECT count(*) = 0 FROM public.sms_consents));
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000001');
+SELECT pg_temp.m107_mark('admin_cannot_write_consent', pg_temp.m107_expect_state('42501', $$
+  INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+  VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+          '+15555550177', 'staff_recorded', 'sms-consent.v1')$$));
+RESET ROLE;
+
+-- ---------------------------------------------------------------------------
+-- Audit rows: one per successful save, attributed to the admin, config only.
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.m107_mark('each_save_writes_one_attributed_audit_row',
+  (SELECT count(*) = 3
+      AND bool_and(user_id = '10700000-0000-4000-a000-000000000001')
+      AND count(*) FILTER (WHERE action_type = 'CREATE') = 2
+      AND count(*) FILTER (WHERE action_type = 'UPDATE') = 1
+     FROM public.audit_log
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a'
+      AND entity_type = 'notification_sequence'));
+
+DO $$
+DECLARE v_failed text;
+BEGIN
+  SELECT string_agg(name, ', ' ORDER BY name) INTO v_failed
+    FROM pg_temp.m107_results WHERE NOT passed;
+  IF v_failed IS NOT NULL THEN
+    RAISE EXCEPTION 'MINT-107 assertions failed: %', v_failed;
+  END IF;
+END;
+$$;
+
+ROLLBACK;
+\echo MINT-107 notification sequences packet passed.

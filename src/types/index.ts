@@ -2333,3 +2333,69 @@ export interface RosterExportSnapshot {
   fileName: string;
   downloadPath: string;
 }
+
+// MINT-107 organization notification sequences (migration 20261031130000).
+// Configuration only: nothing in the app sends these messages yet. Pure rules
+// (validation, ordering, starters, the start-date cadence) live in
+// src/lib/notificationSequences.ts; the template catalog in
+// src/lib/notificationTemplates.ts.
+export type NotificationPurpose = "followup_digest" | "intake_reminder";
+export type NotificationChannel = "email" | "sms";
+export type NotificationStopCondition = "submitted" | "paused" | "withdrawn" | "provider_replied";
+
+/** One cc'd escalation recipient on a step: a member, or everyone holding a role. */
+export type NotificationCcRecipient =
+  { kind: "user"; userId: string } | { kind: "role"; role: AppRole };
+
+/** notification_sequences: one org's settings for one purpose. */
+export interface NotificationSequence {
+  id: string;
+  orgId: string;
+  purpose: NotificationPurpose;
+  enabled: boolean;
+  /** Intake reminders only; always empty for the digest. */
+  stopConditions: NotificationStopCondition[];
+  /** Intake reminders only (1 to 90, default 14); null for the digest. */
+  targetDaysToReady: number | null;
+  /** Intake reminders only; always false for the digest. */
+  compressTowardStartDate: boolean;
+  /** Optimistic-concurrency counter, bumped on every save. */
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/** notification_sequence_steps: one ordered message in a sequence. */
+export interface NotificationSequenceStep {
+  id: string;
+  sequenceId: string;
+  orgId: string;
+  /** 1-based; offsets strictly increase with position. */
+  position: number;
+  offsetDays: number;
+  channel: NotificationChannel;
+  templateKey: string;
+  /** Ordered: the first entry is cc'd first. Empty by default. */
+  ccRecipients: NotificationCcRecipient[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SmsConsentSource = "intake_form" | "staff_recorded" | "sms_keyword";
+export type SmsConsentRevokedSource = "sms_stop" | "provider_request" | "staff_recorded";
+
+/** sms_consents: a provider's recorded agreement to receive texts at one number. */
+export interface SmsConsent {
+  id: string;
+  orgId: string;
+  providerId: string;
+  phoneE164: string;
+  consentedAt: string;
+  source: SmsConsentSource;
+  consentTextVersion: string;
+  recordedBy: string | null;
+  revokedAt: string | null;
+  revokedSource: SmsConsentRevokedSource | null;
+  createdAt: string;
+}

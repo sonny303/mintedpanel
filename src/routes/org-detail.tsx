@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AccountDetailSummary } from "@/components/org/AccountDetailSummary";
 import { FinishSetupBanner } from "@/components/org/FinishSetupBanner";
 import { PartiesManager } from "@/components/org/PartiesManager";
+import { NotificationsCard } from "@/components/notifications/NotificationsCard";
 
 export const Route = createFileRoute("/org-detail")({
   component: OrgDetailPage,
@@ -45,6 +46,9 @@ function OrgDetailPage() {
           The issued VALUE is captured where it is issued (the provider's
           enrollment fact; the group's Payer Network entry) and the per-payer
           LABEL is a Minted-curated payer fact shown in Payer Setup. */}
+      {/* MINT-107: org-level reminder and digest schedules. Admins edit;
+          other members see them read-only. */}
+      <NotificationsCard />
     </div>
   );
 }
