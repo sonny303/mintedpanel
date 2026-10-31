@@ -636,4 +636,48 @@ describe("clearance lookup search and payer statuses", () => {
     ]);
     expect(providerPayerStatuses(snapshot, "missing", TODAY)).toEqual([]);
   });
+
+  it("holds an approved case whose location moved group or sits in another state, never Do Not Bill", () => {
+    const MISMATCH = "This location's group or state no longer matches the enrollment case.";
+    const acme = (snapshot: BillingReadinessSnapshot) =>
+      providerPayerStatuses(snapshot, "p1", TODAY).filter((row) => row.caseId === "c1");
+
+    const moved = lookupSnapshot();
+    moved.facilities[0].groupId = "g2";
+    expect(acme(moved)).toMatchObject([
+      {
+        facility: { id: "f1" },
+        status: "hold",
+        label: "Hold",
+        reasons: [{ severity: "hold", label: MISMATCH }],
+      },
+    ]);
+
+    const otherState = lookupSnapshot();
+    otherState.caseFacilities.push({
+      caseId: "c1",
+      facilityId: "f2",
+      createdAt: "2025-02-01T12:00:00.000Z",
+      createdBy: null,
+    });
+    expect(acme(otherState).map((row) => [row.facility?.name, row.status, row.reasons])).toEqual([
+      ["Boulder Clinic", "ready", []],
+      ["Raleigh Home Visits", "hold", [{ severity: "hold", label: MISMATCH }]],
+    ]);
+
+    const gone = lookupSnapshot();
+    gone.caseFacilities[0].facilityId = "f-missing";
+    expect(acme(gone)).toMatchObject([
+      {
+        facility: null,
+        status: "hold",
+        reasons: [
+          {
+            severity: "hold",
+            label: "The location linked to this enrollment case is not on record.",
+          },
+        ],
+      },
+    ]);
+  });
 });

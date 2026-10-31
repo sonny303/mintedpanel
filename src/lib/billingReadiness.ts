@@ -313,8 +313,11 @@ function groupRows<T>(rows: readonly T[], key: (row: T) => string | null): Map<s
 
 // At Luna scale (thousands of clinicians, tens of thousands of cases) an
 // assessment must not rescan the whole snapshot. The index is rebuilt whenever
-// one of the snapshot's arrays is replaced or changes length; rows are shared
-// by reference, so edits to a row's fields are always seen.
+// one of the snapshot's arrays is replaced or changes length. Rows are shared
+// by reference, so an in-place edit to a field the index does not key on is
+// seen; an in-place edit to a keyed field (id, providerId, caseId, facilityId)
+// is not, until the array is replaced. Snapshots from the service are never
+// edited in place.
 function snapshotIndex(snapshot: BillingReadinessSnapshot): SnapshotIndex {
   const arrays = INDEXED_ARRAYS.map((key) => snapshot[key] as unknown[]);
   const cached = snapshotIndexes.get(snapshot);
@@ -1313,6 +1316,40 @@ export function providerPayerStatuses(
       continue;
     }
     for (const facilityId of facilityIds) {
+      const facility = index.facilities.get(facilityId) ?? null;
+      // The evaluator finds a case by the location's CURRENT group and state.
+      // A location that moved group, or one in another state, would resolve to
+      // "no exact case" and read Do Not Bill on an approved case, so the row is
+      // held with its own reason instead (the guard assessFeedEvent applies).
+      const facilityState = facility ? stateCode(facility.state) : null;
+      if (
+        !facility ||
+        (facility.groupId ?? null) !== row.groupId ||
+        facilityState === null ||
+        facilityState !== stateCode(row.state)
+      ) {
+        rows.push({
+          key: `${row.id}:${facilityId}`,
+          caseId: row.id,
+          payer,
+          facility,
+          state: stateCode(row.state),
+          status: "hold",
+          label: "Hold",
+          reasons: [
+            {
+              severity: "hold",
+              label: facility
+                ? "This location's group or state no longer matches the enrollment case."
+                : "The location linked to this enrollment case is not on record.",
+            },
+          ],
+          confirmedEffectiveDate: row.confirmedEffectiveDate,
+          expectedEffectiveDate: row.expectedEffectiveDate,
+          assessment: null,
+        });
+        continue;
+      }
       const assessment = evaluateBillingReadiness(
         snapshot,
         { providerId, facilityId, payerId: row.payerId },
