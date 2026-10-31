@@ -55,11 +55,16 @@ The mix:
   - approved 2,127 (1,675 effective, 452 awaiting an effective date);
   - submitted 977, not started 893, in review 831, in progress 589;
   - denied 405, action required 284.
-- **Billing Readiness change feed** (approval transitions, location links,
-  terminations, license expirations):
-  - last 7 days: 110, 145, 3, 13;
-  - last 30 days: 407, 1,187, 14, 51;
-  - last 90 days: 939, 4,129, 47, 124.
+- **Billing Readiness change feed** (approval transitions, terminations,
+  license expirations):
+  - last 7 days: 110, 3, 13;
+  - last 30 days: 407, 14, 51;
+  - last 90 days: 939, 47, 124.
+
+  There are no "location linked" events: the feed needs
+  `case_facilities.created_by`, which references `auth.users`, so the seed
+  leaves it null rather than invent an actor.
+
 - **Follow-ups** on open cases (`touches.next_follow_up_date` on the latest
   touch): 897 overdue, 265 due today, 1,519 upcoming.
 
@@ -219,11 +224,46 @@ rolls back.
 
 A later apply reactivates the same org.
 
-## Local rehearsal (optional)
+## Local mode and the CI job
 
-Against a loopback Supabase (`supabase start`), add `--local-rehearsal`. The
-token becomes `SEED LUNA SCALE ON local` or `TEAR DOWN LUNA SCALE ON local`.
-Hosted staging's cluster identity is refused in this mode.
+`--local-rehearsal` is a closed mode, for a loopback Supabase
+(`supabase start`) only:
+
+- Both `SUPABASE_URL` and `LUNA_DATABASE_URL` must be on `127.0.0.1` or
+  `localhost`. Anything else is refused in this mode, even an allowlisted
+  staging project.
+- Production's ref is refused on either URL.
+- Hosted staging's cluster identity is refused.
+- The tokens are `SEED LUNA SCALE ON local` and `TEAR DOWN LUNA SCALE ON local`.
+
+The CI job **Luna-scale seed (local Supabase)** (`luna-scale-seed` in
+`.github/workflows/ci.yml`) proves the SQL on every run:
+
+1. It starts and resets local Supabase the way the UAT seed job does, including
+   the duplicate-timestamp workaround.
+2. It seeds the UAT fixture as pre-existing data, and creates a member login and
+   a login that belongs to a UAT org.
+3. It fingerprints every public row outside the Luna org (`verify:luna-scale
+--fingerprint outside`, one md5 per table).
+4. It runs `--dry-run`, `--apply` (with a member), and `verify:luna-scale
+--strict`. The verifier regenerates the plan from the receipt's parameters
+   and fails on any per-table mismatch, and on any row in the org the seed did
+   not create.
+5. It runs a second `--apply` and checks it is a no-op repair: the
+   `--fingerprint seed` md5s are identical, and a second receipt is written.
+6. It checks that a member of a UAT org is refused and that the transaction
+   rolls back (the seed fingerprint is unchanged).
+7. It runs `--teardown`, then `verify --strict`. Only the inactive org row, its
+   3 roster templates and the receipts may remain.
+8. It checks that the outside fingerprint is unchanged after the applies and
+   after the teardown, then re-seeds and tears down once more.
+
+There is no DB-backed Playwright step. The paging spec mocks the network by
+design. Pointing it at a real stack would need a real sign-in and session, the
+nitro `/api` routes running with a service-role key (access context, the
+Explorer), a `private.internal_staff` row for the staff Explorer, and
+network-quiet tracking from page events instead of the stand-in. That is more
+than a flag.
 
 ## Known limits
 

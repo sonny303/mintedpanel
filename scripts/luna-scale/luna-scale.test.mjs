@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import {
   ID_TAG_SALT,
+  LUNA_FIXTURE_VERSION,
   LUNA_ORG_ID,
   PRODUCTION_CLUSTER,
   PRODUCTION_PROJECT_REF,
@@ -41,11 +42,19 @@ import {
   TABLE_COLUMNS,
   TEARDOWN_TABLES,
   buildApplySql,
+  buildFingerprintSql,
   buildTeardownSql,
+  buildVerifySql,
   sqlLiteral,
 } from "./luna-sql.mjs";
 import { main, parseArgs } from "./seed-luna-scale.mjs";
-import { checkSnapshot } from "./verify-luna-scale.mjs";
+import {
+  ROSTER_TEMPLATES_PER_ORG,
+  checkSnapshot,
+  main as verifyMain,
+  parseVerifyArgs,
+  plannedFromReceipt,
+} from "./verify-luna-scale.mjs";
 
 const ANCHOR = "2026-10-30";
 const dataset = buildLunaDataset(DEFAULT_LUNA_PARAMS, { anchorDate: ANCHOR });
@@ -386,7 +395,6 @@ test("the change feed has activity in the last 7, 30 and 90 days, and follow-ups
   const { feed, followUps } = summarizeDataset(dataset);
   for (const window of ["7d", "30d", "90d"]) {
     assert.ok(feed[window].approvals > 0, `${window} approvals`);
-    assert.ok(feed[window].locationLinks > 0, `${window} location links`);
     assert.ok(feed[window].licenseExpirations > 0, `${window} license expirations`);
   }
   assert.ok(feed["90d"].terminations > 0);
@@ -697,6 +705,85 @@ test("target guard refuses production outright, whatever the allowlist says", ()
   }
 });
 
+test("local mode accepts only 127.0.0.1 or localhost, whatever the allowlist says", () => {
+  const ok = { kind: "local", projectRef: "local" };
+  assert.deepEqual(
+    assertLunaTarget({
+      supabaseUrl: "http://127.0.0.1:54321",
+      databaseUrl: "postgresql://postgres:x@127.0.0.1:54322/postgres",
+      allowedRefs: [],
+      allowLocal: true,
+    }),
+    ok,
+  );
+  assert.deepEqual(
+    assertLunaTarget({
+      supabaseUrl: "http://localhost:54321",
+      databaseUrl: "postgres://postgres:x@localhost:54322/postgres",
+      allowedRefs: allowed,
+      allowLocal: true,
+    }),
+    ok,
+  );
+  // A remote host in local mode is refused, even when it is allowlisted staging.
+  for (const [supabaseUrl, databaseUrl] of [
+    [api, direct],
+    [api, pooler],
+    ["http://127.0.0.1:54321", direct],
+    [api, "postgres://postgres:x@127.0.0.1:54322/postgres"],
+    ["http://127.0.0.1:54321", "postgres://postgres:x@db.example.test:5432/postgres"],
+    [
+      "http://localhost.attacker.test:54321",
+      "postgres://postgres:x@localhost.attacker.test:54322/postgres",
+    ],
+    ["http://[::1]:54321", "postgres://postgres:x@[::1]:54322/postgres"],
+    ["http://10.0.0.5:54321", "postgres://postgres:x@10.0.0.5:54322/postgres"],
+  ]) {
+    assert.throws(
+      () => assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs: allowed, allowLocal: true }),
+      /--local-rehearsal: it accepts only 127\.0\.0\.1 or localhost/,
+      `${supabaseUrl} ${databaseUrl}`,
+    );
+  }
+  // Production's ref is refused in local mode too, on either URL.
+  for (const [supabaseUrl, databaseUrl] of [
+    [
+      "http://127.0.0.1:54321",
+      `postgres://postgres.${PRODUCTION_PROJECT_REF}:x@127.0.0.1:54322/postgres`,
+    ],
+    [
+      `https://${PRODUCTION_PROJECT_REF}.supabase.co`,
+      "postgres://postgres:x@127.0.0.1:54322/postgres",
+    ],
+    [
+      "http://127.0.0.1:54321",
+      `postgres://postgres:x@db.${PRODUCTION_PROJECT_REF}.supabase.co:5432/postgres`,
+    ],
+  ]) {
+    assert.throws(
+      () => assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs: [], allowLocal: true }),
+      /Refusing production/,
+      databaseUrl,
+    );
+  }
+  assert.throws(
+    () =>
+      assertLunaTarget({
+        supabaseUrl: "http://127.0.0.1:54321",
+        databaseUrl: "postgres://postgres:x@127.0.0.1:54322/postgres",
+        allowedRefs: [PRODUCTION_PROJECT_REF],
+        allowLocal: true,
+      }),
+    /Refusing production/,
+  );
+  // Local mode keeps its own confirmation token.
+  assert.equal(confirmationToken("apply", ok), "SEED LUNA SCALE ON local");
+  assert.throws(
+    () => assertConfirmation("apply", ok, `SEED LUNA SCALE ON ${STAGING_PROJECT_REF}`),
+    /ON local/,
+  );
+});
+
 test("target guard refuses unlisted refs, mixed targets, spoofed hosts and overrides", () => {
   assert.throws(
     () => assertLunaTarget({ supabaseUrl: api, databaseUrl: direct, allowedRefs: [] }),
@@ -920,37 +1007,228 @@ test("dry-run and emit-sql never connect", async () => {
   assert.match(emitted.calls.files[0].text, /this is a review copy/);
 });
 
-test("the verifier checks counts against the last receipt and the invariants", () => {
+test("the verifier checks the receipt, the regenerated plan and, when strict, the whole org", () => {
   const counts = planCounts(dataset);
-  const owned = Object.fromEntries(
-    LUNA_TABLES.filter((t) => t !== "organizations").map((t) => [t, counts[t]]),
-  );
+  const receipt = {
+    version: LUNA_FIXTURE_VERSION,
+    event: "apply",
+    params: dataset.params,
+    anchor_date: ANCHOR,
+    counts,
+  };
+  const planned = plannedFromReceipt(receipt);
+  assert.deepEqual(planned, counts, "the plan regenerates from the receipt alone");
+  assert.equal(plannedFromReceipt({ event: "teardown" }), null);
+  const seedTables = LUNA_TABLES.filter((t) => t !== "organizations");
+  const owned = Object.fromEntries(seedTables.map((t) => [t, counts[t]]));
+  const zeroUnowned = Object.fromEntries(seedTables.map((t) => [t, 0]));
   const good = {
     org: { name: "Luna Demo (synthetic)", lifecycle_state: "active" },
-    last_receipt: { event: "apply", counts },
+    last_receipt: receipt,
     owned: { ...owned, memberships: 1 },
+    unowned: zeroUnowned,
+    org_rows: {
+      ...owned,
+      memberships: 1,
+      audit_log: 1,
+      roster_templates: 3,
+      notes: 0,
+      contracts: 0,
+    },
     cross_org_case_links: 0,
     cases_without_primary_location: 0,
     seed_rows_outside_org: 0,
   };
-  assert.deepEqual(checkSnapshot(good), []);
+  assert.deepEqual(checkSnapshot(good, { planned, strict: true }), []);
+  assert.match(checkSnapshot(good).join(), /no parameters to regenerate the plan/);
   assert.match(
-    checkSnapshot({ ...good, owned: { ...good.owned, providers: 3499 } }).join(),
-    /providers: 3499/,
+    checkSnapshot({ ...good, owned: { ...good.owned, providers: 3499 } }, { planned }).join(),
+    /providers: 3499 seed rows, the receipt says 3500.*providers: 3499 seed rows, the plan says 3500/,
   );
-  assert.match(checkSnapshot({ ...good, cross_org_case_links: 2 }).join(), /cross_org_case_links/);
+  assert.match(
+    checkSnapshot(good, { planned: { ...planned, touches: planned.touches + 1 } }).join(),
+    /touches: .* the plan says/,
+  );
+  assert.match(
+    checkSnapshot({ ...good, last_receipt: { ...receipt, version: "older" } }, { planned }).join(),
+    /fixture older/,
+  );
+  assert.match(
+    checkSnapshot({ ...good, cross_org_case_links: 2 }, { planned }).join(),
+    /cross_org_case_links/,
+  );
+  // Strict: a row the seed did not create, anywhere in the org, fails.
+  const unownedTouch = { ...good, unowned: { ...zeroUnowned, touches: 1 } };
+  assert.deepEqual(checkSnapshot(unownedTouch, { planned }), []);
+  assert.match(
+    checkSnapshot(unownedTouch, { planned, strict: true }).join(),
+    /touches: 1 rows the seed did not create/,
+  );
+  const note = { ...good, org_rows: { ...good.org_rows, notes: 2 } };
+  assert.match(
+    checkSnapshot(note, { planned, strict: true }).join(),
+    /notes: 2 rows in the Luna org/,
+  );
+
+  // After a teardown only the inactive shell, its roster templates and the
+  // receipts may remain.
   const zero = Object.fromEntries(Object.keys(good.owned).map((t) => [t, 0]));
-  assert.deepEqual(
-    checkSnapshot({
-      ...good,
-      org: { ...good.org, lifecycle_state: "inactive" },
-      last_receipt: { event: "teardown" },
-      owned: zero,
-    }),
-    [],
+  const shell = {
+    ...good,
+    org: { ...good.org, lifecycle_state: "inactive" },
+    last_receipt: { version: LUNA_FIXTURE_VERSION, event: "teardown" },
+    owned: zero,
+    org_rows: { ...zero, audit_log: 2, roster_templates: ROSTER_TEMPLATES_PER_ORG, notes: 0 },
+  };
+  assert.deepEqual(checkSnapshot(shell, { strict: true }), []);
+  assert.match(
+    checkSnapshot({ ...shell, owned: { ...zero, tasks: 4 } }).join(),
+    /tasks: 4 seed rows remain/,
   );
   assert.match(
-    checkSnapshot({ ...good, last_receipt: { event: "teardown" } }).join(),
-    /remain after the teardown/,
+    checkSnapshot({ ...shell, org: { ...shell.org, lifecycle_state: "active" } }).join(),
+    /not inactive after a teardown/,
+  );
+  assert.match(
+    checkSnapshot(
+      { ...shell, org_rows: { ...shell.org_rows, roster_mappings: 1 } },
+      { strict: true },
+    ).join(),
+    /roster_mappings: 1 rows in the Luna org/,
+  );
+  assert.match(
+    checkSnapshot(
+      { ...shell, org_rows: { ...shell.org_rows, roster_templates: 2 } },
+      { strict: true },
+    ).join(),
+    /roster_templates: 2 rows in the Luna org, expected 3/,
+  );
+  assert.match(
+    checkSnapshot(
+      { ...shell, org_rows: { ...shell.org_rows, providers: 1 } },
+      { strict: true },
+    ).join(),
+    /providers: 1 rows in the Luna org/,
+  );
+});
+
+test("verifier flags parse strictly", () => {
+  assert.deepEqual(parseVerifyArgs([]), { allowLocal: false, strict: false, fingerprint: null });
+  assert.deepEqual(parseVerifyArgs(["--local-rehearsal", "--strict", "--fingerprint", "seed"]), {
+    allowLocal: true,
+    strict: true,
+    fingerprint: "seed",
+  });
+  assert.throws(() => parseVerifyArgs(["--fingerprint", "everything"]), /outside" or "seed/);
+  assert.throws(() => parseVerifyArgs(["--teardown"]), /Unknown argument/);
+});
+
+test("verify and fingerprint SQL are read-only and scoped to the Luna org", () => {
+  const verifySql = buildVerifySql();
+  const outside = buildFingerprintSql("outside");
+  const seed = buildFingerprintSql("seed");
+  for (const sql of [verifySql, outside, seed]) {
+    assert.ok(sql.startsWith("BEGIN READ ONLY;"));
+    assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE)\b/);
+  }
+  // Every org-scoped public table is counted for the org, seed-owned or not.
+  assert.match(verifySql, /'org_rows', \(SELECT json_object_agg\(c\.table_name/);
+  assert.match(verifySql, /c\.column_name = 'org_id'/);
+  // Outside: every public table, minus the Luna org's rows and its org row.
+  assert.ok(outside.includes(`format('x.id::text <> %L', '${LUNA_ORG_ID}')`));
+  assert.ok(outside.includes(`format('x.org_id::text IS DISTINCT FROM %L', '${LUNA_ORG_ID}')`));
+  assert.match(outside, /t\.table_schema = 'public' AND t\.table_type = 'BASE TABLE'/);
+  // Seed: the org row and every table the seed writes or the members it adds.
+  for (const table of [...LUNA_TABLES, "memberships"])
+    assert.ok(seed.includes(`'${table}', (SELECT md5(`), table);
+  assert.throws(() => buildFingerprintSql("all"), /scope/);
+});
+
+test("seeded location links leave created_by null: it references auth.users", () => {
+  assert.ok(tables.case_facilities.length > 0);
+  for (const row of tables.case_facilities) assert.equal(row.created_by, null);
+  assert.equal(
+    tables.credential_cases.some((row) => "created_by" in row),
+    false,
+  );
+});
+
+test("the CI job proves the seed on local Supabase, in order, and only there", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/ci.yml", import.meta.url),
+    "utf8",
+  );
+  const start = workflow.indexOf("\n  luna-scale-seed:\n");
+  assert.ok(start > 0, "the luna-scale-seed job exists");
+  const end = workflow.indexOf("\n  release-guardrails:\n", start);
+  const job = workflow.slice(start, end);
+  assert.match(job, /name: Luna-scale seed \(local Supabase\)/);
+  const order = [
+    "20260903210001_delete_org_sop_template.sql",
+    'supabase --workdir "$luna_workdir" start',
+    "db reset --no-seed",
+    "npm run seed:staging-uat",
+    '--fingerprint outside > "$RUNNER_TEMP/outside-before.json"',
+    "--dry-run --local-rehearsal",
+    '--apply --local-rehearsal --confirm "SEED LUNA SCALE ON local"',
+    "verify:luna-scale -- --local-rehearsal --strict",
+    '--fingerprint seed > "$RUNNER_TEMP/seed-1.json"',
+    'diff "$RUNNER_TEMP/seed-1.json" "$RUNNER_TEMP/seed-2.json"',
+    "--member-email ci.luna.uat-member@example.test",
+    'diff "$RUNNER_TEMP/outside-before.json" "$RUNNER_TEMP/outside-after-apply.json"',
+    '--teardown --local-rehearsal --confirm "TEAR DOWN LUNA SCALE ON local"',
+    'diff "$RUNNER_TEMP/outside-before.json" "$RUNNER_TEMP/outside-after-teardown.json"',
+  ];
+  let cursor = 0;
+  for (const text of order) {
+    const at = job.indexOf(text, cursor);
+    assert.ok(at >= cursor, `step out of order or missing: ${text}`);
+    cursor = at;
+  }
+  // Every seed or verify call is local; no hosted URL, key or password literal.
+  for (const line of job.split("\n").filter((l) => /(seed|verify):luna-scale/.test(l))) {
+    assert.match(line, /--local-rehearsal/, line);
+  }
+  assert.doesNotMatch(job, /supabase\.co|vmznysvietfaddakkegt|fkvuhfsqcmujywzgczmc/);
+  assert.doesNotMatch(job, /postgres:postgres@|eyJ[A-Za-z0-9_-]{10,}/);
+});
+
+test("a failed identity preflight reports psql's error without the credentials", async () => {
+  const { calls, deps } = spies();
+  await assert.rejects(
+    main(["--apply", "--confirm", `SEED LUNA SCALE ON ${STAGING_PROJECT_REF}`], {
+      ...deps,
+      executeIdentity: async () => {
+        const error = new Error(`Command failed: psql ${stagingEnvironment.LUNA_DATABASE_URL}`);
+        error.stderr = `psql: error: connection to ${stagingEnvironment.LUNA_DATABASE_URL} failed: timeout`;
+        throw error;
+      },
+    }),
+    (error) => {
+      assert.match(
+        error.message,
+        /identity preflight failed; nothing was written: psql: error: connection to <LUNA_DATABASE_URL> failed/,
+      );
+      assert.ok(!error.message.includes("private-test-password"));
+      return true;
+    },
+  );
+  assert.equal(calls.sql.length, 0);
+
+  await assert.rejects(
+    verifyMain([], {
+      environment: stagingEnvironment,
+      report: () => {},
+      execute: async () => {
+        const error = new Error("Command failed");
+        error.stderr = `FATAL: password authentication failed (${stagingEnvironment.LUNA_DATABASE_URL})`;
+        throw error;
+      },
+    }),
+    (error) => {
+      assert.ok(!error.message.includes("private-test-password"));
+      assert.match(error.message, /<LUNA_DATABASE_URL>/);
+      return true;
+    },
   );
 });

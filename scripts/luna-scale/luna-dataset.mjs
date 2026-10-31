@@ -8,7 +8,6 @@ import {
   LUNA_FIXTURE_VERSION,
   LUNA_ORG_ID,
   LUNA_ORG_NAME,
-  LUNA_SEED_ACTOR_ID,
   SYNTHETIC_NPI_PREFIX_INDIVIDUAL,
   SYNTHETIC_NPI_PREFIX_ORGANIZATION,
   lunaUuid,
@@ -864,7 +863,8 @@ export function buildLunaDataset(inputParams, { anchorDate }) {
       case_id: caseId,
       facility_id: plan.facility.id,
       is_primary: true,
-      created_by: LUNA_SEED_ACTOR_ID,
+      // FK to auth.users: no synthetic actor can satisfy it, so it stays null.
+      created_by: null,
       created_at: at(t.created, 14, 1),
     });
     const sameStateSecond =
@@ -883,7 +883,7 @@ export function buildLunaDataset(inputParams, { anchorDate }) {
         case_id: caseId,
         facility_id: sameStateSecond.id,
         is_primary: false,
-        created_by: LUNA_SEED_ACTOR_ID,
+        created_by: null,
         created_at: at(linked, 13),
       });
     }
@@ -1071,7 +1071,6 @@ export function summarizeDataset(dataset) {
         (row) =>
           row.to_status === "approved" && row.from_status !== null && within(row.changed_at, days),
       ).length,
-      locationLinks: tables.case_facilities.filter((row) => within(row.created_at, days)).length,
       terminations: tables.credential_cases.filter(
         (row) => row.termination_date && within(row.termination_date, days),
       ).length,

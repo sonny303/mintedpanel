@@ -59,9 +59,6 @@ export function ownedIdSqlPredicate(column) {
 }
 
 export const LUNA_ORG_ID = lunaUuid("organization", 1);
-/** Recorded as case_facilities.created_by so the Billing Readiness change feed
- * treats seeded location links as recorded events. Not a profile or Auth user. */
-export const LUNA_SEED_ACTOR_ID = lunaUuid("actor", "luna-scale-seed");
 
 // ---------- synthetic identifiers ----------
 
@@ -101,7 +98,7 @@ export function syntheticNpi(prefix, serial) {
 
 // ---------- target guards ----------
 
-const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const LOOPBACK = new Set(["127.0.0.1", "localhost"]);
 const PROJECT_REF_RE = /^[a-z0-9]{20}$/;
 const POOLER_RE = /^aws-\d+-[a-z]{2}-[a-z]+-\d+\.pooler\.supabase\.com$/;
 
@@ -119,8 +116,9 @@ function mentionsProduction(...values) {
 /**
  * Classify the target or throw. Production is refused before anything else.
  * A hosted target must be the same project on both URLs and be named in the
- * LUNA_SCALE_ALLOWED_PROJECT_REFS allowlist. Loopback local Supabase is
- * accepted only with an explicit --local-rehearsal.
+ * LUNA_SCALE_ALLOWED_PROJECT_REFS allowlist. --local-rehearsal is a closed
+ * mode: both URLs must be on 127.0.0.1 or localhost, and nothing else is
+ * accepted in it, whatever the allowlist names. Without it, loopback is refused.
  */
 export function assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs, allowLocal = false }) {
   if (!supabaseUrl || !databaseUrl)
@@ -173,14 +171,20 @@ export function assertLunaTarget({ supabaseUrl, databaseUrl, allowedRefs, allowL
 
   const localApi = LOOPBACK.has(api.hostname);
   const localDb = LOOPBACK.has(db.hostname);
-  if (localApi || localDb) {
+  if (allowLocal) {
     if (!(localApi && localDb)) {
-      throw new Error("Refusing unsafe target: local and hosted URLs are mixed");
-    }
-    if (!allowLocal) {
-      throw new Error("Refusing local target without --local-rehearsal");
+      throw new Error(
+        "Refusing --local-rehearsal: it accepts only 127.0.0.1 or localhost for both SUPABASE_URL and LUNA_DATABASE_URL",
+      );
     }
     return { kind: "local", projectRef: "local" };
+  }
+  if (localApi || localDb) {
+    throw new Error(
+      localApi && localDb
+        ? "Refusing local target without --local-rehearsal"
+        : "Refusing unsafe target: local and hosted URLs are mixed",
+    );
   }
 
   const apiMatch = /^([a-z0-9]+)\.supabase\.co$/.exec(api.hostname);

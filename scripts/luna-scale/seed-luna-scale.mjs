@@ -152,11 +152,12 @@ export function formatPlan(dataset, { target, members, sqlBytes }) {
       .join(" · ")}`,
     `  approved: effective ${n(summary.approvedEffective)} · awaiting effective date ${n(summary.approvedAwaitingEffective)}`,
     "",
-    "Billing Readiness change feed sources (approval transitions · location links · terminations · license expirations):",
+    "Billing Readiness change feed sources (approval transitions · terminations · license expirations):",
     ...Object.entries(summary.feed).map(
       ([label, feed]) =>
-        `  last ${label.padEnd(4)} ${n(feed.approvals)} · ${n(feed.locationLinks)} · ${n(feed.terminations)} · ${n(feed.licenseExpirations)}`,
+        `  last ${label.padEnd(4)} ${n(feed.approvals)} · ${n(feed.terminations)} · ${n(feed.licenseExpirations)}`,
     ),
+    "  (No location-link events: case_facilities.created_by references auth.users, so the seed leaves it null.)",
     "",
     `Follow-ups on open cases: overdue ${n(summary.followUps.overdue)} · due today ${n(summary.followUps.dueToday)} · upcoming ${n(summary.followUps.upcoming)}`,
     `States with a location: ${summary.states}`,
@@ -211,9 +212,15 @@ async function readDatabaseIdentity(executeIdentity, databaseUrl, environment) {
       "SELECT system_identifier::text FROM pg_control_system()",
     ],
     { env: psqlEnvironment(environment), timeout: 15000 },
-  ).catch(() => {
-    // execFile errors can carry the credential-bearing connection argument.
-    throw new Error("Luna database identity preflight failed; nothing was written");
+  ).catch((error) => {
+    // execFile's message carries the credential-bearing connection argument;
+    // psql's own stderr does not, once the URL itself is masked.
+    const detail = String(error?.stderr ?? "")
+      .replaceAll(databaseUrl, "<LUNA_DATABASE_URL>")
+      .trim();
+    throw new Error(
+      `Luna database identity preflight failed; nothing was written${detail ? `: ${detail}` : ""}`,
+    );
   });
   return String(stdout).trim();
 }

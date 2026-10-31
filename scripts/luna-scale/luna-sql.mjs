@@ -487,6 +487,7 @@ BEGIN
         ON i.table_schema = c.table_schema AND i.table_name = c.table_name
        AND i.column_name = 'id' AND i.data_type = 'uuid'
      WHERE c.table_schema = 'public' AND c.column_name = 'org_id'
+       AND has_table_privilege(format('public.%I', c.table_name), 'SELECT')
      ORDER BY c.table_name
   LOOP
     EXECUTE format('SELECT count(*) FROM public.%I WHERE org_id::text = $1 AND NOT pg_temp.luna_owned(id)', r.table_name)
@@ -557,8 +558,70 @@ SELECT json_build_object(
   'cases_without_primary_location', (SELECT count(*) FROM public.credential_cases c
      WHERE c.org_id = ${org}::uuid AND NOT EXISTS (
        SELECT 1 FROM public.case_facilities cf WHERE cf.case_id = c.id AND cf.is_primary AND cf.facility_id = c.facility_id)),
-  'seed_rows_outside_org', (SELECT count(*) FROM public.providers WHERE org_id <> ${org}::uuid AND ${ownedIdSqlPredicate("id")})
+  'seed_rows_outside_org', (SELECT count(*) FROM public.providers WHERE org_id <> ${org}::uuid AND ${ownedIdSqlPredicate("id")}),
+  'org_rows', (${ORG_ROWS_SQL.replaceAll("$ORG", org)})
 );
 COMMIT;
 `;
+}
+
+// Every row in the Luna org, per public table with an org_id, seed-owned or
+// not: after a teardown only the roster templates and audit receipts remain.
+// query_to_xml runs one count per table inside a single read-only SELECT.
+const ORG_ROWS_SQL = `SELECT json_object_agg(c.table_name, (xpath('/row/n/text()', query_to_xml(
+       format('SELECT count(*) AS n FROM public.%I WHERE org_id::text = %L', c.table_name, $ORG),
+       false, true, '')))[1]::text::bigint ORDER BY c.table_name)
+     FROM information_schema.columns c
+     JOIN information_schema.tables t
+       ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
+     WHERE c.table_schema = 'public' AND c.column_name = 'org_id'
+       AND has_table_privilege(format('public.%I', c.table_name), 'SELECT')`;
+
+/**
+ * Read-only md5 fingerprints, one per table, for the CI job:
+ * - "outside": every public table's rows that are NOT the Luna org's (the
+ *   organizations row itself excluded), so an apply or teardown that changes
+ *   anything else is caught;
+ * - "seed": every row in the Luna org's seed tables and memberships, plus the
+ *   org row, so a second apply that changes anything is caught.
+ */
+export function buildFingerprintSql(scope) {
+  const org = quote(LUNA_ORG_ID);
+  if (scope === "outside") {
+    return `BEGIN READ ONLY;
+SET LOCAL statement_timeout = '120s';
+SELECT json_object_agg(t.table_name, (xpath('/row/h/text()', query_to_xml(format(
+    'SELECT md5(coalesce(string_agg(r, %L ORDER BY r), %L)) AS h FROM (SELECT row_to_json(x)::text AS r FROM public.%I x WHERE %s) s',
+    ',', '', t.table_name,
+    CASE
+      WHEN t.table_name = 'organizations' THEN format('x.id::text <> %L', ${org})
+      WHEN o.column_name IS NOT NULL THEN format('x.org_id::text IS DISTINCT FROM %L', ${org})
+      ELSE 'true'
+    END), false, true, '')))[1]::text ORDER BY t.table_name)
+FROM information_schema.tables t
+LEFT JOIN information_schema.columns o
+  ON o.table_schema = t.table_schema AND o.table_name = t.table_name AND o.column_name = 'org_id'
+WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+  AND has_table_privilege(format('public.%I', t.table_name), 'SELECT');
+COMMIT;
+`;
+  }
+  if (scope === "seed") {
+    const tables = [...LUNA_TABLES.filter((table) => table !== "organizations"), "memberships"];
+    const parts = [
+      `'organizations', (SELECT md5(row_to_json(x)::text) FROM public.organizations x WHERE x.id = ${org}::uuid)`,
+      ...tables.map(
+        (table) =>
+          `'${table}', (SELECT md5(coalesce(string_agg(row_to_json(x)::text, ',' ORDER BY x.id), '')) FROM public.${table} x WHERE x.org_id = ${org}::uuid)`,
+      ),
+    ];
+    return `BEGIN READ ONLY;
+SET LOCAL statement_timeout = '120s';
+SELECT json_build_object(
+  ${parts.join(",\n  ")}
+);
+COMMIT;
+`;
+  }
+  throw new Error('Fingerprint scope must be "outside" or "seed"');
 }
