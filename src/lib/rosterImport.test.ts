@@ -212,6 +212,21 @@ describe("scanRosterRecord — staging", () => {
   });
 });
 
+describe("scanRosterRecord — typed NPI separators (MINT-110)", () => {
+  it("stages a dashed or spaced NPI as bare digits and still rejects other junk", () => {
+    for (const npi of ["123-456-7893", "123 456 7893"]) {
+      const [row] = scanRoster(parseCsv(csvWith([rowLine({ npi })])));
+      expect(row.rowState).toBe("staged");
+      expect(row.mapped?.npi).toBe("1234567893");
+    }
+    const [junk] = scanRoster(parseCsv(csvWith([rowLine({ npi: "123.456.7893" })])));
+    expect(junk.rowState).toBe("error");
+    expect(junk.errorColumn).toBe("npi");
+    const [short] = scanRoster(parseCsv(csvWith([rowLine({ npi: "123-456-789" })])));
+    expect(short.errorReason).toBe('NPI must be exactly 10 digits, got "123-456-789"');
+  });
+});
+
 describe("scanRosterRecord — TE-6 full-SSN guard", () => {
   it("rejects a dashed SSN in the ssn_last4 column — never truncates to a last-4", () => {
     const parsed = parseCsv(csvWith([rowLine({ ssn_last4: "123-45-6789" })]));

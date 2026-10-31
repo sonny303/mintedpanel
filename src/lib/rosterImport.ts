@@ -18,6 +18,7 @@
 // `mapped`.
 import { coerceDate, parseCsv, type CsvRecord, type ParsedCsv } from "@/lib/csvImport";
 import { toCsv, type CsvCell } from "@/lib/csv";
+import { stripNpiSeparators } from "@/lib/providerIdentity";
 
 /* ------------------------- Template + file gate ------------------------- */
 
@@ -257,9 +258,10 @@ export function scanRosterRecord(record: CsvRecord, headers: string[]): ScannedR
       `provider_middle_initial must be a single letter, got "${middle}"`,
     );
   }
-  const npi = raw.npi ?? "";
+  // MINT-110: dashes and spaces are stripped; other junk still fails.
+  const npi = stripNpiSeparators(raw.npi ?? "");
   if (npi && !NPI_RE.test(npi)) {
-    fail("npi", `NPI must be exactly 10 digits, got "${npi}"`);
+    fail("npi", `NPI must be exactly 10 digits, got "${raw.npi ?? ""}"`);
   }
   for (const h of ["license_state", "facility_state"] as const) {
     const v = raw[h] ?? "";

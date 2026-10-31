@@ -1,5 +1,5 @@
 import { matchGroupLocator } from "@/lib/groupLocator";
-import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi } from "@/lib/providerIdentity";
+import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi, stripNpiSeparators } from "@/lib/providerIdentity";
 
 // E3.1 — the pure five-part dedupe / conflict-review / commit-plan core
 // (TE-3/TE-4). NO I/O: the service layer batch-reads the org's existing data
@@ -339,7 +339,9 @@ function pushNote(notes: string[], note: string | null): void {
 export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
   const byNpi = new Map<string, DedupeProviderRecord[]>();
   for (const p of inputs.providers) {
-    const npi = p.npi?.trim();
+    // MINT-110: imported NPIs arrive with dashes and spaces stripped, so a
+    // stored legacy "123-456-7893" is keyed the same way and still matches.
+    const npi = stripNpiSeparators(p.npi ?? "");
     if (!npi) continue;
     const list = byNpi.get(npi) ?? [];
     // Count distinct provider ids — a duplicated list entry is not two people.
@@ -663,7 +665,10 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
     pushNote(notes, facilityNote);
     pushNote(notes, licenseNote);
     const sameNameNeighbor = nameKey
-      ? (byName.get(nameKey) ?? []).find((p) => p.npi && p.npi.trim() !== "" && p.npi !== npi)
+      ? (byName.get(nameKey) ?? []).find((p) => {
+          const stored = stripNpiSeparators(p.npi ?? "");
+          return stored !== "" && stored !== npi;
+        })
       : undefined;
     if (sameNameNeighbor) {
       pushNote(

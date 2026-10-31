@@ -1,5 +1,6 @@
 // Four field-section bodies shared by the Add stepper and single-page Edit.
 // Each takes (form, errors, update); Licenses/Employment also mutate arrays via update.
+import { useId } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FieldLabel } from "@/components/providers/FormField";
+import { NpiRegistryAssist } from "@/components/providers/NpiRegistryAssist";
 
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
@@ -22,6 +24,7 @@ import {
   type ProviderFormState,
   type UpdateProviderField,
 } from "@/components/providers/providerFormShared";
+import { stripNpiSeparators } from "@/lib/providerIdentity";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { PROVIDER_GENDER_OPTIONS, PROVIDER_GENDER_UNSET_VALUE } from "@/lib/providerGender";
 
@@ -101,16 +104,28 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
 }
 
 export function CredentialsSection({ form, errors, update }: SectionProps) {
+  const npiNoticeId = useId();
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Field label="NPI" error={errors.npi}>
         <Input
           inputMode="numeric"
-          maxLength={10}
+          maxLength={20}
+          aria-describedby={npiNoticeId}
           value={form.npi}
-          onChange={(e) => update("npi", e.target.value.replace(/\D/g, "").slice(0, 10))}
+          onChange={(e) => update("npi", stripNpiSeparators(e.target.value))}
         />
       </Field>
+      <div className="md:col-span-2">
+        <NpiRegistryAssist
+          npi={form.npi}
+          firstName={form.firstName}
+          lastName={form.lastName}
+          verify
+          onPick={(npi) => update("npi", npi)}
+          noticeId={npiNoticeId}
+        />
+      </div>
       <Field label="CAQH ID" error={errors.caqhId}>
         <Input
           inputMode="numeric"

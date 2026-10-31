@@ -132,6 +132,7 @@ export const LEAK_MODES = [
   "e613isolation",
   "providerinvites",
   "intakesession",
+  "npiregistry",
 ];
 
 const USERS = {
@@ -755,6 +756,17 @@ export async function createMockApiServer(options = {}) {
         lastName: sp ? "Park" : "One",
         email: sp ? "sp.provider@example.test" : "kay.one@example.test",
       });
+    }
+
+    // --- MINT-110 leak "npiregistry", part 1: the NPI Registry proxy answers
+    // an anonymous caller (an open proxy). The pass path 401s below like any
+    // other route.
+    if (
+      leak === "npiregistry" &&
+      /^\/api\/npi-registry\//.test(url.pathname) &&
+      !(req.headers.authorization ?? "").startsWith("Bearer ")
+    ) {
+      return envelope(res, 200, { results: [], truncated: false });
     }
 
     // --- auth: resolve the caller, then the org (x-org-id needs membership) ---
@@ -1623,6 +1635,32 @@ export async function createMockApiServer(options = {}) {
         versionNumber: body.versionNumber,
         supersedesDocumentId: null,
       });
+    }
+
+    // --- /api/npi-registry/* (MINT-110) ---
+    // Public registry data, so there is no org row to leak; the wall is the
+    // guard and the role. Writer-only; the body is validated before any
+    // registry call (an empty search body 422s). Never calls out: a valid
+    // request gets an empty answer. Leak "npiregistry", part 2: a billing
+    // (read-only) member is served.
+    const npiRegistryMatch = url.pathname.match(/^\/api\/npi-registry\/(search|lookup)\/?$/);
+    if (npiRegistryMatch) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing" && leak !== "npiregistry") {
+        return envelope(res, 403, null, "Only admins and specialists can search the NPI Registry");
+      }
+      const body = (await readBody(req)) ?? {};
+      res.setHeader("cache-control", "private, no-store, max-age=0");
+      if (npiRegistryMatch[1] === "search") {
+        if (!body.firstName || !body.lastName) {
+          return envelope(res, 422, null, "Enter a first and last name to search the NPI Registry");
+        }
+        return envelope(res, 200, { results: [], truncated: false });
+      }
+      if (typeof body.npi !== "string" || !/^\d{10}$/.test(body.npi.replace(/[-\s]/g, ""))) {
+        return envelope(res, 422, null, "Enter a 10-digit NPI with a valid check digit");
+      }
+      return envelope(res, 200, { record: null });
     }
 
     // --- /api/payer-forms/* (Payer PDF) ---

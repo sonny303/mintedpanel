@@ -386,6 +386,38 @@ describe("dedupeImportRows — five-part matching", () => {
   });
 });
 
+describe("stored NPIs with separators (MINT-110)", () => {
+  it("matches a legacy dashed stored NPI instead of creating a duplicate", () => {
+    const inputs = baseInputs([janeRow(2, { group_name: GROUP2.name, group_tin: GROUP2.tin })]);
+    inputs.providers = [{ ...JANE, npi: "123-456-7893" }];
+    const out = dedupeImportRows(inputs);
+    expect(only(out, "create")).toHaveLength(0);
+    expect(only(out, "update")[0]?.providerId).toBe(JANE.id);
+  });
+
+  it("blocks, never merges, two existing providers whose NPIs differ only by separators", () => {
+    const inputs = baseInputs([janeRow(2)]);
+    inputs.providers = [
+      { ...JANE, id: "prov-jane-a", npi: "1234567893" },
+      { ...JANE, id: "prov-jane-b", npi: "123-456-7893" },
+    ];
+    const out = dedupeImportRows(inputs);
+    expect(only(out, "create")).toHaveLength(0);
+    expect(only(out, "update")).toHaveLength(0);
+    const blocked = only(out, "blocked");
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].reason).toMatch(/matches multiple existing providers/);
+  });
+
+  it("does not flag a spaced stored NPI as a different NPI for the same name", () => {
+    const inputs = baseInputs([janeRow(2)]);
+    inputs.providers = [{ ...JANE, npi: " 123 456 7893 " }];
+    const out = dedupeImportRows(inputs);
+    expect(only(out, "create")).toHaveLength(0);
+    expect(JSON.stringify(out)).not.toContain("has a different NPI");
+  });
+});
+
 describe("conflict detection + resolution (TS-62)", () => {
   it("flags a specialty conflict with the existing value as the shown default", () => {
     const out = dedupeImportRows(baseInputs([janeRow(2, { specialty: "Occupational Therapy" })]));

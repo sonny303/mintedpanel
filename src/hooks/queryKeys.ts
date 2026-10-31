@@ -124,6 +124,13 @@ export const queryKeys = {
   // footprint spans every org the caller belongs to, keyed by Type-1 NPI.
   // Loaded only when the inspector opens, never from the typeahead.
   providerDossier: (userId: string, npi: string) => ["provider-dossier", userId, npi] as const,
+  // MINT-110 NPI Registry (NPPES) reads. Public data, but fetched through the
+  // org-guarded /api route, so keyed by org like every other read.
+  npiRegistryLookup: (orgId: string, npi: string) => ["npi-registry", orgId, "npi", npi] as const,
+  npiRegistrySearch: (
+    orgId: string,
+    input: { firstName: string; lastName: string; state: string },
+  ) => ["npi-registry", orgId, "search", input] as const,
   // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
   orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
   // Full Party model (redesign E0.3): all parties in an org + the global,

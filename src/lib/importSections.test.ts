@@ -466,6 +466,40 @@ describe("provider scan (TE-2/TE-6)", () => {
     expect(row.mapped?.npi).toBe("1234567890");
   });
 
+  it.each(["123-456-7893", "123 456 7893", " 123\u2013456\u20137893 "])(
+    "stages a typed NPI %j with its dashes and spaces stripped (MINT-110)",
+    (npi) => {
+      const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, npi });
+      expect(row.rowState).toBe("staged");
+      expect(row.mapped?.npi).toBe("1234567893");
+      // The persisted source cell stays as uploaded.
+      expect(row.raw.npi).toBe(npi.trim());
+    },
+  );
+
+  it("still rejects other NPI junk after stripping (MINT-110)", () => {
+    for (const npi of ["123.456.7893", "NPI 1234567893", "12345678x3"]) {
+      const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, npi });
+      expect(row.rowState).toBe("error");
+      expect(row.errorColumn).toBe("npi");
+    }
+    const dashesOnly = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, npi: "---" });
+    expect(dashesOnly.rowState).toBe("error");
+    expect(dashesOnly.errorReason).toBe("npi is required");
+  });
+
+  it("quotes a bad group NPI as uploaded, not as stripped (MINT-110)", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, group_npi: "190-283-374" });
+    expect(row.rowState).toBe("error");
+    expect(row.errorReason).toBe('group_npi must be exactly 10 digits, got "190-283-374"');
+  });
+
+  it("strips a dashed group Type 2 NPI the same way (MINT-110)", () => {
+    const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, group_npi: "190-283-3742" });
+    expect(row.rowState).toBe("staged");
+    expect(row.mapped?.group_npi).toBe("1902833742");
+  });
+
   it("rejects an impossible calendar date, naming the column", () => {
     const row = scanRow(PROVIDER_DESCRIPTOR, { ...PROVIDER_ROW, date_of_birth: "1990-02-30" });
     expect(row.rowState).toBe("error");

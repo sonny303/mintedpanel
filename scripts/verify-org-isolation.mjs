@@ -1871,6 +1871,42 @@ function looksLikeVercelGate(r) {
     console.log("SKIP  35d. intake session scope — local mock only (needs an emailed code)");
   }
 
+  // 36-36c — MINT-110 NPI Registry lookup. These routes read no org data (the
+  // registry is public), so there is no cross-org row to leak; the wall to
+  // prove is that the server never proxies the registry for an anonymous
+  // caller or a read-only member. 36 is the positive control: an empty body
+  // 422s, which proves the route is live, so 36b/36c can't pass against a dead
+  // route. On a correct server none of the three reaches the registry.
+  const npiProbe = await apiPost("/api/npi-registry/search", {}, { token: kansasTok });
+  if (npiProbe.status === 404) {
+    console.log("SKIP  36/36b/36c. NPI Registry lookup — route not deployed");
+  } else {
+    check(
+      "36. Kansas POST /api/npi-registry/search with an empty body -> 422 (route is live)",
+      npiProbe.status === 422,
+      `status=${npiProbe.status} (expect 422)`,
+    );
+    const anonymous = await apiPost("/api/npi-registry/search", {
+      firstName: "Gate",
+      lastName: "Probe",
+    });
+    check(
+      "36b. Anonymous NPI Registry search -> 401 (never an open proxy)",
+      anonymous.status === 401 && anonymous.body?.data == null,
+      `status=${anonymous.status} (expect 401) dataPresent=${anonymous.body?.data != null}`,
+    );
+    const readOnly = await apiPost(
+      "/api/npi-registry/lookup",
+      { npi: "1234567893" },
+      { token: spTok },
+    );
+    check(
+      "36c. Billing (read-only) NPI Registry lookup -> 403",
+      readOnly.status === 403 && readOnly.body?.data == null,
+      `status=${readOnly.status} (expect 403) dataPresent=${readOnly.body?.data != null}`,
+    );
+  }
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";
