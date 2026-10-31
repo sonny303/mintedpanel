@@ -1,0 +1,564 @@
+// MINT-82 (RC-07) — SQL for the Luna-scale seed. Pure string builders; the
+// runner (seed-luna-scale.mjs) pipes the output to psql in ONE transaction,
+// the way scripts/uat/seed-staging-uat.mjs applies supabase/seed-uat.sql.
+//
+// Both scripts refuse to run unless psql is given the database identity the
+// runner observed and the exact confirmation token, so pasting the SQL into
+// an editor or running it with bare psql fails before any write.
+import {
+  ID_TAG_SALT,
+  LUNA_FIXTURE_VERSION,
+  LUNA_ORG_ID,
+  LUNA_OWNERSHIP_MARKER,
+  PRODUCTION_CLUSTER,
+  UAT_ORGANIZATION_IDS,
+  confirmationToken,
+  membershipId,
+  ownedIdSqlPredicate,
+} from "./luna-fixture.mjs";
+import { LUNA_TABLES, planCounts } from "./luna-dataset.mjs";
+
+export const INSERT_CHUNK_ROWS = 500;
+
+// Every column the seed writes, with the type used to render its literal.
+const C = {
+  uuid: "uuid",
+  text: "text",
+  int: "int",
+  bool: "bool",
+  date: "date",
+  ts: "timestamptz",
+  textArray: "text[]",
+  jsonb: "jsonb",
+};
+export const TABLE_COLUMNS = Object.freeze({
+  organizations: { id: C.uuid, name: C.text, lifecycle_state: C.text },
+  status_configs: {
+    id: C.uuid,
+    org_id: C.uuid,
+    track: C.text,
+    label: C.text,
+    color: C.text,
+    sort_order: C.int,
+    action_bucket: C.text,
+  },
+  payers: {
+    id: C.uuid,
+    org_id: C.uuid,
+    name: C.text,
+    payer_kind: C.text,
+    states: C.textArray,
+    status: C.text,
+    is_active: C.bool,
+    source: C.text,
+    aliases: C.textArray,
+  },
+  org_payer_assignments: { id: C.uuid, org_id: C.uuid, payer_id: C.uuid, status: C.text },
+  provider_groups: {
+    id: C.uuid,
+    org_id: C.uuid,
+    name: C.text,
+    tin: C.text,
+    npi_type2: C.text,
+    states: C.textArray,
+    is_active: C.bool,
+    billing_street: C.text,
+    billing_city: C.text,
+    billing_state: C.text,
+    billing_zip: C.text,
+    billing_phone: C.text,
+    billing_email: C.text,
+    credentialing_email: C.text,
+  },
+  facilities: {
+    id: C.uuid,
+    org_id: C.uuid,
+    group_id: C.uuid,
+    name: C.text,
+    street: C.text,
+    city: C.text,
+    state: C.text,
+    zip: C.text,
+    phone: C.text,
+    email: C.text,
+    is_active: C.bool,
+    effective_date: C.date,
+  },
+  payer_network_targets: {
+    id: C.uuid,
+    org_id: C.uuid,
+    group_id: C.uuid,
+    payer_id: C.uuid,
+    state: C.text,
+    status: C.text,
+  },
+  providers: {
+    id: C.uuid,
+    org_id: C.uuid,
+    group_id: C.uuid,
+    first_name: C.text,
+    last_name: C.text,
+    credentials: C.text,
+    npi: C.text,
+    specialty: C.text,
+    taxonomy_code: C.text,
+    status: C.text,
+    terminated_date: C.date,
+    verification_state: C.text,
+    reference_only: C.bool,
+    is_test_provider: C.bool,
+    start_date: C.date,
+    caqh_id: C.text,
+    caqh_last_attested_date: C.date,
+    date_of_birth: C.date,
+    ssn_last4: C.text,
+    email: C.text,
+    phone: C.text,
+    home_street: C.text,
+    home_city: C.text,
+    home_state: C.text,
+    home_zip: C.text,
+  },
+  provider_group_assignments: {
+    id: C.uuid,
+    org_id: C.uuid,
+    provider_id: C.uuid,
+    group_id: C.uuid,
+    is_primary: C.bool,
+    start_date: C.date,
+  },
+  provider_facility_assignments: {
+    id: C.uuid,
+    org_id: C.uuid,
+    provider_id: C.uuid,
+    facility_id: C.uuid,
+    is_primary: C.bool,
+    start_date: C.date,
+  },
+  state_licenses: {
+    id: C.uuid,
+    org_id: C.uuid,
+    provider_id: C.uuid,
+    state: C.text,
+    license_number: C.text,
+    license_type: C.text,
+    issue_date: C.date,
+    expiration_date: C.date,
+    status: C.text,
+    verified_status: C.text,
+    verified_at: C.ts,
+    verification_source_url: C.text,
+  },
+  credential_cases: {
+    id: C.uuid,
+    org_id: C.uuid,
+    provider_id: C.uuid,
+    group_id: C.uuid,
+    facility_id: C.uuid,
+    payer_id: C.uuid,
+    state: C.text,
+    specialty: C.text,
+    case_status: C.text,
+    payer_pipeline_state: C.text,
+    credentialing_status_id: C.uuid,
+    submitted_date: C.date,
+    approved_date: C.date,
+    confirmed_effective_date: C.date,
+    expected_effective_date: C.date,
+    termination_date: C.date,
+    payer_reference_id: C.text,
+    payer_individual_provider_id: C.text,
+    created_at: C.ts,
+    updated_at: C.ts,
+  },
+  case_facilities: {
+    id: C.uuid,
+    org_id: C.uuid,
+    case_id: C.uuid,
+    facility_id: C.uuid,
+    is_primary: C.bool,
+    created_by: C.uuid,
+    created_at: C.ts,
+  },
+  case_status_history: {
+    id: C.uuid,
+    org_id: C.uuid,
+    case_id: C.uuid,
+    from_status: C.text,
+    to_status: C.text,
+    actor_kind: C.text,
+    is_correction: C.bool,
+    changed_at: C.ts,
+  },
+  tasks: {
+    id: C.uuid,
+    org_id: C.uuid,
+    case_id: C.uuid,
+    provider_id: C.uuid,
+    title: C.text,
+    description: C.text,
+    sop_content: C.jsonb,
+    status: C.text,
+    sort_order: C.int,
+    due_date: C.date,
+    completed_date: C.date,
+    is_auto_generated: C.bool,
+    created_at: C.ts,
+  },
+  touches: {
+    id: C.uuid,
+    org_id: C.uuid,
+    case_id: C.uuid,
+    touch_date: C.date,
+    entry_type: C.text,
+    touch_type: C.text,
+    outcome: C.text,
+    notes: C.text,
+    source: C.text,
+    next_follow_up_date: C.date,
+    clears_follow_up: C.bool,
+    created_at: C.ts,
+  },
+  enrollment_facts: {
+    id: C.uuid,
+    org_id: C.uuid,
+    provider_id: C.uuid,
+    group_id: C.uuid,
+    payer_id: C.uuid,
+    state: C.text,
+    effective_date: C.date,
+    source: C.text,
+  },
+});
+
+const SEED_TABLES = LUNA_TABLES.filter((table) => table !== "organizations");
+
+/** Teardown order: children before parents, then the memberships. The
+ * organization row itself is never deleted (see the runbook). */
+export const TEARDOWN_TABLES = Object.freeze([
+  ...LUNA_TABLES.filter((table) => table !== "organizations").reverse(),
+  "memberships",
+]);
+
+// Tables the teardown never deletes from: the audit trail (never deleted, by
+// rule) and the roster ledger, which is append-only by trigger. The
+// organization insert trigger seeds three roster_templates rows, so the org
+// row stays behind as an inactive, memberless shell.
+export const PRESERVED_ORG_TABLES = Object.freeze([
+  "audit_log",
+  "roster_templates",
+  "roster_mappings",
+  "roster_export_snapshots",
+  "roster_export_overrides",
+]);
+
+export function sqlLiteral(value, type) {
+  if (value === null || value === undefined) return "NULL";
+  switch (type) {
+    case "int":
+      if (!Number.isSafeInteger(value)) throw new Error(`Not an integer: ${value}`);
+      return String(value);
+    case "bool":
+      if (typeof value !== "boolean") throw new Error(`Not a boolean: ${value}`);
+      return value ? "true" : "false";
+    case "text[]":
+      if (!Array.isArray(value)) throw new Error("Expected an array");
+      return value.length === 0
+        ? "'{}'::text[]"
+        : `ARRAY[${value.map((item) => sqlLiteral(item, "text")).join(",")}]::text[]`;
+    case "jsonb":
+      return `${quote(JSON.stringify(value))}::jsonb`;
+    default:
+      return quote(String(value));
+  }
+}
+
+function quote(text) {
+  if (/[\0\\]/.test(text)) throw new Error("Refusing a NUL or backslash in seed text");
+  return `'${text.replaceAll("'", "''")}'`;
+}
+
+export function buildInsertStatements(table, rows, conflict = "(id) DO NOTHING") {
+  const spec = TABLE_COLUMNS[table];
+  if (!spec) throw new Error(`No column spec for ${table}`);
+  const columns = Object.keys(spec);
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (!(key in spec)) throw new Error(`${table}.${key} is not in the column spec`);
+    }
+  }
+  const statements = [];
+  for (let start = 0; start < rows.length; start += INSERT_CHUNK_ROWS) {
+    const chunk = rows.slice(start, start + INSERT_CHUNK_ROWS);
+    const values = chunk
+      .map((row) => `(${columns.map((column) => sqlLiteral(row[column], spec[column])).join(",")})`)
+      .join(",\n");
+    statements.push(
+      `INSERT INTO public.${table} (${columns.join(", ")}) VALUES\n${values}\nON CONFLICT ${conflict};`,
+    );
+  }
+  return statements;
+}
+
+function preamble(action, target) {
+  const expectedToken = confirmationToken(action, target);
+  const reviewOnly = target.kind === "review";
+  return `BEGIN;
+SET LOCAL lock_timeout = '10s';
+SET LOCAL statement_timeout = '600s';
+SET LOCAL idle_in_transaction_session_timeout = '120s';
+SET LOCAL timezone = 'UTC';
+SELECT set_config('minted.luna_expected_database_identity', :'expected_database_identity', true);
+SELECT set_config('minted.luna_confirm_token', :'confirm_token', true);
+DO $luna$
+DECLARE v_identity text := (SELECT system_identifier::text FROM pg_control_system());
+BEGIN
+  ${reviewOnly ? "RAISE EXCEPTION 'Luna-scale SQL refused: this is a review copy (--emit-sql without a target) and never runs';" : ""}
+  IF v_identity = ${quote(PRODUCTION_CLUSTER)} THEN
+    RAISE EXCEPTION 'Luna-scale SQL refused: this is the production database';
+  END IF;
+  IF v_identity IS DISTINCT FROM current_setting('minted.luna_expected_database_identity') THEN
+    RAISE EXCEPTION 'Luna-scale SQL refused: database identity does not match the runner preflight';
+  END IF;
+  IF current_setting('minted.luna_confirm_token') IS DISTINCT FROM ${quote(expectedToken)} THEN
+    RAISE EXCEPTION 'Luna-scale SQL refused: confirmation token mismatch';
+  END IF;
+END
+$luna$;
+CREATE OR REPLACE FUNCTION pg_temp.luna_owned(p_id uuid) RETURNS boolean LANGUAGE sql IMMUTABLE AS $luna$
+  SELECT ${ownedIdSqlPredicate("p_id")}
+$luna$;
+`;
+}
+
+function receipt(event, fields) {
+  return {
+    minted_luna_scale_fixture: {
+      ...LUNA_OWNERSHIP_MARKER.minted_luna_scale_fixture,
+      event,
+      ...fields,
+    },
+  };
+}
+
+/**
+ * The apply transaction: guards, a parameter check against the last receipt,
+ * every insert (ON CONFLICT (id) DO NOTHING, so a re-run only repairs),
+ * memberships, an exact owned-row count per table, and one audit receipt.
+ */
+export function buildApplySql(dataset, { target, members = [] }) {
+  const counts = planCounts(dataset);
+  const org = quote(LUNA_ORG_ID);
+  const parts = [
+    `-- Luna-scale synthetic organization (MINT-82). Generated by scripts/luna-scale/seed-luna-scale.mjs.`,
+    `-- Fixture ${LUNA_FIXTURE_VERSION}; params sha256 ${dataset.paramsSha256}; anchor ${dataset.anchorDate}.`,
+    `-- Run only through the runner. Every row id is self-certifying (pg_temp.luna_owned).`,
+    preamble("apply", target),
+    `DO $luna$
+DECLARE v_last jsonb;
+BEGIN
+  SELECT a.after -> 'minted_luna_scale_fixture' INTO v_last
+    FROM public.audit_log a
+   WHERE a.org_id = ${org}::uuid AND a.entity_type = 'organization' AND a.entity_id = ${org}::uuid
+     AND a.after ? 'minted_luna_scale_fixture'
+   ORDER BY a.created_at DESC NULLS LAST, a.id DESC
+   LIMIT 1;
+  IF v_last ->> 'event' = 'apply' AND v_last ->> 'params_sha256' IS DISTINCT FROM ${quote(dataset.paramsSha256)} THEN
+    RAISE EXCEPTION 'Luna-scale seed refused: the org holds a seed built from other parameters or another fixture version; run the teardown first';
+  END IF;
+END
+$luna$;`,
+    `INSERT INTO public.organizations (id, name, lifecycle_state) VALUES (${org}, ${quote(dataset.tables.organizations[0].name)}, 'active')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, lifecycle_state = 'active';`,
+    // Rows in the org the seed does not own, before any insert. If a trigger
+    // (for example the touch auto-status trigger) adds one during this
+    // transaction, the check after the inserts aborts the whole apply.
+    `CREATE TEMP TABLE luna_unowned_before ON COMMIT DROP AS
+${SEED_TABLES.map(
+  (table) =>
+    `SELECT '${table}'::text AS table_name, count(*) AS n FROM public.${table} WHERE org_id = ${org}::uuid AND NOT pg_temp.luna_owned(id)`,
+).join("\nUNION ALL\n")};`,
+  ];
+  for (const table of LUNA_TABLES) {
+    if (table === "organizations") continue;
+    parts.push(`-- ${table}: ${counts[table]} rows`);
+    parts.push(...buildInsertStatements(table, dataset.tables[table]));
+  }
+  for (const member of members) {
+    parts.push(`DO $luna$
+DECLARE v_user uuid;
+BEGIN
+  SELECT u.id INTO v_user FROM auth.users u WHERE lower(u.email) = ${quote(member.email)};
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Luna-scale seed refused: no Auth user has the member email (create the login first)';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = v_user) THEN
+    RAISE EXCEPTION 'Luna-scale seed refused: the member has no profiles row';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.memberships m WHERE m.user_id = v_user
+               AND m.org_id = ANY (ARRAY[${UAT_ORGANIZATION_IDS.map((id) => `${quote(id)}::uuid`).join(", ")}])) THEN
+    RAISE EXCEPTION 'Luna-scale seed refused: the member belongs to a UAT fixture org';
+  END IF;
+  INSERT INTO public.memberships (id, org_id, user_id, role)
+  VALUES (${quote(membershipId(member.email))}::uuid, ${org}::uuid, v_user, ${quote(member.role)})
+  ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+END
+$luna$;`);
+  }
+  const checks = LUNA_TABLES.filter((table) => table !== "organizations")
+    .map(
+      (
+        table,
+      ) => `  SELECT count(*) INTO v_count FROM public.${table} WHERE org_id = ${org}::uuid AND pg_temp.luna_owned(id);
+  IF v_count <> ${counts[table]} THEN
+    RAISE EXCEPTION 'Luna-scale seed verification failed: ${table} holds % seed rows, expected ${counts[table]}', v_count;
+  END IF;`,
+    )
+    .join("\n");
+  parts.push(`DO $luna$
+DECLARE v_count bigint;
+BEGIN
+${checks}
+END
+$luna$;`);
+  parts.push(`DO $luna$
+DECLARE r record; v_count bigint;
+BEGIN
+  FOR r IN SELECT table_name, n FROM pg_temp.luna_unowned_before LOOP
+    EXECUTE format('SELECT count(*) FROM public.%I WHERE org_id = $1 AND NOT pg_temp.luna_owned(id)', r.table_name)
+      INTO v_count USING ${org}::uuid;
+    IF v_count <> r.n THEN
+      RAISE EXCEPTION 'Luna-scale seed refused: the database added % row(s) to % that the seed does not own (a trigger side effect); nothing was committed', v_count - r.n, r.table_name;
+    END IF;
+  END LOOP;
+END
+$luna$;`);
+  const after = receipt("apply", {
+    params: dataset.params,
+    params_sha256: dataset.paramsSha256,
+    anchor_date: dataset.anchorDate,
+    counts,
+  });
+  parts.push(`INSERT INTO public.audit_log (org_id, user_id, user_name, action_type, entity_type, entity_id, after, description)
+VALUES (${org}::uuid, NULL, 'Luna-scale seed (MINT-82)', 'CREATE', 'organization', ${org}::uuid, ${sqlLiteral(after, "jsonb")},
+  ${quote(`Luna-scale synthetic fixture ${LUNA_FIXTURE_VERSION} applied (anchor ${dataset.anchorDate})`)});`);
+  parts.push("COMMIT;");
+  parts.push(`\\echo 'Luna-scale synthetic org committed'`);
+  return `${parts.join("\n")}\n`;
+}
+
+/**
+ * The teardown transaction: guards; refuse when the org holds rows the seed
+ * did not create (unless allowUnowned); delete every seed-owned row child
+ * first; leave the org row inactive and memberless; one audit receipt.
+ */
+export function buildTeardownSql({ target, allowUnowned = false }) {
+  const org = quote(LUNA_ORG_ID);
+  const deletes = TEARDOWN_TABLES.map(
+    (
+      table,
+    ) => `  DELETE FROM public.${table} WHERE org_id = ${org}::uuid AND pg_temp.luna_owned(id);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  v_deleted := v_deleted || jsonb_build_object('${table}', v_count);`,
+  ).join("\n");
+  return `-- Luna-scale synthetic organization teardown (MINT-82). Generated by scripts/luna-scale/seed-luna-scale.mjs.
+-- Removes only seed-owned rows (pg_temp.luna_owned) inside the Luna org; never another org.
+${preamble("teardown", target)}SELECT set_config('minted.luna_allow_unowned', ${quote(allowUnowned ? "true" : "false")}, true);
+DO $luna$
+DECLARE
+  r record;
+  v_count bigint;
+  v_unowned jsonb := '{}'::jsonb;
+  v_preserved jsonb := '{}'::jsonb;
+  v_deleted jsonb := '{}'::jsonb;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.organizations WHERE id = ${org}::uuid) THEN
+    RAISE NOTICE 'Luna-scale teardown: the synthetic org does not exist; nothing to do';
+    RETURN;
+  END IF;
+  -- Every public table with an org_id and a uuid id: anything in the Luna org
+  -- that the seed did not create (a reviewer's note, upload or new case).
+  FOR r IN
+    SELECT c.table_name
+      FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
+      JOIN information_schema.columns i
+        ON i.table_schema = c.table_schema AND i.table_name = c.table_name
+       AND i.column_name = 'id' AND i.data_type = 'uuid'
+     WHERE c.table_schema = 'public' AND c.column_name = 'org_id'
+     ORDER BY c.table_name
+  LOOP
+    EXECUTE format('SELECT count(*) FROM public.%I WHERE org_id::text = $1 AND NOT pg_temp.luna_owned(id)', r.table_name)
+      INTO v_count USING ${org};
+    CONTINUE WHEN v_count = 0;
+    IF r.table_name = ANY (ARRAY[${PRESERVED_ORG_TABLES.map(quote).join(", ")}]) THEN
+      v_preserved := v_preserved || jsonb_build_object(r.table_name, v_count);
+    ELSE
+      v_unowned := v_unowned || jsonb_build_object(r.table_name, v_count);
+    END IF;
+  END LOOP;
+  IF v_unowned <> '{}'::jsonb AND current_setting('minted.luna_allow_unowned') <> 'true' THEN
+    RAISE EXCEPTION 'Luna-scale teardown refused: the synthetic org holds rows the seed did not create: %. Review them, then re-run with --allow-unowned to keep them and remove only seed rows', v_unowned;
+  END IF;
+${deletes}
+  UPDATE public.organizations SET lifecycle_state = 'inactive' WHERE id = ${org}::uuid;
+  INSERT INTO public.audit_log (org_id, user_id, user_name, action_type, entity_type, entity_id, after, description)
+  VALUES (${org}::uuid, NULL, 'Luna-scale seed (MINT-82)', 'DELETE', 'organization', ${org}::uuid,
+    jsonb_build_object('minted_luna_scale_fixture', jsonb_build_object(
+      'version', ${quote(LUNA_FIXTURE_VERSION)}, 'event', 'teardown', 'deleted', v_deleted,
+      'kept_unowned', v_unowned, 'kept_preserved', v_preserved)),
+    'Luna-scale synthetic fixture removed; the inactive org row, its roster templates and audit rows remain');
+  RAISE NOTICE 'Luna-scale teardown deleted %', v_deleted;
+  RAISE NOTICE 'Luna-scale teardown kept (append-only or audit) %', v_preserved;
+  IF v_unowned <> '{}'::jsonb THEN
+    RAISE NOTICE 'Luna-scale teardown kept rows the seed did not create %', v_unowned;
+  END IF;
+END
+$luna$;
+COMMIT;
+\\echo 'Luna-scale teardown committed'
+`;
+}
+
+/** Read-only verification query: owned and unowned counts per seed table in
+ * the Luna org, plus relationship invariants. Returns one JSON object. */
+export function buildVerifySql() {
+  const org = quote(LUNA_ORG_ID);
+  const ownedCounts = [...LUNA_TABLES.filter((table) => table !== "organizations"), "memberships"]
+    .map(
+      (table) =>
+        `'${table}', (SELECT count(*) FROM public.${table} WHERE org_id = ${org}::uuid AND ${ownedIdSqlPredicate("id")})`,
+    )
+    .join(",\n    ");
+  const unownedCounts = LUNA_TABLES.filter((table) => table !== "organizations")
+    .map(
+      (table) =>
+        `'${table}', (SELECT count(*) FROM public.${table} WHERE org_id = ${org}::uuid AND NOT ${ownedIdSqlPredicate("id")})`,
+    )
+    .join(",\n    ");
+  return `BEGIN READ ONLY;
+SET LOCAL statement_timeout = '60s';
+SELECT json_build_object(
+  'org', (SELECT json_build_object('name', name, 'lifecycle_state', lifecycle_state) FROM public.organizations WHERE id = ${org}::uuid),
+  'last_receipt', (SELECT a.after -> 'minted_luna_scale_fixture' FROM public.audit_log a
+     WHERE a.org_id = ${org}::uuid AND a.after ? 'minted_luna_scale_fixture'
+     ORDER BY a.created_at DESC NULLS LAST, a.id DESC LIMIT 1),
+  'owned', json_build_object(
+    ${ownedCounts}),
+  'unowned', json_build_object(
+    ${unownedCounts}),
+  'cross_org_case_links', (SELECT count(*) FROM public.credential_cases c
+     LEFT JOIN public.providers p ON p.id = c.provider_id AND p.org_id = c.org_id
+     LEFT JOIN public.provider_groups g ON g.id = c.group_id AND g.org_id = c.org_id
+     LEFT JOIN public.payers y ON y.id = c.payer_id AND y.org_id = c.org_id
+     LEFT JOIN public.facilities f ON f.id = c.facility_id AND f.org_id = c.org_id
+     WHERE c.org_id = ${org}::uuid AND (p.id IS NULL OR g.id IS NULL OR y.id IS NULL OR f.id IS NULL)),
+  'cases_without_primary_location', (SELECT count(*) FROM public.credential_cases c
+     WHERE c.org_id = ${org}::uuid AND NOT EXISTS (
+       SELECT 1 FROM public.case_facilities cf WHERE cf.case_id = c.id AND cf.is_primary AND cf.facility_id = c.facility_id)),
+  'seed_rows_outside_org', (SELECT count(*) FROM public.providers WHERE org_id <> ${org}::uuid AND ${ownedIdSqlPredicate("id")})
+);
+COMMIT;
+`;
+}

@@ -26,6 +26,9 @@
     "test:staging-uat": "node --test scripts/uat/*.test.mjs",
     "verify:staging-uat": "node scripts/uat/verify-uat-fixture.mjs",
     "verify:staging-uat:deletion": "node scripts/uat/verify-delete-case.mjs",
+    "seed:luna-scale": "node scripts/luna-scale/seed-luna-scale.mjs",
+    "verify:luna-scale": "node scripts/luna-scale/verify-luna-scale.mjs",
+    "test:luna-scale": "node --test scripts/luna-scale/*.test.mjs",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "wiki:build": "node scripts/build-wiki-site.mjs"

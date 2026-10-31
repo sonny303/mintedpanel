@@ -52,6 +52,14 @@ All personas use the shared protected password. Auth users are reusable only whe
 
 `scripts/uat/uat-fixture-manifest.json` is the reset boundary. Never select seed-owned rows by display name, wildcard, or a guessed organization.
 
+## Volume fixture
+
+The Luna-scale org (MINT-82: one synthetic org with about 3,500 providers, for
+checks past the 1,000-row cap) is a separate, opt-in staging seed with its own
+guards, confirmation tokens and teardown. It never touches the UAT
+organizations or their personas. Runbook:
+[`scripts/luna-scale/README.md`](../../scripts/luna-scale/README.md).
+
 ## Deletion acceptance
 
 Delete case 46 through `delete_case`. Direct/cascade children must disappear; its generation row keeps the immutable receipt with `case_id = NULL`; the live enrollment becomes expired; the active exclusion becomes voided; the audit `DELETE` receipt remains; and `--reset deletion-pool` restores all ten cases without changing cases 1–40.

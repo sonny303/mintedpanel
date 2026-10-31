@@ -187,6 +187,9 @@ jobs:
       - name: Check backup credential isolation and identity gates
         run: npm run test:backup
 
+      - name: Check the Luna-scale seed generator, SQL and target guards
+        run: npm run test:luna-scale
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
