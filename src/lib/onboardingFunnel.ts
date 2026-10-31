@@ -31,8 +31,8 @@
 //                            days (a future date never counts); the record is
 //                            pending verification; there is no current
 //                            membership in an active group, or no assignment
-//                            to an active location; or no active location
-//                            has a valid state on record
+//                            to an active location; or any active location
+//                            has no valid state on record
 //   Ready for credentialing  verified, assigned to a group and a location,
 //                            and no case exists yet
 //   Credentialing            at least one credentialing case exists, in any
@@ -42,9 +42,12 @@
 // Licenses are judged for the states of the provider's active locations. A
 // provider with no active location has every license on file judged instead;
 // that fallback only fills the Submitted gap list, since they are never
-// Ready. A provider whose active locations all lack a valid state gets no
-// fallback: they stay in Submitted ("Location has no state on record"), as
-// Billing Readiness refuses a location with no valid state.
+// Ready. Ready means verified for every place they work, and no license can
+// be judged for a location with no valid state. So if ANY active location
+// lacks one, the provider stays in Submitted ("Location has no state on
+// record"), even when their other locations pass; the all-licenses fallback
+// never stands in for that location. Billing Readiness holds such a
+// location the same way. (Reference-only locations never reach this input.)
 //
 // A group membership counts until its end date passes. Its start date is
 // ignored on purpose: credentialing happens before a provider starts, so a
@@ -139,7 +142,7 @@ export interface OnboardingFunnelLicenseInput {
 export interface OnboardingFunnelInput {
   providers: readonly OnboardingFunnelProviderFacts[];
   licenses: readonly OnboardingFunnelLicenseInput[];
-  /** One row per assignment to an active location, with that location's state. */
+  /** One row per assignment to an active, non-reference location, with its state. */
   workStates: ReadonlyArray<{ providerId: string | null; state: string | null }>;
   /** Memberships in active groups; one that ended before today does not count,
    * and the start date is deliberately not read (see the header). */
@@ -197,6 +200,9 @@ export function buildOnboardingFunnelRows(
     .map((p): OnboardingFunnelRow => {
       const licenses = licensesBy.get(p.providerId) ?? [];
       const hasLocation = workBy.has(p.providerId);
+      const statelessLocation = (workBy.get(p.providerId) ?? []).some(
+        (row) => code(row.state) === null,
+      );
       const workStates = [
         ...new Set((workBy.get(p.providerId) ?? []).map((row) => code(row.state))),
       ].filter((s): s is string => s !== null);
@@ -235,7 +241,8 @@ export function buildOnboardingFunnelRows(
 
       // Judge the licenses for the states they work in; with no location
       // yet, every license on file. A location with no valid state gets no
-      // fallback: its gap below keeps the provider out of Ready.
+      // fallback: its gap below keeps the provider out of Ready, whatever
+      // their other locations show.
       const judged = hasLocation ? workStates : [...licenseStates];
       const submittedGaps: string[] = [];
       for (const state of judged) {
@@ -268,8 +275,7 @@ export function buildOnboardingFunnelRows(
       if (p.pendingVerification) submittedGaps.push("Record pending verification");
       // Verified is not enough: Ready needs a group and a location.
       submittedGaps.push(...assignmentGaps(grouped.has(p.providerId), hasLocation));
-      if (hasLocation && workStates.length === 0)
-        submittedGaps.push("Location has no state on record");
+      if (statelessLocation) submittedGaps.push("Location has no state on record");
       if (submittedGaps.length > 0) return { ...base, stage: "submitted", gaps: submittedGaps };
       return { ...base, stage: "ready_for_credentialing", gaps: [] };
     })

@@ -148,13 +148,33 @@ describe("provider onboarding funnel", () => {
     }
   });
 
-  it("judges only the valid states when one of several locations has no state", () => {
+  it("holds a provider in Submitted when any one of their locations has no state", () => {
+    // Fay's NC location passes, but a second location has no state, so its
+    // license cannot be judged and she is not verified for every place she works.
+    for (const state of [null, "N1"]) {
+      const data = input();
+      data.workStates = [
+        { providerId: "ready", state },
+        { providerId: "ready", state: "NC" },
+      ];
+      expect(rowFor(data, "ready")).toMatchObject({
+        stage: "submitted",
+        gaps: ["Location has no state on record"],
+      });
+    }
+  });
+
+  it("still judges the valid locations next to a stateless one", () => {
     const data = input();
+    data.licenses = [{ ...verified("ready", "NC"), verifiedStatus: "unverified" }];
     data.workStates = [
-      { providerId: "ready", state: null },
+      { providerId: "ready", state: "" },
       { providerId: "ready", state: "NC" },
     ];
-    expect(rowFor(data, "ready")).toMatchObject({ stage: "ready_for_credentialing", gaps: [] });
+    expect(rowFor(data, "ready")).toMatchObject({
+      stage: "submitted",
+      gaps: ["NC license not board-verified", "Location has no state on record"],
+    });
   });
 
   it("lists a stateless location next to the other gaps", () => {
