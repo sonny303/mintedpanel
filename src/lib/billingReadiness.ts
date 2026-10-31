@@ -430,15 +430,7 @@ function currentStateLicense(
   };
 }
 
-function providerFacilityEvidence(
-  snapshot: BillingReadinessSnapshot,
-  provider: BillingProvider,
-  facility: BillingFacility,
-  group: BillingGroup | null,
-  state: string | null,
-  today: string,
-  includeCase: boolean,
-): BillingReason[] {
+function clinicianReasons(provider: BillingProvider): BillingReason[] {
   const reasons: BillingReason[] = [];
   // Only a terminated clinician is Do Not Bill. "onboarding" is the create
   // default and rarely flipped, so it holds rather than stops (PM decision
@@ -465,6 +457,19 @@ function providerFacilityEvidence(
       label: "Test clinicians are excluded from billing readiness.",
     });
   }
+  return reasons;
+}
+
+function providerFacilityEvidence(
+  snapshot: BillingReadinessSnapshot,
+  provider: BillingProvider,
+  facility: BillingFacility,
+  group: BillingGroup | null,
+  state: string | null,
+  today: string,
+  includeCase: boolean,
+): BillingReason[] {
+  const reasons: BillingReason[] = clinicianReasons(provider);
   if (!facility.isActive) reasons.push({ severity: "stop", label: "The facility is inactive." });
   if (!group) reasons.push({ severity: "hold", label: "The facility has no linked group." });
   else if (!group.isActive)
@@ -570,6 +575,103 @@ function supervisorCandidates(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** The case's own status and date reasons, with the payer decision estimate
+ * for a case still under review. Shared by the evaluator and by Lookup rows
+ * that cannot be fully assessed. */
+function enrollmentCaseReasons(
+  enrollment: BillingCase,
+  payer: BillingPayer,
+  today: string,
+): { reasons: BillingReason[]; estimatedDecisionDate: string | null } {
+  const reasons: BillingReason[] = [];
+  let estimatedDecisionDate: string | null = null;
+  if (isApprovedCase(enrollment)) {
+    if (
+      enrollment.caseStatus?.toLowerCase() === "in_network" &&
+      !enrollment.confirmedEffectiveDate
+    ) {
+      reasons.push({
+        severity: "hold",
+        label: "The legacy in-network record has no confirmed effective date.",
+      });
+    }
+  } else if (enrollment.caseStatus === "submitted" || enrollment.caseStatus === "in_review") {
+    reasons.push({
+      severity: "hold",
+      label: `Enrollment is ${enrollment.caseStatus.replace("_", " ")}.`,
+    });
+    if (
+      validIsoDate(enrollment.submittedDate) &&
+      enrollment.submittedDate <= today &&
+      payer.avgDecisionDays !== null &&
+      Number.isFinite(payer.avgDecisionDays) &&
+      payer.avgDecisionDays > 0
+    ) {
+      estimatedDecisionDate = shiftDays(enrollment.submittedDate, payer.avgDecisionDays);
+    }
+  } else if (enrollment.caseStatus === null || enrollment.caseStatus === "") {
+    reasons.push({ severity: "hold", label: "Current enrollment status is missing." });
+  } else if (
+    !KNOWN_CASE_STATUSES.includes(enrollment.caseStatus as (typeof KNOWN_CASE_STATUSES)[number])
+  ) {
+    reasons.push({ severity: "hold", label: "Current enrollment status is unknown." });
+  } else {
+    reasons.push({
+      severity: "stop",
+      label: `Enrollment status is ${enrollment.caseStatus.replaceAll("_", " ")}.`,
+    });
+  }
+
+  const confirmedEffectiveDate = enrollment.confirmedEffectiveDate;
+  const expectedEffectiveDate = enrollment.expectedEffectiveDate;
+  if (confirmedEffectiveDate === null) {
+    reasons.push({
+      severity: "hold",
+      label: expectedEffectiveDate
+        ? "Only an expected effective date is recorded."
+        : "A confirmed effective date is missing.",
+    });
+  } else if (!validIsoDate(confirmedEffectiveDate)) {
+    reasons.push({ severity: "hold", label: "The confirmed effective date is invalid." });
+  } else if (!isDateReached(confirmedEffectiveDate, today)) {
+    reasons.push({
+      severity: "hold",
+      label: "The confirmed effective date has not been reached.",
+    });
+  }
+  if (expectedEffectiveDate !== null && !validIsoDate(expectedEffectiveDate)) {
+    reasons.push({ severity: "hold", label: "The expected effective date is invalid." });
+  }
+  if (enrollment.approvedDate !== null) {
+    if (!validIsoDate(enrollment.approvedDate)) {
+      reasons.push({ severity: "hold", label: "The recorded approval date is invalid." });
+    } else if (enrollment.approvedDate > today) {
+      reasons.push({
+        severity: "hold",
+        label: "The recorded approval date has not been reached.",
+      });
+    }
+  }
+  if (enrollment.terminationDate !== null) {
+    if (!validIsoDate(enrollment.terminationDate)) {
+      reasons.push({ severity: "hold", label: "The termination date is invalid." });
+    } else if (isDateReached(enrollment.terminationDate, today)) {
+      reasons.push({ severity: "stop", label: "Enrollment termination is effective." });
+    }
+  }
+  return { reasons, estimatedDecisionDate };
+}
+
+function payerReasons(payer: BillingPayer): BillingReason[] {
+  return payer.status !== "active" || payer.isActive !== true
+    ? [{ severity: "stop", label: "The payer is inactive." }]
+    : [];
+}
+
+function statusLabelFor(status: BillingReadinessStatus): BillingAssessment["label"] {
+  return status === "ready" ? "Billable Ready" : status === "stop" ? "Do Not Bill" : "Hold";
+}
+
 export function evaluateBillingReadiness(
   snapshot: BillingReadinessSnapshot,
   selection: BillingSelection,
@@ -623,80 +725,11 @@ export function evaluateBillingReadiness(
         label: "This facility is not linked to the enrollment case.",
       });
 
-    if (isApprovedCase(enrollment)) {
-      if (
-        enrollment.caseStatus?.toLowerCase() === "in_network" &&
-        !enrollment.confirmedEffectiveDate
-      ) {
-        reasons.push({
-          severity: "hold",
-          label: "The legacy in-network record has no confirmed effective date.",
-        });
-      }
-    } else if (enrollment.caseStatus === "submitted" || enrollment.caseStatus === "in_review") {
-      reasons.push({
-        severity: "hold",
-        label: `Enrollment is ${enrollment.caseStatus.replace("_", " ")}.`,
-      });
-      if (
-        validIsoDate(enrollment.submittedDate) &&
-        enrollment.submittedDate <= today &&
-        payer.avgDecisionDays !== null &&
-        Number.isFinite(payer.avgDecisionDays) &&
-        payer.avgDecisionDays > 0
-      ) {
-        estimatedDecisionDate = shiftDays(enrollment.submittedDate, payer.avgDecisionDays);
-      }
-    } else if (enrollment.caseStatus === null || enrollment.caseStatus === "") {
-      reasons.push({ severity: "hold", label: "Current enrollment status is missing." });
-    } else if (
-      !KNOWN_CASE_STATUSES.includes(enrollment.caseStatus as (typeof KNOWN_CASE_STATUSES)[number])
-    ) {
-      reasons.push({ severity: "hold", label: "Current enrollment status is unknown." });
-    } else {
-      reasons.push({
-        severity: "stop",
-        label: `Enrollment status is ${enrollment.caseStatus.replaceAll("_", " ")}.`,
-      });
-    }
-
+    const caseReasons = enrollmentCaseReasons(enrollment, payer, today);
+    reasons.push(...caseReasons.reasons);
+    estimatedDecisionDate = caseReasons.estimatedDecisionDate;
     confirmedEffectiveDate = enrollment.confirmedEffectiveDate;
     expectedEffectiveDate = enrollment.expectedEffectiveDate;
-    if (confirmedEffectiveDate === null) {
-      reasons.push({
-        severity: "hold",
-        label: expectedEffectiveDate
-          ? "Only an expected effective date is recorded."
-          : "A confirmed effective date is missing.",
-      });
-    } else if (!validIsoDate(confirmedEffectiveDate)) {
-      reasons.push({ severity: "hold", label: "The confirmed effective date is invalid." });
-    } else if (!isDateReached(confirmedEffectiveDate, today)) {
-      reasons.push({
-        severity: "hold",
-        label: "The confirmed effective date has not been reached.",
-      });
-    }
-    if (expectedEffectiveDate !== null && !validIsoDate(expectedEffectiveDate)) {
-      reasons.push({ severity: "hold", label: "The expected effective date is invalid." });
-    }
-    if (enrollment.approvedDate !== null) {
-      if (!validIsoDate(enrollment.approvedDate)) {
-        reasons.push({ severity: "hold", label: "The recorded approval date is invalid." });
-      } else if (enrollment.approvedDate > today) {
-        reasons.push({
-          severity: "hold",
-          label: "The recorded approval date has not been reached.",
-        });
-      }
-    }
-    if (enrollment.terminationDate !== null) {
-      if (!validIsoDate(enrollment.terminationDate)) {
-        reasons.push({ severity: "hold", label: "The termination date is invalid." });
-      } else if (isDateReached(enrollment.terminationDate, today)) {
-        reasons.push({ severity: "stop", label: "Enrollment termination is effective." });
-      }
-    }
     if (state) {
       const license = currentStateLicense(
         index.licensesByProvider.get(provider.id) ?? [],
@@ -708,9 +741,7 @@ export function evaluateBillingReadiness(
     }
   }
 
-  if (payer.status !== "active" || payer.isActive !== true) {
-    reasons.push({ severity: "stop", label: "The payer is inactive." });
-  }
+  reasons.push(...payerReasons(payer));
 
   const normalizedTaxonomy = provider.taxonomyCode?.trim().toUpperCase() ?? "";
   const isPta = normalizedTaxonomy === PTA_TAXONOMY;
@@ -735,7 +766,7 @@ export function evaluateBillingReadiness(
   const status = statusFor(reasons);
   return {
     status,
-    label: status === "ready" ? "Billable Ready" : status === "stop" ? "Do Not Bill" : "Hold",
+    label: statusLabelFor(status),
     provider,
     group,
     facility,
@@ -1273,6 +1304,8 @@ export interface BillingPayerStatusRow {
   caseId: string;
   payer: BillingPayer;
   facility: BillingFacility | null;
+  /** The location as the Lookup names it: the facility, or why there is none. */
+  locationLabel: string;
   state: string | null;
   status: BillingReadinessStatus;
   label: BillingAssessment["label"];
@@ -1281,6 +1314,9 @@ export interface BillingPayerStatusRow {
   expectedEffectiveDate: string | null;
   assessment: BillingAssessment | null;
 }
+
+const NO_LINKED_LOCATION = "No linked location";
+const LOCATION_NOT_ON_RECORD = "Location not on record";
 
 /** Payer-by-payer readiness for one clinician: one row per enrollment case and
  * linked location, alphabetical by payer then location. A case with no linked
@@ -1292,7 +1328,44 @@ export function providerPayerStatuses(
 ): BillingPayerStatusRow[] {
   if (!validIsoDate(today)) return [];
   const index = snapshotIndex(snapshot);
+  const provider = index.providers.get(providerId) ?? null;
   const rows: BillingPayerStatusRow[] = [];
+
+  // A row that cannot be fully assessed against a location still carries
+  // every stop that does not depend on the location (the clinician, the case
+  // itself, the payer), so a terminated or denied enrollment never reads as a
+  // mere Hold. The location reason is added as a hold.
+  const unassessedRow = (
+    row: BillingCase,
+    payer: BillingPayer,
+    key: string,
+    facility: BillingFacility | null,
+    locationLabel: string,
+    locationReason: string,
+  ): BillingPayerStatusRow => {
+    const stops = [
+      ...(provider ? clinicianReasons(provider) : []),
+      ...enrollmentCaseReasons(row, payer, today).reasons,
+      ...payerReasons(payer),
+    ].filter((reason) => reason.severity === "stop");
+    const reasons: BillingReason[] = [...stops, { severity: "hold", label: locationReason }];
+    const status = statusFor(reasons);
+    return {
+      key,
+      caseId: row.id,
+      payer,
+      facility,
+      locationLabel,
+      state: stateCode(row.state),
+      status,
+      label: statusLabelFor(status),
+      reasons,
+      confirmedEffectiveDate: row.confirmedEffectiveDate,
+      expectedEffectiveDate: row.expectedEffectiveDate,
+      assessment: null,
+    };
+  };
+
   for (const row of index.casesByProvider.get(providerId) ?? []) {
     const payer = index.payers.get(row.payerId);
     if (!payer) continue;
@@ -1300,54 +1373,64 @@ export function providerPayerStatuses(
       ...new Set((index.caseFacilitiesByCase.get(row.id) ?? []).map((link) => link.facilityId)),
     ];
     if (facilityIds.length === 0) {
-      rows.push({
-        key: `${row.id}:none`,
-        caseId: row.id,
-        payer,
-        facility: null,
-        state: stateCode(row.state),
-        status: "hold",
-        label: "Hold",
-        reasons: [{ severity: "hold", label: "No location is linked to this enrollment case." }],
-        confirmedEffectiveDate: row.confirmedEffectiveDate,
-        expectedEffectiveDate: row.expectedEffectiveDate,
-        assessment: null,
-      });
+      rows.push(
+        unassessedRow(
+          row,
+          payer,
+          `${row.id}:none`,
+          null,
+          NO_LINKED_LOCATION,
+          "No location is linked to this enrollment case.",
+        ),
+      );
       continue;
     }
     for (const facilityId of facilityIds) {
+      const key = `${row.id}:${facilityId}`;
       const facility = index.facilities.get(facilityId) ?? null;
+      if (!facility) {
+        rows.push(
+          unassessedRow(
+            row,
+            payer,
+            key,
+            null,
+            LOCATION_NOT_ON_RECORD,
+            "The location linked to this enrollment case is not on record.",
+          ),
+        );
+        continue;
+      }
       // The evaluator finds a case by the location's CURRENT group and state.
       // A location that moved group, or one in another state, would resolve to
-      // "no exact case" and read Do Not Bill on an approved case, so the row is
-      // held with its own reason instead (the guard assessFeedEvent applies).
-      const facilityState = facility ? stateCode(facility.state) : null;
-      if (
-        !facility ||
-        (facility.groupId ?? null) !== row.groupId ||
-        facilityState === null ||
-        facilityState !== stateCode(row.state)
-      ) {
-        rows.push({
-          key: `${row.id}:${facilityId}`,
-          caseId: row.id,
-          payer,
-          facility,
-          state: stateCode(row.state),
-          status: "hold",
-          label: "Hold",
-          reasons: [
-            {
-              severity: "hold",
-              label: facility
-                ? "This location's group or state no longer matches the enrollment case."
-                : "The location linked to this enrollment case is not on record.",
-            },
-          ],
-          confirmedEffectiveDate: row.confirmedEffectiveDate,
-          expectedEffectiveDate: row.expectedEffectiveDate,
-          assessment: null,
-        });
+      // "no exact case" and read Do Not Bill on an approved case, so the row
+      // gets its own location reason instead (the guard assessFeedEvent
+      // applies).
+      const facilityState = stateCode(facility.state);
+      if (facilityState === null) {
+        rows.push(
+          unassessedRow(
+            row,
+            payer,
+            key,
+            facility,
+            facility.name,
+            "This location has no valid state on record.",
+          ),
+        );
+        continue;
+      }
+      if ((facility.groupId ?? null) !== row.groupId || facilityState !== stateCode(row.state)) {
+        rows.push(
+          unassessedRow(
+            row,
+            payer,
+            key,
+            facility,
+            facility.name,
+            "This location's group or state no longer matches the enrollment case.",
+          ),
+        );
         continue;
       }
       const assessment = evaluateBillingReadiness(
@@ -1357,10 +1440,11 @@ export function providerPayerStatuses(
       );
       if (!assessment) continue;
       rows.push({
-        key: `${row.id}:${facilityId}`,
+        key,
         caseId: row.id,
         payer,
         facility: assessment.facility,
+        locationLabel: assessment.facility.name,
         state: assessment.state,
         status: assessment.status,
         label: assessment.label,

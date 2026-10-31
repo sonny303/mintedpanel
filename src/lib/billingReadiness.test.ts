@@ -670,12 +670,71 @@ describe("clearance lookup search and payer statuses", () => {
     expect(acme(gone)).toMatchObject([
       {
         facility: null,
+        locationLabel: "Location not on record",
         status: "hold",
         reasons: [
           {
             severity: "hold",
             label: "The location linked to this enrollment case is not on record.",
           },
+        ],
+      },
+    ]);
+
+    const noState = lookupSnapshot();
+    noState.facilities[0].state = null;
+    expect(acme(noState)).toMatchObject([
+      {
+        locationLabel: "Boulder Clinic",
+        status: "hold",
+        reasons: [{ severity: "hold", label: "This location has no valid state on record." }],
+      },
+    ]);
+  });
+
+  it("keeps the stops that do not depend on the location on a row it cannot assess", () => {
+    const MISMATCH = "This location's group or state no longer matches the enrollment case.";
+    const acme = (snapshot: BillingReadinessSnapshot) =>
+      providerPayerStatuses(snapshot, "p1", TODAY).filter((row) => row.caseId === "c1");
+
+    const terminated = lookupSnapshot();
+    terminated.facilities[0].groupId = "g2";
+    terminated.cases[0].terminationDate = "2026-09-01";
+    expect(acme(terminated)).toMatchObject([
+      {
+        status: "stop",
+        label: "Do Not Bill",
+        reasons: [
+          { severity: "stop", label: "Enrollment termination is effective." },
+          { severity: "hold", label: MISMATCH },
+        ],
+      },
+    ]);
+
+    const denied = lookupSnapshot();
+    denied.facilities[0].groupId = "g2";
+    denied.cases[0].caseStatus = "denied";
+    denied.providers[0].status = "terminated";
+    denied.payers[0].isActive = false;
+    expect(acme(denied)[0]).toMatchObject({ status: "stop", label: "Do Not Bill" });
+    expect(acme(denied)[0].reasons.map((reason) => reason.label)).toEqual([
+      "The clinician is terminated.",
+      "Enrollment status is denied.",
+      "The payer is inactive.",
+      MISMATCH,
+    ]);
+
+    // A case with no linked location keeps its stops too.
+    const unlinked = lookupSnapshot();
+    unlinked.caseFacilities = [];
+    unlinked.cases[0].terminationDate = "2026-09-01";
+    expect(acme(unlinked)).toMatchObject([
+      {
+        locationLabel: "No linked location",
+        status: "stop",
+        reasons: [
+          { severity: "stop", label: "Enrollment termination is effective." },
+          { severity: "hold", label: "No location is linked to this enrollment case." },
         ],
       },
     ]);

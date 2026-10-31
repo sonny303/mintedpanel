@@ -52,7 +52,7 @@ function AssessmentDetail({ row, asOf }: { row: BillingPayerStatusRow; asOf: str
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-[13.5px] font-semibold text-foreground">
-            {row.payer.name} · {row.facility?.name ?? "No linked location"}
+            {row.payer.name} · {row.locationLabel}
           </h3>
           <p className="mt-0.5 text-[12px] text-muted-foreground">Assessed {fmtDate(asOf)}</p>
         </div>
@@ -233,16 +233,14 @@ function ProviderPayerStatus({
                         <button
                           type="button"
                           aria-expanded={row.key === openKey}
-                          aria-label={`${row.payer.name} at ${row.facility?.name ?? "no linked location"}: details`}
+                          aria-label={`${row.payer.name} at ${row.locationLabel}: details`}
                           onClick={() => setOpenKey(row.key === openKey ? "" : row.key)}
                           className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         >
                           {row.payer.name}
                         </button>
                       </TableCell>
-                      <TableCell className="text-[12.5px]">
-                        {row.facility?.name ?? "No linked location"}
-                      </TableCell>
+                      <TableCell className="text-[12.5px]">{row.locationLabel}</TableCell>
                       <TableCell className="text-[12.5px]">{row.state ?? "Not recorded"}</TableCell>
                       <TableCell>
                         <ReadinessPill
