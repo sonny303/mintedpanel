@@ -1,7 +1,8 @@
-// US phone rule (MINT-91): the ONE check behind every phone input, the import
-// create paths, and roster export. Pure and I/O-free. Blank-value policy stays
-// with each caller — most phone fields are optional; the contact forms require
-// one.
+// US phone rule (MINT-91): the ONE entry-time check behind every phone input
+// and the import create paths. Pure and I/O-free. Blank-value policy stays with
+// each caller — most phone fields are optional; the contact forms require one.
+// Roster export keeps its own digit-count check: it runs over stored rows,
+// which this rule never re-validates.
 
 // An optional trailing extension: x123, ext 123, ext. 123, #123.
 const EXTENSION_RE = /\s*(?:x|ext\.?|#)\s*\d+$/i;
