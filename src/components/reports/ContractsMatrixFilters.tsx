@@ -30,6 +30,7 @@ import {
   type ContractsMatrixStatusFilter,
 } from "@/lib/groupContractsMatrix";
 import { cn } from "@/lib/utils";
+import { countLabel } from "@/lib/countLabel";
 import { ContractToneSwatch } from "./ContractsMatrixCell";
 
 /** Up to this many groups show as chips; more use a checkbox dropdown (GCM-11). */
@@ -278,7 +279,7 @@ function StatesControl({
       ? "All states"
       : onCount === 1
         ? (stateOptions.find(isOn) ?? "1 state")
-        : `${onCount} of ${stateOptions.length} states`;
+        : `${onCount} of ${countLabel(stateOptions.length, "state")}`;
   return (
     <div>
       <span id="contracts-matrix-states" className={CONTROL_LABEL}>

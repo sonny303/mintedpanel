@@ -58,6 +58,7 @@
 // sort_order non-completed); otherwise an honest "review" fallback.
 
 import { fmtDate } from "@/lib/format";
+import { countLabel } from "@/lib/countLabel";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
 import type { CaseStatus } from "@/lib/caseStatus";
 import { resolveActiveFollowUp, type FollowUpTouch } from "@/lib/followUps";
@@ -444,7 +445,7 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       signals.push({
         date,
         source: "cadence",
-        reason: `SOP cadence says touch every ${cadence} days; ${
+        reason: `SOP cadence says touch every ${countLabel(cadence, "day")}; ${
           latestTouchDate
             ? `last touch ${fmtDate(base)}`
             : `no touch yet — counting from case creation ${fmtDate(base)}`

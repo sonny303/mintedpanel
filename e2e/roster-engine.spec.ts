@@ -301,7 +301,7 @@ test("roster mapping saves scope, records an override, and downloads an immutabl
   await page.getByRole("option", { name: /Practice ZIP/ }).click();
   await page.getByRole("button", { name: "Save mapping", exact: true }).first().click();
   await expect(
-    page.getByText("1 selected providers produce 1 output rows", { exact: false }),
+    page.getByText("1 selected provider produces 1 output row", { exact: false }),
   ).toBeVisible();
   await page.getByRole("link", { name: /Review validation/ }).click();
 

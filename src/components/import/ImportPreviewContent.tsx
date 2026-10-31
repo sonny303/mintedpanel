@@ -32,6 +32,7 @@ import { useCancelImportRun, useCommitImportRun, useImportPreview } from "@/hook
 import { useIsAdmin } from "@/lib/permissions";
 import { downloadCsv } from "@/lib/csv";
 import { errorReportCsvRows } from "@/lib/rosterImport";
+import { countLabel } from "@/lib/countLabel";
 import {
   buildCommitPlan,
   summarizeImportPreview,
@@ -121,11 +122,11 @@ function UpdateRow({
   const unresolved = unresolvedConflicts(entry, resolutions);
   const additions: string[] = [];
   if (entry.addGroupIds.length > 0)
-    additions.push(`${entry.addGroupIds.length} group assignment(s)`);
+    additions.push(countLabel(entry.addGroupIds.length, "group assignment"));
   if (entry.addFacilityIds.length > 0)
-    additions.push(`${entry.addFacilityIds.length} facility assignment(s)`);
+    additions.push(countLabel(entry.addFacilityIds.length, "facility assignment"));
   if (entry.licenseInserts.length > 0)
-    additions.push(`${entry.licenseInserts.length} new license(s)`);
+    additions.push(countLabel(entry.licenseInserts.length, "new license"));
   return (
     <div className="rounded-md border border-[#E8E5E0] p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -311,7 +312,7 @@ export function ImportPreviewContent({ runId }: { runId: string }) {
         {summary.skippedProviders} exact duplicate
         {summary.skippedProviders === 1 ? "" : "s"} will be skipped ("already exists").{" "}
         {reconciles && totalReconciles ? (
-          <span>Counts reconcile with the {run.totalRows ?? 0} staged rows.</span>
+          <span>Counts reconcile with the {countLabel(run.totalRows ?? 0, "staged row")}.</span>
         ) : (
           <span className="text-[#B91C1C]">
             Counts do not reconcile with the run — reload the preview.

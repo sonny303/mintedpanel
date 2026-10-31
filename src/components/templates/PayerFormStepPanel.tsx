@@ -34,6 +34,7 @@ import { withLegacyPdfMappingGeneration } from "@/lib/pdfFieldImport";
 import { payerFormFileError, payerFormLabelError } from "@/lib/payerForms";
 import { PayerFormFieldPanel } from "./PayerFormFieldPanel";
 import { fmtDate } from "@/lib/format";
+import { countLabel } from "@/lib/countLabel";
 import type { PayerForm } from "@/types";
 
 interface PayerFormStepPanelProps {
@@ -104,7 +105,7 @@ export function PayerFormStepPanel({
       );
       if (result.failed > 0) {
         toast.error(
-          `Form uploaded. Imported ${result.imported} of ${result.rows.length} fillable fields; retry the remaining ${result.failed} from Field mapping.`,
+          `Form uploaded. Imported ${result.imported} of ${countLabel(result.rows.length, "fillable field")}; retry the remaining ${result.failed} from Field mapping.`,
         );
       } else if (result.totalFields === 0) {
         toast.error("Form uploaded, but this PDF has no interactive fields to map.");
@@ -112,7 +113,7 @@ export function PayerFormStepPanel({
         toast.error("Form uploaded, but its PDF controls are only buttons or signatures.");
       } else {
         toast.success(
-          `${replacing ? "Replaced" : "Added"} “${form.label}” · imported ${result.imported} fields${result.unclearLabels > 0 ? ` · review ${result.unclearLabels} unclear labels` : ""}`,
+          `${replacing ? "Replaced" : "Added"} “${form.label}” · imported ${countLabel(result.imported, "field")}${result.unclearLabels > 0 ? ` · review ${countLabel(result.unclearLabels, "unclear label")}` : ""}`,
         );
       }
     } catch (e) {

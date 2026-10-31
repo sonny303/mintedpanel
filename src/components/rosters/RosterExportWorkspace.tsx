@@ -17,6 +17,7 @@ import {
   useRosterValidation,
 } from "@/hooks/useRosterEngine";
 import { useCanWrite } from "@/lib/permissions";
+import { countLabel, pluralize } from "@/lib/countLabel";
 import { downloadRosterBlob, formatRosterDisplayDate } from "@/lib/rosterDisplay";
 import type { RosterExportFormat, RosterMappingDetail, RosterExportSnapshot } from "@/types";
 import { RosterEmpty, RosterError, RosterLoading, RosterStatus } from "./shared";
@@ -117,7 +118,8 @@ export function RosterExportWorkspace({ detail }: { detail: RosterMappingDetail 
             <div>
               <h2 className="text-[14px] font-semibold">{detail.mapping.name}</h2>
               <p className="mt-0.5 text-[12px] text-muted-foreground">
-                {detail.template.name} · {validation.rowCount} rows · revision {validation.revision}
+                {detail.template.name} · {countLabel(validation.rowCount, "row")} · revision{" "}
+                {validation.revision}
               </p>
             </div>
           </div>
@@ -146,15 +148,19 @@ export function RosterExportWorkspace({ detail }: { detail: RosterMappingDetail 
                   : "Validation blockers remain"
                 : "Validation is stale"}
             </RosterStatus>
-            <RosterStatus>{validation.overriddenErrorCount} applied overrides</RosterStatus>
+            <RosterStatus>
+              {countLabel(validation.overriddenErrorCount, "applied override")}
+            </RosterStatus>
             <span className="text-[11px] text-muted-foreground">
               Hash is recorded from the stored file bytes.
             </span>
           </div>
           {validation.hardErrorCount > 0 ? (
             <div className="rounded-md border border-destructive/30 p-3 text-[12px] text-destructive">
-              {validation.hardErrorCount} hard error(s) still block export. Resolve them or record
-              an eligible audited override.
+              {countLabel(validation.hardErrorCount, "hard error")} still{" "}
+              {pluralize(validation.hardErrorCount, "blocks", "block")} export. Resolve{" "}
+              {pluralize(validation.hardErrorCount, "it", "them")} or record an eligible audited
+              override.
             </div>
           ) : null}
           {!current ? (
@@ -219,7 +225,7 @@ export function RosterExportWorkspace({ detail }: { detail: RosterMappingDetail 
             <div>
               <div className="text-[13px] font-semibold">Snapshot saved</div>
               <div className="text-[11px] text-muted-foreground">
-                {snapshot.fileName} · {snapshot.totalRows} rows ·{" "}
+                {snapshot.fileName} · {countLabel(snapshot.totalRows, "row")} ·{" "}
                 {formatRosterDisplayDate(snapshot.exportedAt)}
               </div>
             </div>

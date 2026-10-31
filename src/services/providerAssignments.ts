@@ -11,6 +11,7 @@ import { camelizeRow } from "@/lib/case";
 import { readCompletePages } from "@/lib/completePages";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { translateDbError } from "@/lib/dbErrors";
+import { countLabel } from "@/lib/countLabel";
 import {
   firstAssignmentIdsToPromote,
   planFacilityAssignmentSync,
@@ -148,7 +149,7 @@ export async function setAssignments(providerId: string, drafts: AssignmentDraft
       entityType: "provider_facility_assignment",
       entityId: providerId,
       before: { removed: stored.filter((r) => plan.deleteIds.includes(r.id)) },
-      description: `Removed ${plan.deleteIds.length} facility assignment(s)`,
+      description: `Removed ${countLabel(plan.deleteIds.length, "facility assignment")}`,
     });
   }
 

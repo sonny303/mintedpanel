@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { useRosterPreview, useUpdateRosterMapping } from "@/hooks/useRosterEngine";
 import { useCanWrite } from "@/lib/permissions";
+import { countLabel, pluralize } from "@/lib/countLabel";
 import {
   getRosterSourceFieldsForTarget,
   getRosterTransformsForTarget,
@@ -547,14 +548,16 @@ function MappingPreview({
         <div>
           <h2 className="text-[14px] font-semibold">Output preview</h2>
           <p className="text-[12px] text-muted-foreground">
-            {detail.mapping.selectedProviderIds.length} selected providers produce{" "}
-            {preview.rowCount} output rows at {ROSTER_GRAIN_LABELS[detail.mapping.grain]} grain.
+            {countLabel(detail.mapping.selectedProviderIds.length, "selected provider")}{" "}
+            {pluralize(detail.mapping.selectedProviderIds.length, "produces", "produce")}{" "}
+            {countLabel(preview.rowCount, "output row")} at{" "}
+            {ROSTER_GRAIN_LABELS[detail.mapping.grain]} grain.
           </p>
         </div>
         <RosterStatus>
           {preview.rows.length < preview.rowCount
             ? `Showing ${preview.rows.length} of ${preview.rowCount}`
-            : `${preview.rowCount} rows`}
+            : countLabel(preview.rowCount, "row")}
         </RosterStatus>
       </div>
       <div className="overflow-x-auto rounded-md border border-border">

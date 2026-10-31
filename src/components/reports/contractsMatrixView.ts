@@ -27,7 +27,5 @@ export function contractsMatrixCellDomId(
   return `contracts-matrix-${specialty}-${columnKey}-${payerId}`.replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
-/** "1 group", "3 groups". */
-export function countLabel(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
+/** "1 group", "3 groups" — the shared helper, re-exported for the matrix. */
+export { countLabel } from "@/lib/countLabel";

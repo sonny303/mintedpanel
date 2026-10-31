@@ -36,6 +36,7 @@ import { createFillRunGuard, createFillRunLatch } from "@/lib/fillRunGuard";
 import { planPayerFormFill } from "@/lib/payerFormFill";
 import { runExclusivePdfFill } from "@/lib/pdfFillRun";
 import { withSystemTokenValues } from "@/lib/systemTokens";
+import { countLabel, pluralize } from "@/lib/countLabel";
 import type { RefreshPdfTokenValues } from "@/hooks/useFreshPdfTokenValues";
 import type { RegistryRow } from "@/lib/fieldRegistry";
 import type { Task } from "@/types";
@@ -103,6 +104,7 @@ export function PayerFormActionRow({
   // The plan is computed here too, not just inside the fill, so the row can say
   // what a fill WOULD do before the coordinator commits to downloading it.
   const plan = useMemo(() => planPayerFormFill(rows, values), [rows, values]);
+  const blankCount = plan.manualLabels.length + plan.fieldsSkipped.length;
 
   const label = payerFormDisplayName(pointer);
   const sent = task.status === "completed";
@@ -243,7 +245,7 @@ export function PayerFormActionRow({
             title={
               canRetryRecording
                 ? "Retry saving the previous fill result without generating another PDF"
-                : `Writes ${plan.fill.length} mapped field${plan.fill.length === 1 ? "" : "s"}; ${plan.manualLabels.length + plan.fieldsSkipped.length} left for you`
+                : `Writes ${plan.fill.length} mapped field${plan.fill.length === 1 ? "" : "s"}; ${blankCount} left for you`
             }
           >
             {fill.isPending || refreshingFillContext ? (
@@ -278,8 +280,8 @@ export function PayerFormActionRow({
           {recordingPending
             ? `The filled copy was already downloaded and stays editable. ${pendingSummary?.needsReviewCount ?? 0} field${pendingSummary?.needsReviewCount === 1 ? " still needs" : "s still need"} review${(pendingSummary?.rejectedCount ?? 0) > 0 ? `, including ${pendingSummary?.rejectedCount} writer rejection${pendingSummary?.rejectedCount === 1 ? "" : "s"}` : ""}. Retry saves its value-free outcome record; it will not generate another PDF.`
             : "A filled copy downloads to this computer only and stays editable — nothing is uploaded."}
-          {!recordingPending && plan.manualLabels.length + plan.fieldsSkipped.length > 0
-            ? ` ${plan.manualLabels.length + plan.fieldsSkipped.length} field(s) come back blank for you to complete.`
+          {!recordingPending && blankCount > 0
+            ? ` ${countLabel(blankCount, "field")} ${pluralize(blankCount, "comes", "come")} back blank for you to complete.`
             : ""}
         </p>
       ) : null}

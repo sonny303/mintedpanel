@@ -804,9 +804,7 @@ test("TS-61: preview summary + five-part dedupe (create / skip / multi-group upd
   // The update proposes Jane's new group + facility assignment.
   await page.getByRole("button", { name: /Updates & conflict review \(1\)/ }).click();
   await expect(page.getByText(/Jane Shelby/)).toBeVisible();
-  await expect(
-    page.getByText(/proposes 1 group assignment\(s\), 1 facility assignment\(s\)/),
-  ).toBeVisible();
+  await expect(page.getByText(/proposes 1 group assignment, 1 facility assignment/)).toBeVisible();
 
   // Skip drilldown: Brooke, already exists.
   await page.getByRole("button", { name: /Skipped \(already exists\) \(1\)/ }).click();
