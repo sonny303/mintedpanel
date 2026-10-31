@@ -78,10 +78,12 @@ describe("isValidUsPhone (MINT-91)", () => {
   });
 
   it("stays linear on a long run of spaces", () => {
+    // 100k spaces: the old quadratic pattern took seconds here, linear takes
+    // milliseconds, so the 1s ceiling leaves slow CI runners plenty of room.
     const started = performance.now();
-    expect(isValidUsPhone(`1${" ".repeat(30_000)}a`)).toBe(false);
-    expect(isValidUsPhone(`x${" ".repeat(30_000)}a`)).toBe(false);
-    expect(performance.now() - started).toBeLessThan(100);
+    expect(isValidUsPhone(`1${" ".repeat(100_000)}a`)).toBe(false);
+    expect(isValidUsPhone(`x${" ".repeat(100_000)}a`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("rejects separators outside the listed set", () => {
