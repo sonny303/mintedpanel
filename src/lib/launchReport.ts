@@ -5,7 +5,10 @@
 // NOTHING else; the designated test provider is excluded throughout. It
 // restores the old Home "Launches at risk" read: a location is flagged
 // at-risk when its go-live date approaches with open cases still pending or
-// zero providers assigned. All date math is date-only against a passed-in `today` (never a
+// zero providers assigned, and Overdue when the date passed within the last
+// 90 days with either still true (an opened location with nothing outstanding
+// shows for 30 days, unflagged); dateless locations list apart, never
+// flagged. All date math is date-only against a passed-in `today` (never a
 // clock read in the lib — the enrollmentReadiness idiom). Pure, no I/O.
 import type { CaseStatus } from "./caseStatus";
 import { isOpenCaseStatus } from "./caseStatus";
@@ -15,6 +18,11 @@ import { isTestProvider, testProviderIds, type HasTestProviderFlag } from "./tes
  * launched" — carried from the retired launchLocations 30-day window). */
 export const LAUNCH_RECENT_WINDOW_DAYS = 30;
 
+/** An at-risk location whose go-live passed within this many days still
+ * shows, flagged Overdue; past it the location drops off (a mature location
+ * with a routine new-payer case is not a launch at risk). */
+export const LAUNCH_OVERDUE_WINDOW_DAYS = 90;
+
 /** A go-live date within this many days AHEAD counts as "approaching" for
  * the at-risk flag. */
 export const LAUNCH_UPCOMING_WINDOW_DAYS = 30;
@@ -22,7 +30,11 @@ export const LAUNCH_UPCOMING_WINDOW_DAYS = 30;
 /** The inline at-risk explanation (F6.6.2 AC: the rule is explained on the
  * report, single-sourced here so the e2e pins the same text). */
 export const LAUNCH_AT_RISK_RULE_TEXT =
-  "At risk = go-live within 30 days with open cases still pending or no providers assigned.";
+  "At risk = go-live within 30 days with open cases still pending or no providers assigned. Overdue = go-live passed within the last 90 days and either is still true. Opened locations with neither show for 30 days.";
+
+/** Which marker an at-risk row carries: go-live today or ahead ("upcoming"),
+ * or already passed ("overdue"). */
+export type LaunchRiskKind = "upcoming" | "overdue";
 
 export interface LaunchFacilityInput {
   id: string;
@@ -74,7 +86,18 @@ export interface LaunchReportRow {
   providerCount: number;
   openCaseCount: number;
   atRisk: boolean;
+  /** null when the row is not at risk. */
+  riskKind: LaunchRiskKind | null;
   atRiskReasons: string[];
+}
+
+/** A location with no go-live date: listed in its own section, never
+ * flagged (there is no date to approach or pass). */
+export interface LaunchNoDateRow extends Pick<
+  LaunchReportRow,
+  "facilityId" | "name" | "groupId" | "city" | "state" | "providerCount" | "openCaseCount"
+> {
+  groupName: string;
 }
 
 export interface LaunchReportGroup {
@@ -161,8 +184,9 @@ export function openCasesByFacility(
 
 /**
  * The report rows: ACTIVE, non-reference facilities whose go-live date is in
- * the future or within the recent window (dateless locations are not
- * launches — excluded). Sorted date ascending, name tiebreak.
+ * the future, within the recent window, or — when still at risk — within the
+ * overdue window (dateless locations are listed apart by
+ * buildNoGoLiveDateRows). Sorted date ascending, name tiebreak.
  */
 export function buildLaunchReportRows(
   facilities: readonly LaunchFacilityInput[],
@@ -174,13 +198,18 @@ export function buildLaunchReportRows(
   for (const f of facilities) {
     if (!f.isActive || f.referenceOnly || !f.effectiveDate) continue;
     const days = daysUntil(f.effectiveDate, today);
-    if (days === null || days < -LAUNCH_RECENT_WINDOW_DAYS) continue;
+    if (days === null || days < -LAUNCH_OVERDUE_WINDOW_DAYS) continue;
     const providerCount = providerCountByFacility.get(f.id) ?? 0;
     const openCaseCount = openCaseCountByFacility.get(f.id) ?? 0;
-    const approaching = days >= 0 && days <= LAUNCH_UPCOMING_WINDOW_DAYS;
+    // The same test ahead of go-live (upcoming) and after it (overdue); only a
+    // date beyond the upcoming window is exempt.
+    const checked = days <= LAUNCH_UPCOMING_WINDOW_DAYS;
     const atRiskReasons: string[] = [];
-    if (approaching && openCaseCount > 0) atRiskReasons.push("open cases still pending");
-    if (approaching && providerCount === 0) atRiskReasons.push("no providers assigned");
+    if (checked && openCaseCount > 0) atRiskReasons.push("open cases still pending");
+    if (checked && providerCount === 0) atRiskReasons.push("no providers assigned");
+    const atRisk = atRiskReasons.length > 0;
+    // Past the recent window only an at-risk (overdue) location still shows.
+    if (!atRisk && days < -LAUNCH_RECENT_WINDOW_DAYS) continue;
     rows.push({
       facilityId: f.id,
       name: f.name,
@@ -191,13 +220,60 @@ export function buildLaunchReportRows(
       daysUntil: days,
       providerCount,
       openCaseCount,
-      atRisk: atRiskReasons.length > 0,
+      atRisk,
+      riskKind: atRisk ? (days < 0 ? "overdue" : "upcoming") : null,
       atRiskReasons,
     });
   }
   return rows.sort(
     (a, b) =>
       a.daysUntil - b.daysUntil ||
+      a.name.localeCompare(b.name) ||
+      a.facilityId.localeCompare(b.facilityId),
+  );
+}
+
+/** The Risk pill text: "At risk — reasons" up to go-live, "Overdue by N
+ * days — reasons" once it has passed; null when the row is not flagged. */
+export function launchRiskLabel(row: LaunchReportRow): string | null {
+  if (!row.riskKind) return null;
+  const reasons = row.atRiskReasons.join("; ");
+  if (row.riskKind === "upcoming") return `At risk — ${reasons}`;
+  const days = -row.daysUntil;
+  return `Overdue by ${days} day${days === 1 ? "" : "s"} — ${reasons}`;
+}
+
+/**
+ * The "No go-live date" section: ACTIVE, non-reference facilities with no
+ * go-live date, never flagged. Ordered the way the dated report reads: group
+ * A→Z by name, ungrouped last (a groupId missing from the map folds into
+ * "No group"), then location name.
+ */
+export function buildNoGoLiveDateRows(
+  facilities: readonly LaunchFacilityInput[],
+  providerCountByFacility: ReadonlyMap<string, number>,
+  openCaseCountByFacility: ReadonlyMap<string, number>,
+  groupNameById: ReadonlyMap<string, string>,
+): LaunchNoDateRow[] {
+  const rows: LaunchNoDateRow[] = [];
+  for (const f of facilities) {
+    if (!f.isActive || f.referenceOnly || f.effectiveDate) continue;
+    rows.push({
+      facilityId: f.id,
+      name: f.name,
+      groupId: f.groupId,
+      groupName: (f.groupId ? groupNameById.get(f.groupId) : undefined) ?? "No group",
+      city: f.city ?? null,
+      state: f.state ?? null,
+      providerCount: providerCountByFacility.get(f.id) ?? 0,
+      openCaseCount: openCaseCountByFacility.get(f.id) ?? 0,
+    });
+  }
+  const ungrouped = (r: LaunchNoDateRow) => !(r.groupId && groupNameById.has(r.groupId));
+  return rows.sort(
+    (a, b) =>
+      Number(ungrouped(a)) - Number(ungrouped(b)) ||
+      a.groupName.localeCompare(b.groupName) ||
       a.name.localeCompare(b.name) ||
       a.facilityId.localeCompare(b.facilityId),
   );
