@@ -656,7 +656,7 @@ creates no persistent artifact or asynchronous work.
 
 ## MINT-106 scheduled jobs (repository-only)
 
-`20261031120000_job_runs.sql` adds the ledger behind `GET /api/jobs/<name>`
+`20261031050000_job_runs.sql` adds the ledger behind `GET /api/jobs/<name>`
 (Vercel cron, `src/server/jobs/`).
 
 ### job_runs
@@ -664,17 +664,21 @@ creates no persistent artifact or asynchronous work.
 `id`, `job` (the registered name, `^[a-z][a-z0-9-]{0,47}$`), `run_key` (the
 slot, by default the UTC day `YYYY-MM-DD`), `started_at`, `finished_at`,
 `outcome` (`running | succeeded | failed`), `counts` (a flat JSON object of
-snake_case keys mapped to non-negative integers), `error_code` (set exactly
-when `failed`: `job_error`, `invalid_counts` or `timed_out`). The partial
+snake_case keys mapped to non-negative integers; code allows only the keys
+the job declares), `error_code` (set exactly when `failed`, and CHECK-closed
+to `job_error`, `invalid_counts` or `timed_out`). The partial
 unique index `job_runs_one_live_run` on `(job, run_key) WHERE outcome IN
 ('running', 'succeeded')` is the idempotency guarantee. No PHI: counts and
 codes only. RLS on with no policies; service_role has SELECT and nothing else.
 
 ### RPCs (service_role only, SECURITY DEFINER, `search_path = ''`)
 
-- `claim_job_run(p_job, p_run_key) → uuid | null` — marks a `running` row of
-  the slot older than 15 minutes `failed` / `timed_out`, then inserts a
-  `running` row unless the slot is running or succeeded (null).
+- `claim_job_run(p_job, p_run_key) → uuid | null` — marks every `running` row
+  of the job older than 15 minutes, in any `run_key`, `failed` / `timed_out`
+  (a daily job never revisits an earlier day's slot), then inserts a
+  `running` row unless the slot is running or succeeded (null). Serialized
+  per job by an advisory lock.
 - `finish_job_run(p_id, p_outcome, p_counts, p_error_code DEFAULT NULL) →
 boolean` — records `succeeded` or `failed` on a `running` row; false when the
-  row is no longer running. Re-validates the counts.
+  row is no longer running. Re-validates the counts and refuses an error code
+  outside the closed set.

@@ -80,7 +80,7 @@ export async function runJob(job: JobDefinition, deps: RunJobDeps): Promise<JobR
     return failed("job_error", error);
   }
 
-  const counts = validateJobCounts(raw);
+  const counts = validateJobCounts(raw, job.countKeys);
   if (!counts) return failed("invalid_counts", new InvalidJobCountsError());
 
   const recorded = await deps.ledger.finish(runId, {

@@ -9,6 +9,7 @@ import type { JobContext, JobCounts, JobDefinition } from "./types";
 // MINT-106 runner against a fake job_runs: claim, skip while running or after
 // success, retry after failure, and stale-running recovery.
 const SITE = { method: "GET", route: "/api/jobs/test-job" };
+const COUNT_KEYS = ["orgs", "sent"] as const;
 const MINUTE = 60_000;
 
 let fake: FakeJobDb;
@@ -23,9 +24,12 @@ afterEach(() => {
   consoleError.mockRestore();
 });
 
-function testJob(run: (ctx: JobContext) => Promise<JobCounts>, extra: Partial<JobDefinition> = {}) {
+function testJob(
+  run: (ctx: JobContext) => Promise<JobCounts>,
+  extra: Partial<Omit<JobDefinition, "run">> = {},
+) {
   const spy = vi.fn(run);
-  const job: JobDefinition = { name: "test-job", run: spy, ...extra };
+  const job: JobDefinition = { name: "test-job", countKeys: COUNT_KEYS, ...extra, run: spy };
   return { job, spy };
 }
 
@@ -166,11 +170,11 @@ describe("runJob: one run per (job, runKey)", () => {
 });
 
 describe("runJob: stale running rows", () => {
-  function seedRunning(ageMinutes: number) {
+  function seedRunning(ageMinutes: number, runKey = "2026-10-30", job = "test-job") {
     fake.rows.push({
-      id: "00000000-0000-4000-a000-0000000000aa",
-      job: "test-job",
-      run_key: "2026-10-30",
+      id: `00000000-0000-4000-a000-${String(fake.rows.length + 1).padStart(12, "a")}`,
+      job,
+      run_key: runKey,
       started_at: fake.clock.now - ageMinutes * MINUTE,
       finished_at: null,
       outcome: "running",
@@ -190,6 +194,36 @@ describe("runJob: stale running rows", () => {
       ["succeeded", null],
     ]);
     expect(slot()[0].finished_at).toBe(fake.clock.now);
+  });
+
+  it("times out a crashed run in an earlier day's slot, which no later claim would revisit", async () => {
+    seedRunning(24 * 60 + JOB_STALE_AFTER_MINUTES, "2026-10-29");
+    const { job, spy } = testJob(async () => ({ sent: 5 }));
+    expect((await run(job)).runKey).toBe("2026-10-30");
+    expect(spy).toHaveBeenCalledOnce();
+    expect(slot("2026-10-29")).toEqual([
+      expect.objectContaining({
+        outcome: "failed",
+        error_code: "timed_out",
+        finished_at: fake.clock.now,
+      }),
+    ]);
+    expect(slot()).toEqual([expect.objectContaining({ outcome: "succeeded" })]);
+  });
+
+  it("leaves another job's stale rows, and its own young rows in other slots, alone", async () => {
+    seedRunning(JOB_STALE_AFTER_MINUTES + 1, "2026-10-29", "other-job");
+    seedRunning(JOB_STALE_AFTER_MINUTES - 1, "2026-10-30T12");
+    const { job } = testJob(async () => ({ sent: 5 }));
+    expect((await run(job)).outcome).toBe("succeeded");
+    expect(
+      fake.rows
+        .filter((row) => row.run_key !== "2026-10-30")
+        .map((row) => [row.job, row.run_key, row.outcome]),
+    ).toEqual([
+      ["other-job", "2026-10-29", "running"],
+      ["test-job", "2026-10-30T12", "running"],
+    ]);
   });
 
   it("leaves a running row inside the stale timeout alone and skips", async () => {
@@ -244,6 +278,24 @@ describe("runJob: failures", () => {
     expect(String(consoleError.mock.calls[0][1])).toContain('"errorClass":"InvalidJobCountsError"');
   });
 
+  it("refuses a well-formed key the job did not declare, such as a name", async () => {
+    // jane_doe is a valid shape; only the declaration keeps it out.
+    expect(validateJobCounts({ jane_doe: 19610412 }, ["jane_doe"])).not.toBeNull();
+    const { job } = testJob(async () => ({ jane_doe: 19610412 }));
+    const result = await run(job);
+    expect(result).toMatchObject({ outcome: "failed", counts: {} });
+    expect(slot()).toEqual([
+      expect.objectContaining({ outcome: "failed", error_code: "invalid_counts", counts: {} }),
+    ]);
+    expect(JSON.stringify(fake.rows)).not.toContain("19610412");
+    expect(JSON.stringify(fake.rows)).not.toContain("jane_doe");
+  });
+
+  it("accepts a subset of the declared keys", async () => {
+    const { job } = testJob(async () => ({ sent: 0 }));
+    expect(await run(job)).toMatchObject({ outcome: "succeeded", counts: { sent: 0 } });
+  });
+
   it("propagates a ledger fault on claim without running the job", async () => {
     fake.failNext.claim_job_run = { code: "08006", message: "connection failure" };
     const { job, spy } = testJob(async () => ({}));
@@ -255,13 +307,18 @@ describe("runJob: failures", () => {
 describe("validateJobCounts", () => {
   it("accepts snake_case keys mapped to non-negative safe integers, as a copy", () => {
     const input = { orgs: 3, sent_ok: 0, failed: Number.MAX_SAFE_INTEGER };
-    const counts = validateJobCounts(input);
+    const counts = validateJobCounts(input, ["orgs", "sent_ok", "failed", "unused"]);
     expect(counts).toEqual(input);
     expect(counts).not.toBe(input);
-    expect(validateJobCounts({})).toEqual({});
-    expect(validateJobCounts(Object.assign(Object.create(null) as object, { sent: 1 }))).toEqual({
-      sent: 1,
-    });
+    expect(validateJobCounts({}, [])).toEqual({});
+    expect(
+      validateJobCounts(Object.assign(Object.create(null) as object, { sent: 1 }), ["sent"]),
+    ).toEqual({ sent: 1 });
+  });
+
+  it("refuses a key outside the declared set", () => {
+    expect(validateJobCounts({ sent: 1, orgs: 2 }, ["sent"])).toBeNull();
+    expect(validateJobCounts({ sent: 1 }, [])).toBeNull();
   });
 
   it.each([
@@ -288,8 +345,12 @@ describe("validateJobCounts", () => {
     ["a symbol key", { [Symbol("sent")]: 1 }],
     ["a getter", Object.defineProperty({}, "sent", { get: () => 1, enumerable: true })],
     ["a non-enumerable key", Object.defineProperty({}, "sent", { value: 1, enumerable: false })],
-  ])("refuses %s", (_label, value) => {
-    expect(validateJobCounts(value)).toBeNull();
+  ])("refuses %s, even with every key declared", (_label, value) => {
+    // Declaring the value's own keys isolates the shape rule from the
+    // declaration rule.
+    const declared =
+      typeof value === "object" && value !== null ? Object.getOwnPropertyNames(value) : [];
+    expect(validateJobCounts(value, declared)).toBeNull();
   });
 });
 
@@ -298,20 +359,29 @@ describe("registry", () => {
     expect([...JOB_REGISTRY.keys()]).toEqual([]);
   });
 
+  const noop = async () => ({});
+  const job = (name: string, countKeys: readonly string[] = ["sent"]): JobDefinition => ({
+    name,
+    countKeys,
+    run: noop,
+  });
+
   it("refuses a name that is not a path-safe identifier, and duplicates", () => {
-    const run = async () => ({});
-    expect(() => createJobRegistry([{ name: "Daily Digest", run }])).toThrow();
-    expect(() => createJobRegistry([{ name: "daily/digest", run }])).toThrow();
-    expect(() => createJobRegistry([{ name: "a".repeat(49), run }])).toThrow();
-    expect(() =>
-      createJobRegistry([
-        { name: "daily-digest", run },
-        { name: "daily-digest", run },
-      ]),
-    ).toThrow();
-    expect([...createJobRegistry([{ name: "daily-digest", run }]).keys()]).toEqual([
-      "daily-digest",
-    ]);
+    expect(() => createJobRegistry([job("Daily Digest")])).toThrow();
+    expect(() => createJobRegistry([job("daily/digest")])).toThrow();
+    expect(() => createJobRegistry([job("a".repeat(49))])).toThrow();
+    expect(() => createJobRegistry([job("daily-digest"), job("daily-digest")])).toThrow();
+    expect([...createJobRegistry([job("daily-digest")]).keys()]).toEqual(["daily-digest"]);
+  });
+
+  it("refuses count keys that are malformed, repeated or too many", () => {
+    expect(() => createJobRegistry([job("daily-digest", ["Sent"])])).toThrow();
+    expect(() => createJobRegistry([job("daily-digest", ["d1961_04_12"])])).toThrow();
+    expect(() => createJobRegistry([job("daily-digest", ["sent", "sent"])])).toThrow();
+    const many = Array.from({ length: 33 }, (_, i) => `k${"a".repeat(i)}`);
+    expect(() => createJobRegistry([job("daily-digest", many)])).toThrow();
+    expect(() => createJobRegistry([job("daily-digest", many.slice(0, 32))])).not.toThrow();
+    expect(() => createJobRegistry([job("daily-digest", [])])).not.toThrow();
   });
 });
 

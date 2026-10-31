@@ -1,13 +1,15 @@
 // An in-memory stand-in for public.job_runs and its two RPCs
-// (supabase/migrations/20261031120000_job_runs.sql), for the MINT-106 runner
-// and route tests. It follows the SQL: the stale sweep, then an insert that is
-// a no-op while a running or succeeded row holds the slot, and a finish that
-// only touches a running row. Its clock is the test's, standing in for now().
+// (supabase/migrations/20261031050000_job_runs.sql), for the MINT-106 runner
+// and route tests. It follows the SQL: the stale sweep over every slot of the
+// job, then an insert that is a no-op while a running or succeeded row holds
+// the slot, and a finish that takes only a closed error code and only touches
+// a running row. Its clock is the test's, standing in for now().
 // The SQL itself is exercised by supabase/tests/mint106-job-runs.sql.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { JOB_STALE_AFTER_MINUTES } from "@/server/jobs/ledger";
 import { JOB_NAME_RE, RUN_KEY_RE } from "@/server/jobs/registry";
+import { JOB_ERROR_CODES } from "@/server/jobs/types";
 
 export interface FakeJobRun {
   id: string;
@@ -61,14 +63,15 @@ export function createFakeJobDb(start = Date.parse("2026-10-30T13:00:00Z")): Fak
       return { data: null, error: CHECK_VIOLATION("job_runs_run_key_check") };
     }
     const staleBefore = state.clock.now - JOB_STALE_AFTER_MINUTES * 60_000;
-    const slot = state.rows.filter((row) => row.job === job && row.run_key === runKey);
-    for (const row of slot) {
-      if (row.outcome === "running" && row.started_at < staleBefore) {
+    // Every slot of the job, as in claim_job_run.
+    for (const row of state.rows) {
+      if (row.job === job && row.outcome === "running" && row.started_at < staleBefore) {
         row.outcome = "failed";
         row.error_code = "timed_out";
         row.finished_at = state.clock.now;
       }
     }
+    const slot = state.rows.filter((row) => row.job === job && row.run_key === runKey);
     if (slot.some((row) => row.outcome === "running" || row.outcome === "succeeded")) {
       return { data: null, error: null };
     }
@@ -93,6 +96,9 @@ export function createFakeJobDb(start = Date.parse("2026-10-30T13:00:00Z")): Fak
       return { data: null, error: { code: "22023", message: "finish_job_run: outcome" } };
     }
     const errorCode = typeof args.p_error_code === "string" ? args.p_error_code : null;
+    if (errorCode !== null && !(JOB_ERROR_CODES as readonly string[]).includes(errorCode)) {
+      return { data: null, error: { code: "22023", message: "finish_job_run: error code" } };
+    }
     if ((outcome === "failed") !== (errorCode !== null)) {
       return { data: null, error: CHECK_VIOLATION("job_runs_failed_code_check") };
     }

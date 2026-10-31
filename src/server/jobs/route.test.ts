@@ -11,6 +11,7 @@ vi.mock("node:crypto", async () => {
 import { timingSafeEqual } from "node:crypto";
 import { createFakeJobDb, type FakeJobDb } from "@/__fixtures__/jobRunsFakeDb";
 import { REQUEST_ID_HEADER } from "../safeLog";
+import { validateJobCounts } from "./counts";
 import { createJobRegistry } from "./registry";
 import { handleJobRequest, isCronAuthorized, type JobRouteDeps } from "./route";
 import type { JobContext, JobCounts } from "./types";
@@ -41,7 +42,9 @@ afterEach(() => {
 
 function deps(overrides: Partial<JobRouteDeps> = {}): Partial<JobRouteDeps> {
   return {
-    registry: createJobRegistry([{ name: "daily-digest", run: digestRun }]),
+    registry: createJobRegistry([
+      { name: "daily-digest", countKeys: ["orgs", "sent"], run: digestRun },
+    ]),
     getDb,
     now: () => new Date(fake.clock.now),
     cronSecret: () => SECRET,
@@ -185,15 +188,19 @@ describe("GET /api/jobs/<name>: methods and names", () => {
 });
 
 describe("GET /api/jobs/<name>: the response", () => {
-  it("returns exactly { job, runKey, outcome, counts } with no-store and no CORS", async () => {
+  it("returns { job, runKey, outcome, counts } in the envelope, with no-store and no CORS", async () => {
     vi.stubEnv("API_CORS_ORIGINS", "chrome-extension://abc");
     const res = await call("/api/jobs/daily-digest", { origin: "chrome-extension://abc" });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      job: "daily-digest",
-      runKey: "2026-10-30",
-      outcome: "succeeded",
-      counts: { orgs: 2, sent: 2 },
+      data: {
+        job: "daily-digest",
+        runKey: "2026-10-30",
+        outcome: "succeeded",
+        counts: { orgs: 2, sent: 2 },
+      },
+      error: null,
+      meta: null,
     });
     expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -206,10 +213,9 @@ describe("GET /api/jobs/<name>: the response", () => {
     const res = await call("/api/jobs/daily-digest");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      job: "daily-digest",
-      runKey: "2026-10-30",
-      outcome: "skipped",
-      counts: {},
+      data: { job: "daily-digest", runKey: "2026-10-30", outcome: "skipped", counts: {} },
+      error: null,
+      meta: null,
     });
     expect(digestRun).toHaveBeenCalledOnce();
     expect(fake.rows).toHaveLength(1);
@@ -220,10 +226,9 @@ describe("GET /api/jobs/<name>: the response", () => {
     const res = await call("/api/jobs/daily-digest");
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({
-      job: "daily-digest",
-      runKey: "2026-10-30",
-      outcome: "failed",
-      counts: {},
+      data: { job: "daily-digest", runKey: "2026-10-30", outcome: "failed", counts: {} },
+      error: null,
+      meta: null,
     });
     const requestId = res.headers.get(REQUEST_ID_HEADER) ?? "";
     expect(requestId).toMatch(UUID_RE);
@@ -317,16 +322,28 @@ describe("GET /api/jobs/<name>: a failing job leaks nothing", () => {
     expect(output).toContain("[jobs:daily-digest] invalid_event");
   });
 
-  it("a job that returns data as counts", async () => {
-    digestRun.mockResolvedValue({
-      jane_doe: 19610412,
-      ["742 Evergreen Terrace"]: 1,
-    } as unknown as JobCounts);
+  // A well-formed key: it passes the shape rule, so only the job's declared
+  // countKeys can refuse it. This is the case the declaration exists for.
+  it("a job that reports a name and a DOB as a well-formed, undeclared count", async () => {
+    const counts = { jane_doe: 19610412 };
+    expect(validateJobCounts(counts, ["jane_doe"])).toEqual(counts);
+    expect(validateJobCounts(counts, ["orgs", "sent"])).toBeNull();
+    digestRun.mockResolvedValue(counts);
     const res = await call("/api/jobs/daily-digest");
     expect(res.status).toBe(500);
-    const { raw } = await expectNoLeak(res);
-    expect(raw).not.toContain("19610412");
-    expect(JSON.stringify(fake.rows)).not.toContain("19610412");
+    const { raw, output } = await expectNoLeak(res);
+    for (const text of [raw, output, JSON.stringify(fake.rows)]) {
+      expect(text).not.toContain("19610412");
+      expect(text).not.toContain("jane_doe");
+    }
+    expect(fake.rows[0]).toMatchObject({ error_code: "invalid_counts", counts: {} });
+  });
+
+  it("a job that returns free text as a count key", async () => {
+    digestRun.mockResolvedValue({ ["742 Evergreen Terrace"]: 1 } as JobCounts);
+    const res = await call("/api/jobs/daily-digest");
+    expect(res.status).toBe(500);
+    await expectNoLeak(res);
     expect(fake.rows[0]).toMatchObject({ error_code: "invalid_counts", counts: {} });
   });
 });

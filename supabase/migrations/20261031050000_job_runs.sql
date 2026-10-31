@@ -7,15 +7,17 @@
 -- row per (job, run_key) is running or succeeded. A failed row is outside it,
 -- so a retry inserts a new row and the failure stays on record.
 --
--- claim_job_run first marks a running row older than 15 minutes as failed
--- (error_code timed_out). 15 minutes is longer than any Vercel function may
--- run (800 seconds at most), so the invocation that held that row is gone and
--- a crash cannot block the job forever. Keep the interval in step with
--- JOB_STALE_AFTER_MINUTES in src/server/jobs/ledger.ts.
+-- claim_job_run first marks every running row of the job older than 15
+-- minutes as failed (error_code timed_out), in any run_key: a daily job never
+-- claims yesterday's slot again, so a crashed row there would otherwise stay
+-- running forever. 15 minutes is longer than any Vercel function may run (800
+-- seconds at most), so the invocation that held such a row is gone. Keep the
+-- interval in step with JOB_STALE_AFTER_MINUTES in src/server/jobs/ledger.ts.
 --
 -- No PHI, ever. counts is a flat object of snake_case keys mapped to
--- non-negative integers; error_code is a lowercase identifier. Both are
--- checked here and in code (src/server/jobs/counts.ts).
+-- non-negative integers (in code, only the keys the job declares); error_code
+-- is one of job_error, invalid_counts or timed_out. Both are checked here and
+-- in code (src/server/jobs/counts.ts, src/server/jobs/types.ts).
 --
 -- service_role only: RLS on with no policies, nothing granted to anon or
 -- authenticated. service_role may read the table, and writes only through the
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.job_runs (
   CONSTRAINT job_runs_outcome_check CHECK (outcome IN ('running', 'succeeded', 'failed')),
   CONSTRAINT job_runs_counts_check CHECK (jsonb_typeof(counts) = 'object'),
   CONSTRAINT job_runs_error_code_check CHECK (
-    error_code IS NULL OR error_code ~ '^[a-z][a-z0-9_]{0,62}$'
+    error_code IS NULL OR error_code IN ('job_error', 'invalid_counts', 'timed_out')
   ),
   -- A run is finished exactly when it is no longer running, and carries an
   -- error code exactly when it failed.
@@ -67,13 +69,13 @@ COMMENT ON COLUMN public.job_runs.outcome IS
 COMMENT ON COLUMN public.job_runs.counts IS
   'Flat object of snake_case keys mapped to non-negative integers, e.g. {"sent": 2}. Never row data.';
 COMMENT ON COLUMN public.job_runs.error_code IS
-  'Set exactly when outcome is failed: job_error, invalid_counts or timed_out. A lowercase identifier, never an error message.';
+  'Set exactly when outcome is failed, and only to job_error (the job threw), invalid_counts (it returned something other than its declared integer counts) or timed_out (it was still running after 15 minutes). Never an error message.';
 
 -- ---------------------------------------------------------------------------
 -- claim_job_run: take the (job, run_key) slot. Returns the new running row's
--- id, or NULL when a run for the slot is already running or succeeded. A
--- running row older than 15 minutes is marked failed (timed_out) first, in the
--- same call.
+-- id, or NULL when a run for the slot is already running or succeeded. Every
+-- running row of the job older than 15 minutes, in any slot, is marked failed
+-- (timed_out) first, in the same call.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.claim_job_run(p_job text, p_run_key text)
 RETURNS uuid
@@ -84,21 +86,24 @@ AS $function$
 DECLARE
   v_id uuid;
 BEGIN
-  -- One claim per slot at a time, so the stale sweep and the insert see a
-  -- settled row set. job_runs_one_live_run remains the guarantee.
-  PERFORM pg_advisory_xact_lock(hashtextextended('job_runs:' || p_job || ':' || p_run_key, 0));
+  -- One claim per job at a time. The sweep reaches every slot of the job, so
+  -- serializing per job keeps two claims from locking the same stale rows in
+  -- different orders. job_runs_one_live_run remains the guarantee.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('job_runs:' || p_job, 0));
 
+  -- Every slot, not only this one: a daily job never claims an earlier day's
+  -- slot again, so a row that crashed there is retired here.
   UPDATE public.job_runs
      SET outcome = 'failed', error_code = 'timed_out', finished_at = now()
    WHERE job = p_job
-     AND run_key = p_run_key
      AND outcome = 'running'
      AND started_at < now() - interval '15 minutes';
 
   -- A live run for the slot makes this insert a no-op, which leaves v_id NULL.
+  -- The target names the partial index, so any other conflict still raises.
   INSERT INTO public.job_runs (job, run_key)
   VALUES (p_job, p_run_key)
-  ON CONFLICT DO NOTHING
+  ON CONFLICT (job, run_key) WHERE outcome IN ('running', 'succeeded') DO NOTHING
   RETURNING id INTO v_id;
 
   RETURN v_id;
@@ -107,9 +112,9 @@ $function$;
 
 -- ---------------------------------------------------------------------------
 -- finish_job_run: record the outcome of a running row. Returns false when the
--- row is no longer running (a later claim marked it timed_out). Counts are
--- validated here as well as in code: snake_case keys, at most 32, mapped to
--- non-negative integers.
+-- row is no longer running (a later claim marked it timed_out). Counts and
+-- the error code are validated here as well as in code: snake_case keys, at
+-- most 32, mapped to non-negative integers; a code from the closed set.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.finish_job_run(
   p_id uuid,
@@ -129,6 +134,11 @@ DECLARE
 BEGIN
   IF p_outcome IS NULL OR p_outcome NOT IN ('succeeded', 'failed') THEN
     RAISE EXCEPTION 'finish_job_run: outcome must be succeeded or failed'
+      USING ERRCODE = '22023';
+  END IF;
+  IF p_error_code IS NOT NULL
+     AND p_error_code NOT IN ('job_error', 'invalid_counts', 'timed_out') THEN
+    RAISE EXCEPTION 'finish_job_run: error code must be job_error, invalid_counts or timed_out'
       USING ERRCODE = '22023';
   END IF;
   IF p_counts IS NULL OR jsonb_typeof(p_counts) <> 'object' THEN
@@ -168,8 +178,8 @@ GRANT EXECUTE ON FUNCTION public.claim_job_run(text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.finish_job_run(uuid, text, jsonb, text) TO service_role;
 
 COMMENT ON FUNCTION public.claim_job_run(text, text) IS
-  'MINT-106: claim the (job, run_key) slot. Returns the new run id, or NULL when a run is already running or succeeded. Marks a running row older than 15 minutes failed (timed_out) first. service_role only.';
+  'MINT-106: claim the (job, run_key) slot. Returns the new run id, or NULL when a run is already running or succeeded. First marks every running row of the job older than 15 minutes, in any run_key, failed (timed_out). service_role only.';
 COMMENT ON FUNCTION public.finish_job_run(uuid, text, jsonb, text) IS
-  'MINT-106: record succeeded or failed, integer counts and an optional error code on a running row. Returns false when the row is no longer running. service_role only.';
+  'MINT-106: record succeeded or failed, integer counts and an error code (job_error, invalid_counts or timed_out; required for failed) on a running row. Returns false when the row is no longer running. service_role only.';
 
 NOTIFY pgrst, 'reload schema';

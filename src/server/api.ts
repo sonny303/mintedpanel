@@ -6,7 +6,11 @@
 // (kept in sync with the check in src/server.ts): every data route goes through
 // the shared `authenticate` guard, only /api/health is public, unknown /api
 // paths get a JSON 404, and OPTIONS preflights are answered for the
-// API_CORS_ORIGINS allowlist (see ./cors.ts).
+// API_CORS_ORIGINS allowlist (see ./cors.ts). Two surfaces carry no user JWT:
+// /api/jobs/* (Vercel cron, authenticated by the CRON_SECRET bearer in
+// ./jobs/route.ts), dispatched first, before the preflight and every user
+// guard, with no CORS headers; and /api/intake/* (the provider's HttpOnly
+// session cookie).
 import { ok, fail } from "./envelope";
 import {
   authenticate,

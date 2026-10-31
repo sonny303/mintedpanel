@@ -28,7 +28,7 @@ vi.mock("./jobs/registry", async () => {
   return {
     ...actual,
     JOB_REGISTRY: actual.createJobRegistry([
-      { name: "test-job", run: (ctx: JobContext) => hoisted.run(ctx) },
+      { name: "test-job", countKeys: ["sent"], run: (ctx: JobContext) => hoisted.run(ctx) },
     ]),
   };
 });
@@ -83,9 +83,9 @@ describe("/api/jobs dispatch", () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      job: "test-job",
-      outcome: "succeeded",
-      counts: { sent: 3 },
+      data: { job: "test-job", outcome: "succeeded", counts: { sent: 3 } },
+      error: null,
+      meta: null,
     });
     expect(hoisted.run).toHaveBeenCalledOnce();
     expectNoUserGuard();

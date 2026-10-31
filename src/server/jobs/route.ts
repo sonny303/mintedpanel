@@ -12,12 +12,13 @@
 //   3. a missing or wrong bearer         -> 401
 //   4. a job name not in the registry    -> 404 (only now, so an unauthenticated
 //      caller cannot enumerate job names)
-// A run answers `{ job, runKey, outcome, counts }`: 200 for succeeded or
-// skipped, 500 for failed (with the log line's `x-request-id`).
+// A run answers the standard envelope with `data: { job, runKey, outcome,
+// counts }`: 200 for succeeded or skipped, 500 for failed (with the log
+// line's `x-request-id`). Refusals are the usual `fail()` envelope.
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { fail } from "../envelope";
+import { fail, ok } from "../envelope";
 import { logServerError, requestSite, withRequestId, type ErrorLogSite } from "../safeLog";
 import { getServiceClient } from "../serviceClient";
 import { supabaseJobLedger } from "./ledger";
@@ -102,18 +103,13 @@ export async function handleJobRequest(
     site = { method: "GET", route: `/api/jobs/${job.name}` };
     const db = deps.getDb();
     const result = await runJob(job, { ledger: supabaseJobLedger(db), db, now: deps.now(), site });
-    const body = {
+    const data = {
       job: result.job,
       runKey: result.runKey,
       outcome: result.outcome,
       counts: result.counts,
     };
-    const response = noStore(
-      new Response(JSON.stringify(body), {
-        status: result.outcome === "failed" ? 500 : 200,
-        headers: { "content-type": "application/json; charset=utf-8" },
-      }),
-    );
+    const response = noStore(ok(data, null, result.outcome === "failed" ? 500 : 200));
     return result.requestId ? withRequestId(response, result.requestId) : response;
   } catch (error) {
     const requestId = logServerError("[jobs] internal error", error, site);

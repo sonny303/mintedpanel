@@ -1,18 +1,21 @@
 -- MINT-106 job_runs packet: claim_job_run / finish_job_run and the ledger's
--- access boundary (supabase/migrations/20261031120000_job_runs.sql).
+-- access boundary (supabase/migrations/20261031050000_job_runs.sql).
 --
--- Run after all migrations in a disposable PostgreSQL database (CI's
--- Migration dry-run job seeds the anon / authenticated / service_role roles),
--- never against hosted:
+-- Run after all migrations in a disposable PostgreSQL database, never against
+-- hosted. CI's Migration dry-run job runs it right after applying them:
 --   psql -v ON_ERROR_STOP=1 -f supabase/tests/mint106-job-runs.sql
 -- Every row it writes is rolled back.
+--
+-- It needs only what that job seeds: a superuser connection (it writes
+-- job_runs directly and switches role) and the anon, authenticated and
+-- service_role roles, created NOLOGIN with none of Supabase's attributes. So
+-- service_role has no BYPASSRLS here, and the packet reads job_runs only as
+-- the superuser. The first block checks these and stops with a plain message.
 --
 -- Single session. Concurrency rests on job_runs_one_live_run, which is proved
 -- here by a direct second live insert failing 23505; a two-session race (in
 -- the style of scripts/security/verify-mint19-atomic-sop.mjs) is not included.
 --
--- This packet was written without a PostgreSQL to run it on; its first
--- execution is still owed.
 \set ON_ERROR_STOP on
 \set QUIET on
 \pset format unaligned
@@ -20,6 +23,25 @@
 
 BEGIN;
 SET LOCAL client_min_messages = warning;
+
+DO $$
+BEGIN
+  IF NOT coalesce(
+    (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user), false
+  ) THEN
+    RAISE EXCEPTION 'mint106-job-runs.sql must run as a superuser';
+  END IF;
+  IF (SELECT count(*) FROM pg_catalog.pg_roles
+       WHERE rolname IN ('anon', 'authenticated', 'service_role')) <> 3 THEN
+    RAISE EXCEPTION 'mint106-job-runs.sql needs the anon, authenticated and service_role roles';
+  END IF;
+  IF to_regclass('public.job_runs') IS NULL
+     OR to_regprocedure('public.claim_job_run(text, text)') IS NULL
+     OR to_regprocedure('public.finish_job_run(uuid, text, jsonb, text)') IS NULL THEN
+    RAISE EXCEPTION 'mint106-job-runs.sql runs after supabase/migrations/20261031050000_job_runs.sql';
+  END IF;
+END;
+$$;
 
 CREATE TEMP TABLE m106_results (name text PRIMARY KEY, passed boolean NOT NULL);
 CREATE TEMP TABLE m106_ids (name text PRIMARY KEY, id uuid);
@@ -140,12 +162,45 @@ SELECT pg_temp.m106_mark('running_row_inside_the_timeout_blocks_the_claim',
   AND (SELECT outcome FROM public.job_runs WHERE id = '10600000-0000-4000-a000-000000000002') = 'running'
   AND (SELECT count(*) FROM public.job_runs WHERE job = 'm106-job' AND run_key = 'slot-d') = 1);
 
+-- ---------------------------------------------------------------------------
+-- Slot E: the sweep covers every slot of the job. A daily job never claims
+-- yesterday's slot again, so its crashed row is retired by today's claim.
+-- Another job's stale row is not touched.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.job_runs (id, job, run_key, started_at)
+VALUES
+  ('10600000-0000-4000-a000-000000000003', 'm106-job', 'slot-e-day1', now() - interval '25 hours'),
+  ('10600000-0000-4000-a000-000000000004', 'm106-other', 'slot-e-day1', now() - interval '25 hours');
+INSERT INTO pg_temp.m106_ids VALUES ('e1', public.claim_job_run('m106-job', 'slot-e-day2'));
+
+SELECT pg_temp.m106_mark('sweep_times_out_a_stale_row_in_another_slot_of_the_job',
+  EXISTS (
+    SELECT 1 FROM public.job_runs
+     WHERE id = '10600000-0000-4000-a000-000000000003'
+       AND outcome = 'failed' AND error_code = 'timed_out' AND finished_at = now()
+  )
+  AND EXISTS (
+    SELECT 1 FROM public.job_runs WHERE id = pg_temp.m106_id('e1') AND outcome = 'running'
+  ));
+SELECT pg_temp.m106_mark('sweep_leaves_another_jobs_stale_row_alone',
+  (SELECT outcome FROM public.job_runs WHERE id = '10600000-0000-4000-a000-000000000004') = 'running');
+SELECT pg_temp.m106_mark('sweep_leaves_a_young_row_in_another_slot_alone',
+  (SELECT outcome FROM public.job_runs WHERE id = '10600000-0000-4000-a000-000000000002') = 'running');
+
 SELECT pg_temp.m106_mark('index_refuses_a_second_live_row',
   pg_temp.m106_expect_state('23505',
     $$INSERT INTO public.job_runs (job, run_key) VALUES ('m106-job', 'slot-d')$$));
 SELECT pg_temp.m106_mark('index_refuses_a_running_row_beside_a_success',
   pg_temp.m106_expect_state('23505',
     $$INSERT INTO public.job_runs (job, run_key) VALUES ('m106-job', 'slot-a')$$));
+-- The claim's ON CONFLICT names the partial index, so it infers that index
+-- (no 42P10) and swallows only a live-slot conflict; a primary key collision
+-- in a free slot still raises.
+SELECT pg_temp.m106_mark('named_conflict_target_lets_a_primary_key_collision_raise',
+  pg_temp.m106_expect_state('23505',
+    format($$INSERT INTO public.job_runs (id, job, run_key) VALUES (%L, 'm106-job', 'slot-z')
+             ON CONFLICT (job, run_key) WHERE outcome IN ('running', 'succeeded') DO NOTHING$$,
+           pg_temp.m106_id('a1'))));
 
 -- ---------------------------------------------------------------------------
 -- Input checks. b2 is running; every refused finish leaves it running.
@@ -174,7 +229,8 @@ SELECT pg_temp.m106_mark('finish_refuses_' || label,
     ('a_running_outcome', '22023', 'running', '{}', NULL),
     ('success_with_an_error_code', '23514', 'succeeded', '{}', 'job_error'),
     ('failure_without_an_error_code', '23514', 'failed', '{}', NULL),
-    ('an_error_code_that_is_not_an_identifier', '23514', 'failed', '{}', 'DOB 1961-04-12')
+    ('an_identifier_outside_the_closed_codes', '22023', 'failed', '{}', 'job_failed_badly'),
+    ('free_text_as_an_error_code', '22023', 'failed', '{}', 'DOB 1961-04-12')
   ) AS t(label, state, outcome, counts, code);
 
 SELECT pg_temp.m106_mark('finish_refuses_more_than_32_keys',
@@ -183,6 +239,13 @@ SELECT pg_temp.m106_mark('finish_refuses_more_than_32_keys',
            pg_temp.m106_id('b2'),
            (SELECT jsonb_object_agg('k' || repeat('a', g), 1)::text
               FROM generate_series(1, 33) AS g))));
+
+SELECT pg_temp.m106_mark('check_refuses_an_error_code_outside_the_closed_set',
+  pg_temp.m106_expect_state('23514',
+    format($$UPDATE public.job_runs
+                SET outcome = 'failed', error_code = 'other_code', finished_at = now()
+              WHERE id = %L$$,
+           pg_temp.m106_id('b2'))));
 
 SELECT pg_temp.m106_mark('refused_finishes_leave_the_row_running',
   (SELECT outcome FROM public.job_runs WHERE id = pg_temp.m106_id('b2')) = 'running');
