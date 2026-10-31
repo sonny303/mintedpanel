@@ -1094,3 +1094,45 @@ test("E1.3: Locations section — add a second location, make it primary, remove
   await expect(detailsAfterReload.getByText("Boulder Main St Clinic")).toHaveCount(0);
   await expect(detailsAfterReload.getByText("Primary", { exact: true })).toBeVisible();
 });
+
+// MINT-75 — a coordinator in Denver at 11:25 PM MDT on Oct 19, when UTC is
+// already Oct 20. e2e runs under TZ=UTC, so the browser zone is pinned here.
+// Completing a task, logging a note and the touch form's default all land on
+// the local day, and a stored completion date renders as that same day.
+test.describe("MINT-75: activity dates follow the browser's time zone", () => {
+  test.use({ timezoneId: "America/Denver" });
+
+  test("a late-evening completion, note and touch default all say Oct 19", async ({
+    context,
+    page,
+  }) => {
+    const fixtures = makeFixtures();
+    fixtures.tasks[0].completed_date = "2026-10-19";
+    const { handler, writes } = makeHandler(fixtures);
+    await context.route(/\/(rest|auth)\/v1\//, handler);
+    await seedAuth(context);
+    await page.clock.setFixedTime(new Date("2026-10-20T05:25:00Z"));
+
+    await page.goto(`/cases/${CASE_ID}`);
+    // A calendar-only completed_date is shown on its own day, not shifted.
+    await expect(page.getByText("Completed Oct 19, 2026")).toBeVisible({ timeout: 30000 });
+
+    await page
+      .getByRole("button", { name: "Complete Complete the enrollment form in the portal" })
+      .click();
+    await expect
+      .poll(() => writes.find((w) => w.table === "tasks" && w.method === "PATCH")?.body ?? null)
+      .toMatchObject({ status: "completed", completed_date: "2026-10-19" });
+
+    await page.getByRole("button", { name: "Add note" }).click();
+    await page.getByPlaceholder("Add an internal note...").fill("Called the payer back.");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect
+      .poll(() => writes.find((w) => w.table === "touches" && w.method === "POST")?.body ?? null)
+      .toMatchObject({ entry_type: "note", touch_date: "2026-10-19" });
+
+    // The touch form's Date is the first date input while the filters are shut.
+    await page.getByRole("button", { name: "Add touch" }).click();
+    await expect(page.locator('input[type="date"]').first()).toHaveValue("2026-10-19");
+  });
+});
