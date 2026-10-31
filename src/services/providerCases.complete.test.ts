@@ -371,6 +371,21 @@ describe("searchOrgCases — past the max-rows cap", () => {
       message: "page failed",
     });
   });
+
+  it.each([0, -1, 2.5, Number.NaN])(
+    "refuses limit %d, which would answer every match or none, before any read",
+    async (limit) => {
+      const { db, requests } = makeServer({
+        credential_cases: fillerCases(10),
+        providers: [FILLER_PROVIDER],
+        payers: [FILLER_PAYER],
+      });
+      await expect(searchOrgCases(ctxWith(db), "filler", limit)).rejects.toThrow(
+        "Invalid case search limit",
+      );
+      expect(requests).toHaveLength(0);
+    },
+  );
 });
 
 describe("listOpenProviderCases — complete and URL-bounded", () => {

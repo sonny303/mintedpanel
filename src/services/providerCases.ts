@@ -349,6 +349,10 @@ export async function searchOrgCases(
   query: string,
   limit: number,
 ): Promise<CaseSearchResult> {
+  // A bad limit would answer every match (NaN) or none (zero): refuse it.
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error(`Invalid case search limit: ${limit}`);
+  }
   const { db, orgId } = ctx;
   const q = query.trim().toLowerCase();
   if (q === "") return { rows: [], total: 0, truncated: false };
