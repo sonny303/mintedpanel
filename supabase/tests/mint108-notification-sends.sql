@@ -302,7 +302,42 @@ SELECT pg_temp.m108_mark('claim_answers_claimed_with_the_id_then_taken',
         (SELECT id FROM public.notification_sends
           WHERE slot = 'answers' AND outcome = 'claimed'))
   AND (SELECT answer FROM pg_temp.m108_answers WHERE name = 'second')
-    = '{"status": "taken"}'::jsonb);
+    = '{"status": "taken", "outcome": "claimed", "recent": true}'::jsonb);
+
+-- A claimed row says whether it is recent: claimed under 15 minutes ago.
+-- now() is the packet transaction's start, so the ages below are exact.
+INSERT INTO pg_temp.m108_answers VALUES ('aged-claim', public.claim_notification_send(
+  'followup-digest', 'aged',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+INSERT INTO pg_temp.m108_answers VALUES ('edge-claim', public.claim_notification_send(
+  'followup-digest', 'edge',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+UPDATE public.notification_sends SET claimed_at = now() - interval '16 minutes'
+ WHERE slot = 'aged';
+UPDATE public.notification_sends SET claimed_at = now() - interval '14 minutes 59 seconds'
+ WHERE slot = 'edge';
+INSERT INTO pg_temp.m108_answers VALUES ('aged-again', public.claim_notification_send(
+  'followup-digest', 'aged',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+INSERT INTO pg_temp.m108_answers VALUES ('edge-again', public.claim_notification_send(
+  'followup-digest', 'edge',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+SELECT pg_temp.m108_mark('a_claim_older_than_15_minutes_answers_taken_claimed_not_recent',
+  (SELECT answer FROM pg_temp.m108_answers WHERE name = 'aged-again')
+    = '{"status": "taken", "outcome": "claimed", "recent": false}'::jsonb);
+SELECT pg_temp.m108_mark('a_claim_just_under_15_minutes_old_is_still_recent',
+  (SELECT answer FROM pg_temp.m108_answers WHERE name = 'edge-again')
+    = '{"status": "taken", "outcome": "claimed", "recent": true}'::jsonb);
+UPDATE public.notification_sends SET claimed_at = now() - interval '15 minutes'
+ WHERE slot = 'edge';
+INSERT INTO pg_temp.m108_answers VALUES ('edge-at-window', public.claim_notification_send(
+  'followup-digest', 'edge',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+SELECT pg_temp.m108_mark('a_claim_exactly_15_minutes_old_is_not_recent',
+  (SELECT answer FROM pg_temp.m108_answers WHERE name = 'edge-at-window')
+    = '{"status": "taken", "outcome": "claimed", "recent": false}'::jsonb);
+SELECT pg_temp.m108_mark('taken_answers_write_nothing',
+  (SELECT count(*) FROM public.notification_sends WHERE slot IN ('aged', 'edge')) = 2);
 
 -- generate_series calls the claim and the finish once per row, in order.
 SELECT pg_temp.m108_mark('three_failures_are_allowed',
@@ -342,9 +377,9 @@ SELECT pg_temp.m108_mark('a_third_attempt_may_be_sent',
 INSERT INTO pg_temp.m108_answers VALUES ('after-sent', public.claim_notification_send(
   'followup-digest', 'two-then-sent',
   '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
-SELECT pg_temp.m108_mark('a_sent_row_after_two_failures_answers_taken',
+SELECT pg_temp.m108_mark('a_sent_row_after_two_failures_answers_taken_sent',
   (SELECT answer FROM pg_temp.m108_answers WHERE name = 'after-sent')
-    = '{"status": "taken"}'::jsonb);
+    = '{"status": "taken", "outcome": "sent", "recent": false}'::jsonb);
 
 -- ---------------------------------------------------------------------------
 -- notification_org_slots: an org's slot (for the digest, its local date) is

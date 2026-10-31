@@ -1,24 +1,32 @@
 // The daily coordinator follow-up digest job (MINT-108): its registry entry.
 //
-// Mechanism (Sowmya, Oct 30: the send hour is per org, set by Minted). One
-// cron entry runs GET /api/jobs/followup-digest every hour (vercel.json
-// `"0 * * * *"`). Each run sends to every org whose digest is on and whose
-// local hour, in its effective time zone, is at or after its effective send
-// hour, unless that org has already had its digest for that local date.
-// "At or after" lets a missed or failed run catch up later the same local
-// day; nothing goes out before the hour. See ./followupDigestRun.ts.
+// Mechanism (Sowmya, Oct 30: the send hour is per org, set by Minted).
+// GET /api/jobs/followup-digest is called every hour, and each call sends to
+// every org whose digest is on and whose local hour, in its effective time
+// zone, is at or after its effective send hour, unless that org has already
+// had its digest for that local date. "At or after" lets a missed or failed
+// call catch up later the same local day; nothing goes out before the hour.
+// See ./followupDigestRun.ts.
 //
-// MERGE BLOCKER: Vercel runs a cron more often than daily only on the Pro
-// plan. On Hobby a sub-daily schedule fails every production deploy. The
-// schedule is one line in vercel.json, pinned by crons.test.ts.
+// Who calls it. Production is on Vercel's Hobby plan, which allows a cron at
+// most once a day per entry and fails a deploy with a more frequent one. So:
+//   * The hourly tick is a GitHub Actions schedule,
+//     .github/workflows/followup-digest-tick.yml (7 minutes past each hour),
+//     with the same CRON_SECRET bearer Vercel cron would send.
+//   * vercel.json keeps one daily backup at 18:00 UTC, when every US zone's
+//     8 am has passed (8 am in Hawaii). It only ever catches up: GitHub runs
+//     schedules on the default branch only, and may delay or skip them under
+//     load.
+// crons.test.ts pins both.
 //
 // Two keys, on purpose:
 //   * The run key (job_runs) is the UTC hour (`utcHourKey`), so each hourly
-//     call is its own slot: a second call in the same hour is skipped, and a
-//     failed run is retried by the next call in that hour.
+//     call is its own slot: a second call in the same hour (the Vercel backup
+//     and the tick in hour 18, say) is skipped, and a failed run is retried
+//     by the next call in that hour.
 //   * The send slot (notification_sends, notification_org_slots) is the
 //     org's local date. Each coordinator gets at most one digest per org per
-//     local date, whatever the hour, the zone or the number of runs.
+//     local date, whatever the hour, the zone or the number of calls.
 //
 // The work lives in ./followupDigestRun.ts and is imported when the job runs,
 // so the registry, the cron route and their tests stay free of the Supabase
@@ -57,7 +65,7 @@ export const FOLLOWUP_DIGEST_COUNT_KEYS = [
   "orgs_completion_unrecorded",
   /** Emails the provider accepted on this attempt. */
   "digests_sent",
-  /** Coordinators an earlier attempt already claimed or sent for the local date. */
+  /** Coordinators an earlier attempt already sent to for the local date. */
   "digests_already_sent",
   /** Coordinators with nothing overdue or due today: no email. */
   "digests_suppressed",
@@ -66,13 +74,20 @@ export const FOLLOWUP_DIGEST_COUNT_KEYS = [
   /** Overdue or due-today follow-ups on unassigned cases: sent to no one. */
   "unassigned_follow_ups",
   /** Sends that definitely did not go out: the claim failed, or the mailer
-   *  rejected it before or at SendGrid. A later attempt may retry them. */
+   *  rejected it before or at SendGrid (a 4xx other than 408). A later attempt
+   *  may retry them, unless the failure could not be recorded. */
   "send_failures",
-  /** Sends that may have been delivered (network error, timeout, an
-   *  unexplained error): left claimed, never resent. */
+  /** Sends that may have been delivered (network error, timeout, a SendGrid
+   *  5xx or 408, an unexplained error): left claimed, never resent. */
   "sends_uncertain",
   /** Coordinators whose send already failed three times for the local date. */
   "sends_exhausted",
+  /** Coordinators another attempt claimed recently and may still be sending
+   *  to: left to it, and the org's date stays open. */
+  "sends_in_flight",
+  /** Coordinators an earlier, finished attempt left claimed (maybe delivered,
+   *  or a rejection it could not record): never resent. */
+  "sends_held",
   /** Sends that went out but whose ledger row could not be finished. */
   "sends_unrecorded",
 ] as const;

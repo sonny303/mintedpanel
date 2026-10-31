@@ -12,8 +12,9 @@
 // read is recorded with its table, columns and filters.
 //
 // RPCs: the claim answers {status:"exhausted"} after three failed rows for the
-// key, {status:"taken"} while a claimed or sent row holds it, else
-// {status:"claimed", id}; the finish takes only a closed error code and a safe
+// key, {status:"taken", outcome, recent} while a claimed or sent row holds it
+// (recent: claimed under NOTIFICATION_SEND_RECENT_MINUTES ago by `clock`),
+// else {status:"claimed", id}; the finish takes only a closed error code and a safe
 // message id, and touches only a claimed row. The org-slot completion inserts
 // into `tables.notification_org_slots` once per (job, org, slot), so the job's
 // own read of that table sees it. job_runs RPCs go to an optional FakeJobDb,
@@ -26,6 +27,7 @@ import { JOB_NAME_RE } from "@/server/jobs/registry";
 import {
   NOTIFICATION_SEND_ERROR_CODES,
   NOTIFICATION_SEND_MAX_FAILURES,
+  NOTIFICATION_SEND_RECENT_MINUTES,
   NOTIFICATION_SLOT_RE,
   PROVIDER_MESSAGE_ID_RE,
 } from "@/server/jobs/notificationSends";
@@ -54,6 +56,8 @@ export interface FakeNotificationSend {
   org_id: string;
   recipient_user_id: string;
   outcome: "claimed" | "sent" | "failed";
+  /** Epoch ms, from `clock`. */
+  claimed_at: number;
   provider_message_id: string | null;
   error_code: string | null;
 }
@@ -75,6 +79,8 @@ export interface FakeDigestDb {
   failNextRpc: Partial<Record<SendRpc, FakeError>>;
   /** A claim for one of these recipients answers with a connection error. */
   failClaimFor: Set<string>;
+  /** The database's now(), in epoch ms; tests move it with the run. */
+  clock: { now: number };
 }
 
 type Result = { data: unknown; error: FakeError | null; count?: number | null };
@@ -115,6 +121,7 @@ export function createFollowUpDigestFakeDb(
     failRead: null,
     failNextRpc: {},
     failClaimFor: new Set(),
+    clock: { now: Date.now() },
   };
   let sequence = 0;
 
@@ -207,8 +214,12 @@ export function createFollowUpDigestFakeDb(
     if (forKey.filter((row) => row.outcome === "failed").length >= NOTIFICATION_SEND_MAX_FAILURES) {
       return { data: { status: "exhausted" }, error: null };
     }
-    if (forKey.some((row) => row.outcome === "claimed" || row.outcome === "sent")) {
-      return { data: { status: "taken" }, error: null };
+    const live = forKey.find((row) => row.outcome === "claimed" || row.outcome === "sent");
+    if (live) {
+      const recent =
+        live.outcome === "claimed" &&
+        live.claimed_at > state.clock.now - NOTIFICATION_SEND_RECENT_MINUTES * 60_000;
+      return { data: { status: "taken", outcome: live.outcome, recent }, error: null };
     }
     sequence += 1;
     const id = `10800000-0000-4000-b000-${String(sequence).padStart(12, "0")}`;
@@ -219,6 +230,7 @@ export function createFollowUpDigestFakeDb(
       org_id: orgId,
       recipient_user_id: recipient,
       outcome: "claimed",
+      claimed_at: state.clock.now,
       provider_message_id: null,
       error_code: null,
     });

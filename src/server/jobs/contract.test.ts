@@ -6,6 +6,7 @@ import { JOB_STALE_AFTER_MINUTES } from "./ledger";
 import {
   NOTIFICATION_SEND_ERROR_CODES,
   NOTIFICATION_SEND_MAX_FAILURES,
+  NOTIFICATION_SEND_RECENT_MINUTES,
   NOTIFICATION_SLOT_RE,
   PROVIDER_MESSAGE_ID_RE,
 } from "./notificationSends";
@@ -104,6 +105,7 @@ const SENDS_MIGRATION = readFileSync(
   "utf8",
 );
 const sendsLedgerSource = readFileSync(join(root, "src/server/jobs/notificationSends.ts"), "utf8");
+const runSource = readFileSync(join(root, "src/server/jobs/followupDigestRun.ts"), "utf8");
 
 describe("notification_sends migration and code agree", () => {
   it("sorts after the job_runs and notification sequences migrations it follows", () => {
@@ -153,10 +155,17 @@ describe("notification_sends migration and code agree", () => {
   it("caps a key at the failed rows the code expects, and answers with the statuses it parses", () => {
     expect(SENDS_MIGRATION).toContain(`  IF v_failed >= ${NOTIFICATION_SEND_MAX_FAILURES} THEN`);
     expect(SENDS_MIGRATION).toMatch(/\) RETURNS jsonb\nLANGUAGE plpgsql/);
-    for (const status of ["exhausted", "taken"]) {
-      expect(SENDS_MIGRATION).toContain(`jsonb_build_object('status', '${status}')`);
-    }
+    expect(SENDS_MIGRATION).toContain("jsonb_build_object('status', 'exhausted')");
     expect(SENDS_MIGRATION).toContain("jsonb_build_object('status', 'claimed', 'id', v_id)");
+    // `taken` says whether the live row is sent or claimed, and whether a
+    // claim is recent, over the window the code (and the fake) use.
+    expect(SENDS_MIGRATION).toMatch(
+      /jsonb_build_object\(\s+'status', 'taken',\s+'outcome', coalesce\(v_outcome, 'claimed'\),\s+'recent', v_outcome IS NULL\s+OR \(v_outcome = 'claimed' AND v_claimed_at > now\(\) - interval '(\d+) minutes'\)\s+\)/,
+    );
+    const window = /v_claimed_at > now\(\) - interval '(\d+) minutes'/.exec(SENDS_MIGRATION)?.[1];
+    expect(Number(window)).toBe(NOTIFICATION_SEND_RECENT_MINUTES);
+    // The job_runs stale window: an older claim's run has finished or timed out.
+    expect(NOTIFICATION_SEND_RECENT_MINUTES).toBe(JOB_STALE_AFTER_MINUTES);
     // A changed return type needs DROP + CREATE, never CREATE OR REPLACE.
     expect(SENDS_MIGRATION).toContain(
       "DROP FUNCTION IF EXISTS public.claim_notification_send(text, text, uuid, uuid);",
@@ -165,6 +174,9 @@ describe("notification_sends migration and code agree", () => {
 
   it("never records a send that may have been delivered as failed", () => {
     expect(NOTIFICATION_SEND_ERROR_CODES).not.toContain("network");
+    // A SendGrid 5xx or 408 is provider_rejected from the mailer, but the job
+    // treats it as maybe delivered (definiteRejectionCode).
+    expect(runSource).toMatch(/status >= 500 \|\| status === 408/);
     expect(SENDS_MIGRATION).not.toMatch(/'network'|'send_error'/);
   });
 

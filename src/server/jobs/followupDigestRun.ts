@@ -1,5 +1,6 @@
 // The daily coordinator follow-up digest (MINT-108): the run behind
-// GET /api/jobs/followup-digest (./followupDigest.ts), called every hour.
+// GET /api/jobs/followup-digest (./followupDigest.ts), called every hour by
+// the GitHub Actions tick, plus a daily Vercel cron as a backup.
 //
 // Each run:
 //   1. Discovery, the one cross-org read: every org whose followup_digest
@@ -22,8 +23,9 @@
 //   6. For each digest, claim (job, local date, org, recipient) in
 //      notification_sends, send followup_digest_daily through sendEmail, and
 //      record the send sent or failed.
-//   7. When nothing is left that a later run could retry, record the org's
-//      local date complete, so later hourly runs that day skip it.
+//   7. When nothing is left that a later run could retry, and no other
+//      attempt holds a recent claim for the org, record the org's local date
+//      complete, so later hourly runs that day skip it.
 //
 // Failure semantics. One recipient's failed send, one org's failed read, or
 // a send whose ledger row could not be finished never stops the rest: every
@@ -31,13 +33,26 @@
 // gets no completion row, so the next hourly run catches it up the same local
 // day; the claims keep that run from resending what already went. If
 // anything failed, the run then throws FollowUpDigestIncompleteError, so
-// job_runs records the hour failed. Only a definite rejection is retried, at
-// most three times per recipient per local date: a network error, a timeout
-// or an unexplained error may have been delivered, so that send stays claimed
-// and is never resent. Missing configuration (the SendGrid env, or an
-// APP_BASE_URL that is not a bare origin) throws before any send. A template
-// or send-time problem is one org's setting: it is counted and logged every
-// run until fixed, but does not fail the run.
+// job_runs records the hour failed. Only a definite rejection (a SendGrid 4xx
+// other than 408, invalid input, misconfiguration) is retried, at most three
+// times per recipient per local date: a network error, a timeout, a SendGrid
+// 5xx or 408 (its edge may have accepted the message) or an unexplained error
+// may have been delivered, so that send stays claimed and is never resent. A
+// claim another attempt took under NOTIFICATION_SEND_RECENT_MINUTES ago is
+// left to it: this run neither sends it nor completes the org, so a
+// rejection there can still be retried. Missing configuration (the SendGrid
+// env, or an APP_BASE_URL that is not a bare origin) throws before any send.
+// A template problem is one org's setting: it is counted every run until
+// fixed, logged once per org per local date (in its first due hour), and
+// does not fail the run.
+//
+// Edges, by design. A send hour of 23 is due in one hourly tick only (the
+// next is the next local date), so it gets one attempt a day; Minted should
+// keep send hours at 21 or earlier. A zone change can move an org's local
+// date: westward across the date line (Honolulu to Tokyo, say) a local date
+// can be skipped; eastward the org can get a digest for an earlier date a few
+// hours after the last. A failed run's counts are lost: the MINT-106 runner
+// records `{}` on failure (a follow-up there, not here).
 //
 // Logging: ctx.log.error only, with closed snake_case events. Nothing here
 // logs an address, a name, a case, a date or a count.
@@ -89,6 +104,9 @@ export class FollowUpDigestNotConfiguredError extends Error {
 export class FollowUpDigestTemplateError extends Error {
   override name = "FollowUpDigestTemplateError";
 }
+/** Only for a send time the resolver should never return: since #561 the
+ *  zone always falls back to a usable one, and the database keeps the hour in
+ *  0 to 23 and the default's hour set. Kept as a cheap guard. */
 export class FollowUpDigestSendTimeError extends Error {
   override name = "FollowUpDigestSendTimeError";
 }
@@ -160,11 +178,18 @@ function zeroCounts(): FollowUpDigestCounts {
   ) as FollowUpDigestCounts;
 }
 
+/** SendGrid answers that may come after its edge accepted the message: any
+ *  5xx, and 408 (request timeout). */
+export function isAmbiguousProviderStatus(status: number | undefined): boolean {
+  return status === undefined || status >= 500 || status === 408;
+}
+
 /** The code of a definite rejection, or null when the send may have been
- *  delivered (a network error or timeout, or an error the mailer did not
- *  classify). */
+ *  delivered: a network error or timeout, a SendGrid 5xx or 408, or an error
+ *  the mailer did not classify. Every other 4xx, 429 included, is definite. */
 export function definiteRejectionCode(error: unknown): NotificationSendErrorCode | null {
   if (!(error instanceof EmailError)) return null;
+  if (error.kind === "provider_rejected" && isAmbiguousProviderStatus(error.status)) return null;
   const kind: string = error.kind;
   return (NOTIFICATION_SEND_ERROR_CODES as readonly string[]).includes(kind)
     ? (kind as NotificationSendErrorCode)
@@ -172,7 +197,19 @@ export function definiteRejectionCode(error: unknown): NotificationSendErrorCode
 }
 
 type DeliveryOutcome =
-  "sent" | "already_sent" | "failed" | "uncertain" | "exhausted" | "unrecorded";
+  | "sent"
+  | "already_sent"
+  /** Another attempt claimed it recently and may still be sending it. */
+  | "in_flight"
+  /** Claimed by an earlier attempt that is over: maybe delivered, never resent. */
+  | "held"
+  | "failed"
+  /** A definite rejection whose failed row could not be written: it stays
+   *  claimed, so no later run retries it. */
+  | "failed_unrecorded"
+  | "uncertain"
+  | "exhausted"
+  | "unrecorded";
 
 async function deliver(
   log: JobLogger,
@@ -184,7 +221,10 @@ async function deliver(
   let claimId: string;
   try {
     const claim = await ledger.claim(key);
-    if (claim.status === "taken") return "already_sent";
+    if (claim.status === "taken") {
+      if (claim.outcome === "sent") return "already_sent";
+      return claim.recent ? "in_flight" : "held";
+    }
     if (claim.status === "exhausted") {
       log.error("send_retries_exhausted", new NotificationSendRetriesExhaustedError());
       return "exhausted";
@@ -208,12 +248,13 @@ async function deliver(
     }
     log.error(`send_failed_${errorCode}`, error);
     try {
-      await ledger.finish(claimId, { outcome: "failed", errorCode });
+      if (await ledger.finish(claimId, { outcome: "failed", errorCode })) return "failed";
+      log.error("send_failure_unrecorded", new NotificationSendFinishLostError());
     } catch (finishError) {
-      // The claim stays claimed, so this recipient is not retried that day.
       log.error("send_failure_unrecorded", finishError);
     }
-    return "failed";
+    // The claim stays claimed, so this recipient is not retried that day.
+    return "failed_unrecorded";
   }
 
   try {
@@ -230,11 +271,12 @@ async function deliver(
   return "unrecorded";
 }
 
-/** A due org: its effective sequence and the local date the digest is for. */
+/** A due org: its effective sequence and the local date and hour of the run. */
 interface DueOrg {
   orgId: string;
   sequence: EffectiveNotificationSequence;
   localDate: string;
+  localHour: number;
 }
 
 function orgSlot(org: DueOrg): NotificationOrgSlotKey {
@@ -252,7 +294,10 @@ async function runOrg(
   const problem = digestStepProblem(org.sequence.steps);
   if (problem) {
     counts.orgs_skipped_template += 1;
-    ctx.log.error(`org_skipped_${problem}`, new FollowUpDigestTemplateError());
+    // Counted every run; logged once per local date, in the first due hour.
+    if (org.localHour === org.sequence.sendHour) {
+      ctx.log.error(`org_skipped_${problem}`, new FollowUpDigestTemplateError());
+    }
     return;
   }
 
@@ -268,8 +313,9 @@ async function runOrg(
   counts.digests_suppressed += plan.suppressed;
   counts.unassigned_follow_ups += plan.unassignedFollowUps;
 
-  // Sends a later run could still make: a failed claim or a definite rejection.
-  let retryable = 0;
+  // Sends a later run could still make (a failed claim or a recorded definite
+  // rejection), or that another attempt may still be making.
+  let open = 0;
   for (const digest of plan.digests) {
     const to = digest.email?.trim() ?? "";
     if (!isEmailAddress(to)) {
@@ -291,10 +337,15 @@ async function runOrg(
     );
     if (outcome === "sent") counts.digests_sent += 1;
     else if (outcome === "already_sent") counts.digests_already_sent += 1;
+    else if (outcome === "in_flight") {
+      counts.sends_in_flight += 1;
+      open += 1;
+    } else if (outcome === "held") counts.sends_held += 1;
     else if (outcome === "failed") {
       counts.send_failures += 1;
-      retryable += 1;
-    } else if (outcome === "uncertain") counts.sends_uncertain += 1;
+      open += 1;
+    } else if (outcome === "failed_unrecorded") counts.send_failures += 1;
+    else if (outcome === "uncertain") counts.sends_uncertain += 1;
     else if (outcome === "exhausted") counts.sends_exhausted += 1;
     else {
       counts.digests_sent += 1;
@@ -302,11 +353,12 @@ async function runOrg(
     }
   }
 
-  // Leave the day open for the next hourly run to retry.
-  if (retryable > 0) return;
+  // Leave the day open for the next hourly run, or for the attempt in flight.
+  if (open > 0) return;
   try {
-    await ledger.completeOrgSlot(orgSlot(org));
-    counts.orgs_completed += 1;
+    if (await ledger.completeOrgSlot(orgSlot(org))) counts.orgs_completed += 1;
+    // A concurrent attempt recorded it first.
+    else counts.orgs_already_completed += 1;
   } catch (error) {
     counts.orgs_completion_unrecorded += 1;
     ctx.log.error("org_completion_unrecorded", error);
@@ -331,13 +383,20 @@ export async function runFollowUpDigest(
     counts.orgs_enabled += 1;
     const slot = digestSlot(sequence, ctx.now);
     if (!slot) {
+      // Unreachable through data since #561 (see FollowUpDigestSendTimeError),
+      // so it is logged every run rather than once a day.
       counts.orgs_skipped_send_time += 1;
       ctx.log.error("org_skipped_send_time", new FollowUpDigestSendTimeError());
     } else if (!slot.due) {
       counts.orgs_not_due += 1;
     } else {
       counts.orgs_due += 1;
-      due.push({ orgId: row.orgId, sequence, localDate: slot.localDate });
+      due.push({
+        orgId: row.orgId,
+        sequence,
+        localDate: slot.localDate,
+        localHour: slot.localHour,
+      });
     }
   }
   if (due.length === 0) return counts;

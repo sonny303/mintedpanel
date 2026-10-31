@@ -8,23 +8,29 @@
 -- a recipient whose send for that slot is already claimed or sent.
 --
 -- The slot is what makes a send once-only, and it is not the job_runs run
--- key. The digest's cron runs every hour (its run key is the UTC hour), and
--- each org's digest goes out once its local hour reaches its send hour; its
--- slot is the org's LOCAL DATE. So a rerun, a later hourly run, a changed send
+-- key. The digest is called every hour (a GitHub Actions schedule, plus one
+-- daily Vercel cron as a backup; its run key is the UTC hour), and each org's
+-- digest goes out once its local hour reaches its send hour; its slot is the
+-- org's LOCAL DATE. So a rerun, a later hourly run, a changed send
 -- hour or a changed time zone cannot send a recipient a second digest for the
 -- same local date.
 --
 -- Idempotency is the partial unique index notification_sends_one_live_send:
 -- at most one row per key is claimed or sent. Only a definite rejection (the
--- provider refused it, the input was invalid, or the mailer was misconfigured,
--- each before anything was accepted) is finished as failed; a failed row is
+-- provider refused it with a 4xx other than 408, the input was invalid, or the
+-- mailer was misconfigured, each before anything was accepted) is finished as
+-- failed; a failed row is
 -- outside the index, so a later attempt may claim again with a new row, and
 -- the failure stays on record. After three failed rows for a key the claim
 -- answers `exhausted` and the job stops trying that send for the slot.
 --
 -- Anything that may have been delivered is never resent: a network error or
--- timeout, an unexplained error, or a function that died mid-send leaves the
--- row claimed, because SendGrid has no idempotency key.
+-- timeout, a 5xx or 408 from SendGrid (its edge may have accepted the
+-- message), an unexplained error, or a function that died mid-send leaves the
+-- row claimed, because SendGrid has no idempotency key. When the claim finds a
+-- live row it says which: `sent`, or `claimed` and whether that claim is
+-- recent (under 15 minutes old, the job_runs stale window), in which case
+-- another attempt may still be sending and the job leaves the org's slot open.
 --
 -- notification_org_slots records, per (job, org_id, slot), that the org's
 -- sends for the slot are settled: every planned send is sent, already sent,
@@ -115,13 +121,13 @@ COMMENT ON COLUMN public.notification_sends.slot IS
 COMMENT ON COLUMN public.notification_sends.recipient_user_id IS
   'The org member the message went to (an actor id, not a foreign key). Never an address.';
 COMMENT ON COLUMN public.notification_sends.outcome IS
-  'claimed (the job is sending, or the send may have been delivered: a network error, a timeout, an unexplained error or a function that died; never resent), then sent or failed. failed means a definite rejection; a later attempt may claim again as a new row, up to three failed rows per key.';
+  'claimed (the job is sending, or the send may have been delivered: a network error, a timeout, a SendGrid 5xx or 408, an unexplained error or a function that died; never resent), then sent or failed. failed means a definite rejection (a 4xx other than 408, invalid input, misconfiguration); a later attempt may claim again as a new row, up to three failed rows per key.';
 COMMENT ON COLUMN public.notification_sends.finished_at IS
   'When the send was recorded sent (the provider accepted it) or failed. NULL while claimed.';
 COMMENT ON COLUMN public.notification_sends.provider_message_id IS
   'SendGrid''s x-message-id for a sent row, when it returned one. Limited to [A-Za-z0-9._=-], at most 128 characters.';
 COMMENT ON COLUMN public.notification_sends.error_code IS
-  'Set exactly when outcome is failed: misconfigured, invalid_input or provider_rejected, the mailer''s error kinds that prove nothing was accepted. Never an error message.';
+  'Set exactly when outcome is failed: misconfigured, invalid_input or provider_rejected (a SendGrid 4xx other than 408), the mailer''s errors that prove nothing was accepted. Never an error message.';
 
 -- ---------------------------------------------------------------------------
 -- notification_org_slots: one row per (job, org_id, slot) once that org's
@@ -153,10 +159,12 @@ COMMENT ON COLUMN public.notification_org_slots.completed_at IS
 
 -- ---------------------------------------------------------------------------
 -- claim_notification_send: claim one recipient's send for a slot.
--- Returns {"status":"claimed","id":<uuid>} for a new claimed row,
--- {"status":"taken"} when that send is already claimed or sent, or
--- {"status":"exhausted"} when it has already failed three times. jsonb, not
--- a uuid, so the job can tell "already sent" from "gave up".
+-- Returns {"status":"claimed","id":<uuid>} for a new claimed row;
+-- {"status":"taken","outcome":"sent"|"claimed","recent":<bool>} when that
+-- send is already sent or claimed (`recent`: claimed under 15 minutes ago, so
+-- another attempt may still be sending); or {"status":"exhausted"} when it has
+-- already failed three times. jsonb, not a uuid, so the job can tell "already
+-- sent" from "in flight", "held" and "gave up".
 -- ---------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.claim_notification_send(text, text, uuid, uuid);
 CREATE FUNCTION public.claim_notification_send(
@@ -172,6 +180,8 @@ AS $function$
 DECLARE
   v_id uuid;
   v_failed integer;
+  v_outcome text;
+  v_claimed_at timestamptz;
 BEGIN
   SELECT pg_catalog.count(*) INTO v_failed
     FROM public.notification_sends
@@ -194,7 +204,23 @@ BEGIN
   RETURNING id INTO v_id;
 
   IF v_id IS NULL THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'taken');
+    -- A new statement, so it sees the live row the insert conflicted with
+    -- (ON CONFLICT waits for that row's transaction to commit).
+    SELECT outcome, claimed_at INTO v_outcome, v_claimed_at
+      FROM public.notification_sends
+     WHERE job = p_job
+       AND slot = p_slot
+       AND org_id = p_org_id
+       AND recipient_user_id = p_recipient_user_id
+       AND outcome IN ('claimed', 'sent')
+     LIMIT 1;
+    -- A row that moved on between the two statements reads as a live claim.
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'taken',
+      'outcome', coalesce(v_outcome, 'claimed'),
+      'recent', v_outcome IS NULL
+        OR (v_outcome = 'claimed' AND v_claimed_at > now() - interval '15 minutes')
+    );
   END IF;
   RETURN pg_catalog.jsonb_build_object('status', 'claimed', 'id', v_id);
 END;
@@ -273,7 +299,7 @@ REVOKE ALL ON FUNCTION public.complete_notification_org_slot(text, uuid, text)
 GRANT EXECUTE ON FUNCTION public.complete_notification_org_slot(text, uuid, text) TO service_role;
 
 COMMENT ON FUNCTION public.claim_notification_send(text, text, uuid, uuid) IS
-  'MINT-108: claim one recipient''s send for a slot (for followup-digest, the org''s local date). Returns {"status":"claimed","id":...}, {"status":"taken"} (already claimed or sent) or {"status":"exhausted"} (three failed rows already). service_role only.';
+  'MINT-108: claim one recipient''s send for a slot (for followup-digest, the org''s local date). Returns {"status":"claimed","id":...}, {"status":"taken","outcome":"sent"|"claimed","recent":bool} (already sent, or claimed; recent when claimed under 15 minutes ago) or {"status":"exhausted"} (three failed rows already). service_role only.';
 COMMENT ON FUNCTION public.finish_notification_send(uuid, text, text, text) IS
   'MINT-108: record sent (optional provider message id) or failed (error code misconfigured, invalid_input or provider_rejected) on a claimed row. Returns false when the row is not claimed. service_role only.';
 COMMENT ON FUNCTION public.complete_notification_org_slot(text, uuid, text) IS

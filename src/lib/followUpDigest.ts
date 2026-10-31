@@ -8,8 +8,8 @@
 // (resolveActiveFollowUp), and its status is followUpStatus against `today`.
 // Overdue and due-today follow-ups are listed; upcoming ones are not.
 //
-// When it goes out, and what "today" is (digestSlot). The cron runs every
-// hour. An org's digest is due once the wall clock in its effective time zone
+// When it goes out, and what "today" is (digestSlot). The job is called
+// every hour. An org's digest is due once the wall clock in its effective time zone
 // reaches its effective send hour (both platform-managed, resolved by
 // resolveNotificationSequence). "At or after" the hour, so a missed or failed
 // run catches up later the same local day; never before it. "Today" is the
@@ -20,6 +20,12 @@
 // run's instant, so a repeated hour (DST ends) stays the same local date, and
 // a skipped hour (DST starts) is caught by "at or after". No clock read here:
 // `now` is passed in.
+//
+// Two edges follow from keying on the local date. A send hour of 23 is due in
+// one hourly call only, so it gets one attempt a day (keep it at 21 or
+// earlier). And a zone change moves the local date with it: moving an org
+// west across the date line (Honolulu to Tokyo) can skip a date, and moving
+// it east can send a digest for an earlier date hours after the last.
 //
 // No at-risk flag (Sowmya, Oct 30). `payers.avg_decision_days` has no writer
 // yet, so a flag built on it would rarely fire and could not be trusted. It

@@ -81,9 +81,10 @@ Because automatic deployments from Git pushes are disabled in `vercel.json` (`gi
 
 ### CI surfaces (panel)
 
-| Workflow                   | What                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| `.github/workflows/ci.yml` | format, typecheck, lint, unit tests, build, migration dry-run and release guardrails |
+| Workflow                                     | What                                                                                                                                                                                                                                                                             |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`                   | format, typecheck, lint, unit tests, build, migration dry-run and release guardrails                                                                                                                                                                                             |
+| `.github/workflows/followup-digest-tick.yml` | hourly schedule (`7 * * * *`) plus manual dispatch: calls `GET /api/jobs/followup-digest` on production with the `CRON_SECRET` repository secret (MINT-108; Vercel Hobby allows only daily crons). No checkout, `permissions: {}`; exits 0 with a notice until the secret is set |
 
 The previous hosted `verify-org-isolation.yml` workflow is retired. Production
 isolation must run inside the single approved production job described in

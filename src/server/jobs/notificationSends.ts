@@ -7,14 +7,15 @@
 // each send on (job, slot, org, recipient) before sending it. The slot is what
 // the send is once-only for, and it is not the job_runs run key: the hourly
 // follow-up digest's slot is the org's local date. The claim answers `taken`
-// when that send is already claimed or sent for the slot, and `exhausted`
-// after NOTIFICATION_SEND_MAX_FAILURES failed rows: skip it either way.
+// when that send is already sent or claimed for the slot (saying which, and
+// whether the claim is recent), and `exhausted` after
+// NOTIFICATION_SEND_MAX_FAILURES failed rows: skip it either way.
 //
 // Only a definite rejection (the codes below: nothing was accepted) is
 // finished as failed, and a later attempt may claim it again. A send that may
-// have been delivered (a network error or timeout, an unexplained error, a
-// function that died mid-send) is never finished and stays claimed: SendGrid
-// has no idempotency key, so it is never resent.
+// have been delivered (a network error or timeout, a SendGrid 5xx or 408, an
+// unexplained error, a function that died mid-send) is never finished and
+// stays claimed: SendGrid has no idempotency key, so it is never resent.
 //
 // Once every planned send for an org's slot is settled (nothing a later run
 // could retry), the job records the slot complete; a later run reads that and
@@ -23,9 +24,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
 /** Mirrored by notification_sends_error_code_check and finish_notification_send.
- *  The mailer's EmailErrorKind values that prove nothing was accepted: each is
- *  thrown before the request, or is SendGrid's own non-2xx answer. `network`
- *  is not one: a timeout may have been delivered. */
+ *  The mailer's EmailErrorKind values that can prove nothing was accepted:
+ *  `misconfigured` and `invalid_input` are thrown before the request;
+ *  `provider_rejected` proves it only for a 4xx other than 408 (the job
+ *  decides, definiteRejectionCode). `network` is never one: a timeout may have
+ *  been delivered. */
 export const NOTIFICATION_SEND_ERROR_CODES = [
   "misconfigured",
   "invalid_input",
@@ -36,6 +39,12 @@ export type NotificationSendErrorCode = (typeof NOTIFICATION_SEND_ERROR_CODES)[n
 /** After this many failed rows for a key the claim answers `exhausted`.
  *  Mirrored by claim_notification_send. */
 export const NOTIFICATION_SEND_MAX_FAILURES = 3;
+
+/** A claimed row younger than this is `recent`: another attempt may still be
+ *  sending it. The job_runs stale window (JOB_STALE_AFTER_MINUTES), so an
+ *  older claim's run has finished or been timed out. Mirrored by
+ *  claim_notification_send. */
+export const NOTIFICATION_SEND_RECENT_MINUTES = 15;
 
 /** Mirrored by notification_sends_provider_message_id_check. A message id
  *  outside it is not recorded (null), so a provider oddity cannot make the
@@ -62,7 +71,12 @@ export type NotificationSendFinish =
   | { outcome: "failed"; errorCode: NotificationSendErrorCode };
 
 export type NotificationSendClaim =
-  { status: "claimed"; id: string } | { status: "taken" } | { status: "exhausted" };
+  | { status: "claimed"; id: string }
+  /** `sent`: it went out. `claimed` and `recent`: another attempt may still be
+   *  sending it. `claimed`, not recent: it may have been delivered, or its
+   *  rejection could not be recorded; held, never resent. */
+  | { status: "taken"; outcome: "sent" | "claimed"; recent: boolean }
+  | { status: "exhausted" };
 
 export class InvalidNotificationSendClaimError extends Error {
   override name = "InvalidNotificationSendClaimError";
@@ -72,12 +86,19 @@ export class InvalidNotificationSendClaimError extends Error {
 export function parseNotificationSendClaim(value: unknown): NotificationSendClaim {
   const answer =
     value && typeof value === "object" && !Array.isArray(value)
-      ? (value as { status?: unknown; id?: unknown })
+      ? (value as { status?: unknown; id?: unknown; outcome?: unknown; recent?: unknown })
       : {};
   if (answer.status === "claimed" && typeof answer.id === "string" && answer.id.length > 0) {
     return { status: "claimed", id: answer.id };
   }
-  if (answer.status === "taken" || answer.status === "exhausted") return { status: answer.status };
+  if (
+    answer.status === "taken" &&
+    (answer.outcome === "sent" || answer.outcome === "claimed") &&
+    typeof answer.recent === "boolean"
+  ) {
+    return { status: "taken", outcome: answer.outcome, recent: answer.recent };
+  }
+  if (answer.status === "exhausted") return { status: "exhausted" };
   throw new InvalidNotificationSendClaimError("claim_notification_send answered an unknown shape");
 }
 

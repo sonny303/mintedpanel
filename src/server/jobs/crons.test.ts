@@ -36,12 +36,16 @@ describe("vercel.json crons and the job registry agree", () => {
     }
   });
 
-  it("runs the follow-up digest every hour, on the hour (one cron entry)", () => {
-    // MERGE BLOCKER: a cron more often than daily needs Vercel Pro. On Hobby
-    // it fails every production deploy. Each org's digest goes out once its
-    // local hour reaches its own send hour (followupDigest.ts), so the cron
-    // must run hourly; changing that is this one line in vercel.json.
-    expect(crons).toEqual([{ path: "/api/jobs/followup-digest", schedule: "0 * * * *" }]);
+  it("keeps one daily Vercel cron for the follow-up digest, a backup after every US 8 am", () => {
+    // Production is on Vercel Hobby: one run a day per cron entry at most, and
+    // a more frequent schedule fails the deploy. The hourly tick is the GitHub
+    // Actions workflow below. 18:00 UTC is 8 am in Hawaii and later in every
+    // other US zone, so the backup only ever catches up ("at or after").
+    expect(crons).toEqual([{ path: "/api/jobs/followup-digest", schedule: "0 18 * * *" }]);
+    for (const cron of crons) {
+      const [minute, hour] = cron.schedule.split(" ");
+      expect(/^\d+$/.test(minute) && /^\d+$/.test(hour), `${cron.path} runs once a day`).toBe(true);
+    }
   });
 
   it("rejects a malformed cron list", () => {
@@ -57,6 +61,93 @@ describe("vercel.json crons and the job registry agree", () => {
     expect(() =>
       vercelCronsFrom({ crons: [{ path: "/api/jobs/x", schedule: "0 * * *" }] }),
     ).toThrow();
+  });
+});
+
+// The hourly tick (MINT-108): a GitHub Actions schedule, because Vercel Hobby
+// allows only daily crons.
+const TICK_PATH = ".github/workflows/followup-digest-tick.yml";
+const tick = readFileSync(join(root, TICK_PATH), "utf8");
+
+/** Every `run: |` block's body, by indentation. */
+function runBlocks(yaml: string): string[] {
+  const lines = yaml.split("\n");
+  const blocks: string[] = [];
+  lines.forEach((line, i) => {
+    const match = /^(\s*)(?:- )?run:\s*(.*)$/.exec(line);
+    if (!match) return;
+    const indent = match[1].length;
+    const body = [match[2]];
+    for (const next of lines.slice(i + 1)) {
+      if (next.trim() !== "" && next.length - next.trimStart().length <= indent) break;
+      body.push(next);
+    }
+    blocks.push(body.join("\n"));
+  });
+  return blocks;
+}
+
+describe("the follow-up digest's hourly GitHub Actions tick", () => {
+  it("runs hourly off the top of the hour, and on manual dispatch", () => {
+    expect([...tick.matchAll(/^\s*- cron: "([^"]+)"$/gm)].map((m) => m[1])).toEqual(["7 * * * *"]);
+    expect(tick).toMatch(/^on:\n {2}schedule:\n/m);
+    expect(tick).toMatch(/^ {2}workflow_dispatch:\s*$/m);
+    expect(tick).not.toMatch(/pull_request|push:|workflow_run|repository_dispatch/);
+  });
+
+  it("calls the registered job route that the daily cron also calls", () => {
+    const path = /"\$\{BASE_URL%\/\}(\/api\/jobs\/[a-z-]+)"/.exec(tick)?.[1];
+    expect(path).toBe("/api/jobs/followup-digest");
+    expect(crons.map((cron) => cron.path)).toContain(path);
+    expect(JOB_REGISTRY.has("followup-digest")).toBe(true);
+    // Production by default, overridable by a repository variable; https only.
+    expect(tick).toContain(
+      "BASE_URL: ${{ vars.FOLLOWUP_DIGEST_BASE_URL || 'https://mintedpanel.com' }}",
+    );
+    expect(tick).toContain("https://*) ;;");
+  });
+
+  it("sends the CRON_SECRET repository secret as the bearer, through env only", () => {
+    expect(tick.match(/\$\{\{\s*secrets\.[A-Z_]+\s*\}\}/g)).toEqual(["${{ secrets.CRON_SECRET }}"]);
+    expect(tick).toMatch(/^ {10}CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}$/m);
+    expect(tick).toContain('-H "Authorization: Bearer ${CRON_SECRET}"');
+    expect(tick).toContain("curl --silent --show-error --fail-with-body --max-time 60");
+  });
+
+  it("never interpolates an expression into a run: script, and never prints the secret", () => {
+    const blocks = runBlocks(tick);
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(block).not.toContain("${{");
+      expect(block).not.toMatch(/\b(echo|printf)\b[^\n]*CRON_SECRET\}?"?\s*$/m);
+      expect(block).not.toMatch(/set -[a-z]*x|set -o xtrace/);
+    }
+    // The guard catches an interpolated secret.
+    expect(runBlocks('    run: |\n      curl -H "${{ secrets.CRON_SECRET }}"\n')[0]).toContain(
+      "${{",
+    );
+  });
+
+  it("is a no-op with a notice until the secret is set, and holds no permissions", () => {
+    expect(tick).toMatch(
+      /if \[ -z "\$\{CRON_SECRET:-\}" \]; then\n\s+echo "::notice[^\n]*"\n\s+exit 0/,
+    );
+    expect(tick).toMatch(/^permissions: \{\}$/m);
+    expect(tick).toMatch(
+      /^concurrency:\n {2}group: followup-digest-tick\n {2}cancel-in-progress: false$/m,
+    );
+    expect(tick).toMatch(/^ {4}timeout-minutes: \d$/m);
+    expect(tick).not.toContain("actions/checkout");
+  });
+
+  it("prints only the HTTP status, the outcome and the counts", () => {
+    const echoes = [...tick.matchAll(/^\s*echo (.*)$/gm)].map((m) => m[1]);
+    expect(echoes).toEqual([
+      '"::notice title=Follow-up digest tick::CRON_SECRET is not set, so no tick ran."',
+      '"::error title=Follow-up digest tick::FOLLOWUP_DIGEST_BASE_URL must start with https://"',
+      '"HTTP ${status:-none}: ${summary}"',
+    ]);
+    expect(tick).toContain("jq -c '{outcome: .data.outcome, counts: .data.counts, error: .error}'");
   });
 });
 
