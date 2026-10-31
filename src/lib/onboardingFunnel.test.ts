@@ -143,7 +143,7 @@ describe("provider onboarding funnel", () => {
       data.workStates = [{ providerId: "ready", state }];
       expect(rowFor(data, "ready")).toMatchObject({
         stage: "submitted",
-        gaps: ["Location has no state on record"],
+        gaps: ["Location has no valid state on record"],
       });
     }
   });
@@ -159,7 +159,7 @@ describe("provider onboarding funnel", () => {
       ];
       expect(rowFor(data, "ready")).toMatchObject({
         stage: "submitted",
-        gaps: ["Location has no state on record"],
+        gaps: ["Location has no valid state on record"],
       });
     }
   });
@@ -173,7 +173,7 @@ describe("provider onboarding funnel", () => {
     ];
     expect(rowFor(data, "ready")).toMatchObject({
       stage: "submitted",
-      gaps: ["NC license not board-verified", "Location has no state on record"],
+      gaps: ["NC license not board-verified", "Location has no valid state on record"],
     });
   });
 
@@ -186,7 +186,7 @@ describe("provider onboarding funnel", () => {
     // not judged: only the missing group and the missing state hold her.
     expect(rowFor(data, "ready")).toMatchObject({
       stage: "submitted",
-      gaps: ["Needs a group", "Location has no state on record"],
+      gaps: ["Needs a group", "Location has no valid state on record"],
     });
   });
 

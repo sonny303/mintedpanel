@@ -275,7 +275,7 @@ export function buildOnboardingFunnelRows(
       if (p.pendingVerification) submittedGaps.push("Record pending verification");
       // Verified is not enough: Ready needs a group and a location.
       submittedGaps.push(...assignmentGaps(grouped.has(p.providerId), hasLocation));
-      if (statelessLocation) submittedGaps.push("Location has no state on record");
+      if (statelessLocation) submittedGaps.push("Location has no valid state on record");
       if (submittedGaps.length > 0) return { ...base, stage: "submitted", gaps: submittedGaps };
       return { ...base, stage: "ready_for_credentialing", gaps: [] };
     })
