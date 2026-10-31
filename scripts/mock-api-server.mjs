@@ -134,6 +134,10 @@ export const LEAK_MODES = [
   "intakesession",
 ];
 
+// GET /api/cases?q= result limit — mirrors CASE_SEARCH_DEFAULT_LIMIT in
+// src/server/caseSearchLimit.ts (no platform setting exists before M6).
+const CASE_SEARCH_DEFAULT_LIMIT = 5;
+
 const USERS = {
   [FIXTURES.KANSAS_EMAIL]: {
     token: "tok-kansas",
@@ -1901,7 +1905,17 @@ export async function createMockApiServer(options = {}) {
                     (caseDigits != null && digits !== "" && digits.includes(caseDigits))
                   );
                 });
-        return envelope(res, 200, rows, null, { total: rows.length });
+        // At most meta.limit rows — the platform-admin case-search limit,
+        // which is the default 5 until Mission Control M6 adds the setting
+        // (src/server/caseSearchLimit.ts). meta.total counts every match and
+        // meta.truncated says whether data holds all of them; all three are
+        // always sent on this mode.
+        const limit = CASE_SEARCH_DEFAULT_LIMIT;
+        return envelope(res, 200, rows.slice(0, limit), null, {
+          total: rows.length,
+          truncated: rows.length > limit,
+          limit,
+        });
       }
       return envelope(res, 422, null, "providerId or q query parameter is required");
     }
