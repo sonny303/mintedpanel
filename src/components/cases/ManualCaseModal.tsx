@@ -216,6 +216,14 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     caseType === "enrollment" && !loading && !failed && prerequisitesReady
       ? missingManualCaseFieldsHint(missingFields)
       : null;
+  // Enrollment needs all four key fields and Contract needs group, payer and
+  // state to open its Matrix cell; Recredentialing creates nothing.
+  const keyFieldsRequired = caseType !== "recredentialing";
+  const requiredMark = (
+    <span aria-hidden="true" className="text-[#DC2626]">
+      *
+    </span>
+  );
 
   const caseTypeSelector = (
     <div className="space-y-1.5">
@@ -436,9 +444,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
             {caseType !== "contract" ? (
               <div className="space-y-1.5">
                 <Label htmlFor="manual-case-provider">
-                  Provider <span className="text-[#DC2626]">*</span>
+                  Provider {keyFieldsRequired ? requiredMark : null}
                 </Label>
                 <Select
+                  required={keyFieldsRequired}
                   value={providerId}
                   onValueChange={(v) => {
                     setProviderId(v);
@@ -461,9 +470,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-group">
-                Group <span className="text-[#DC2626]">*</span>
+                Group {keyFieldsRequired ? requiredMark : null}
               </Label>
               <Select
+                required={keyFieldsRequired}
                 value={groupId}
                 onValueChange={(v) => {
                   setGroupId(v);
@@ -498,9 +508,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-payer">
-                Payer <span className="text-[#DC2626]">*</span>
+                Payer {keyFieldsRequired ? requiredMark : null}
               </Label>
               <Select
+                required={keyFieldsRequired}
                 value={payerId}
                 onValueChange={(v) => {
                   setPayerId(v);
@@ -522,9 +533,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             <div className="space-y-1.5">
               <Label htmlFor="manual-case-state">
-                State <span className="text-[#DC2626]">*</span>
+                State {keyFieldsRequired ? requiredMark : null}
               </Label>
               <Select
+                required={keyFieldsRequired}
                 value={state}
                 onValueChange={(v) => {
                   setState(v);
@@ -612,7 +624,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           {missingFieldsHint ? (
             <span
               id="manual-case-missing-fields"
-              className="mr-auto pr-2 text-[12.5px] text-muted-foreground"
+              className="order-last mr-auto pb-2 pr-2 text-[12.5px] text-muted-foreground sm:order-none sm:pb-0"
             >
               {missingFieldsHint}
             </span>

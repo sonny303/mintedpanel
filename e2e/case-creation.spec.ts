@@ -828,9 +828,17 @@ test("MINT-93: manual case marks the four key fields required and names the miss
   await page.getByRole("button", { name: "New case" }).click();
   const dialog = page.getByRole("dialog");
   const createButton = dialog.getByRole("button", { name: "Create case" });
+  const hint = dialog.locator("#manual-case-missing-fields");
 
-  for (const field of ["provider", "group", "payer", "state"]) {
-    await expect(dialog.locator(`label[for="manual-case-${field}"]`)).toContainText("*");
+  // The asterisk is visual only: each name stays exact and aria-required carries it.
+  for (const name of ["Provider", "Group", "Payer", "State"]) {
+    await expect(dialog.getByRole("combobox", { name, exact: true })).toHaveAttribute(
+      "aria-required",
+      "true",
+    );
+    await expect(dialog.locator(`label[for="manual-case-${name.toLowerCase()}"]`)).toContainText(
+      "*",
+    );
   }
   await expect(createButton).toBeDisabled();
   await expect(createButton).toHaveAccessibleDescription(
@@ -841,15 +849,27 @@ test("MINT-93: manual case marks the four key fields required and names the miss
   await page.getByRole("option", { name: "Jane Whitaker" }).click();
   await dialog.getByRole("combobox", { name: "Group" }).click();
   await page.getByRole("option", { name: "Group 1" }).click();
-  await expect(dialog.getByText("Choose a payer and state to create the case.")).toBeVisible();
+  await expect(hint).toHaveText("Choose a payer and state to create the case.");
   await expect(createButton).toBeDisabled();
+
+  // Recredentialing creates nothing, so neither the hint nor the markers apply.
+  await dialog.getByRole("combobox", { name: "Case type" }).click();
+  await page.getByRole("option", { name: "Recredentialing — authoring only" }).click();
+  await expect(hint).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Group", exact: true })).toHaveAttribute(
+    "aria-required",
+    "false",
+  );
+  await dialog.getByRole("combobox", { name: "Case type" }).click();
+  await page.getByRole("option", { name: "Enrollment" }).click();
+  await expect(hint).toHaveText("Choose a payer and state to create the case.");
 
   await dialog.getByRole("combobox", { name: "Payer" }).click();
   await page.getByRole("option", { name: "Cigna-NC" }).click();
   await dialog.getByRole("combobox", { name: "State" }).click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
-  await expect(dialog.getByText("to create the case.")).toHaveCount(0);
+  await expect(hint).toHaveCount(0);
   await expect(createButton).toBeEnabled();
   await expect(createButton).not.toHaveAttribute("aria-describedby");
 });
