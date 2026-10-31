@@ -183,6 +183,12 @@ contract; clients and both-audience CSV receive explicit safe projections.
 | roster_export_overrides | ledger | support | roster services/RPCs | Append-only validation exceptions recorded immediately, with verified actor, timestamp, reason, row/rule/field, mapping revision and source fingerprint.                                    |
 | roster_export_snapshots | ledger | support | roster services/RPCs | Immutable original CSV/XLSX bytes, database-computed SHA-256, frozen inputs and applied overrides, actor/time/counts; atomic and idempotent export commit; authorized historical retrieval. |
 
+## MINT-106 — Scheduled jobs
+
+| Table    | Layer  | Status  | Usage                                  | Notes / replacement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------- | ------ | ------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| job_runs | ledger | support | 0 + `claim_job_run` / `finish_job_run` | Repo-only (`20261031120000`). One row per run attempt of a `GET /api/jobs/<name>` cron job (`src/server/jobs/`); a partial unique index allows one `running` or `succeeded` row per `(job, run_key)`, so a failed run is retried as a new row and a skipped call writes nothing. `running` older than 15 minutes is marked `failed` / `timed_out` by the next claim. Integer `counts` and a safe `error_code` only, never PHI. service_role only (RLS on, no policies; SELECT grant, writes through the two SECURITY DEFINER RPCs). |
+
 ## Design rules (defended by this register)
 
 1. **Grain rule.** Every table has exactly one grain (case = provider×group×
