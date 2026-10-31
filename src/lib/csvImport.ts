@@ -15,6 +15,7 @@
 // line where they start so every validation error can point at a source line.
 import type { FacilityInput } from "@/services/orgSettings";
 import type { LicenseInput, ProviderInput } from "@/services/providers";
+import { stripNpiSeparators } from "@/lib/providerIdentity";
 
 export type ImportFile = "facilities" | "providers" | "provider_facility_assignments";
 
@@ -381,7 +382,8 @@ function parseProviders(csv: string, errors: CsvImportError[]): ParsedProvider[]
       });
       continue;
     }
-    const npi = reader.cell(record, "npi");
+    // MINT-110: dashes and spaces are stripped; other junk still fails.
+    const npi = stripNpiSeparators(reader.cell(record, "npi"));
     if (npi && !NPI_RE.test(npi)) {
       errors.push({
         file: "providers",

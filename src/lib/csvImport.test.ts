@@ -202,6 +202,18 @@ describe("parseImportPackage validation", () => {
     );
   });
 
+  it("accepts a dashed or spaced NPI as bare digits; other junk still fails (MINT-110)", () => {
+    const providersCsv = [
+      "first_name,last_name,npi",
+      "Al,Roe,123-456-7893",
+      "Bo,Roe,190 283 3742",
+      "Cy,Roe,123.456.7893",
+    ].join("\n");
+    const { providers, errors } = parseImportPackage({ providersCsv });
+    expect(providers.slice(0, 2).map((p) => p.input.npi)).toEqual(["1234567893", "1902833742"]);
+    expect(errors.filter((e) => e.column === "npi").map((e) => e.line)).toEqual([4]);
+  });
+
   it("flags an assignment referencing an unknown facility", () => {
     const facilitiesCsv = ["ref,name", "f1,Casa Bonita"].join("\n");
     const providersCsv = ["ref,first_name,last_name", "p1,Jane,Doe"].join("\n");

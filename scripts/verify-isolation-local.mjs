@@ -158,6 +158,9 @@ const EXPECTED_FAILS = {
   providerinvites: ["35b", "35c"],
   // A provider intake session reads another org's provider (35d).
   intakesession: ["35d"],
+  // MINT-110: the NPI Registry proxy serves an anonymous caller (36b) and a
+  // read-only billing member (36c).
+  npiregistry: ["36b", "36c"],
 };
 
 function failedAssertions(output) {

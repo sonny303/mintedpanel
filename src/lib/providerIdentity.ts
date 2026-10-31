@@ -36,8 +36,21 @@ export function npiCheckDigit(first9: string): number | null {
   return (10 - (sum % 10)) % 10;
 }
 
+// MINT-110: the separators staff paste from documents and spreadsheets — any
+// whitespace, the ASCII hyphen, the Unicode hyphens and dashes (U+2010–U+2015)
+// and the minus sign (U+2212). Nothing else is removed.
+const NPI_SEPARATORS_RE = /[-\s\u2010-\u2015\u2212]/g;
+
+/** A typed or imported NPI with its dashes and spaces removed, so
+ * "123-456-7890" and "123 456 7890" both become "1234567890". Letters, dots and
+ * any other junk stay in place, so isValidNpi still rejects them. */
+export function stripNpiSeparators(value: string): string {
+  return value.replace(NPI_SEPARATORS_RE, "");
+}
+
 /** Exactly 10 digits (surrounding whitespace ignored) whose last digit is the
- * CMS check digit. Dashes or spaces inside the number fail; strip them first. */
+ * CMS check digit. Dashes or spaces inside the number fail; strip them first
+ * with stripNpiSeparators. */
 export function isValidNpi(value: unknown): boolean {
   if (typeof value !== "string" && typeof value !== "number") return false;
   const digits = String(value).trim();

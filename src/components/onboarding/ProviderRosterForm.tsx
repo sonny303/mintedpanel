@@ -41,8 +41,13 @@ import { useCreateEnrollmentFact } from "@/hooks/useEnrollmentFacts";
 import { usePayers } from "@/hooks/useAdmin";
 import { StateSelect } from "@/components/StateSelect";
 import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
-import { normalizeNpi } from "@/lib/providerGroup";
-import { NPI_CHECK_DIGIT_MESSAGE, identityFieldChanged, isValidNpi } from "@/lib/providerIdentity";
+import { NpiRegistryAssist } from "@/components/providers/NpiRegistryAssist";
+import {
+  NPI_CHECK_DIGIT_MESSAGE,
+  identityFieldChanged,
+  isValidNpi,
+  stripNpiSeparators,
+} from "@/lib/providerIdentity";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
 import {
@@ -126,7 +131,7 @@ function toProviderInput(f: RosterFormState): Omit<ProviderInput, "firstName" | 
     // dialog no longer captures it, and omitting the keys means an edit-mode
     // save never touches the columns — the provider record's inline fields
     // and the CSV import remain the address writers.
-    npi: f.npi.replace(/\D/g, "") || null,
+    npi: stripNpiSeparators(f.npi) || null,
     taxonomyCode: t(f.taxonomyCode),
     specialty: t(f.specialty),
     startDate: t(f.startDate),
@@ -199,6 +204,12 @@ function FormBody({
   const pending = createMut.isPending || updateMut.isPending;
 
   const set = (patch: Partial<RosterFormState>) => setForm((f) => ({ ...f, ...patch }));
+  const npiDigits = stripNpiSeparators(form.npi);
+  const npiChanged = identityFieldChanged(
+    form.npi,
+    provider ? initialForm.npi : undefined,
+    stripNpiSeparators,
+  );
 
   const reload = async () => {
     if (!onReload) return;
@@ -220,15 +231,10 @@ function FormBody({
     if (!form.lastName.trim()) next.lastName = "Last name is required";
     // MINT-7: an entered or changed NPI must pass the CMS check digit; an
     // unchanged stored NPI is not re-validated, so legacy data never blocks
-    // an unrelated edit.
-    const npiDigits = normalizeNpi(form.npi);
-    const npiChanged = identityFieldChanged(
-      form.npi,
-      provider ? initialForm.npi : undefined,
-      normalizeNpi,
-    );
+    // an unrelated edit. MINT-110: only dashes and spaces are stripped, so
+    // any other junk still fails.
     if (!form.npi.trim()) next.npi = "Type 1 NPI is required";
-    else if (npiChanged && npiDigits.length !== 10) next.npi = "NPI must be 10 digits";
+    else if (npiChanged && !/^\d{10}$/.test(npiDigits)) next.npi = "NPI must be 10 digits";
     else if (npiChanged && !isValidNpi(npiDigits)) next.npi = NPI_CHECK_DIGIT_MESSAGE;
     if (form.ssnLast4.trim() && !/^\d{4}$/.test(form.ssnLast4.trim()))
       next.ssnLast4 = "Enter the LAST 4 digits only";
@@ -528,6 +534,13 @@ function FormBody({
               />
             </div>
           </div>
+          <NpiRegistryAssist
+            npi={npiDigits}
+            firstName={form.firstName}
+            lastName={form.lastName}
+            verify={npiChanged}
+            onPick={(npi) => set({ npi })}
+          />
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label htmlFor="prov-degree" className="text-[12px]">

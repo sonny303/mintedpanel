@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FieldLabel } from "@/components/providers/FormField";
+import { NpiRegistryAssist } from "@/components/providers/NpiRegistryAssist";
 
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
@@ -22,6 +23,7 @@ import {
   type ProviderFormState,
   type UpdateProviderField,
 } from "@/components/providers/providerFormShared";
+import { stripNpiSeparators } from "@/lib/providerIdentity";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { PROVIDER_GENDER_OPTIONS, PROVIDER_GENDER_UNSET_VALUE } from "@/lib/providerGender";
 
@@ -106,11 +108,20 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
       <Field label="NPI" error={errors.npi}>
         <Input
           inputMode="numeric"
-          maxLength={10}
+          maxLength={20}
           value={form.npi}
-          onChange={(e) => update("npi", e.target.value.replace(/\D/g, "").slice(0, 10))}
+          onChange={(e) => update("npi", stripNpiSeparators(e.target.value))}
         />
       </Field>
+      <div className="md:col-span-2">
+        <NpiRegistryAssist
+          npi={form.npi}
+          firstName={form.firstName}
+          lastName={form.lastName}
+          verify
+          onPick={(npi) => update("npi", npi)}
+        />
+      </div>
       <Field label="CAQH ID" error={errors.caqhId}>
         <Input
           inputMode="numeric"

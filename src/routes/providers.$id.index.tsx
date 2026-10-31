@@ -76,7 +76,7 @@ import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddT
 import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import { isValidEmail } from "@/lib/contactValidation";
-import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi } from "@/lib/providerIdentity";
+import { NPI_CHECK_DIGIT_MESSAGE, isValidNpi, stripNpiSeparators } from "@/lib/providerIdentity";
 import { hasValidLicenseDateOrder, LICENSE_DATE_ORDER_ERROR } from "@/lib/licenseDates";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -364,6 +364,8 @@ interface FieldDef {
   value: string | null;
   type?: "text" | "date" | "gender";
   validate?: (value: string) => string | null;
+  /** Applied to the trimmed draft before validation and save. */
+  normalize?: (value: string) => string;
   masked?: boolean;
   mono?: boolean;
   display?: (value: string | null) => string;
@@ -419,6 +421,8 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
           key: "npi",
           value: provider.npi ?? null,
           mono: true,
+          // MINT-110: "123-456-7890" and "123 456 7890" save as digits.
+          normalize: stripNpiSeparators,
           // Runs only when the NPI changed (see save) — MINT-7 check digit.
           validate: (v) => {
             if (!/^\d{10}$/.test(v)) return "NPI is 10 digits.";
@@ -473,14 +477,23 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
     setEditing(true);
   };
 
+  const draftOf = (f: FieldDef): string => {
+    const draftValue = draft[f.key] ?? "";
+    if (f.type === "gender") return draftValue;
+    return f.normalize ? f.normalize(draftValue.trim()) : draftValue.trim();
+  };
+  // The stored value under the same normalization, so a legacy "123-456-7890"
+  // left untouched is not seen as a change (and never re-validated).
+  const storedOf = (f: FieldDef): string | null =>
+    f.normalize && f.value !== null ? f.normalize(f.value.trim()) || null : (f.value ?? null);
+
   const save = async () => {
     const errors: Record<string, string> = {};
     for (const f of fields) {
-      const draftValue = draft[f.key] ?? "";
-      const v = f.type === "gender" ? draftValue : draftValue.trim();
+      const v = draftOf(f);
       // Validate only fields the user actually changed — a legacy invalid
       // value in an untouched field must not block an unrelated edit.
-      const changed = (v === "" ? null : v) !== (f.value ?? null);
+      const changed = (v === "" ? null : v) !== storedOf(f);
       if (changed && v !== "" && f.validate) {
         const message = f.validate(v);
         if (message) errors[f.key] = message;
@@ -493,10 +506,9 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
     // here (the E6.4 wipe-defect protection holds by construction).
     const patch: Partial<ProviderInput> = {};
     for (const f of fields) {
-      const draftValue = draft[f.key] ?? "";
-      const value = f.type === "gender" ? draftValue : draftValue.trim();
+      const value = draftOf(f);
       const next = value === "" ? null : value;
-      if (next !== (f.value ?? null)) (patch as Record<string, string | null>)[f.key] = next;
+      if (next !== storedOf(f)) (patch as Record<string, string | null>)[f.key] = next;
     }
     if (Object.keys(patch).length === 0) {
       setEditing(false);

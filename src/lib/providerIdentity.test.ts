@@ -8,6 +8,7 @@ import {
   isValidDea,
   isValidNpi,
   npiCheckDigit,
+  stripNpiSeparators,
 } from "./providerIdentity";
 
 describe("isValidNpi", () => {
@@ -47,6 +48,27 @@ describe("isValidNpi", () => {
       const first9 = String(100000000 + i * 7919);
       expect(isValidNpi(`${first9}${npiCheckDigit(first9)}`)).toBe(true);
     }
+  });
+});
+
+describe("stripNpiSeparators (MINT-110)", () => {
+  it("strips dashes and spaces so a typed NPI validates", () => {
+    expect(stripNpiSeparators("123-456-7893")).toBe("1234567893");
+    expect(stripNpiSeparators("123 456 7893")).toBe("1234567893");
+    expect(stripNpiSeparators(" 123 - 456 - 7893 ")).toBe("1234567893");
+    expect(isValidNpi(stripNpiSeparators("123-456-7893"))).toBe(true);
+  });
+
+  it("strips pasted Unicode dashes, the minus sign and non-breaking spaces", () => {
+    expect(stripNpiSeparators("123\u2013456\u20147893")).toBe("1234567893");
+    expect(stripNpiSeparators("123\u2212456\u00a07893")).toBe("1234567893");
+  });
+
+  it("keeps other junk so the NPI rule still fails it", () => {
+    for (const value of ["123.456.7893", "(123)4567893", "NPI 1234567893", "12345678x3"]) {
+      expect(isValidNpi(stripNpiSeparators(value))).toBe(false);
+    }
+    expect(stripNpiSeparators("123.456.7893")).toBe("123.456.7893");
   });
 });
 

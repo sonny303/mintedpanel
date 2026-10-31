@@ -102,6 +102,7 @@ npx playwright test e2e/<spec>.spec.ts
 | Wizard — Assignments section                               | `assignments-wizard.spec.ts`                                |
 | Wizard — Payer Network section                             | `payer-network.spec.ts`                                     |
 | Provider record — Readiness section (relocated 2026-07-21) | `provider-readiness.spec.ts`                                |
+| NPI Registry search + verify (mocked `/api/npi-registry`)  | `npi-registry.spec.ts`                                      |
 
 ### Reporting & portfolio
 
