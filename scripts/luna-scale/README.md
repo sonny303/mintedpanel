@@ -45,10 +45,10 @@ The mix:
 - **Provider Onboarding funnel** (MINT-81's four stages):
   - Profile incomplete, 420: 70 each with no NPI, no CAQH ID, no date of birth,
     no SSN last 4, no license, and no license for the state they work in.
-  - Awaiting verification, 348: 87 each with an unverified license, an expired
+  - Submitted, 348: 87 each with an unverified license, an expired
     license (status still `active`), CAQH attested more than 120 days ago, and a
     record pending verification.
-  - Ready to credential, 280.
+  - Ready for credentialing, 280.
   - Credentialing, 2,417.
   - 35 terminated providers, which the funnel does not count.
 - **Case status**:

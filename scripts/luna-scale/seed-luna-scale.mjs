@@ -150,8 +150,8 @@ export function formatPlan(dataset, { target, members, sqlBytes }) {
     "",
     "Provider Onboarding funnel:",
     `  profile incomplete ${n(summary.funnel.profile_incomplete)} (no NPI ${summary.scenarios.missing_npi ?? 0}, no CAQH ID ${summary.scenarios.missing_caqh ?? 0}, no DOB ${summary.scenarios.missing_dob ?? 0}, no SSN last 4 ${summary.scenarios.missing_ssn_last4 ?? 0}, no license ${summary.scenarios.no_license ?? 0}, no working-state license ${summary.scenarios.missing_work_state_license ?? 0})`,
-    `  awaiting verification ${n(summary.funnel.awaiting_verification)} (unverified license ${summary.scenarios.license_unverified ?? 0}, expired license ${summary.scenarios.license_expired ?? 0}, CAQH > 120 days ${summary.scenarios.caqh_stale ?? 0}, pending verification ${summary.scenarios.pending_verification ?? 0})`,
-    `  ready to credential ${n(summary.funnel.ready_to_credential)} · credentialing ${n(summary.funnel.credentialing)} · terminated (not counted) ${n(summary.funnel.terminated_excluded)}`,
+    `  submitted ${n(summary.funnel.submitted)} (unverified license ${summary.scenarios.license_unverified ?? 0}, expired license ${summary.scenarios.license_expired ?? 0}, CAQH > 120 days ${summary.scenarios.caqh_stale ?? 0}, pending verification ${summary.scenarios.pending_verification ?? 0})`,
+    `  ready for credentialing ${n(summary.funnel.ready_for_credentialing)} · credentialing ${n(summary.funnel.credentialing)} · terminated (not counted) ${n(summary.funnel.terminated_excluded)}`,
     "",
     "Cases by status:",
     `  ${Object.entries(summary.caseStatus)

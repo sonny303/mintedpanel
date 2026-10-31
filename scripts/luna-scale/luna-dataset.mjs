@@ -149,18 +149,18 @@ export const PROVIDER_SCENARIOS = Object.freeze([
   { key: "missing_ssn_last4", stage: "profile_incomplete", weight: 0.02 },
   { key: "no_license", stage: "profile_incomplete", weight: 0.02 },
   { key: "missing_work_state_license", stage: "profile_incomplete", weight: 0.02 },
-  { key: "license_unverified", stage: "awaiting_verification", weight: 0.025 },
-  { key: "license_expired", stage: "awaiting_verification", weight: 0.025 },
-  { key: "caqh_stale", stage: "awaiting_verification", weight: 0.025 },
-  { key: "pending_verification", stage: "awaiting_verification", weight: 0.025 },
-  { key: "ready", stage: "ready_to_credential", weight: 0.08 },
+  { key: "license_unverified", stage: "submitted", weight: 0.025 },
+  { key: "license_expired", stage: "submitted", weight: 0.025 },
+  { key: "caqh_stale", stage: "submitted", weight: 0.025 },
+  { key: "pending_verification", stage: "submitted", weight: 0.025 },
+  { key: "ready", stage: "ready_for_credentialing", weight: 0.08 },
   { key: "terminated", stage: "terminated", weight: 0.01 },
   // credentialing takes the remainder.
 ]);
 export const FUNNEL_STAGES = Object.freeze([
   "profile_incomplete",
-  "awaiting_verification",
-  "ready_to_credential",
+  "submitted",
+  "ready_for_credentialing",
   "credentialing",
 ]);
 
@@ -1049,8 +1049,8 @@ export function summarizeDataset(dataset) {
     );
   const funnel = {
     profile_incomplete: stage("profile_incomplete"),
-    awaiting_verification: stage("awaiting_verification"),
-    ready_to_credential: stage("ready_to_credential"),
+    submitted: stage("submitted"),
+    ready_for_credentialing: stage("ready_for_credentialing"),
     credentialing: scenarios.credentialing ?? 0,
     terminated_excluded: scenarios.terminated ?? 0,
   };

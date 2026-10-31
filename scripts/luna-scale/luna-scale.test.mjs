@@ -144,7 +144,7 @@ function classifyFunnel() {
     if (age === null || age < 0 || age > 120) gaps.push("caqh_stale");
     if (p.verification_state === "pending_verification") gaps.push("pending_verification");
     result.set(p.id, {
-      stage: gaps.length > 0 ? "awaiting_verification" : "ready_to_credential",
+      stage: gaps.length > 0 ? "submitted" : "ready_for_credentialing",
       gaps,
     });
   }
