@@ -159,16 +159,43 @@ describe("buildLaunchReportRows", () => {
       [
         facility({ id: "future", effectiveDate: "2026-09-01" }),
         facility({ id: "recent", effectiveDate: "2026-07-01" }), // 18 days ago
+        // 79 days ago and fully staffed: past the recent window, not at risk.
         facility({ id: "old", effectiveDate: "2026-05-01" }),
         facility({ id: "dateless", effectiveDate: null }),
         facility({ id: "inactive", isActive: false }),
         facility({ id: "reference", referenceOnly: true }),
       ],
-      new Map(),
+      new Map([["old", 1]]),
       new Map(),
       TODAY,
     );
     expect(rows.map((r) => r.facilityId)).toEqual(["recent", "future"]);
+  });
+
+  it("MINT-100: past go-lives show for 30 days unflagged, or 90 days while still at risk", () => {
+    const staffed = new Map([
+      ["clean-30", 1],
+      ["clean-31", 1],
+    ]);
+    const rows = buildLaunchReportRows(
+      [
+        facility({ id: "clean-30", effectiveDate: "2026-06-19" }),
+        facility({ id: "clean-31", effectiveDate: "2026-06-18" }),
+        facility({ id: "risk-31", effectiveDate: "2026-06-18" }),
+        facility({ id: "risk-90", effectiveDate: "2026-04-20" }),
+        facility({ id: "risk-91", effectiveDate: "2026-04-19" }),
+      ],
+      staffed,
+      new Map(),
+      TODAY,
+    );
+    const byId = new Map(rows.map((r) => [r.facilityId, r]));
+    expect(byId.get("clean-30")).toMatchObject({ daysUntil: -30, atRisk: false });
+    expect(byId.has("clean-31")).toBe(false);
+    expect(byId.get("risk-31")).toMatchObject({ daysUntil: -31, riskKind: "overdue" });
+    const risk90 = byId.get("risk-90");
+    expect(risk90 && launchRiskLabel(risk90)).toBe("Overdue by 90 days — no providers assigned");
+    expect(byId.has("risk-91")).toBe(false);
   });
 
   it("sorts date ascending with name tiebreak", () => {

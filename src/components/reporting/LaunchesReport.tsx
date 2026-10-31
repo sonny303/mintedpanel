@@ -132,7 +132,7 @@ export function LaunchesReport() {
       {/* The at-risk rule, stated inline (F6.6.2 AC). */}
       <p className="text-[12.5px] text-muted-foreground">{LAUNCH_AT_RISK_RULE_TEXT}</p>
       {groups.length === 0 && noDate.length === 0 ? (
-        <EmptyState message="No locations opening soon, opened in the last 30 days, or waiting for a go-live date." />
+        <EmptyState message="No locations opening soon, opened in the last 30 days, overdue within the last 90 days, or waiting for a go-live date." />
       ) : (
         groups.map((g) => (
           <section key={g.groupId ?? "no-group"} aria-label={g.groupName}>
