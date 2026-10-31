@@ -5,17 +5,40 @@ name: Follow-up digest hourly tick
 # its send hour, once per org-local date (src/server/jobs/followupDigest.ts).
 # Production is on Vercel's Hobby plan, which runs a cron at most once a day
 # and fails a deploy with a more frequent one, so the hourly tick comes from
-# here. vercel.json keeps one daily call at 18:00 UTC as a backup: GitHub runs
-# schedules on the default branch only, and may delay or skip them under load.
+# here. vercel.json keeps one daily call at 18:00 UTC as a backup.
 #
-# Setup (operator): set the repository secret CRON_SECRET to the same value as
-# CRON_SECRET on the Vercel project the tick calls. Until it is set, every
-# tick exits 0 with a notice. The optional repository variable
-# FOLLOWUP_DIGEST_BASE_URL overrides the target origin (default: production).
+# Setup (operator, Sowmya). Create the GitHub environment "Production Jobs"
+# (Settings > Environments) with `main` as its only deployment branch, no
+# required reviewers and no wait timer. Put the secret CRON_SECRET there, with
+# the same value as CRON_SECRET on the Vercel project the tick calls, and,
+# optionally, the variable FOLLOWUP_DIGEST_BASE_URL. Never as a repository
+# secret: a production-capable secret belongs behind an environment
+# (docs/ops/release-controls.md; scheduled-backup.yml's "Production Backup").
 #
-# The bearer reaches the shell only through `env`, never interpolated into a
-# script, and is never printed. The tick prints the HTTP status, the run's
-# outcome and its integer counts, which carry no PHI.
+# What it does. The bearer reaches the shell only through `env`, never
+# interpolated into a script, and is never printed. The target must be one of
+# three exact origins. No redirect is followed and only https is spoken. The
+# tick is green only for HTTP 200 with the job envelope's outcome
+# `succeeded` or `skipped`; anything else (a failed run's 500, a redirect, an
+# HTML page, JSON without `data`, no response) is red. It prints the HTTP
+# status, the outcome and the integer counts, which carry no PHI.
+#
+# Known limits.
+#   * Until the environment and secret exist, every tick exits 0 with a notice
+#     and stays green, and only the 18:00 UTC Vercel backup sends (about noon
+#     to 1 pm Central).
+#   * `--max-time 60`: a run longer than that turns the tick red while the
+#     function may still finish; job_runs records the real outcome. How long
+#     a Hobby function may run depends on the project's Fluid compute setting.
+#     The function's maxDuration is not raised here: it would apply to the one
+#     server function, so to every API route.
+#   * GitHub runs schedules on the default branch only, may delay or skip them
+#     under load, and disables them after 60 days without activity in a public
+#     repository. The daily backup and "at or after" catch up.
+#   * Failure emails for a scheduled workflow go only to whoever last edited
+#     the cron line below.
+#   * Each tick bills about one Actions minute: about 744 a month in a private
+#     repository. Each run also shows as a deployment of "Production Jobs".
 
 on:
   schedule:
@@ -35,6 +58,7 @@ jobs:
   tick:
     name: Call the follow-up digest job
     runs-on: ubuntu-latest
+    environment: Production Jobs
     timeout-minutes: 3
     steps:
       - name: GET /api/jobs/followup-digest
@@ -44,24 +68,40 @@ jobs:
         run: |
           set -uo pipefail
           if [ -z "${CRON_SECRET:-}" ]; then
-            echo "::notice title=Follow-up digest tick::CRON_SECRET is not set, so no tick ran."
+            echo "::notice title=Follow-up digest tick::CRON_SECRET is not set in the Production Jobs environment, so no tick ran."
             exit 0
           fi
-          case "${BASE_URL}" in
-            https://*) ;;
+          origin="${BASE_URL%/}"
+          case "${origin}" in
+            https://mintedpanel.com | https://www.mintedpanel.com | https://staging.mintedpanel.com) ;;
             *)
-              echo "::error title=Follow-up digest tick::FOLLOWUP_DIGEST_BASE_URL must start with https://"
+              echo "::error title=Follow-up digest tick::FOLLOWUP_DIGEST_BASE_URL is not an allowed origin."
               exit 1
               ;;
           esac
           body="$(mktemp)"
           code=0
           status="$(curl --silent --show-error --fail-with-body --max-time 60 \
+            --proto '=https' --max-redirs 0 \
             --output "${body}" --write-out '%{http_code}' \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${BASE_URL%/}/api/jobs/followup-digest")" || code=$?
+            "${origin}/api/jobs/followup-digest")" || code=$?
+          if [ -z "${status}" ] || [ "${status}" = "000" ]; then
+            rm -f "${body}"
+            echo "::error title=Follow-up digest tick::No response from the job route (curl exit ${code})."
+            exit 1
+          fi
           summary="$(jq -c '{outcome: .data.outcome, counts: .data.counts, error: .error}' "${body}" 2>/dev/null)" \
-            || summary='"not the job envelope"'
+            || summary=""
+          [ -n "${summary}" ] || summary='"not the job envelope"'
+          ran=0
+          if [ "${status}" = "200" ] \
+            && jq -e '.data.outcome == "succeeded" or .data.outcome == "skipped"' "${body}" >/dev/null 2>&1; then
+            ran=1
+          fi
           rm -f "${body}"
-          echo "HTTP ${status:-none}: ${summary}"
-          exit "${code}"
+          echo "HTTP ${status}: ${summary}"
+          if [ "${ran}" -ne 1 ]; then
+            echo "::error title=Follow-up digest tick::The job did not run to completion (HTTP ${status})."
+            exit 1
+          fi

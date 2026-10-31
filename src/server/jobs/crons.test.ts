@@ -88,6 +88,8 @@ function runBlocks(yaml: string): string[] {
 }
 
 describe("the follow-up digest's hourly GitHub Actions tick", () => {
+  const script = runBlocks(tick).join("\n");
+
   it("runs hourly off the top of the hour, and on manual dispatch", () => {
     expect([...tick.matchAll(/^\s*- cron: "([^"]+)"$/gm)].map((m) => m[1])).toEqual(["7 * * * *"]);
     expect(tick).toMatch(/^on:\n {2}schedule:\n/m);
@@ -96,22 +98,56 @@ describe("the follow-up digest's hourly GitHub Actions tick", () => {
   });
 
   it("calls the registered job route that the daily cron also calls", () => {
-    const path = /"\$\{BASE_URL%\/\}(\/api\/jobs\/[a-z-]+)"/.exec(tick)?.[1];
+    const path = /"\$\{origin\}(\/api\/jobs\/[a-z-]+)"/.exec(tick)?.[1];
     expect(path).toBe("/api/jobs/followup-digest");
     expect(crons.map((cron) => cron.path)).toContain(path);
     expect(JOB_REGISTRY.has("followup-digest")).toBe(true);
-    // Production by default, overridable by a repository variable; https only.
+  });
+
+  it("calls only three exact origins, production by default", () => {
     expect(tick).toContain(
       "BASE_URL: ${{ vars.FOLLOWUP_DIGEST_BASE_URL || 'https://mintedpanel.com' }}",
     );
-    expect(tick).toContain("https://*) ;;");
+    expect(script).toContain('origin="${BASE_URL%/}"');
+    const allowed =
+      /case "\$\{origin\}" in\n\s+(.+)\) ;;\n\s+\*\)\n\s+echo "::error[^\n]*"\n\s+exit 1/.exec(
+        script,
+      )?.[1];
+    expect(allowed?.split(" | ")).toEqual([
+      "https://mintedpanel.com",
+      "https://www.mintedpanel.com",
+      "https://staging.mintedpanel.com",
+    ]);
+    // No prefix or wildcard match.
+    expect(allowed).not.toMatch(/\*/);
   });
 
-  it("sends the CRON_SECRET repository secret as the bearer, through env only", () => {
+  it("reads CRON_SECRET from the Production Jobs environment, through env only", () => {
+    expect(tick).toMatch(/^ {4}environment: Production Jobs$/m);
     expect(tick.match(/\$\{\{\s*secrets\.[A-Z_]+\s*\}\}/g)).toEqual(["${{ secrets.CRON_SECRET }}"]);
     expect(tick).toMatch(/^ {10}CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}$/m);
-    expect(tick).toContain('-H "Authorization: Bearer ${CRON_SECRET}"');
-    expect(tick).toContain("curl --silent --show-error --fail-with-body --max-time 60");
+    expect(script).toContain('-H "Authorization: Bearer ${CRON_SECRET}"');
+  });
+
+  it("speaks https only, follows no redirect and caps the wait", () => {
+    expect(script).toContain("curl --silent --show-error --fail-with-body --max-time 60");
+    expect(script).toContain("--proto '=https' --max-redirs 0");
+    expect(script).not.toMatch(/(^|\s)(-L|--location)(\s|$)/m);
+  });
+
+  it("is green only for HTTP 200 with a succeeded or skipped run", () => {
+    expect(script).toContain(
+      `if [ "\${status}" = "200" ] \\\n            && jq -e '.data.outcome == "succeeded" or .data.outcome == "skipped"' "\${body}" >/dev/null 2>&1; then\n            ran=1`,
+    );
+    expect(script).toMatch(
+      /if \[ "\$\{ran\}" -ne 1 \]; then\n\s+echo "::error[^\n]*"\n\s+exit 1\n\s+fi\s*$/,
+    );
+    // No response at all is its own clear failure, never "HTTP 000:".
+    expect(script).toMatch(
+      /if \[ -z "\$\{status\}" \] \|\| \[ "\$\{status\}" = "000" \]; then\n\s+rm -f "\$\{body\}"\n\s+echo "::error title=Follow-up digest tick::No response from the job route \(curl exit \$\{code\}\)\."\n\s+exit 1/,
+    );
+    // The only other exit 0 is the missing-secret notice.
+    expect(script.match(/exit 0/g)).toHaveLength(1);
   });
 
   it("never interpolates an expression into a run: script, and never prints the secret", () => {
@@ -129,7 +165,7 @@ describe("the follow-up digest's hourly GitHub Actions tick", () => {
   });
 
   it("is a no-op with a notice until the secret is set, and holds no permissions", () => {
-    expect(tick).toMatch(
+    expect(script).toMatch(
       /if \[ -z "\$\{CRON_SECRET:-\}" \]; then\n\s+echo "::notice[^\n]*"\n\s+exit 0/,
     );
     expect(tick).toMatch(/^permissions: \{\}$/m);
@@ -140,14 +176,36 @@ describe("the follow-up digest's hourly GitHub Actions tick", () => {
     expect(tick).not.toContain("actions/checkout");
   });
 
-  it("prints only the HTTP status, the outcome and the counts", () => {
+  it("prints only the HTTP status, the outcome, the counts and fixed notices", () => {
     const echoes = [...tick.matchAll(/^\s*echo (.*)$/gm)].map((m) => m[1]);
     expect(echoes).toEqual([
-      '"::notice title=Follow-up digest tick::CRON_SECRET is not set, so no tick ran."',
-      '"::error title=Follow-up digest tick::FOLLOWUP_DIGEST_BASE_URL must start with https://"',
-      '"HTTP ${status:-none}: ${summary}"',
+      '"::notice title=Follow-up digest tick::CRON_SECRET is not set in the Production Jobs environment, so no tick ran."',
+      '"::error title=Follow-up digest tick::FOLLOWUP_DIGEST_BASE_URL is not an allowed origin."',
+      '"::error title=Follow-up digest tick::No response from the job route (curl exit ${code})."',
+      '"HTTP ${status}: ${summary}"',
+      '"::error title=Follow-up digest tick::The job did not run to completion (HTTP ${status})."',
     ]);
-    expect(tick).toContain("jq -c '{outcome: .data.outcome, counts: .data.counts, error: .error}'");
+    expect(script).toContain(
+      "jq -c '{outcome: .data.outcome, counts: .data.counts, error: .error}'",
+    );
+    expect(script).toContain(`[ -n "\${summary}" ] || summary='"not the job envelope"'`);
+  });
+
+  it("documents its setup and limits in the header", () => {
+    const header = tick.slice(0, tick.indexOf("\non:"));
+    for (const phrase of [
+      'GitHub environment "Production Jobs"',
+      "`main` as its only deployment branch",
+      "no\n# required reviewers and no wait timer",
+      "Never as a repository\n# secret",
+      "only the 18:00 UTC Vercel backup sends",
+      "Fluid compute",
+      "last edited\n#     the cron line",
+      "744 a month",
+      "60 days without activity in a public\n#     repository",
+    ]) {
+      expect(header).toContain(phrase);
+    }
   });
 });
 

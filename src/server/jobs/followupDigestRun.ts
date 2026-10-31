@@ -40,7 +40,11 @@
 // may have been delivered, so that send stays claimed and is never resent. A
 // claim another attempt took under NOTIFICATION_SEND_RECENT_MINUTES ago is
 // left to it: this run neither sends it nor completes the org, so a
-// rejection there can still be retried. Missing configuration (the SendGrid
+// rejection there can still be retried. One edge remains between two
+// concurrent runs: if run A completes the org while run B is sending to a
+// coordinator A never claimed (B's plan saw a follow-up A's did not), and B's
+// send is then definitely rejected, the org is already complete, so that
+// rejection is not retried that day. There is still no duplicate. Missing configuration (the SendGrid
 // env, or an APP_BASE_URL that is not a bare origin) throws before any send.
 // A template problem is one org's setting: it is counted every run until
 // fixed, logged once per org per local date (in its first due hour), and
@@ -295,6 +299,9 @@ async function runOrg(
   if (problem) {
     counts.orgs_skipped_template += 1;
     // Counted every run; logged once per local date, in the first due hour.
+    // So the line is missing for a date whose due-hour tick was skipped or
+    // delayed, or when the org was switched on after its send hour; the
+    // counts still show the skip.
     if (org.localHour === org.sequence.sendHour) {
       ctx.log.error(`org_skipped_${problem}`, new FollowUpDigestTemplateError());
     }
