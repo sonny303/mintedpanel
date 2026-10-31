@@ -22,14 +22,12 @@ const CANDIDATES: TouchCaseCandidate[] = [
   { id: "case-b", label: "Dana Whitley · SC · Anthem", currentStatus: "in_progress" },
 ];
 
-function render(candidates: TouchCaseCandidate[], defaultSelectedIds?: string[]) {
+function render(
+  candidates: TouchCaseCandidate[],
+  opts: { defaultSelectedIds?: string[]; loading?: boolean; failed?: boolean } = {},
+) {
   return renderToStaticMarkup(
-    <AddTouchDialog
-      open
-      candidates={candidates}
-      defaultSelectedIds={defaultSelectedIds}
-      onClose={() => undefined}
-    />,
+    <AddTouchDialog open candidates={candidates} onClose={() => undefined} {...opts} />,
   );
 }
 
@@ -55,14 +53,35 @@ describe("AddTouchDialog (MINT-92)", () => {
   it("with cases but none selected disables Save and says why beside it", () => {
     const html = render(CANDIDATES);
     expect(html).toContain("Cases (0 selected)");
-    expect(html).toContain("Select at least one case");
-    expect(buttonTag(html, "Save touch")).toMatch(/\sdisabled=""/);
+    const hintId = html.match(/<p id="([^"]+)"[^>]*>Select at least one case<\/p>/)?.[1];
+    expect(hintId).toBeDefined();
+    const save = buttonTag(html, "Save touch");
+    expect(save).toMatch(/\sdisabled=""/);
+    expect(save).toContain(`aria-describedby="${hintId}"`);
   });
 
   it("enables Save and drops the hint once a case is selected", () => {
-    const html = render(CANDIDATES, ["case-a"]);
+    const html = render(CANDIDATES, { defaultSelectedIds: ["case-a"] });
     expect(html).toContain("Cases (1 selected)");
     expect(html).not.toContain("Select at least one case");
-    expect(buttonTag(html, "Save touch")).not.toMatch(/\sdisabled=""/);
+    const save = buttonTag(html, "Save touch");
+    expect(save).not.toMatch(/\sdisabled=""/);
+    expect(save).not.toContain("aria-describedby");
+  });
+
+  it("while the cases load says so instead of claiming there are none", () => {
+    const html = render([], { loading: true });
+    expect(html).toContain("Loading cases…");
+    expect(html).not.toContain("No open cases");
+    expect(html).not.toContain("Save touch");
+    expect(buttonTag(html, "Close")).toBeDefined();
+  });
+
+  it("after a failed load reports the failure, never an empty list", () => {
+    const html = render([], { loading: true, failed: true });
+    expect(html).toContain("load cases. Refresh to retry.");
+    expect(html).not.toContain("No open cases");
+    expect(html).not.toContain("Loading cases");
+    expect(html).not.toContain("Save touch");
   });
 });

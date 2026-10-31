@@ -8,9 +8,10 @@
 // just advanced the case). A failed bump never unwinds the logged touches;
 // the ledger stays append-only. Supersedes BulkLogTouchDialog AND the
 // "Log Payer Call" BatchTouchpointDialog (both retired).
-// MINT-92: no candidates = the message and Close, no form; candidates but none
-// selected = Save disabled with the reason beside it (bulkLogTouch still
-// rejects an empty set as the backstop).
+// MINT-92: while the cases load, after a failed load, or with no candidates
+// the dialog shows one line and Close, no form; candidates but none selected
+// = Save disabled with the reason beside it (bulkLogTouch still rejects an
+// empty set as the backstop).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -39,11 +40,17 @@ export function AddTouchDialog({
   open,
   candidates,
   defaultSelectedIds,
+  loading = false,
+  failed = false,
   onClose,
   onLogged,
 }: {
   open: boolean;
   candidates: TouchCaseCandidate[];
+  /** The reads behind `candidates` are still in flight / failed; an empty
+   * list then means "not known yet", never "no open cases". */
+  loading?: boolean;
+  failed?: boolean;
   /** Preselected case ids (e.g. the one case a record panel targets). Absent
    * = none selected, pick explicitly. */
   defaultSelectedIds?: readonly string[];
@@ -127,6 +134,15 @@ export function AddTouchDialog({
     }
   };
 
+  // Failure first, then loading: only a settled, empty list is "no open cases".
+  const notice = failed ? (
+    <p className="text-[13px] text-[#B91C1C] py-2">Couldn&apos;t load cases. Refresh to retry.</p>
+  ) : loading ? (
+    <p className="text-[13px] text-muted-foreground py-2">Loading cases…</p>
+  ) : candidates.length === 0 ? (
+    <p className="text-[13px] text-muted-foreground py-2">No open cases to log against.</p>
+  ) : null;
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && closeAndReset()}>
       <DialogContent className="max-w-[640px] max-h-[85vh] overflow-y-auto">
@@ -134,9 +150,9 @@ export function AddTouchDialog({
           <DialogTitle>Add touch</DialogTitle>
         </DialogHeader>
 
-        {candidates.length === 0 ? (
+        {notice ? (
           <>
-            <p className="text-[13px] text-muted-foreground py-2">No open cases to log against.</p>
+            {notice}
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={closeAndReset}>
                 Close
