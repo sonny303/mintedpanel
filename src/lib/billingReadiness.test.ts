@@ -131,6 +131,82 @@ describe("billing readiness evaluator", () => {
     expect(assess(snapshot)?.status).toBe("hold");
   });
 
+  describe("an approved, effective enrollment (MINT-76)", () => {
+    const ONBOARDING_REASON =
+      "Clinician is still marked Onboarding. Mark them Active once they start seeing patients.";
+
+    it("is Billable Ready for an active clinician with a verified license and a linked facility", () => {
+      const snapshot = readySnapshot();
+      expect(assess(snapshot)).toMatchObject({
+        status: "ready",
+        label: "Billable Ready",
+        reasons: [],
+      });
+    });
+
+    it("holds an Onboarding clinician with its own reason and never reads Do Not Bill", () => {
+      const snapshot = readySnapshot();
+      snapshot.providers[0].status = "onboarding";
+      const assessment = assess(snapshot);
+      expect(assessment).toMatchObject({
+        status: "hold",
+        label: "Hold",
+        reasons: [{ severity: "hold", label: ONBOARDING_REASON }],
+      });
+      expect(assessment?.reasons.some((reason) => reason.severity === "stop")).toBe(false);
+    });
+
+    it("stops a terminated clinician as Do Not Bill", () => {
+      const snapshot = readySnapshot();
+      snapshot.providers[0].status = "terminated";
+      expect(assess(snapshot)).toMatchObject({
+        status: "stop",
+        label: "Do Not Bill",
+        reasons: [{ severity: "stop", label: "The clinician is terminated." }],
+      });
+    });
+
+    it("holds an unrecognized clinician status instead of stopping it", () => {
+      const snapshot = readySnapshot();
+      // Not a value providers_status_check allows today; a future one must hold.
+      Object.assign(snapshot.providers[0], { status: "inactive" });
+      expect(assess(snapshot)).toMatchObject({
+        status: "hold",
+        reasons: [{ severity: "hold", label: "The clinician status is not recognized." }],
+      });
+    });
+
+    it("lists both holds for an Onboarding clinician who is also unverified", () => {
+      const snapshot = readySnapshot();
+      snapshot.providers[0].status = "onboarding";
+      snapshot.providers[0].verificationState = "pending_verification";
+      expect(assess(snapshot)).toMatchObject({
+        status: "hold",
+        label: "Hold",
+        reasons: [
+          { severity: "hold", label: ONBOARDING_REASON },
+          { severity: "hold", label: "Clinician verification is incomplete." },
+        ],
+      });
+    });
+
+    it("treats a group membership with no start date as current", () => {
+      const snapshot = readySnapshot();
+      snapshot.groupMemberships[0].startDate = null;
+      expect(assess(snapshot)).toMatchObject({ status: "ready", reasons: [] });
+      snapshot.groupMemberships[0].endDate = "2026-09-24";
+      expect(assess(snapshot)?.reasons).toContainEqual({
+        severity: "hold",
+        label: "Current group membership is not established.",
+      });
+      snapshot.groupMemberships[0].endDate = "2026-13-01";
+      expect(assess(snapshot)?.reasons).toContainEqual({
+        severity: "hold",
+        label: "The group membership dates are invalid.",
+      });
+    });
+  });
+
   it("honors effective-date and termination day boundaries and invalid dates", () => {
     const snapshot = readySnapshot();
     snapshot.cases[0].confirmedEffectiveDate = TODAY;
