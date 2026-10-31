@@ -21,7 +21,7 @@ function ProviderOnboardingPage() {
       </Link>
       <PageHeader
         title="Provider Onboarding"
-        description="Where every provider stands before credentialing can start, and what each one still needs."
+        description="Where every provider stands on the way to credentialing, and what each one still needs."
       />
       <OnboardingFunnelReport />
     </div>

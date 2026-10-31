@@ -47,11 +47,13 @@ export const REPORTS: ReportDef[] = [
     path: "/reporting/facilities-without-providers",
     group: "performance",
   },
-  // RC-06 — the onboarding funnel: who cannot start credentialing yet, and why.
+  // RC-06 — the onboarding funnel: each provider's stage on the way to
+  // credentialing, and what holds them there.
   {
     key: "provider-onboarding",
     title: "Provider Onboarding",
-    description: "Where each provider stands before credentialing, and what they still need.",
+    description:
+      "Where each provider stands on the way to credentialing, and what they still need.",
     path: "/reporting/provider-onboarding",
     group: "credentialing",
   },

@@ -53,6 +53,7 @@ vi.mock("@/integrations/supabase/externalClient", () => ({
 }));
 vi.mock("@/lib/audit", () => ({ requireActiveOrg: () => "org-1" }));
 
+import { buildOnboardingFunnelRows, onboardingFunnelStageCounts } from "@/lib/onboardingFunnel";
 import { getOnboardingFunnelInput } from "./onboardingFunnel";
 
 const DOB = "1987-06-05";
@@ -106,7 +107,36 @@ describe("onboarding funnel service", () => {
         { id: "a-1", org_id: "org-1", provider_id: "p-active", facility_id: "f-on" },
         { id: "a-2", org_id: "org-1", provider_id: "p-active", facility_id: "f-off" },
       ],
-      credential_cases: [{ id: "c-1", org_id: "org-1", provider_id: "p-active", state: "NC" }],
+      provider_groups: [
+        { id: "g-on", org_id: "org-1", is_active: true },
+        { id: "g-off", org_id: "org-1", is_active: false },
+      ],
+      provider_group_assignments: [
+        { id: "m-1", org_id: "org-1", provider_id: "p-active", group_id: "g-on", end_date: null },
+        {
+          id: "m-2",
+          org_id: "org-1",
+          provider_id: "p-onboarding",
+          group_id: "g-on",
+          end_date: "2026-01-31",
+        },
+        {
+          id: "m-3",
+          org_id: "org-1",
+          provider_id: "p-onboarding",
+          group_id: "g-off",
+          end_date: null,
+        },
+      ],
+      credential_cases: [
+        {
+          id: "c-1",
+          org_id: "org-1",
+          provider_id: "p-active",
+          state: "NC",
+          case_status: "submitted",
+        },
+      ],
     };
   });
 
@@ -152,5 +182,41 @@ describe("onboarding funnel service", () => {
     expect(input.licenses).toHaveLength(619);
     expect(input.workStates).toEqual([{ providerId: "p-active", state: "NC" }]);
     expect(input.cases).toEqual([{ providerId: "p-active", state: "NC" }]);
+  });
+
+  it("reads group memberships in active groups only and leaves the end date to the funnel", async () => {
+    const input = await getOnboardingFunnelInput();
+    expect(input.groupMemberships).toEqual([
+      { providerId: "p-active", endDate: null },
+      { providerId: "p-onboarding", endDate: "2026-01-31" },
+    ]);
+  });
+
+  it("cannot read the intake tables, so the Invited stage stays hidden", async () => {
+    const input = await getOnboardingFunnelInput();
+    expect(input.intakeReadable).toBe(false);
+    expect(Object.keys(holder.calls).filter((table) => table.includes("intake"))).toEqual([]);
+  });
+
+  it("counts a provider whose only case is denied in Credentialing", async () => {
+    holder.tables.providers = [provider("p-denied")];
+    holder.tables.state_licenses = [];
+    holder.tables.provider_facility_assignments = [];
+    holder.tables.provider_group_assignments = [];
+    holder.tables.credential_cases = [
+      { id: "c-9", org_id: "org-1", provider_id: "p-denied", state: "NC", case_status: "denied" },
+    ];
+    const input = await getOnboardingFunnelInput();
+    // No case-status column is read: every case counts.
+    expect(String(holder.calls.credential_cases.select[0][0])).not.toMatch(/status/);
+    const rows = buildOnboardingFunnelRows(input, "2026-10-20");
+    expect(rows.map((row) => [row.providerId, row.stage])).toEqual([["p-denied", "credentialing"]]);
+    expect(onboardingFunnelStageCounts(rows)).toEqual({
+      invited: 0,
+      profile_incomplete: 0,
+      submitted: 0,
+      ready_for_credentialing: 0,
+      credentialing: 1,
+    });
   });
 });

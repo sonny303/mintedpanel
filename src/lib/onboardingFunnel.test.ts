@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOnboardingFunnelRows,
+  ONBOARDING_FUNNEL_STAGES,
   onboardingFunnelStageCounts,
   onboardingFunnelStates,
+  visibleOnboardingFunnelStages,
   type OnboardingFunnelInput,
   type OnboardingFunnelProviderFacts,
 } from "@/lib/onboardingFunnel";
@@ -27,6 +29,8 @@ const verified = (providerId: string, state: string) => ({
   expirationDate: "2027-06-30",
 });
 
+const member = (providerId: string, endDate: string | null = null) => ({ providerId, endDate });
+
 function input(): OnboardingFunnelInput {
   return {
     providers: [
@@ -48,10 +52,17 @@ function input(): OnboardingFunnelInput {
     workStates: [
       { providerId: "wrongstate", state: "MO" },
       { providerId: "unverified", state: "tx" },
+      { providerId: "stale", state: "NC" },
       { providerId: "ready", state: "NC" },
     ],
+    groupMemberships: [member("unverified"), member("stale"), member("ready")],
     cases: [{ providerId: "enrolling", state: "CO" }],
+    intakeReadable: false,
   };
+}
+
+function rowFor(data: OnboardingFunnelInput, providerId: string) {
+  return buildOnboardingFunnelRows(data, TODAY).find((r) => r.providerId === providerId);
 }
 
 describe("provider onboarding funnel", () => {
@@ -61,28 +72,80 @@ describe("provider onboarding funnel", () => {
       ["missing", "profile_incomplete", ["No NPI", "No SSN last 4", "No state license"]],
       ["nolicense", "profile_incomplete", ["No state license"]],
       ["wrongstate", "profile_incomplete", ["No MO license"]],
-      ["unverified", "awaiting_verification", ["TX license not board-verified"]],
-      ["stale", "awaiting_verification", ["CAQH attestation older than 120 days"]],
+      ["unverified", "submitted", ["TX license not board-verified"]],
+      ["stale", "submitted", ["CAQH attestation older than 120 days"]],
       // The expired SC license is outside the state Fay works in.
-      ["ready", "ready_to_credential", []],
+      ["ready", "ready_for_credentialing", []],
       // A case means credentialing has started, whatever else is open.
       ["enrolling", "credentialing", []],
     ]);
     const counts = onboardingFunnelStageCounts(rows);
     expect(counts).toEqual({
+      invited: 0,
       profile_incomplete: 3,
-      awaiting_verification: 2,
-      ready_to_credential: 1,
+      submitted: 2,
+      ready_for_credentialing: 1,
       credentialing: 1,
     });
     expect(Object.values(counts).reduce((n, c) => n + c, 0)).toBe(rows.length);
   });
 
-  it("judges every license on file when no work location is assigned", () => {
+  it("keeps a verified provider in Submitted until they have both a group and a location", () => {
+    const data = input();
+    data.providers = [
+      complete("both", "Ada Both"),
+      complete("grouponly", "Ben Grouponly"),
+      complete("locationonly", "Cy Locationonly"),
+      complete("neither", "Di Neither"),
+    ];
+    data.licenses = data.providers.map((p) => verified(p.providerId, "NC"));
+    data.workStates = [
+      { providerId: "both", state: "NC" },
+      { providerId: "locationonly", state: "NC" },
+    ];
+    data.groupMemberships = [member("both"), member("grouponly")];
+    data.cases = [];
+    const rows = buildOnboardingFunnelRows(data, TODAY);
+    expect(rows.map((r) => [r.providerId, r.stage, r.gaps])).toEqual([
+      ["both", "ready_for_credentialing", []],
+      ["grouponly", "submitted", ["Needs a location"]],
+      ["locationonly", "submitted", ["Needs a group"]],
+      ["neither", "submitted", ["Needs a group and a location"]],
+    ]);
+  });
+
+  it("does not count a group membership that ended before today", () => {
+    const data = input();
+    data.groupMemberships = [member("ready", "2026-10-19")];
+    expect(rowFor(data, "ready")).toMatchObject({ stage: "submitted", gaps: ["Needs a group"] });
+    data.groupMemberships = [member("ready", TODAY)];
+    expect(rowFor(data, "ready")).toMatchObject({ stage: "ready_for_credentialing" });
+  });
+
+  it("judges every license on file when no location is assigned, and never calls that Ready", () => {
     const data = input();
     data.workStates = [];
-    const ready = buildOnboardingFunnelRows(data, TODAY).find((r) => r.providerId === "ready");
-    expect(ready).toMatchObject({ stage: "awaiting_verification", gaps: ["SC license expired"] });
+    expect(rowFor(data, "ready")).toMatchObject({
+      stage: "submitted",
+      gaps: ["SC license expired", "Needs a location"],
+    });
+    data.licenses = data.licenses.filter((l) => !(l.providerId === "ready" && l.state === "SC"));
+    expect(rowFor(data, "ready")).toMatchObject({ stage: "submitted", gaps: ["Needs a location"] });
+  });
+
+  it("lists verification gaps and the missing assignment together", () => {
+    const data = input();
+    data.groupMemberships = [];
+    expect(rowFor(data, "unverified")).toMatchObject({
+      stage: "submitted",
+      gaps: ["TX license not board-verified", "Needs a group"],
+    });
+  });
+
+  it("counts any case as Credentialing, even for an incomplete, unassigned profile", () => {
+    const data = input();
+    data.cases = [{ providerId: "missing", state: "TX" }];
+    expect(rowFor(data, "missing")).toMatchObject({ stage: "credentialing", gaps: [] });
   });
 
   it("flags never-attested CAQH and pending records, and lists states for the filter", () => {
@@ -107,9 +170,8 @@ describe("provider onboarding funnel", () => {
     data.licenses = data.licenses.map((l) =>
       l.providerId === "ready" && l.state === "NC" ? { ...l, expirationDate: null } : l,
     );
-    const ready = buildOnboardingFunnelRows(data, TODAY).find((r) => r.providerId === "ready");
-    expect(ready).toMatchObject({
-      stage: "awaiting_verification",
+    expect(rowFor(data, "ready")).toMatchObject({
+      stage: "submitted",
       gaps: ["NC license has no expiration date"],
     });
   });
@@ -118,7 +180,7 @@ describe("provider onboarding funnel", () => {
     const data = input();
     data.providers = [{ ...complete("ready", "Fay Ready"), caqhLastAttestedDate: "2026-11-01" }];
     expect(buildOnboardingFunnelRows(data, TODAY)[0]).toMatchObject({
-      stage: "awaiting_verification",
+      stage: "submitted",
       gaps: ["CAQH attestation date is in the future"],
     });
   });
@@ -128,15 +190,58 @@ describe("provider onboarding funnel", () => {
     data.providers = [complete("bad", "Hal Badstate")];
     data.licenses = [verified("bad", "Z9")];
     data.workStates = [];
+    data.groupMemberships = [];
     const [row] = buildOnboardingFunnelRows(data, TODAY);
     expect(row).toMatchObject({
       stage: "profile_incomplete",
       gaps: ["License state is missing or invalid"],
     });
     data.licenses = [...data.licenses, verified("bad", "nc")];
+    data.workStates = [{ providerId: "bad", state: "NC" }];
+    data.groupMemberships = [member("bad")];
     expect(buildOnboardingFunnelRows(data, TODAY)[0]).toMatchObject({
-      stage: "ready_to_credential",
+      stage: "ready_for_credentialing",
       states: ["NC"],
     });
+  });
+});
+
+describe("provider onboarding funnel stages", () => {
+  it("runs Invited, Profile incomplete, Submitted, Ready for credentialing, Credentialing", () => {
+    expect(ONBOARDING_FUNNEL_STAGES.map((s) => [s.key, s.title])).toEqual([
+      ["invited", "Invited"],
+      ["profile_incomplete", "Profile incomplete"],
+      ["submitted", "Submitted"],
+      ["ready_for_credentialing", "Ready for credentialing"],
+      ["credentialing", "Credentialing"],
+    ]);
+  });
+
+  it("hides Invited until the intake tables can be read, and places nobody there today", () => {
+    expect(visibleOnboardingFunnelStages(false).map((s) => s.key)).toEqual([
+      "profile_incomplete",
+      "submitted",
+      "ready_for_credentialing",
+      "credentialing",
+    ]);
+    expect(visibleOnboardingFunnelStages(true).map((s) => s.key)).toEqual(
+      ONBOARDING_FUNNEL_STAGES.map((s) => s.key),
+    );
+    const rows = buildOnboardingFunnelRows(input(), TODAY);
+    expect(rows.some((r) => r.stage === "invited")).toBe(false);
+  });
+
+  it("describes each stage in the PM's words, with no case-status breakdown", () => {
+    const copy = Object.fromEntries(ONBOARDING_FUNNEL_STAGES.map((s) => [s.title, s.description]));
+    expect(copy).toEqual({
+      Invited: "Invited to the intake form. Nothing submitted yet.",
+      "Profile incomplete": "Missing NPI, CAQH ID, demographics, or a license.",
+      Submitted: "Information is in, but not yet verified or assigned to a group and location.",
+      "Ready for credentialing": "Verified and assigned to a group and location. No case yet.",
+      Credentialing: "Has at least one credentialing case, in any status.",
+    });
+    const text = Object.entries(copy).flat().join(" ");
+    expect(text).not.toMatch(/Awaiting verification|Ready to credential\b/);
+    expect(text).not.toMatch(/approved|denied|withdrawn|underway/i);
   });
 });

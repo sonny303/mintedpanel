@@ -1,6 +1,10 @@
-// Provider Onboarding funnel (Oct 20 review, RC-06). Four stages from today's
-// data; click a stage to see who is in it and what holds them there. State
-// filter only, per the Oct 19 Luna prep (no date range). Read-only.
+// Provider Onboarding funnel (Oct 20 review, RC-06; stage names from the PM,
+// Oct 30). Provider stages from today's data, in funnel order: Profile
+// incomplete, Submitted, Ready for credentialing, Credentialing (Invited joins
+// first once the intake tables can be read). Click a stage to see who is in it
+// and what holds them there. Credentialing is one stage, never split by case
+// status: that belongs on the case board. State filter only, per the Oct 19
+// Luna prep (no date range). Read-only.
 import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -22,7 +26,6 @@ import {
 } from "@/components/ui/table";
 import { useOnboardingFunnel } from "@/hooks/useOnboardingFunnel";
 import {
-  ONBOARDING_FUNNEL_STAGES,
   onboardingFunnelStageCounts,
   onboardingFunnelStates,
   type OnboardingFunnelStage,
@@ -30,12 +33,15 @@ import {
 
 const PAGE_SIZE = 100;
 
+/** The stages whose providers are held by gaps the table can name. */
+const GAP_STAGES: ReadonlySet<OnboardingFunnelStage> = new Set(["profile_incomplete", "submitted"]);
+
 function percent(count: number, total: number): number {
   return total === 0 ? 0 : Math.round((count / total) * 100);
 }
 
 export function OnboardingFunnelReport() {
-  const { orgId, rows, isLoading, isError, refetch } = useOnboardingFunnel();
+  const { orgId, rows, stages, isLoading, isError, refetch } = useOnboardingFunnel();
   const [state, setState] = useState("");
   const [stage, setStage] = useState<OnboardingFunnelStage>("profile_incomplete");
   const [shown, setShown] = useState({ key: "", count: PAGE_SIZE });
@@ -49,7 +55,9 @@ export function OnboardingFunnelReport() {
   const inStage = useMemo(() => filtered.filter((row) => row.stage === stage), [filtered, stage]);
   const viewKey = `${state}:${stage}`;
   const visibleCount = shown.key === viewKey ? shown.count : PAGE_SIZE;
-  const stageInfo = ONBOARDING_FUNNEL_STAGES.find((entry) => entry.key === stage);
+  const stageInfo = stages.find((entry) => entry.key === stage);
+  const showGaps = GAP_STAGES.has(stage);
+  const columns = stages.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4";
 
   if (!orgId) {
     return <EmptyState message="Select an organization to see provider onboarding." />;
@@ -57,8 +65,8 @@ export function OnboardingFunnelReport() {
   if (isLoading) {
     return (
       <div className="space-y-3" role="status" aria-label="Loading provider onboarding">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {ONBOARDING_FUNNEL_STAGES.map((entry) => (
+        <div className={`grid gap-3 sm:grid-cols-2 ${columns}`}>
+          {stages.map((entry) => (
             <Skeleton key={entry.key} className="h-[112px] rounded-md" />
           ))}
         </div>
@@ -108,8 +116,8 @@ export function OnboardingFunnelReport() {
         </div>
       </div>
 
-      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Onboarding stages">
-        {ONBOARDING_FUNNEL_STAGES.map((entry, i) => {
+      <ol className={`grid gap-3 sm:grid-cols-2 ${columns}`} aria-label="Onboarding stages">
+        {stages.map((entry, i) => {
           const count = counts[entry.key];
           const share = percent(count, filtered.length);
           const selected = entry.key === stage;
@@ -161,9 +169,7 @@ export function OnboardingFunnelReport() {
                     <TableHead>Provider</TableHead>
                     <TableHead>NPI</TableHead>
                     <TableHead>States</TableHead>
-                    {stage === "profile_incomplete" || stage === "awaiting_verification" ? (
-                      <TableHead>What's needed</TableHead>
-                    ) : null}
+                    {showGaps ? <TableHead>What's needed</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -176,7 +182,7 @@ export function OnboardingFunnelReport() {
                       <TableCell className="text-[12.5px]">
                         {row.states.length > 0 ? row.states.join(", ") : "None recorded"}
                       </TableCell>
-                      {stage === "profile_incomplete" || stage === "awaiting_verification" ? (
+                      {showGaps ? (
                         <TableCell className="text-[12.5px]">{row.gaps.join(" · ")}</TableCell>
                       ) : null}
                     </TableRow>

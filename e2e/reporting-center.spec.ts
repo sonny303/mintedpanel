@@ -511,24 +511,44 @@ test("RC-06 — Provider Onboarding places each provider in one stage and lists 
     verified_status: verified,
     expiration_date: daysFromNow(400),
   });
+  const membership = (id: string, providerId: string) => ({
+    id,
+    org_id: ORG_A,
+    provider_id: providerId,
+    group_id: GROUP_ID,
+    end_date: null,
+  });
   await seed(context, {
     providers: [
       { ...providerRow("p-new", "Ann", "Newhire"), ...complete, npi: null },
       { ...providerRow("p-psv", "Bea", "Pending"), ...complete },
       { ...providerRow("p-ready", "Cal", "Ready"), ...complete },
       { ...providerRow("p-case", "Dee", "Enrolling"), ...complete },
+      { ...providerRow("p-unassigned", "Eve", "Unassigned"), ...complete },
+      // Her only case was denied, and her profile is incomplete: still Credentialing.
+      { ...providerRow("p-denied", "Fay", "Reapply"), ...complete, npi: null },
     ],
     state_licenses: [
       license("l-1", "p-new", "TX", "verified"),
       license("l-2", "p-psv", "TX", "unverified"),
       license("l-3", "p-ready", "MO", "verified"),
       license("l-4", "p-case", "TX", "verified"),
+      license("l-5", "p-unassigned", "NC", "verified"),
     ],
-    facilities: [facilityRow("f-tx", "Dallas", null)],
+    provider_groups: [{ id: GROUP_ID, org_id: ORG_A, name: "Rose City Rehab", is_active: true }],
+    provider_group_assignments: [membership("m-1", "p-psv"), membership("m-2", "p-ready")],
+    facilities: [
+      facilityRow("f-tx", "Dallas", null),
+      facilityRow("f-mo", "Kansas City", null, { state: "MO" }),
+    ],
     provider_facility_assignments: [
       { id: "a-1", org_id: ORG_A, provider_id: "p-psv", facility_id: "f-tx" },
+      { id: "a-2", org_id: ORG_A, provider_id: "p-ready", facility_id: "f-mo" },
     ],
-    credential_cases: [caseRow("c-1", "p-case", "payer-1", "TX", "submitted")],
+    credential_cases: [
+      caseRow("c-1", "p-case", "payer-1", "TX", "submitted"),
+      caseRow("c-2", "p-denied", "payer-1", "TX", "denied"),
+    ],
   });
 
   await page.goto("/reporting");
@@ -540,24 +560,48 @@ test("RC-06 — Provider Onboarding places each provider in one stage and lists 
   await expect(stages.getByRole("button", { name: /Profile incomplete\s*1/ })).toBeVisible({
     timeout: 30000,
   });
-  await expect(stages.getByRole("button", { name: /Awaiting verification\s*1/ })).toBeVisible();
-  await expect(stages.getByRole("button", { name: /Ready to credential\s*1/ })).toBeVisible();
-  await expect(stages.getByRole("button", { name: /Credentialing\s*1/ })).toBeVisible();
+  // Provider stages in funnel order. Invited stays hidden until the intake
+  // tables can be read (MINT-89).
+  await expect(stages.locator("li > button > span:nth-child(2)")).toHaveText([
+    "Profile incomplete",
+    "Submitted",
+    "Ready for credentialing",
+    "Credentialing",
+  ]);
+  await expect(stages.getByRole("button", { name: /Submitted\s*2/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Ready for credentialing\s*1/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Credentialing\s*2/ })).toBeVisible();
+  await expect(page.getByText("Awaiting verification")).toHaveCount(0);
+  await expect(page.getByText("Invited", { exact: true })).toHaveCount(0);
 
   // Default stage lists who is incomplete and why.
   await expect(page.locator("tr", { hasText: "Ann Newhire" })).toContainText("No NPI");
   // Date of birth and SSN last 4 are presence checks only; neither value renders.
   await expect(page.getByText(/1990/)).toHaveCount(0);
   await expect(page.getByText("1234", { exact: true })).toHaveCount(0);
-  await stages.getByRole("button", { name: /Awaiting verification/ }).click();
+  await stages.getByRole("button", { name: /Submitted/ }).click();
   await expect(page.locator("tr", { hasText: "Bea Pending" })).toContainText(
     "TX license not board-verified",
   );
+  // Verified but with no group and no location: Submitted, not Ready.
+  await expect(page.locator("tr", { hasText: "Eve Unassigned" })).toContainText(
+    "Needs a group and a location",
+  );
   await expect(page.locator("tr", { hasText: "Ann Newhire" })).toHaveCount(0);
+
+  // Any case is Credentialing, a denied one too, with no case-status breakdown.
+  await stages.getByRole("button", { name: /Credentialing\s*2/ }).click();
+  const credentialing = page.getByRole("region", {
+    name: "Credentialing providers",
+    exact: true,
+  });
+  await expect(credentialing.locator("tbody tr")).toHaveCount(2);
+  await expect(credentialing).toContainText("Fay Reapply");
+  await expect(credentialing).not.toContainText(/denied|submitted|What's needed/i);
 
   // State filter narrows every stage.
   await page.getByRole("combobox", { name: "State" }).click();
   await page.getByRole("option", { name: "MO", exact: true }).click();
-  await expect(stages.getByRole("button", { name: /Ready to credential\s*1/ })).toBeVisible();
-  await expect(stages.getByRole("button", { name: /Awaiting verification\s*0/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Ready for credentialing\s*1/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Submitted\s*0/ })).toBeVisible();
 });

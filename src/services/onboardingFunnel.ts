@@ -2,6 +2,10 @@
 // reads joined in memory by src/lib/onboardingFunnel.ts. Every read pages to
 // completion, so a Luna-sized roster is never silently capped.
 //
+// The intake tables (provider_intake_invites and friends) are service-role
+// only (MINT-89), so this browser read cannot see them: intakeReadable is
+// false and the funnel hides its Invited stage.
+//
 // PHI boundary: date of birth and SSN last-4 are read ONLY to reduce them to
 // presence booleans right here. The values never leave this module, never
 // enter the cache, and never render.
@@ -43,33 +47,51 @@ export async function getOnboardingFunnelInput(): Promise<OnboardingFunnelInput>
     .select("id, provider_id, facility_id", { count: "exact" })
     .eq("org_id", orgId)
     .order("id", { ascending: true });
+  const groupsQuery = supabase
+    .from("provider_groups")
+    .select("id, is_active", { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
+  const membershipsQuery = supabase
+    .from("provider_group_assignments")
+    .select("id, provider_id, group_id, end_date", { count: "exact" })
+    .eq("org_id", orgId)
+    .order("id", { ascending: true });
   const casesQuery = supabase
     .from("credential_cases")
     .select("id, provider_id, state", { count: "exact" })
     .eq("org_id", orgId)
     .order("id", { ascending: true });
 
-  const [providers, licenses, facilities, assignments, cases] = (await Promise.all([
-    readCompletePages(async (from, to) => await providersQuery.range(from, to), {
-      label: "Onboarding providers",
-    }),
-    readCompletePages(async (from, to) => await licensesQuery.range(from, to), {
-      label: "Onboarding licenses",
-    }),
-    readCompletePages(async (from, to) => await facilitiesQuery.range(from, to), {
-      label: "Onboarding locations",
-    }),
-    readCompletePages(async (from, to) => await assignmentsQuery.range(from, to), {
-      label: "Onboarding location assignments",
-    }),
-    readCompletePages(async (from, to) => await casesQuery.range(from, to), {
-      label: "Onboarding cases",
-    }),
-  ])) as unknown as Row[][];
+  const [providers, licenses, facilities, assignments, groups, memberships, cases] =
+    (await Promise.all([
+      readCompletePages(async (from, to) => await providersQuery.range(from, to), {
+        label: "Onboarding providers",
+      }),
+      readCompletePages(async (from, to) => await licensesQuery.range(from, to), {
+        label: "Onboarding licenses",
+      }),
+      readCompletePages(async (from, to) => await facilitiesQuery.range(from, to), {
+        label: "Onboarding locations",
+      }),
+      readCompletePages(async (from, to) => await assignmentsQuery.range(from, to), {
+        label: "Onboarding location assignments",
+      }),
+      readCompletePages(async (from, to) => await groupsQuery.range(from, to), {
+        label: "Onboarding groups",
+      }),
+      readCompletePages(async (from, to) => await membershipsQuery.range(from, to), {
+        label: "Onboarding group memberships",
+      }),
+      readCompletePages(async (from, to) => await casesQuery.range(from, to), {
+        label: "Onboarding cases",
+      }),
+    ])) as unknown as Row[][];
 
   const activeFacilityStates = new Map(
     facilities.filter((row) => row.is_active === true).map((row) => [row.id, text(row.state)]),
   );
+  const activeGroups = new Set(groups.filter((row) => row.is_active === true).map((row) => row.id));
   return {
     providers: providers
       .filter((row) => row.reference_only !== true)
@@ -97,6 +119,11 @@ export async function getOnboardingFunnelInput(): Promise<OnboardingFunnelInput>
         providerId: text(row.provider_id),
         state: activeFacilityStates.get(row.facility_id) ?? null,
       })),
+    groupMemberships: memberships
+      .filter((row) => activeGroups.has(row.group_id))
+      .map((row) => ({ providerId: text(row.provider_id), endDate: text(row.end_date) })),
+    // Every case counts, whatever its status: no status column is read.
     cases: cases.map((row) => ({ providerId: text(row.provider_id), state: text(row.state) })),
+    intakeReadable: false,
   };
 }
