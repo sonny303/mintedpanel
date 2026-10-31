@@ -231,3 +231,21 @@ export function isMissingContractSpecialtyKeyError(error: unknown): boolean {
   );
   return namesColumn && (row.code === "42703" || row.code === "PGRST204");
 }
+
+/** Deploy-order safety for READS: true when PostgREST says a
+ * `notification_sequence*` table (the org's sequences and steps, or Minted's
+ * defaults and default steps) does not exist, i.e. migration
+ * 20261031051500 is not applied to this database yet — PGRST205 from the
+ * schema cache ("Could not find the table …"), or Postgres 42P01 from the
+ * statement. The reader then reports the feature as unavailable rather than
+ * failing, so the Org Detail Notifications card says it is not switched on
+ * yet instead of showing a load error. Any other error (network, permission,
+ * a different table) is NOT this and must propagate. */
+export function isMissingNotificationSequenceTablesError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const namesTable = [row.message, row.details, row.hint].some(
+    (value) => typeof value === "string" && value.includes("notification_sequence"),
+  );
+  return namesTable && (row.code === "PGRST205" || row.code === "42P01");
+}

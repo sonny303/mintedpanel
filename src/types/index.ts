@@ -2333,3 +2333,113 @@ export interface RosterExportSnapshot {
   fileName: string;
   downloadPath: string;
 }
+
+// MINT-107 organization notification sequences (migration 20261031051500).
+// Configuration only: nothing in the app sends these messages yet. Minted's
+// platform default (one per purpose) is inherited field by field by each
+// org's own row; resolveNotificationSequence() in
+// src/lib/notificationSequences.ts gives the effective sequence. The pure
+// rules (resolution, validation, ordering, the start-date cadence) live
+// there; the template catalog in src/lib/notificationTemplates.ts.
+export type NotificationPurpose = "followup_digest" | "intake_reminder";
+export type NotificationChannel = "email" | "sms";
+export type NotificationStopCondition = "submitted" | "paused" | "withdrawn" | "provider_replied";
+
+/** One cc'd escalation recipient on a step: a member, or everyone holding a role. */
+export type NotificationCcRecipient =
+  { kind: "user"; userId: string } | { kind: "role"; role: AppRole };
+
+/**
+ * notification_sequences: one org's own settings for one purpose. A null
+ * setting uses Minted's default (NotificationSequenceDefault); `enabled` is
+ * never inherited.
+ */
+export interface NotificationSequence {
+  id: string;
+  orgId: string;
+  purpose: NotificationPurpose;
+  enabled: boolean;
+  /** Intake only; null uses Minted's default. Always null for the digest. */
+  stopConditions: NotificationStopCondition[] | null;
+  /** Intake only (1 to 90); null uses Minted's default. Always null for the digest. */
+  targetDaysToReady: number | null;
+  /** Intake only, platform-managed (only Minted sets it); null uses Minted's default. */
+  compressTowardStartDate: boolean | null;
+  /** Digest only, platform-managed: the local send hour (0 to 23); null uses Minted's default. */
+  sendHour: number | null;
+  /** Digest only, platform-managed: the IANA zone of sendHour; null uses Minted's default. */
+  sendTimeZone: string | null;
+  /** Optimistic-concurrency counter, bumped on every save. */
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/** notification_sequence_steps: one ordered message of an org's own steps. */
+export interface NotificationSequenceStep {
+  id: string;
+  sequenceId: string;
+  orgId: string;
+  /** 1-based; offsets strictly increase with position. */
+  position: number;
+  offsetDays: number;
+  channel: NotificationChannel;
+  templateKey: string;
+  /** Ordered: the first entry is cc'd first. Empty by default; always empty for the digest. */
+  ccRecipients: NotificationCcRecipient[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * notification_sequence_defaults: Minted's platform default for one purpose,
+ * inherited by every org. No org, no `enabled`, no cc list. Only Minted
+ * writes it (Mission Control later).
+ */
+export interface NotificationSequenceDefault {
+  purpose: NotificationPurpose;
+  /** Intake: set. Digest: null. */
+  stopConditions: NotificationStopCondition[] | null;
+  /** Intake: set. Digest: null. */
+  targetDaysToReady: number | null;
+  /** Intake: set (false in R1). Digest: null. */
+  compressTowardStartDate: boolean | null;
+  /** Digest: set (8). Intake: null. */
+  sendHour: number | null;
+  /** Digest: set (America/Chicago). Intake: null. */
+  sendTimeZone: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** notification_sequence_default_steps: one ordered step of a platform default. */
+export interface NotificationSequenceDefaultStep {
+  id: string;
+  purpose: NotificationPurpose;
+  /** 1-based; offsets strictly increase with position. */
+  position: number;
+  offsetDays: number;
+  channel: NotificationChannel;
+  templateKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SmsConsentSource = "intake_form" | "staff_recorded" | "sms_keyword";
+export type SmsConsentRevokedSource = "sms_stop" | "provider_request" | "staff_recorded";
+
+/** sms_consents: a provider's recorded agreement to receive texts at one number. */
+export interface SmsConsent {
+  id: string;
+  orgId: string;
+  providerId: string;
+  phoneE164: string;
+  consentedAt: string;
+  source: SmsConsentSource;
+  consentTextVersion: string;
+  recordedBy: string | null;
+  revokedAt: string | null;
+  revokedSource: SmsConsentRevokedSource | null;
+  createdAt: string;
+}
