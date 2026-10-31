@@ -1,11 +1,14 @@
 // E6.6 F6.6.2 — Launches report derivation tests (TS-135 shapes): the
 // date-only universe, the case_facilities open-case attribution, the
-// staffing rule, the at-risk rule, and the group ordering.
+// staffing rule, the at-risk rule (upcoming + overdue), the group ordering,
+// and the No go-live date section.
 import { describe, expect, it } from "vitest";
 import {
   buildLaunchReportRows,
+  buildNoGoLiveDateRows,
   daysUntil,
   groupLaunchRows,
+  launchRiskLabel,
   openCasesByFacility,
   providerCountsByFacility,
   type LaunchFacilityInput,
@@ -182,7 +185,7 @@ describe("buildLaunchReportRows", () => {
     expect(rows.map((r) => r.name)).toEqual(["Charlie", "Alpha", "Bravo"]);
   });
 
-  it("flags at-risk ONLY inside the upcoming window: open cases or zero providers", () => {
+  it("flags at-risk inside the upcoming window or once passed: open cases or zero providers", () => {
     const rows = buildLaunchReportRows(
       [
         facility({ id: "soon-open-cases", effectiveDate: "2026-08-01" }),
@@ -214,8 +217,63 @@ describe("buildLaunchReportRows", () => {
     expect(byId.get("soon-fine")?.atRisk).toBe(false);
     // Outside the 30-day window: not "approaching", never at risk.
     expect(byId.get("far-no-providers")?.atRisk).toBe(false);
-    // Already launched: history, never at risk.
-    expect(byId.get("launched-open-cases")?.atRisk).toBe(false);
+    // Already launched with a case still open: overdue, not history.
+    expect(byId.get("launched-open-cases")).toMatchObject({ atRisk: true, riskKind: "overdue" });
+  });
+
+  it("MINT-100: a go-live 19 days past with open cases is Overdue, with the same reasons", () => {
+    const rows = buildLaunchReportRows(
+      [
+        facility({ id: "overdue", effectiveDate: "2026-06-30" }),
+        facility({ id: "overdue-1", effectiveDate: "2026-07-18" }),
+      ],
+      new Map([["overdue", 2]]),
+      new Map([["overdue", 1]]),
+      TODAY,
+    );
+    const byId = new Map(rows.map((r) => [r.facilityId, r]));
+    const overdue = byId.get("overdue");
+    expect(overdue).toMatchObject({
+      daysUntil: -19,
+      atRisk: true,
+      riskKind: "overdue",
+      atRiskReasons: ["open cases still pending"],
+    });
+    expect(overdue && launchRiskLabel(overdue)).toBe(
+      "Overdue by 19 days — open cases still pending",
+    );
+    const oneDay = byId.get("overdue-1");
+    expect(oneDay && launchRiskLabel(oneDay)).toBe("Overdue by 1 day — no providers assigned");
+  });
+
+  it("MINT-100: a past go-live with nothing outstanding stays unflagged", () => {
+    const rows = buildLaunchReportRows(
+      [facility({ id: "opened-clean", effectiveDate: "2026-06-30" })],
+      new Map([["opened-clean", 3]]),
+      new Map(),
+      TODAY,
+    );
+    expect(rows[0]).toMatchObject({ atRisk: false, riskKind: null, atRiskReasons: [] });
+    expect(launchRiskLabel(rows[0])).toBeNull();
+  });
+
+  it("MINT-100: the 0- and 30-day upcoming boundaries are unchanged", () => {
+    const rows = buildLaunchReportRows(
+      [
+        facility({ id: "day-0", effectiveDate: TODAY }),
+        facility({ id: "day-30", effectiveDate: "2026-08-18" }),
+        facility({ id: "day-31", effectiveDate: "2026-08-19" }),
+      ],
+      new Map(),
+      new Map(),
+      TODAY,
+    );
+    const byId = new Map(rows.map((r) => [r.facilityId, r]));
+    expect(byId.get("day-0")).toMatchObject({ daysUntil: 0, riskKind: "upcoming" });
+    expect(byId.get("day-30")).toMatchObject({ daysUntil: 30, riskKind: "upcoming" });
+    expect(byId.get("day-31")).toMatchObject({ daysUntil: 31, atRisk: false, riskKind: null });
+    const day0 = byId.get("day-0");
+    expect(day0 && launchRiskLabel(day0)).toBe("At risk — no providers assigned");
   });
 
   it("a same-day launch (daysUntil 0) is inside the approaching window", () => {
@@ -273,5 +331,44 @@ describe("groupLaunchRows", () => {
     const groups = groupLaunchRows(rows, new Map());
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ groupId: null, groupName: "No group" });
+  });
+});
+
+describe("buildNoGoLiveDateRows", () => {
+  it("MINT-100: dateless locations land in the No go-live date group, unflagged, group A→Z then name", () => {
+    const facilities = [
+      facility({ id: "z-b", name: "Bravo", groupId: "gz", effectiveDate: null }),
+      facility({ id: "none", name: "Alpha", groupId: null, effectiveDate: null }),
+      facility({ id: "a-c", name: "Charlie", groupId: "ga", effectiveDate: null }),
+      facility({ id: "a-a", name: "Alpha", groupId: "ga", effectiveDate: null }),
+      facility({ id: "gone", name: "Delta", groupId: "deleted", effectiveDate: null }),
+      facility({ id: "dated", effectiveDate: "2026-08-01" }),
+      facility({ id: "inactive", isActive: false, effectiveDate: null }),
+      facility({ id: "reference", referenceOnly: true, effectiveDate: null }),
+    ];
+    const noDate = buildNoGoLiveDateRows(
+      facilities,
+      new Map([["a-a", 2]]),
+      new Map([["a-a", 1]]),
+      new Map([
+        ["ga", "Alpha Group"],
+        ["gz", "Zulu Group"],
+      ]),
+    );
+    expect(noDate.map((r) => r.facilityId)).toEqual(["a-a", "a-c", "z-b", "none", "gone"]);
+    expect(noDate[0]).toEqual({
+      facilityId: "a-a",
+      name: "Alpha",
+      groupId: "ga",
+      groupName: "Alpha Group",
+      city: null,
+      state: null,
+      providerCount: 2,
+      openCaseCount: 1,
+    });
+    expect(noDate.at(-1)?.groupName).toBe("No group");
+    // The dated report still leaves them out: one list, never both.
+    const dated = buildLaunchReportRows(facilities, new Map(), new Map(), TODAY);
+    expect(dated.map((r) => r.facilityId)).toEqual(["dated"]);
   });
 });
