@@ -816,6 +816,44 @@ test("TS-52: a manual one-off case against an unattached payer gets the same key
   expect(writes.filter((w) => w.table === "rpc/create_case_with_tasks")).toHaveLength(1);
 });
 
+test("MINT-93: manual case marks the four key fields required and names the missing ones until all are set", async ({
+  context,
+  page,
+}) => {
+  const { handler } = makeHandler(makeFixtures());
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+  const createButton = dialog.getByRole("button", { name: "Create case" });
+
+  for (const field of ["provider", "group", "payer", "state"]) {
+    await expect(dialog.locator(`label[for="manual-case-${field}"]`)).toContainText("*");
+  }
+  await expect(createButton).toBeDisabled();
+  await expect(createButton).toHaveAccessibleDescription(
+    "Choose a provider, group, payer, and state to create the case.",
+  );
+
+  await dialog.getByRole("combobox", { name: "Provider" }).click();
+  await page.getByRole("option", { name: "Jane Whitaker" }).click();
+  await dialog.getByRole("combobox", { name: "Group" }).click();
+  await page.getByRole("option", { name: "Group 1" }).click();
+  await expect(dialog.getByText("Choose a payer and state to create the case.")).toBeVisible();
+  await expect(createButton).toBeDisabled();
+
+  await dialog.getByRole("combobox", { name: "Payer" }).click();
+  await page.getByRole("option", { name: "Cigna-NC" }).click();
+  await dialog.getByRole("combobox", { name: "State" }).click();
+  await page.getByRole("option", { name: "NC", exact: true }).click();
+
+  await expect(dialog.getByText("to create the case.")).toHaveCount(0);
+  await expect(createButton).toBeEnabled();
+  await expect(createButton).not.toHaveAttribute("aria-describedby");
+});
+
 test("manual case replaces empty selectors with provider and payer setup actions", async ({
   context,
   page,

@@ -49,6 +49,7 @@ import { US_STATES } from "@/lib/usStates";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { CASE_TYPES, type CaseType } from "@/lib/caseTypes";
 import { contractSpecialtyForTaxonomy } from "@/lib/contractSpecialty";
+import { missingManualCaseFields, missingManualCaseFieldsHint } from "@/lib/manualCaseFields";
 
 interface ManualCaseModalProps {
   onClose: () => void;
@@ -143,16 +144,21 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
       .filter((g): g is NonNullable<typeof g> => Boolean(g));
   }, [providerId, currentProviderAssignments, groupsQ.data]);
 
+  // MINT-93: one predicate gates the selection and names the footer hint.
+  const missingFields = useMemo(
+    () =>
+      missingManualCaseFields(
+        { provider: providerId, group: groupId, payer: payerId, state },
+        NONE,
+      ),
+    [providerId, groupId, payerId, state],
+  );
   const selection = useMemo(
     () =>
-      caseType === "enrollment" &&
-      providerId !== NONE &&
-      groupId !== NONE &&
-      payerId !== NONE &&
-      state !== NONE
+      caseType === "enrollment" && missingFields.length === 0
         ? { providerId, groupId, payerId, state }
         : null,
-    [caseType, providerId, groupId, payerId, state],
+    [caseType, missingFields, providerId, groupId, payerId, state],
   );
 
   // The picked provider's specialty opens that specialty's matrix table
@@ -204,6 +210,12 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const prerequisitesReady =
     payers.length > 0 &&
     (caseType === "contract" ? (groupsQ.data ?? []).length > 0 : providers.length > 0);
+  // Only on the enrollment form itself — the other case types and the
+  // loading / failed / setup states already say why nothing can be created.
+  const missingFieldsHint =
+    caseType === "enrollment" && !loading && !failed && prerequisitesReady
+      ? missingManualCaseFieldsHint(missingFields)
+      : null;
 
   const caseTypeSelector = (
     <div className="space-y-1.5">
@@ -423,7 +435,9 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
 
             {caseType !== "contract" ? (
               <div className="space-y-1.5">
-                <Label htmlFor="manual-case-provider">Provider</Label>
+                <Label htmlFor="manual-case-provider">
+                  Provider <span className="text-[#DC2626]">*</span>
+                </Label>
                 <Select
                   value={providerId}
                   onValueChange={(v) => {
@@ -446,7 +460,9 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
             ) : null}
 
             <div className="space-y-1.5">
-              <Label htmlFor="manual-case-group">Group</Label>
+              <Label htmlFor="manual-case-group">
+                Group <span className="text-[#DC2626]">*</span>
+              </Label>
               <Select
                 value={groupId}
                 onValueChange={(v) => {
@@ -481,7 +497,9 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="manual-case-payer">Payer</Label>
+              <Label htmlFor="manual-case-payer">
+                Payer <span className="text-[#DC2626]">*</span>
+              </Label>
               <Select
                 value={payerId}
                 onValueChange={(v) => {
@@ -503,7 +521,9 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="manual-case-state">State</Label>
+              <Label htmlFor="manual-case-state">
+                State <span className="text-[#DC2626]">*</span>
+              </Label>
               <Select
                 value={state}
                 onValueChange={(v) => {
@@ -588,12 +608,21 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="sm:items-center">
+          {missingFieldsHint ? (
+            <span
+              id="manual-case-missing-fields"
+              className="mr-auto pr-2 text-[12.5px] text-muted-foreground"
+            >
+              {missingFieldsHint}
+            </span>
+          ) : null}
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
             className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+            aria-describedby={missingFieldsHint ? "manual-case-missing-fields" : undefined}
             disabled={
               caseType !== "enrollment" ||
               !prerequisitesReady ||
