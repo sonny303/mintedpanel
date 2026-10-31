@@ -10,7 +10,7 @@
 // status; targets grouped by suggested status render one checkbox each. A
 // touch that implies nothing renders no suggestion — the dialog never
 // pressures a bump; declining logs the touch alone.
-import { useState } from "react";
+import { useId, useState } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,6 +53,7 @@ export function AddTouchForm({
   saving,
   bumpTargets = [],
   variant = "inline",
+  disabledReason,
   onCancel,
   onSave,
 }: {
@@ -64,6 +65,9 @@ export function AddTouchForm({
   bumpTargets?: readonly TouchBumpTarget[];
   /** inline = the case-detail panel strip; dialog = inside AddTouchDialog. */
   variant?: "inline" | "dialog";
+  /** MINT-92 — a block the caller owns (the dialog's case selection): Save
+   * stays disabled and the reason shows beside it. Absent = none. */
+  disabledReason?: string | null;
   onCancel: () => void;
   onSave: (input: TouchInput, acceptedBumps: AcceptedTouchBump[]) => void;
 }) {
@@ -82,7 +86,8 @@ export function AddTouchForm({
 
   const requiresContext = dispositionRequiresContext(outcome as TouchOutcome);
   const contextMissing = requiresContext && !notes.trim();
-  const disableSave = saving || contextMissing;
+  const disableSave = saving || contextMissing || Boolean(disabledReason);
+  const hintId = useId();
 
   // The closed F6.0.3 rule table, applied per target against the LIVE
   // type/outcome; corrections never suggest.
@@ -281,11 +286,21 @@ export function AddTouchForm({
         </label>
       ))}
 
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-2">
+        {disabledReason ? (
+          <p id={hintId} className="mr-auto text-[11px] text-muted-foreground">
+            {disabledReason}
+          </p>
+        ) : null}
         <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button size="sm" disabled={disableSave} onClick={submit}>
+        <Button
+          size="sm"
+          disabled={disableSave}
+          aria-describedby={disabledReason ? hintId : undefined}
+          onClick={submit}
+        >
           {saving ? "Saving…" : correctionOf ? "Log correction" : "Save touch"}
         </Button>
       </div>

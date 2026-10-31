@@ -8,9 +8,20 @@
 // just advanced the case). A failed bump never unwinds the logged touches;
 // the ledger stays append-only. Supersedes BulkLogTouchDialog AND the
 // "Log Payer Call" BatchTouchpointDialog (both retired).
+// MINT-92: while the cases load, after a failed load, or with no candidates
+// the dialog shows one line and Close, no form; candidates but none selected
+// = Save disabled with the reason beside it (bulkLogTouch still rejects an
+// empty set as the backstop).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useBulkLogTouch } from "@/hooks/useTouches";
@@ -29,11 +40,17 @@ export function AddTouchDialog({
   open,
   candidates,
   defaultSelectedIds,
+  loading = false,
+  failed = false,
   onClose,
   onLogged,
 }: {
   open: boolean;
   candidates: TouchCaseCandidate[];
+  /** The reads behind `candidates` are still in flight / failed; an empty
+   * list then means "not known yet", never "no open cases". */
+  loading?: boolean;
+  failed?: boolean;
   /** Preselected case ids (e.g. the one case a record panel targets). Absent
    * = none selected, pick explicitly. */
   defaultSelectedIds?: readonly string[];
@@ -69,10 +86,6 @@ export function AddTouchDialog({
   );
 
   const handleSave = async (input: TouchInput, acceptedBumps: AcceptedTouchBump[]) => {
-    if (selectedCandidates.length === 0) {
-      toast.error("Select at least one case");
-      return;
-    }
     setSaving(true);
     try {
       const result = await bulkM.mutateAsync({
@@ -121,6 +134,15 @@ export function AddTouchDialog({
     }
   };
 
+  // Failure first, then loading: only a settled, empty list is "no open cases".
+  const notice = failed ? (
+    <p className="text-[13px] text-[#B91C1C] py-2">Couldn&apos;t load cases. Refresh to retry.</p>
+  ) : loading ? (
+    <p className="text-[13px] text-muted-foreground py-2">Loading cases…</p>
+  ) : candidates.length === 0 ? (
+    <p className="text-[13px] text-muted-foreground py-2">No open cases to log against.</p>
+  ) : null;
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && closeAndReset()}>
       <DialogContent className="max-w-[640px] max-h-[85vh] overflow-y-auto">
@@ -128,50 +150,60 @@ export function AddTouchDialog({
           <DialogTitle>Add touch</DialogTitle>
         </DialogHeader>
 
-        {candidates.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground py-2">No open cases to log against.</p>
+        {notice ? (
+          <>
+            {notice}
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={closeAndReset}>
+                Close
+              </Button>
+            </DialogFooter>
+          </>
         ) : (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Cases ({selected.size} selected)
-              </Label>
-              <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer">
-                <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(Boolean(v))} />
-                Select all
-              </label>
-            </div>
-            <div className="border border-border rounded-md divide-y divide-border max-h-[200px] overflow-y-auto">
-              {candidates.map((c) => (
-                <label
-                  key={c.id}
-                  className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/30"
-                >
-                  <Checkbox
-                    checked={selected.has(c.id)}
-                    onCheckedChange={(v) => toggle(c.id, Boolean(v))}
-                  />
-                  <span className="text-[13px] text-foreground">{c.label}</span>
-                  <span className="ml-auto text-[11px] text-muted-foreground">
-                    {caseStatusLabel(c.currentStatus)}
-                  </span>
+          <>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Cases ({selected.size} selected)
+                </Label>
+                <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer">
+                  <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(Boolean(v))} />
+                  Select all
                 </label>
-              ))}
+              </div>
+              <div className="border border-border rounded-md divide-y divide-border max-h-[200px] overflow-y-auto">
+                {candidates.map((c) => (
+                  <label
+                    key={c.id}
+                    className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/30"
+                  >
+                    <Checkbox
+                      checked={selected.has(c.id)}
+                      onCheckedChange={(v) => toggle(c.id, Boolean(v))}
+                    />
+                    <span className="text-[13px] text-foreground">{c.label}</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">
+                      {caseStatusLabel(c.currentStatus)}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
 
-        <AddTouchForm
-          correctionOf={null}
-          saving={saving}
-          variant="dialog"
-          bumpTargets={selectedCandidates.map((c) => ({
-            id: c.id,
-            currentStatus: c.currentStatus,
-          }))}
-          onCancel={closeAndReset}
-          onSave={handleSave}
-        />
+            <AddTouchForm
+              correctionOf={null}
+              saving={saving}
+              variant="dialog"
+              bumpTargets={selectedCandidates.map((c) => ({
+                id: c.id,
+                currentStatus: c.currentStatus,
+              }))}
+              disabledReason={selectedCandidates.length === 0 ? "Select at least one case" : null}
+              onCancel={closeAndReset}
+              onSave={handleSave}
+            />
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

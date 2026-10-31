@@ -432,3 +432,92 @@ test("TS-137 — a non-implying touch never offers a bump; declining an offered 
   expect(writes.filter((w) => w.table === "touches" && w.method === "POST")).toHaveLength(3);
   expect(writes.filter((w) => w.table === "rpc/set_case_status")).toHaveLength(0);
 });
+
+test("MINT-92 — Add touch with zero open cases offers only Close; with none selected Save is disabled and says why", async ({
+  context,
+  page,
+}) => {
+  // Zero open cases: the only case is Approved, so the dialog has no candidates.
+  const fixtures = makeFixtures();
+  fixtures.credential_cases = [caseRow("case-done", { case_status: "approved" })];
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  // Wait for the approved case to render so the dialog opens on SETTLED data,
+  // not on the empty list it has while the cases load.
+  await page.goto("/cases?pivot=flat");
+  await expect(
+    page.getByRole("row").filter({ hasText: "Dana Whitley" }).filter({ hasText: "Approved" }),
+  ).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Add touch" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("No open cases to log against.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save touch" })).toHaveCount(0);
+  await expect(dialog.getByRole("textbox")).toHaveCount(0);
+  await expect(dialog.getByRole("combobox")).toHaveCount(0);
+  // .first(): the dialog's corner X is also named "Close" (sr-only label).
+  await dialog.getByRole("button", { name: "Close", exact: true }).first().click();
+  await expect(dialog).toHaveCount(0);
+
+  // Open cases, none selected: Save is disabled with the reason beside it
+  // until a case is picked.
+  fixtures.credential_cases = makeFixtures().credential_cases;
+  await page.reload();
+  await page.getByRole("button", { name: "Add touch" }).click();
+  await expect(dialog.getByText("Cases (0 selected)")).toBeVisible();
+  await expect(dialog.getByText("Select at least one case")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save touch" })).toBeDisabled();
+  await dialog.getByText("Select all").click();
+  await expect(dialog.getByText("Select at least one case")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Save touch" })).toBeEnabled();
+
+  expect(writes.filter((w) => w.table === "touches")).toHaveLength(0);
+});
+
+test("MINT-92 — while the cases load, Add touch says Loading cases… and never claims there are no open cases", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  const { handler } = makeHandler(fixtures);
+  // Hold every credential_cases read until the dialog is open.
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await context.route(/\/(rest|auth)\/v1\//, async (route) => {
+    const req = route.request();
+    if (req.method() === "GET" && new URL(req.url()).pathname.endsWith("/credential_cases")) {
+      await gate;
+    }
+    return handler(route);
+  });
+  await seedAuth(context);
+  // Flag the empty-state copy if it is EVER in the document, however briefly.
+  await context.addInitScript(() => {
+    const flags = window as unknown as { sawNoOpenCases?: boolean };
+    new MutationObserver(() => {
+      if (document.body?.textContent?.includes("No open cases to log against.")) {
+        flags.sawNoOpenCases = true;
+      }
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+  });
+
+  await page.goto("/cases?pivot=flat");
+  await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible({
+    timeout: 30000,
+  });
+  await page.getByRole("button", { name: "Add touch" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Loading cases…")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save touch" })).toHaveCount(0);
+
+  release();
+  await expect(dialog.getByText("Cases (0 selected)")).toBeVisible({ timeout: 30000 });
+  await expect(dialog.getByText("Loading cases…")).toHaveCount(0);
+  const sawNoOpenCases = await page.evaluate(
+    () => (window as unknown as { sawNoOpenCases?: boolean }).sawNoOpenCases ?? false,
+  );
+  expect(sawNoOpenCases).toBe(false);
+});

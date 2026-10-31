@@ -392,6 +392,8 @@ function CasesPage() {
         <AddTouchDialog
           open={bulkOpen}
           candidates={bulkCandidates}
+          loading={loading}
+          failed={failed}
           onClose={() => setBulkOpen(false)}
           onLogged={(caseIds) =>
             navigate({ to: "/cases", search: { pivot: "payer", ids: caseIds.join(",") } })
