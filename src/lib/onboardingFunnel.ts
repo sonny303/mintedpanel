@@ -14,26 +14,44 @@
 //   Profile incomplete       missing NPI, CAQH ID, date of birth, SSN last 4,
 //                            or a license (any license with a valid state
 //                            code, and one for each state they are assigned
-//                            to work in). Stands in for "not yet submitted"
-//                            until intake data can be read.
+//                            to work in). Not in the PM's Oct 30 list: it
+//                            stands in for "not yet submitted" while intake
+//                            data cannot be read, and it stays for providers
+//                            added by staff or by CSV with no invite. Once
+//                            intake data can be read, slice 2 decides which
+//                            stage wins for a provider who is both Invited
+//                            and Profile incomplete, and merges this
+//                            vocabulary with OnboardingStage in
+//                            src/types/providerOnboarding.ts (ready,
+//                            in_credentialing).
 //   Submitted                the information is in but not verified or not
 //                            assigned: a working-state license is not
 //                            board-verified, is expired, or has no expiration
 //                            date; CAQH is not attested within the last 120
 //                            days (a future date never counts); the record is
-//                            pending verification; or there is no current
+//                            pending verification; there is no current
 //                            membership in an active group, or no assignment
-//                            to an active location
+//                            to an active location; or no active location
+//                            has a valid state on record
 //   Ready for credentialing  verified, assigned to a group and a location,
 //                            and no case exists yet
 //   Credentialing            at least one credentialing case exists, in any
 //                            status (a denied case counts). The case board
 //                            breaks cases down by status; this funnel does not.
 //
-// Licenses are judged for the states of the provider's active location
-// assignments, or every license on file when they have none. That fallback
-// only fills the Submitted gap list: a provider with no location is never
-// Ready.
+// Licenses are judged for the states of the provider's active locations. A
+// provider with no active location has every license on file judged instead;
+// that fallback only fills the Submitted gap list, since they are never
+// Ready. A provider whose active locations all lack a valid state gets no
+// fallback: they stay in Submitted ("Location has no state on record"), as
+// Billing Readiness refuses a location with no valid state.
+//
+// A group membership counts until its end date passes. Its start date is
+// ignored on purpose: credentialing happens before a provider starts, so a
+// membership that begins in the future already counts here. Billing
+// Readiness (src/lib/billingReadiness.ts) and the contract SOP assignments
+// (src/services/contractSopAssignments.ts) do require a start date on or
+// before today, because they ask who is working now.
 //
 // Not the provider onboarding (intake) flow in src/lib/providerOnboarding.ts:
 // this is the Reporting Center funnel over the provider records themselves.
@@ -50,6 +68,8 @@ export interface OnboardingFunnelStageInfo {
   description: string;
   /** Shown only when the intake tables can be read (Invited). */
   needsIntakeData: boolean;
+  /** Providers here are held by gaps the report lists ("What's needed"). */
+  listsGaps: boolean;
 }
 
 /** Every stage, in funnel order. */
@@ -59,30 +79,35 @@ export const ONBOARDING_FUNNEL_STAGES: ReadonlyArray<OnboardingFunnelStageInfo> 
     title: "Invited",
     description: "Invited to the intake form. Nothing submitted yet.",
     needsIntakeData: true,
+    listsGaps: false,
   },
   {
     key: "profile_incomplete",
     title: "Profile incomplete",
     description: "Missing NPI, CAQH ID, demographics, or a license.",
     needsIntakeData: false,
+    listsGaps: true,
   },
   {
     key: "submitted",
     title: "Submitted",
     description: "Information is in, but not yet verified or assigned to a group and location.",
     needsIntakeData: false,
+    listsGaps: true,
   },
   {
     key: "ready_for_credentialing",
     title: "Ready for credentialing",
     description: "Verified and assigned to a group and location. No case yet.",
     needsIntakeData: false,
+    listsGaps: false,
   },
   {
     key: "credentialing",
     title: "Credentialing",
     description: "Has at least one credentialing case, in any status.",
     needsIntakeData: false,
+    listsGaps: false,
   },
 ];
 
@@ -116,7 +141,8 @@ export interface OnboardingFunnelInput {
   licenses: readonly OnboardingFunnelLicenseInput[];
   /** One row per assignment to an active location, with that location's state. */
   workStates: ReadonlyArray<{ providerId: string | null; state: string | null }>;
-  /** Memberships in active groups; one that ended before today does not count. */
+  /** Memberships in active groups; one that ended before today does not count,
+   * and the start date is deliberately not read (see the header). */
   groupMemberships: ReadonlyArray<{ providerId: string | null; endDate: string | null }>;
   cases: ReadonlyArray<{ providerId: string | null; state: string | null }>;
   /** False while the intake tables cannot be read (MINT-89): Invited stays hidden. */
@@ -170,6 +196,7 @@ export function buildOnboardingFunnelRows(
   return input.providers
     .map((p): OnboardingFunnelRow => {
       const licenses = licensesBy.get(p.providerId) ?? [];
+      const hasLocation = workBy.has(p.providerId);
       const workStates = [
         ...new Set((workBy.get(p.providerId) ?? []).map((row) => code(row.state))),
       ].filter((s): s is string => s !== null);
@@ -207,8 +234,9 @@ export function buildOnboardingFunnelRows(
         return { ...base, stage: "profile_incomplete", gaps: profileGaps };
 
       // Judge the licenses for the states they work in; with no location
-      // yet, every license on file.
-      const judged = workStates.length > 0 ? workStates : [...licenseStates];
+      // yet, every license on file. A location with no valid state gets no
+      // fallback: its gap below keeps the provider out of Ready.
+      const judged = hasLocation ? workStates : [...licenseStates];
       const submittedGaps: string[] = [];
       for (const state of judged) {
         const best = stateLicenses
@@ -239,7 +267,9 @@ export function buildOnboardingFunnelRows(
       }
       if (p.pendingVerification) submittedGaps.push("Record pending verification");
       // Verified is not enough: Ready needs a group and a location.
-      submittedGaps.push(...assignmentGaps(grouped.has(p.providerId), workBy.has(p.providerId)));
+      submittedGaps.push(...assignmentGaps(grouped.has(p.providerId), hasLocation));
+      if (hasLocation && workStates.length === 0)
+        submittedGaps.push("Location has no state on record");
       if (submittedGaps.length > 0) return { ...base, stage: "submitted", gaps: submittedGaps };
       return { ...base, stage: "ready_for_credentialing", gaps: [] };
     })

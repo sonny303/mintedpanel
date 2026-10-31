@@ -33,8 +33,11 @@ import {
 
 const PAGE_SIZE = 100;
 
-/** The stages whose providers are held by gaps the table can name. */
-const GAP_STAGES: ReadonlySet<OnboardingFunnelStage> = new Set(["profile_incomplete", "submitted"]);
+/** Wide-screen columns by visible stage count; Tailwind needs literal class names. */
+const LG_COLUMNS: Readonly<Record<number, string>> = {
+  4: "lg:grid-cols-4",
+  5: "lg:grid-cols-5",
+};
 
 function percent(count: number, total: number): number {
   return total === 0 ? 0 : Math.round((count / total) * 100);
@@ -56,8 +59,8 @@ export function OnboardingFunnelReport() {
   const viewKey = `${state}:${stage}`;
   const visibleCount = shown.key === viewKey ? shown.count : PAGE_SIZE;
   const stageInfo = stages.find((entry) => entry.key === stage);
-  const showGaps = GAP_STAGES.has(stage);
-  const columns = stages.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4";
+  const showGaps = stageInfo?.listsGaps ?? false;
+  const columns = LG_COLUMNS[stages.length] ?? "lg:grid-cols-4";
 
   if (!orgId) {
     return <EmptyState message="Select an organization to see provider onboarding." />;

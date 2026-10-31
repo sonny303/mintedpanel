@@ -100,8 +100,8 @@ describe("onboarding funnel service", () => {
         expiration_date: "2027-06-30",
       })),
       facilities: [
-        { id: "f-on", org_id: "org-1", state: "NC", is_active: true },
-        { id: "f-off", org_id: "org-1", state: "SC", is_active: false },
+        { id: "f-on", org_id: "org-1", state: "NC", is_active: true, reference_only: false },
+        { id: "f-off", org_id: "org-1", state: "SC", is_active: false, reference_only: false },
       ],
       provider_facility_assignments: [
         { id: "a-1", org_id: "org-1", provider_id: "p-active", facility_id: "f-on" },
@@ -184,8 +184,41 @@ describe("onboarding funnel service", () => {
     expect(input.cases).toEqual([{ providerId: "p-active", state: "NC" }]);
   });
 
+  it("leaves reference-only locations out, so they never make a provider Ready", async () => {
+    holder.tables.providers = [provider("p-ref")];
+    holder.tables.state_licenses = [
+      {
+        id: "l-ref",
+        org_id: "org-1",
+        provider_id: "p-ref",
+        state: "TX",
+        status: "active",
+        verified_status: "verified",
+        expiration_date: "2027-06-30",
+      },
+    ];
+    holder.tables.facilities = [
+      { id: "f-ref", org_id: "org-1", state: "TX", is_active: true, reference_only: true },
+    ];
+    holder.tables.provider_facility_assignments = [
+      { id: "a-ref", org_id: "org-1", provider_id: "p-ref", facility_id: "f-ref" },
+    ];
+    holder.tables.provider_group_assignments = [
+      { id: "m-ref", org_id: "org-1", provider_id: "p-ref", group_id: "g-on", end_date: null },
+    ];
+    holder.tables.credential_cases = [];
+    const input = await getOnboardingFunnelInput();
+    expect(holder.calls.facilities.select[0][0]).toContain("reference_only");
+    expect(input.workStates).toEqual([]);
+    expect(buildOnboardingFunnelRows(input, "2026-10-20")).toMatchObject([
+      { providerId: "p-ref", stage: "submitted", gaps: ["Needs a location"] },
+    ]);
+  });
+
   it("reads group memberships in active groups only and leaves the end date to the funnel", async () => {
     const input = await getOnboardingFunnelInput();
+    // A membership that starts in the future already counts: no start date.
+    expect(holder.calls.provider_group_assignments.select[0][0]).not.toContain("start_date");
     expect(input.groupMemberships).toEqual([
       { providerId: "p-active", endDate: null },
       { providerId: "p-onboarding", endDate: "2026-01-31" },

@@ -133,6 +133,43 @@ describe("provider onboarding funnel", () => {
     expect(rowFor(data, "ready")).toMatchObject({ stage: "submitted", gaps: ["Needs a location"] });
   });
 
+  it("never lets a location with no valid state reach Ready", () => {
+    // Fay: complete profile, verified unexpired NC license, current group
+    // membership. Her only active location has no usable state, so there is
+    // no working state to judge and no all-licenses fallback.
+    for (const state of [null, "", "Kansas", "N1"]) {
+      const data = input();
+      data.licenses = [verified("ready", "NC")];
+      data.workStates = [{ providerId: "ready", state }];
+      expect(rowFor(data, "ready")).toMatchObject({
+        stage: "submitted",
+        gaps: ["Location has no state on record"],
+      });
+    }
+  });
+
+  it("judges only the valid states when one of several locations has no state", () => {
+    const data = input();
+    data.workStates = [
+      { providerId: "ready", state: null },
+      { providerId: "ready", state: "NC" },
+    ];
+    expect(rowFor(data, "ready")).toMatchObject({ stage: "ready_for_credentialing", gaps: [] });
+  });
+
+  it("lists a stateless location next to the other gaps", () => {
+    const data = input();
+    data.groupMemberships = [];
+    data.workStates = [{ providerId: "ready", state: "nowhere" }];
+    data.licenses = [{ ...verified("ready", "NC"), verifiedStatus: "unverified" }];
+    // With a location there is no fallback, so the unverified NC license is
+    // not judged: only the missing group and the missing state hold her.
+    expect(rowFor(data, "ready")).toMatchObject({
+      stage: "submitted",
+      gaps: ["Needs a group", "Location has no state on record"],
+    });
+  });
+
   it("lists verification gaps and the missing assignment together", () => {
     const data = input();
     data.groupMemberships = [];
@@ -243,5 +280,12 @@ describe("provider onboarding funnel stages", () => {
     const text = Object.entries(copy).flat().join(" ");
     expect(text).not.toMatch(/Awaiting verification|Ready to credential\b/);
     expect(text).not.toMatch(/approved|denied|withdrawn|underway/i);
+  });
+
+  it("lists gaps only for the stages that have them", () => {
+    expect(ONBOARDING_FUNNEL_STAGES.filter((s) => s.listsGaps).map((s) => s.key)).toEqual([
+      "profile_incomplete",
+      "submitted",
+    ]);
   });
 });

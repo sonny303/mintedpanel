@@ -39,7 +39,7 @@ export async function getOnboardingFunnelInput(): Promise<OnboardingFunnelInput>
     .order("id", { ascending: true });
   const facilitiesQuery = supabase
     .from("facilities")
-    .select("id, state, is_active", { count: "exact" })
+    .select("id, state, is_active, reference_only", { count: "exact" })
     .eq("org_id", orgId)
     .order("id", { ascending: true });
   const assignmentsQuery = supabase
@@ -52,6 +52,8 @@ export async function getOnboardingFunnelInput(): Promise<OnboardingFunnelInput>
     .select("id, is_active", { count: "exact" })
     .eq("org_id", orgId)
     .order("id", { ascending: true });
+  // start_date is deliberately not read: a future membership already counts
+  // (src/lib/onboardingFunnel.ts header).
   const membershipsQuery = supabase
     .from("provider_group_assignments")
     .select("id, provider_id, group_id, end_date", { count: "exact" })
@@ -88,8 +90,12 @@ export async function getOnboardingFunnelInput(): Promise<OnboardingFunnelInput>
       }),
     ])) as unknown as Row[][];
 
+  // A reference-only location exists to be referenced, not worked: like the
+  // Portfolio footprint, it never counts as a place the provider works.
   const activeFacilityStates = new Map(
-    facilities.filter((row) => row.is_active === true).map((row) => [row.id, text(row.state)]),
+    facilities
+      .filter((row) => row.is_active === true && row.reference_only !== true)
+      .map((row) => [row.id, text(row.state)]),
   );
   const activeGroups = new Set(groups.filter((row) => row.is_active === true).map((row) => row.id));
   return {
