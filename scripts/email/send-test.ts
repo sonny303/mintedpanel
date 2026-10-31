@@ -9,7 +9,7 @@ import { EmailError, sendEmail } from "../../src/server/email/sendgrid.ts";
 import type { TemplateDataMap, TemplateKey } from "../../src/server/email/templates.ts";
 
 const USAGE =
-  'usage: npm run email:send-test -- --to <address> [--template test|provider_invitation|intake_code] [--reply-to <address>] [--practice "<name>"] [--live]\n';
+  'usage: npm run email:send-test -- --to <address> [--template test|provider_invitation|intake_code|followup_digest_daily] [--reply-to <address>] [--practice "<name>"] [--live]\n';
 
 let values;
 try {
@@ -46,6 +46,32 @@ const SAMPLES: { [K in TemplateKey]: TemplateDataMap[K] } = {
     link: "https://example.invalid/intake/sample-token",
   },
   intake_code: { practiceName, code: "123456" },
+  // Synthetic rows: no real provider, payer or case.
+  followup_digest_daily: {
+    practiceName,
+    recipientFirstName: "Anita",
+    digestDate: "2026-10-31",
+    workQueueLink: "https://example.invalid/work",
+    own: {
+      rows: [
+        {
+          caseNumber: 1001,
+          caseLink: "https://example.invalid/cases/sample-case",
+          providerName: "Sample Provider",
+          payerName: "Sample Payer",
+          dueDate: "2026-10-28",
+          status: "overdue",
+          atRisk: { daysSinceSubmission: 62, avgDecisionDays: 45 },
+        },
+      ],
+      more: 0,
+      overdue: 1,
+      dueToday: 0,
+      atRisk: 1,
+    },
+    unassigned: { rows: [], more: 0, overdue: 0, dueToday: 0, atRisk: 0 },
+    team: [],
+  },
 };
 
 const template = (values.template ?? "test") as TemplateKey;

@@ -9,6 +9,7 @@ import {
   ccCopyFields,
   getNotificationTemplate,
   selectableTemplates,
+  templateSendProblem,
   templateSupportsChannel,
   type NotificationTemplateEntry,
 } from "./notificationTemplates";
@@ -104,5 +105,40 @@ describe("notification template catalog", () => {
         expect(getNotificationTemplate(step.templateKey)?.purpose).toBe(purpose);
       }
     }
+  });
+
+  it("applies the consumer contract to a saved step: exists, purpose, selectable, channel", () => {
+    expect(templateSendProblem("followup_digest", "followup_digest_daily", "email")).toBeNull();
+    expect(templateSendProblem("followup_digest", "followup_digest_weekly", "email")).toBe(
+      "unknown_template",
+    );
+    expect(templateSendProblem("followup_digest", "intake_reminder_first", "email")).toBe(
+      "wrong_purpose",
+    );
+    expect(templateSendProblem("intake_reminder", INTAKE_BOUNCE_NOTICE_TEMPLATE, "email")).toBe(
+      "not_selectable",
+    );
+    expect(templateSendProblem("followup_digest", "followup_digest_daily", "sms")).toBe(
+      "channel_unsupported",
+    );
+  });
+
+  it("lets the digest render its rows and team counts, and nothing a cc rule forbids", () => {
+    const digest = getNotificationTemplate("followup_digest_daily");
+    expect(digest?.recipientFields).toEqual(
+      expect.arrayContaining([
+        "caseNumber",
+        "caseLink",
+        "providerFullName",
+        "payerName",
+        "followUpDueDate",
+        "followUpStatus",
+        "daysSinceSubmission",
+        "payerDecisionDays",
+      ]),
+    );
+    expect(digest?.recipientFields).not.toContain("coordinatorName");
+    expect(digest?.ccFields).toContain("coordinatorName");
+    expect(digest?.ccFields).not.toContain("intakeLink");
   });
 });

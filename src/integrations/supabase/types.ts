@@ -1873,6 +1873,53 @@ export type Database = {
         };
         Relationships: [];
       };
+      notification_sends: {
+        Row: {
+          claimed_at: string;
+          error_code: string | null;
+          finished_at: string | null;
+          id: string;
+          job: string;
+          org_id: string;
+          outcome: string;
+          provider_message_id: string | null;
+          recipient_user_id: string;
+          run_key: string;
+        };
+        Insert: {
+          claimed_at?: string;
+          error_code?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          job: string;
+          org_id: string;
+          outcome?: string;
+          provider_message_id?: string | null;
+          recipient_user_id: string;
+          run_key: string;
+        };
+        Update: {
+          claimed_at?: string;
+          error_code?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          job?: string;
+          org_id?: string;
+          outcome?: string;
+          provider_message_id?: string | null;
+          recipient_user_id?: string;
+          run_key?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_sends_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       notification_sequence_steps: {
         Row: {
           cc_recipients: Json;
@@ -4685,12 +4732,30 @@ export type Database = {
         Args: { p_job: string; p_run_key: string };
         Returns: string;
       };
+      claim_notification_send: {
+        Args: {
+          p_job: string;
+          p_org_id: string;
+          p_recipient_user_id: string;
+          p_run_key: string;
+        };
+        Returns: string;
+      };
       finish_job_run: {
         Args: {
           p_counts: Json;
           p_error_code?: string;
           p_id: string;
           p_outcome: string;
+        };
+        Returns: boolean;
+      };
+      finish_notification_send: {
+        Args: {
+          p_error_code?: string;
+          p_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
         };
         Returns: boolean;
       };

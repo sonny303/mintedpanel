@@ -740,3 +740,41 @@ p_purpose, p_payload)` is the save path: SECURITY INVOKER, admin-checked,
   EXECUTE for authenticated and service_role.
 - Regression packet: `supabase/tests/mint107-notification-sequences.sql`, run
   by CI's Migration dry-run job.
+
+## MINT-108 notification sends (repository-only, operator apply pending)
+
+Migration `20261031060000_notification_sends.sql`, applied after
+`20261031050000` and `20261031051500`. The per-recipient ledger behind
+scheduled notification jobs: a job run is at-least-once (`job_runs`), so a job
+that emails people claims each send here before sending it. The first user is
+the daily follow-up digest (`GET /api/jobs/followup-digest`,
+`src/server/jobs/followupDigestRun.ts`). Until it is applied the digest cannot
+claim a send, so it sends nothing and its run is recorded failed.
+
+### notification_sends
+
+`id`, `job` and `run_key` (the `job_runs` patterns), `org_id` (FK to
+`organizations`, ON DELETE CASCADE), `recipient_user_id` (the member it went
+to; an actor id, not a foreign key), `outcome` (`claimed | sent | failed`),
+`claimed_at`, `finished_at` (set exactly when no longer claimed),
+`provider_message_id` (SendGrid's `x-message-id`, only on `sent`,
+`^[A-Za-z0-9._=-]{1,128}$`), `error_code` (set exactly when `failed`;
+`misconfigured`, `invalid_input`, `provider_rejected`, `network` or
+`send_error`). The partial unique index `notification_sends_one_live_send` on
+`(job, run_key, org_id, recipient_user_id) WHERE outcome IN ('claimed',
+'sent')` is the once-per-slot guarantee. A claim that never finishes stays
+`claimed`: its outcome is unknown and it is never resent (SendGrid has no
+idempotency key). No PHI: no address, name, subject or body. RLS on with no
+policies; service_role has SELECT and nothing else.
+
+### RPCs (service_role only, SECURITY DEFINER, `search_path = ''`)
+
+- `claim_notification_send(p_job, p_run_key, p_org_id, p_recipient_user_id)
+→ uuid | null` — inserts a `claimed` row unless that send is already claimed
+  or sent for the slot (null).
+- `finish_notification_send(p_id, p_outcome, p_provider_message_id DEFAULT
+NULL, p_error_code DEFAULT NULL) → boolean` — records `sent` or `failed` on a
+  `claimed` row; false when the row is not claimed. Refuses an outcome or an
+  error code outside the closed sets; the table CHECKs pair them.
+- Regression packet: `supabase/tests/mint108-notification-sends.sql`, run by
+  CI's Migration dry-run job after the MINT-107 packet.

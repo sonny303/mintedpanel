@@ -3,6 +3,7 @@
 // vercel.json. The route takes the registry as a dependency, so tests run
 // their own.
 import { JOB_COUNT_KEY_RE, MAX_JOB_COUNT_KEYS } from "./counts";
+import { followupDigestJob } from "./followupDigest";
 import type { JobDefinition, JobRegistry } from "./types";
 
 // Mirrored by job_runs_job_check and job_runs_run_key_check in
@@ -34,5 +35,6 @@ export function utcDayKey(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
-/** The jobs /api/jobs/<name> serves. Empty until the first job ships. */
-export const JOB_REGISTRY: JobRegistry = createJobRegistry([]);
+/** The jobs /api/jobs/<name> serves. Each has a vercel.json cron
+ *  (src/server/jobs/crons.test.ts pins both directions). */
+export const JOB_REGISTRY: JobRegistry = createJobRegistry([followupDigestJob]);

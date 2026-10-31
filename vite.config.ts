@@ -3,12 +3,15 @@
 // The wrapper's Lovable-editor-only plugins (componentTagger, hmr-gate, dev-server
 // bridge, sandbox detection, editor error loggers) are intentionally dropped; the
 // build-relevant behavior below is reproduced 1:1.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig, loadEnv } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
+import { vercelCronsFrom } from "./src/server/jobs/vercelCrons";
 
 export default defineConfig(({ command, mode }) => {
   // Bake VITE_* vars (from .env files and the process env) into both client and
@@ -19,6 +22,13 @@ export default defineConfig(({ command, mode }) => {
   }
 
   const isDevBuild = command === "build" && mode === "development";
+
+  // vercel.json's crons, for nitro's Vercel Build Output. Nitro writes
+  // .vercel/output/config.json itself and never reads vercel.json's crons, and
+  // the deploy ships that output prebuilt (src/server/jobs/vercelCrons.ts).
+  const vercelCrons = vercelCronsFrom(
+    JSON.parse(readFileSync(join(process.cwd(), "vercel.json"), "utf8")),
+  );
 
   return {
     define: envDefine,
@@ -94,7 +104,16 @@ export default defineConfig(({ command, mode }) => {
       }),
       // Build-only deploy plugin. defaultPreset only applies when no provider is
       // auto-detected (Vercel CI detects itself and emits Build Output API).
-      ...(command === "build" ? [nitro({ defaultPreset: "cloudflare-module" })] : []),
+      // `vercel.config` applies only to the vercel preset (deploys set
+      // NITRO_PRESET=vercel); other presets ignore it.
+      ...(command === "build"
+        ? [
+            nitro({
+              defaultPreset: "cloudflare-module",
+              vercel: { config: { version: 3, crons: vercelCrons } },
+            }),
+          ]
+        : []),
       viteReact(),
     ],
   };
