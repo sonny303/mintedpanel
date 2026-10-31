@@ -22,6 +22,14 @@ describe("isValidUsPhone (MINT-91)", () => {
     expect(isValidUsPhone("22525550100")).toBe(false);
   });
 
+  it("treats a leading + as a country code: only +1 then 10 digits passes", () => {
+    expect(isValidUsPhone("+65 6123 4567")).toBe(false);
+    expect(isValidUsPhone("+82 2 123 4567")).toBe(false);
+    expect(isValidUsPhone("+2525550100")).toBe(false);
+    expect(isValidUsPhone("+44 20 7946 0958")).toBe(false);
+    expect(isValidUsPhone("+1 252 555 0100 x12")).toBe(true);
+  });
+
   it("accepts a leading +1, and a leading + only once", () => {
     expect(isValidUsPhone("+1 252 555 0100")).toBe(true);
     expect(isValidUsPhone("+1 (252) 555-0100")).toBe(true);
@@ -67,6 +75,13 @@ describe("isValidUsPhone (MINT-91)", () => {
     expect(isValidUsPhone("252-555-010")).toBe(false);
     expect(isValidUsPhone("252-555-01000")).toBe(false);
     expect(isValidUsPhone("1-252-555-01000")).toBe(false);
+  });
+
+  it("stays linear on a long run of spaces", () => {
+    const started = performance.now();
+    expect(isValidUsPhone(`1${" ".repeat(30_000)}a`)).toBe(false);
+    expect(isValidUsPhone(`x${" ".repeat(30_000)}a`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(100);
   });
 
   it("rejects separators outside the listed set", () => {

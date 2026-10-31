@@ -68,6 +68,22 @@ describe("provider import — phone (MINT-91)", () => {
     ]);
   });
 
+  it("blocks every later row of a provider whose first row is phone-blocked", () => {
+    const out = dedupeImportRows(
+      providerInputs([
+        providerRow(2, NEW_NPI, "abc-def-ghij"),
+        providerRow(3, NEW_NPI, "910-555-0100"),
+        providerRow(4, NEW_NPI, null),
+      ]),
+    );
+    expect(kinds(out)).toEqual(["blocked", "blocked", "blocked"]);
+    expect(out[1]).toMatchObject({
+      line: 3,
+      column: "npi",
+      reason: `Same provider (NPI ${NEW_NPI}) as row 2, which is blocked`,
+    });
+  });
+
   it("creates a NEW provider with a blank or valid phone", () => {
     expect(kinds(dedupeImportRows(providerInputs([providerRow(2, NEW_NPI, null)])))).toEqual([
       "create",
@@ -101,6 +117,25 @@ describe("group import — phone (MINT-91)", () => {
         reason: "cred_phone must be a 10-digit US phone number",
       },
     ]);
+  });
+
+  it("blocks a later row with the same TIN instead of creating it", () => {
+    const result = dedupeGroupRows(
+      [
+        row(2, { name: "Fresh Group", tin: "555001234", billing_phone: "abc-def-ghij" }),
+        row(3, { name: "Fresh Group", tin: "555001234", billing_phone: "919-555-0100" }),
+      ],
+      [GROUP1],
+    );
+    expect(result.creates).toHaveLength(0);
+    expect(result.skips).toHaveLength(0);
+    expect(result.blocked.map((b) => [b.line, b.column])).toEqual([
+      [2, "billing_phone"],
+      [3, "group_tin"],
+    ]);
+    expect(result.blocked[1].reason).toBe(
+      "Duplicate TIN 555001234 in this file — row 2 is blocked",
+    );
   });
 
   it("skips an EXISTING group (matched by TIN) whatever its phone", () => {
@@ -145,6 +180,21 @@ describe("facility import — phone (MINT-91)", () => {
     );
     expect(result.creates.map((c) => c.line)).toEqual([2]);
     expect(result.blocked.map((b) => [b.line, b.column])).toEqual([[3, "appointment_phone"]]);
+  });
+
+  it("blocks a later row for the same facility instead of creating it", () => {
+    const fresh = { ...base, street: "20 Ocean Ave" };
+    const result = dedupeFacilityRows(
+      [row(2, { ...fresh, phone: "abc-def-ghij" }), row(3, { ...fresh, phone: "910-555-0100" })],
+      [GROUP1],
+      facilities,
+    );
+    expect(result.creates).toHaveLength(0);
+    expect(result.blocked.map((b) => [b.line, b.column])).toEqual([
+      [2, "phone"],
+      [3, "facility_name"],
+    ]);
+    expect(result.blocked[1].reason).toMatch(/row 2 is blocked$/);
   });
 
   it("skips an EXISTING facility whatever its phone", () => {

@@ -80,7 +80,7 @@ import { isValidNpi } from "@/lib/providerGroup";
 import { hasValidLicenseDateOrder, LICENSE_DATE_ORDER_ERROR } from "@/lib/licenseDates";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { isValidUsPhone } from "@/lib/phone";
+import { US_PHONE_MESSAGE, isValidUsPhone } from "@/lib/phone";
 import {
   PROVIDER_GENDER_UNSET_VALUE,
   providerGenderLabel,
@@ -413,7 +413,7 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
           key: "phone",
           value: provider.phone ?? null,
           mono: true,
-          validate: (v) => (isValidUsPhone(v) ? null : "Enter a 10-digit US phone number."),
+          validate: (v) => (isValidUsPhone(v) ? null : `${US_PHONE_MESSAGE}.`),
         },
       ],
     },

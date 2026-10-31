@@ -4,18 +4,22 @@
 // Roster export keeps its own digit-count check: it runs over stored rows,
 // which this rule never re-validates.
 
-// An optional trailing extension: x123, ext 123, ext. 123, #123.
-const EXTENSION_RE = /\s*(?:x|ext\.?|#)\s*\d+$/i;
+// An optional trailing extension: x123, ext 123, ext. 123, #123. No leading
+// \s*: the space before it is a separator, and a leading \s* goes quadratic
+// on a long run of spaces.
+const EXTENSION_RE = /(?:x|ext\.?|#)\s*\d+$/i;
 // The separators a typed number may carry; anything else left over fails.
 const SEPARATORS_RE = /[\s().-]/g;
 
 export const US_PHONE_MESSAGE = "Enter a 10-digit US phone number";
 
-/** 10 digits, or 11 starting with 1, once spaces, `( ) - .` and one leading
- * `+` are removed, with an optional trailing extension. Any other letter fails. */
+/** 10 digits, or 11 starting with 1, once spaces and `( ) - .` are removed,
+ * with an optional trailing extension. A leading `+` is a country code, so it
+ * must be +1 then 10 digits. Any other letter fails. */
 export function isValidUsPhone(value: string): boolean {
-  const number = value.trim().replace(EXTENSION_RE, "").replace(/^\+/, "");
-  return /^1?\d{10}$/.test(number.replace(SEPARATORS_RE, ""));
+  const number = value.trim().replace(EXTENSION_RE, "");
+  const digits = number.replace(/^\+/, "").replace(SEPARATORS_RE, "");
+  return (number.startsWith("+") ? /^1\d{10}$/ : /^1?\d{10}$/).test(digits);
 }
 
 /** Existing-data rule (the MINT-7 NPI rule): blank passes, and on an edit a

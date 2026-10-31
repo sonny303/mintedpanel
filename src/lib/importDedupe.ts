@@ -476,6 +476,9 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
   const ordered: ImportRowDisposition[] = [];
   const createByNpi = new Map<string, CreateDisposition>();
   const matchedByProvider = new Map<string, UpdateDisposition>();
+  // NPI → line of a NEW provider's phone-blocked row. Its later rows block
+  // too, so the provider is never created from the rows after the bad one.
+  const phoneBlockedByNpi = new Map<string, number>();
 
   for (const row of inputs.rows) {
     if (!row.mapped) {
@@ -721,8 +724,20 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
       continue;
     }
 
+    const blockedLine = phoneBlockedByNpi.get(npi);
+    if (blockedLine !== undefined) {
+      ordered.push({
+        kind: "blocked",
+        line: row.line,
+        column: "npi",
+        displayName,
+        reason: `Same provider (NPI ${npi}) as row ${blockedLine}, which is blocked`,
+      });
+      continue;
+    }
     const badPhone = invalidPhoneColumn(row.mapped, ["phone"]);
     if (badPhone) {
+      phoneBlockedByNpi.set(npi, row.line);
       ordered.push({
         kind: "blocked",
         line: row.line,
@@ -1088,6 +1103,7 @@ export function dedupeGroupRows(
   }
   const result: SectionDedupeResult = { creates: [], skips: [], blocked: [] };
   const seenTins = new Set<string>();
+  const phoneBlockedTins = new Map<string, number>();
   for (const row of rows) {
     if (!row.mapped) {
       result.blocked.push({
@@ -1127,8 +1143,19 @@ export function dedupeGroupRows(
       });
       continue;
     }
+    const blockedLine = phoneBlockedTins.get(tin);
+    if (blockedLine !== undefined) {
+      result.blocked.push({
+        line: row.line,
+        column: "group_tin",
+        displayName,
+        reason: `Duplicate TIN ${tin} in this file — row ${blockedLine} is blocked`,
+      });
+      continue;
+    }
     const badPhone = invalidPhoneColumn(row.mapped, ["billing_phone", "corr_phone", "cred_phone"]);
     if (badPhone) {
+      phoneBlockedTins.set(tin, row.line);
       result.blocked.push({
         line: row.line,
         column: badPhone,
@@ -1161,6 +1188,7 @@ export function dedupeFacilityRows(
 ): SectionDedupeResult {
   const result: SectionDedupeResult = { creates: [], skips: [], blocked: [] };
   const seen = new Set<string>();
+  const phoneBlocked = new Map<string, number>();
   for (const row of rows) {
     if (!row.mapped) {
       result.blocked.push({
@@ -1239,8 +1267,19 @@ export function dedupeFacilityRows(
       });
       continue;
     }
+    const blockedLine = phoneBlocked.get(key);
+    if (blockedLine !== undefined) {
+      result.blocked.push({
+        line: row.line,
+        column: "facility_name",
+        displayName,
+        reason: `Duplicate facility (same group, name and address) in this file — row ${blockedLine} is blocked`,
+      });
+      continue;
+    }
     const badPhone = invalidPhoneColumn(row.mapped, ["phone", "appointment_phone"]);
     if (badPhone) {
+      phoneBlocked.set(key, row.line);
       result.blocked.push({
         line: row.line,
         column: badPhone,
