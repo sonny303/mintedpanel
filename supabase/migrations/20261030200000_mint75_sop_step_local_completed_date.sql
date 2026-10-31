@@ -22,9 +22,11 @@
 -- search_path, row locks, step ordering, audit, grants, comment) is copied
 -- verbatim from 20261006143000_mint19_atomic_sop_step_completion.sql.
 --
--- Deploy order: apply this before (or with) the Panel build that sends
--- p_completed_date. An older Panel keeps working against this function; a
--- newer Panel against the old 5-argument function fails every step tick.
+-- Deploy order: either. An older Panel keeps working against this function
+-- (the argument defaults to NULL). A newer Panel against the old 5-argument
+-- function gets PGRST202 naming p_completed_date, which nothing ran on, and
+-- retries once without it (src/services/taskSteps.ts), storing the UTC day
+-- until this is applied.
 
 DROP FUNCTION IF EXISTS public.complete_sop_task_step(uuid, uuid, text, uuid, text);
 

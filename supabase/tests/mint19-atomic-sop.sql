@@ -141,8 +141,9 @@ SELECT pg_temp.mint19_assert(
       AND pronamespace = 'public'::regnamespace)
 );
 
--- MINT-75 tasks: one single-step task per completion-date case, plus a
--- two-step task whose first tick must leave completed_date unset.
+-- MINT-75 tasks: one single-step task per completion-date case (UTC-1, UTC+1,
+-- UTC-2, UTC-30, UTC+2, omitted), plus a two-step task whose first tick must
+-- leave completed_date unset.
 INSERT INTO public.tasks (id, org_id, case_id, title, status, sop_content) VALUES
   ('69000000-0000-4000-8000-000000000005', '19000000-0000-4000-8000-000000000001',
    '59000000-0000-4000-8000-000000000002', 'MINT-75 local date in range', 'not_started',
@@ -158,7 +159,13 @@ INSERT INTO public.tasks (id, org_id, case_id, title, status, sop_content) VALUE
    '[{"id":"only-step","order":1,"label":"Only step","isCompleted":false}]'::jsonb),
   ('69000000-0000-4000-8000-000000000009', '19000000-0000-4000-8000-000000000001',
    '59000000-0000-4000-8000-000000000002', 'MINT-75 non-final step', 'not_started',
-   '[{"id":"first","order":1,"label":"First","isCompleted":false},{"id":"last","order":2,"label":"Last","isCompleted":false}]'::jsonb);
+   '[{"id":"first","order":1,"label":"First","isCompleted":false},{"id":"last","order":2,"label":"Last","isCompleted":false}]'::jsonb),
+  ('69000000-0000-4000-8000-000000000010', '19000000-0000-4000-8000-000000000001',
+   '59000000-0000-4000-8000-000000000002', 'MINT-75 local date UTC+1', 'not_started',
+   '[{"id":"only-step","order":1,"label":"Only step","isCompleted":false}]'::jsonb),
+  ('69000000-0000-4000-8000-000000000011', '19000000-0000-4000-8000-000000000001',
+   '59000000-0000-4000-8000-000000000002', 'MINT-75 local date UTC-2', 'not_started',
+   '[{"id":"only-step","order":1,"label":"Only step","isCompleted":false}]'::jsonb);
 
 -- The UTC day the RPC falls back to (clock_timestamp may cross midnight after
 -- the transaction's now(), so either day is accepted).
@@ -175,7 +182,7 @@ $function$;
 SET LOCAL request.jwt.claim.sub = '29000000-0000-4000-8000-000000000001';
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.mint19_assert(
-  'MINT-75 a local date within one day of UTC is stored',
+  'MINT-75 a local date one day behind UTC (UTC-1) is stored',
   (public.complete_sop_task_step(
     '19000000-0000-4000-8000-000000000001',
     '69000000-0000-4000-8000-000000000005',
@@ -185,6 +192,29 @@ SELECT pg_temp.mint19_assert(
     (pg_catalog.clock_timestamp() AT TIME ZONE 'UTC')::date - 1
   ) -> 'task' ->> 'completed_date')::date
     = (pg_catalog.clock_timestamp() AT TIME ZONE 'UTC')::date - 1
+);
+SELECT pg_temp.mint19_assert(
+  'MINT-75 a local date one day ahead of UTC (UTC+1) is stored',
+  (public.complete_sop_task_step(
+    '19000000-0000-4000-8000-000000000001',
+    '69000000-0000-4000-8000-000000000010',
+    'only-step',
+    '29000000-0000-4000-8000-000000000001',
+    'panel',
+    (pg_catalog.clock_timestamp() AT TIME ZONE 'UTC')::date + 1
+  ) -> 'task' ->> 'completed_date')::date
+    = (pg_catalog.clock_timestamp() AT TIME ZONE 'UTC')::date + 1
+);
+SELECT pg_temp.mint19_assert(
+  'MINT-75 a local date two days behind UTC (UTC-2) falls back to the UTC day',
+  pg_temp.mint75_is_utc_day(public.complete_sop_task_step(
+    '19000000-0000-4000-8000-000000000001',
+    '69000000-0000-4000-8000-000000000011',
+    'only-step',
+    '29000000-0000-4000-8000-000000000001',
+    'panel',
+    (pg_catalog.now() AT TIME ZONE 'UTC')::date - 2
+  ) -> 'task' ->> 'completed_date')
 );
 SELECT pg_temp.mint19_assert(
   'MINT-75 a backdated local date falls back to the UTC day',

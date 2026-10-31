@@ -20,6 +20,22 @@ export type CompleteTaskStepResult =
   | { kind: "ok"; task: Task; allDone: boolean }
   | { kind: "rejected"; status: 403 | 404 | 409 | 422; message: string };
 
+const COMPLETED_DATE_ARG = "p_completed_date";
+
+/** Deploy-order safety: PGRST202 naming `p_completed_date` means PostgREST has
+ * no complete_sop_task_step taking it (migration 20261030200000 is not applied
+ * to this database yet) and nothing ran, so the caller retries once without
+ * the date and the old function stores the UTC day. Anything else — a network
+ * fault, a permission error, a 5xx — must propagate, never be retried. */
+function isMissingCompletedDateArgError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const namesArg = [row.message, row.details, row.hint].some(
+    (value) => typeof value === "string" && value.includes(COMPLETED_DATE_ARG),
+  );
+  return namesArg && row.code === "PGRST202";
+}
+
 /** Complete one ordered SOP step through the transaction shared by the Panel
  * and extension paths. The database locks the task, derives the rollup, updates
  * a termination case when applicable, and appends the audit row atomically. */
@@ -35,15 +51,20 @@ export async function completeTaskStep(
     return { kind: "rejected", status: 403, message: "An authenticated actor is required" };
   }
 
-  const { data, error } = await ctx.db.rpc("complete_sop_task_step", {
+  const args = {
     p_org_id: ctx.orgId,
     p_task_id: taskId,
     p_step_id: stepId,
     p_actor_id: ctx.userId,
     p_source: ctx.source,
-    // MINT-75: the browser's local day; the server route omits it (UTC fallback).
-    ...(ctx.source === "panel" ? { p_completed_date: format(new Date(), "yyyy-MM-dd") } : {}),
-  });
+  };
+  // MINT-75: the browser's local day; the server route omits it (UTC fallback).
+  const datedArgs =
+    ctx.source === "panel" ? { ...args, p_completed_date: format(new Date(), "yyyy-MM-dd") } : args;
+  let { data, error } = await ctx.db.rpc("complete_sop_task_step", datedArgs);
+  if (error && datedArgs !== args && isMissingCompletedDateArgError(error)) {
+    ({ data, error } = await ctx.db.rpc("complete_sop_task_step", args));
+  }
   if (error) throw error;
 
   if (!data || typeof data !== "object" || Array.isArray(data)) {

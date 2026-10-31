@@ -144,4 +144,57 @@ describe("completeTaskStep completion date", () => {
     await completeTaskStep(context("extension"), "task-1", "step-1");
     expect(rpc.mock.calls[0]?.[1]).not.toHaveProperty("p_completed_date");
   });
+
+  // PostgREST's answer when only the old 5-argument function exists.
+  const missingArgError = {
+    code: "PGRST202",
+    message:
+      "Could not find the function public.complete_sop_task_step(p_actor_id, p_completed_date, p_org_id, p_source, p_step_id, p_task_id) in the schema cache",
+    details: null,
+    hint: "Perhaps you meant to call the function public.complete_sop_task_step(p_actor_id, p_org_id, p_source, p_step_id, p_task_id)",
+  };
+
+  it("retries once without the date when the database predates the argument", async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: missingArgError });
+
+    await expect(completeTaskStep(context("panel"), "task-1", "step-1")).resolves.toMatchObject({
+      kind: "ok",
+      allDone: true,
+    });
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls[0]?.[1]).toMatchObject({ p_completed_date: "2026-10-19" });
+    expect(rpc.mock.calls[1]).toEqual([
+      "complete_sop_task_step",
+      {
+        p_org_id: "org-a",
+        p_task_id: "task-1",
+        p_step_id: "step-1",
+        p_actor_id: "writer-a",
+        p_source: "panel",
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "another PGRST202",
+      { ...missingArgError, message: "Could not find the function", hint: null },
+    ],
+    ["a permission error", { code: "42501", message: "permission denied", details: null }],
+    ["a network fault", new Error("Failed to fetch")],
+  ])("does not retry on %s", async (_label, failure) => {
+    rpc.mockResolvedValueOnce({ data: null, error: failure });
+
+    await expect(completeTaskStep(context("panel"), "task-1", "step-1")).rejects.toBe(failure);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("the extension route never retries, since it sent no date", async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: missingArgError });
+
+    await expect(completeTaskStep(context("extension"), "task-1", "step-1")).rejects.toBe(
+      missingArgError,
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
 });
