@@ -4,7 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/lib/auth-store";
 import { queryKeys, FIVE_MINUTES } from "./queryKeys";
-import { listPortfolioOrgStates } from "@/services/reporting";
+import { listPortfolioFootprint } from "@/services/reporting";
 import {
   createReportShare,
   listReportShares,
@@ -12,13 +12,17 @@ import {
   type CreateReportShareInput,
 } from "@/services/reportShares";
 
-export function usePortfolioOrgStates() {
-  const session = useAuthStore((s) => s.session);
+// Group, location, provider and assignment writes across every org all move
+// these counts, and no single invalidation set covers them, so the report
+// refetches every time it opens instead of serving a stale cache.
+export function usePortfolioFootprint() {
+  const userId = useAuthStore((s) => s.session?.user.id ?? null);
   return useQuery({
-    queryKey: queryKeys.orgStates(),
-    queryFn: listPortfolioOrgStates,
-    enabled: Boolean(session),
+    queryKey: queryKeys.portfolioFootprint(userId ?? "no-session"),
+    queryFn: listPortfolioFootprint,
+    enabled: Boolean(userId),
     staleTime: FIVE_MINUTES,
+    refetchOnMount: "always",
   });
 }
 

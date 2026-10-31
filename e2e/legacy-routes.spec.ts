@@ -117,7 +117,6 @@ const RENDERING_ROUTES = [
   "/reporting/audit-log",
   "/reporting/leads",
   "/reporting/facilities-without-providers",
-  "/reporting/locations-per-group",
   "/org-detail",
   "/groups",
   "/providers",
@@ -148,6 +147,8 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/progress", to: /\/reporting\/denials\/?$/ },
   { from: "/launches", to: /\/reporting\/launches\/?$/ },
   { from: "/launches/loc-1", to: /\/reporting\/launches\/?$/ },
+  // RC-05 — Locations per Group folded into the Portfolio.
+  { from: "/reporting/locations-per-group", to: /\/reporting\/portfolio\/?$/ },
   // E6.6 F6.6.4 — the Audit Log admin page re-homed into the Center.
   { from: "/admin/audit", to: /\/reporting\/audit-log\/?$/ },
   // 3M Slice 2 — the pre-redesign /reports tab switcher retires to the Center.

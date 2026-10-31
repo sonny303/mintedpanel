@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
-import { StatusPill, type StatusColor } from "@/components/StatusPill";
+import { StatusPill } from "@/components/StatusPill";
 import { EmptyState } from "@/components/EmptyState";
+import { ReadinessPill } from "@/components/reporting/ReadinessPill";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -18,29 +19,37 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
 import { isCurrentBillingReadinessDate } from "@/hooks/useBillingReadiness";
 import {
+  assessFeedEvent,
+  BILLING_FEED_KIND_LABELS,
+  buildChangeFeedCsv,
   buildNewlyBillableDigestCsv,
-  evaluateBillingReadiness,
   filterBillingFeed,
   type BillingAssessment,
   type BillingFeedEvent,
   type BillingFeedFilters,
+  type BillingFeedKind,
   type BillingFeedRange,
 } from "@/lib/billingReadiness";
 import { downloadCsvText } from "@/lib/csv";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import type { BillingReadinessData, BillingReadinessQueryData } from "@/hooks/useBillingReadiness";
+import type { BillingReadinessData } from "@/hooks/useBillingReadiness";
 
-const STATUS_TONE: Record<BillingAssessment["status"], StatusColor> = {
-  ready: "green",
-  hold: "amber",
-  stop: "red",
-};
+// Rows render a page at a time; a 90-day window at Luna scale holds thousands.
+const PAGE_SIZE = 200;
+
+const FEED_KINDS = Object.keys(BILLING_FEED_KIND_LABELS) as BillingFeedKind[];
 
 function feedFiltersKey(filters: BillingFeedFilters): string {
-  return JSON.stringify([filters.range, filters.facilityId ?? "", filters.payerId ?? ""]);
+  return JSON.stringify([
+    filters.range,
+    filters.facilityId ?? "",
+    filters.payerId ?? "",
+    filters.kind ?? "",
+  ]);
 }
 
 function facilityIdentity(
@@ -51,26 +60,6 @@ function facilityIdentity(
   return `${facility.name} · ${facility.state ?? "State not recorded"} · ${groupName ?? "Group not recorded"}`;
 }
 
-function eventAssessment(
-  data: BillingReadinessQueryData | undefined,
-  event: BillingFeedEvent,
-): BillingAssessment | null {
-  if (!data || !event.payerId || !event.facilityId) return null;
-  const assessment = evaluateBillingReadiness(
-    data.snapshot,
-    { providerId: event.providerId, facilityId: event.facilityId, payerId: event.payerId },
-    data.asOf,
-  );
-  if (
-    !assessment?.case ||
-    assessment.case.id !== event.caseId ||
-    assessment.case.groupId !== event.groupId
-  ) {
-    return null;
-  }
-  return assessment;
-}
-
 function eventDate(event: BillingFeedEvent): string {
   return event.eventDate.includes("T") ? fmtDateTime(event.eventDate) : fmtDate(event.eventDate);
 }
@@ -79,13 +68,21 @@ export function BillingChangeFeed({ readiness }: { readiness: BillingReadinessDa
   const [range, setRange] = useState<BillingFeedRange>(30);
   const [facilityId, setFacilityId] = useState("");
   const [payerId, setPayerId] = useState("");
+  const [kind, setKind] = useState<BillingFeedKind | "">("");
   const [digestBusy, setDigestBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
   const currentFilters = useMemo<BillingFeedFilters>(
-    () => ({ range, facilityId: facilityId || undefined, payerId: payerId || undefined }),
-    [range, facilityId, payerId],
+    () => ({
+      range,
+      facilityId: facilityId || undefined,
+      payerId: payerId || undefined,
+      kind: kind || undefined,
+    }),
+    [range, facilityId, payerId, kind],
   );
   const filtersKey = feedFiltersKey(currentFilters);
+  const [visible, setVisible] = useState({ key: filtersKey, count: PAGE_SIZE });
+  const visibleCount = visible.key === filtersKey ? visible.count : PAGE_SIZE;
   const filtersKeyRef = useRef(filtersKey);
   filtersKeyRef.current = filtersKey;
 
@@ -105,11 +102,15 @@ export function BillingChangeFeed({ readiness }: { readiness: BillingReadinessDa
         : [],
     [readiness.data, currentFilters],
   );
+  const shownRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount]);
   const assessmentByEvent = useMemo(() => {
     const results = new Map<string, BillingAssessment | null>();
-    for (const event of rows) results.set(event.id, eventAssessment(readiness.data, event));
+    if (!readiness.data) return results;
+    for (const event of shownRows) {
+      results.set(event.id, assessFeedEvent(readiness.data.snapshot, event, readiness.data.asOf));
+    }
     return results;
-  }, [readiness.data, rows]);
+  }, [readiness.data, shownRows]);
 
   const canDownload = Boolean(
     readiness.data &&
@@ -165,6 +166,22 @@ export function BillingChangeFeed({ readiness }: { readiness: BillingReadinessDa
     }
   }
 
+  function downloadChanges() {
+    const data = readiness.data;
+    if (!canDownload || !data) return;
+    setDownloadError("");
+    if (!isCurrentBillingReadinessDate(data.asOf)) {
+      setDownloadError(
+        "A complete current read was not available. Retry after the source data loads.",
+      );
+      return;
+    }
+    downloadCsvText(
+      "credentialing-changes.csv",
+      buildChangeFeedCsv(data.snapshot, rows, data.asOf),
+    );
+  }
+
   return (
     <div className="space-y-3 pt-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -176,19 +193,31 @@ export function BillingChangeFeed({ readiness }: { readiness: BillingReadinessDa
             complete history.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!canDownload}
-          onClick={() => void downloadDigest()}
-        >
-          <Download className="h-3.5 w-3.5" />
-          Newly Billable Digest
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!canDownload || rows.length === 0}
+            onClick={downloadChanges}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export changes
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!canDownload}
+            onClick={() => void downloadDigest()}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Newly Billable Digest
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-3 rounded-md border border-border p-4 sm:grid-cols-3">
+      <div className="grid gap-3 rounded-md border border-border p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <span className="text-[12px] font-medium text-foreground">Date range</span>
           <Select
@@ -203,6 +232,26 @@ export function BillingChangeFeed({ readiness }: { readiness: BillingReadinessDa
               <SelectItem value="7">Last 7 days</SelectItem>
               <SelectItem value="30">Last 30 days</SelectItem>
               <SelectItem value="90">Last 90 days</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <span className="text-[12px] font-medium text-foreground">Change type</span>
+          <Select
+            value={kind || "all"}
+            onValueChange={(value) => setKind(value === "all" ? "" : (value as BillingFeedKind))}
+            disabled={!readiness.data}
+          >
+            <SelectTrigger aria-label="Change type" className="h-9 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All changes</SelectItem>
+              {FEED_KINDS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {BILLING_FEED_KIND_LABELS[value]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -259,65 +308,86 @@ export function BillingChangeFeed({ readiness }: { readiness: BillingReadinessDa
       ) : rows.length === 0 ? (
         <EmptyState message="No recorded or date-derived changes match these filters." />
       ) : (
-        <div className="overflow-x-auto rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Change</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Clinician</TableHead>
-                <TableHead>Facility</TableHead>
-                <TableHead>Payer</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Current readiness</TableHead>
-                <TableHead>Recorded confirmed effective date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((event) => {
-                const assessment = assessmentByEvent.get(event.id);
-                return (
-                  <TableRow key={event.id}>
-                    <TableCell className="whitespace-nowrap text-[12.5px]">
-                      {eventDate(event)}
-                    </TableCell>
-                    <TableCell className="text-[12.5px] font-medium">{event.title}</TableCell>
-                    <TableCell>
-                      <StatusPill
-                        status={event.recorded ? "blue" : "amber"}
-                        label={event.recorded ? "Recorded" : "Date-derived"}
-                      />
-                    </TableCell>
-                    <TableCell className="text-[12.5px]">{event.providerName}</TableCell>
-                    <TableCell className="text-[12.5px]">
-                      {event.facilityName ?? "Not recorded"}
-                    </TableCell>
-                    <TableCell className="text-[12.5px]">
-                      {event.payerName ?? "Not recorded"}
-                    </TableCell>
-                    <TableCell className="text-[12.5px]">{event.state ?? "Not recorded"}</TableCell>
-                    <TableCell>
-                      {assessment ? (
+        <TooltipProvider delayDuration={150}>
+          <p className="text-[12px] text-muted-foreground" aria-live="polite">
+            {rows.length === 1 ? "1 change" : `${rows.length.toLocaleString()} changes`}
+            {rows.length > shownRows.length
+              ? ` · showing the newest ${shownRows.length.toLocaleString()}`
+              : ""}
+          </p>
+          <div className="overflow-x-auto rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Change</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Clinician</TableHead>
+                  <TableHead>Facility</TableHead>
+                  <TableHead>Payer</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Current readiness</TableHead>
+                  <TableHead>Recorded confirmed effective date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shownRows.map((event) => {
+                  const assessment = assessmentByEvent.get(event.id);
+                  return (
+                    <TableRow key={event.id}>
+                      <TableCell className="whitespace-nowrap text-[12.5px]">
+                        {eventDate(event)}
+                      </TableCell>
+                      <TableCell className="text-[12.5px] font-medium">{event.title}</TableCell>
+                      <TableCell>
                         <StatusPill
-                          status={STATUS_TONE[assessment.status]}
-                          label={assessment.label}
+                          status={event.recorded ? "blue" : "amber"}
+                          label={event.recorded ? "Recorded" : "Date-derived"}
                         />
-                      ) : (
-                        <StatusPill status="gray" label="Unable to assess" />
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-[12.5px]">
-                      {assessment?.confirmedEffectiveDate
-                        ? fmtDate(assessment.confirmedEffectiveDate)
-                        : "Not recorded"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
+                      <TableCell className="text-[12.5px]">{event.providerName}</TableCell>
+                      <TableCell className="text-[12.5px]">
+                        {event.facilityName ?? "Not recorded"}
+                      </TableCell>
+                      <TableCell className="text-[12.5px]">
+                        {event.payerName ?? "Not recorded"}
+                      </TableCell>
+                      <TableCell className="text-[12.5px]">
+                        {event.state ?? "Not recorded"}
+                      </TableCell>
+                      <TableCell>
+                        {assessment ? (
+                          <ReadinessPill
+                            status={assessment.status}
+                            label={assessment.label}
+                            reasons={assessment.reasons}
+                          />
+                        ) : (
+                          <StatusPill status="gray" label="Unable to assess" />
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-[12.5px]">
+                        {assessment?.confirmedEffectiveDate
+                          ? fmtDate(assessment.confirmedEffectiveDate)
+                          : "Not recorded"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          {rows.length > shownRows.length ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setVisible({ key: filtersKey, count: visibleCount + PAGE_SIZE })}
+            >
+              Show {Math.min(PAGE_SIZE, rows.length - shownRows.length).toLocaleString()} more
+            </Button>
+          ) : null}
+        </TooltipProvider>
       )}
     </div>
   );

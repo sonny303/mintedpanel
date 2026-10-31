@@ -108,6 +108,8 @@ npx playwright test e2e/<spec>.spec.ts
 | Surface                                                        | Spec(s)                               |
 | -------------------------------------------------------------- | ------------------------------------- |
 | `/reporting`, `/reporting/portfolio`                           | `reporting-center.spec.ts`            |
+| `/reporting/provider-onboarding`                               | `reporting-center.spec.ts`            |
+| `/reporting/billing-readiness` (Lookup + Change Feed)          | `billing-readiness.spec.ts`           |
 | `/portfolio` redirect + all-inactive fallback                  | `portfolio-inactive-fallback.spec.ts` |
 | `/reporting/expiring-credentials` + document tables (provider, | `document-storage.spec.ts`            |
 | group, case verification, signed upload/download)              |                                       |

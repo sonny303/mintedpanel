@@ -1,158 +1,303 @@
-import { useMemo, useState } from "react";
-import { AlertCircle } from "lucide-react";
-import { StatusPill, type StatusColor } from "@/components/StatusPill";
+// Billing clearance lookup (Oct 20 review, RC-04): one search box for a
+// clinician's name, NPI, state code, or location, then that clinician's
+// readiness payer by payer. Selecting a payer row opens the full assessment.
+import { useDeferredValue, useMemo, useState } from "react";
+import { AlertCircle, ChevronLeft } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { ReadinessPill } from "@/components/reporting/ReadinessPill";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { evaluateBillingReadiness, type BillingSelection } from "@/lib/billingReadiness";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  providerPayerStatuses,
+  searchBillingProviders,
+  type BillingAssessment,
+  type BillingPayerStatusRow,
+  type BillingReadinessStatus,
+} from "@/lib/billingReadiness";
 import { fmtDate } from "@/lib/format";
 import { taxonomyLabel } from "@/lib/providerTaxonomy";
 import type { BillingReadinessQueryData } from "@/hooks/useBillingReadiness";
 
-const STATUS_TONE: Record<"ready" | "hold" | "stop", StatusColor> = {
-  ready: "green",
-  hold: "amber",
-  stop: "red",
+const STATUS_ORDER: BillingReadinessStatus[] = ["ready", "hold", "stop"];
+const STATUS_SUMMARY: Record<BillingReadinessStatus, string> = {
+  ready: "Billable Ready",
+  hold: "Hold",
+  stop: "Do Not Bill",
 };
-
-function fullName(firstName: string, lastName: string): string {
-  return `${firstName} ${lastName}`.trim();
-}
 
 function providerIdentifier(npi: string | null, id: string): string {
   return npi ? `NPI ${npi}` : `Provider ID ${id}`;
 }
 
-function facilityIdentity(
-  facility: { name: string; state: string | null; groupId: string | null },
-  groups: { id: string; name: string }[],
-): string {
-  const groupName = groups.find((group) => group.id === facility.groupId)?.name;
-  return `${facility.name} · ${facility.state ?? "State not recorded"} · ${groupName ?? "Group not recorded"}`;
+function effectiveDateText(row: BillingPayerStatusRow): string {
+  if (row.confirmedEffectiveDate) return fmtDate(row.confirmedEffectiveDate);
+  if (row.expectedEffectiveDate) return `Expected ${fmtDate(row.expectedEffectiveDate)}`;
+  return "Not recorded";
+}
+
+function AssessmentDetail({ row, asOf }: { row: BillingPayerStatusRow; asOf: string }) {
+  const assessment: BillingAssessment | null = row.assessment;
+  return (
+    <div className="space-y-4 rounded-md border border-border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[13.5px] font-semibold text-foreground">
+            {row.payer.name} · {row.locationLabel}
+          </h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Assessed {fmtDate(asOf)}</p>
+        </div>
+        <div data-testid="billing-assessment-status">
+          <ReadinessPill status={row.status} label={row.label} reasons={[]} />
+        </div>
+      </div>
+
+      {assessment ? (
+        <dl className="grid gap-x-6 gap-y-3 border-y border-border py-3 text-[12.5px] sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-muted-foreground">Group</dt>
+            <dd className="mt-0.5 font-medium text-foreground">
+              {assessment.group?.name ?? "Not recorded"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Enrollment state</dt>
+            <dd className="mt-0.5 font-medium text-foreground">
+              {assessment.state ?? "Not recorded"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Recorded confirmed effective date</dt>
+            <dd className="mt-0.5 font-medium text-foreground">
+              {assessment.confirmedEffectiveDate
+                ? fmtDate(assessment.confirmedEffectiveDate)
+                : "Not recorded"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Retro eligibility</dt>
+            <dd className="mt-0.5 font-medium text-foreground">Not recorded</dd>
+          </div>
+          {assessment.expectedEffectiveDate ? (
+            <div>
+              <dt className="text-muted-foreground">Expected effective date</dt>
+              <dd className="mt-0.5 font-medium text-foreground">
+                {fmtDate(assessment.expectedEffectiveDate)}
+              </dd>
+            </div>
+          ) : null}
+          {assessment.estimatedDecisionDate ? (
+            <div>
+              <dt className="text-muted-foreground">Estimated decision date</dt>
+              <dd className="mt-0.5 font-medium text-foreground">
+                {fmtDate(assessment.estimatedDecisionDate)} · estimate
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+
+      {assessment?.isPta ? (
+        <div className="rounded-md border border-border bg-background p-3 text-[12.5px] text-foreground">
+          <p className="font-medium text-[var(--mp-warn-ink)]">
+            CQ modifier guidance: PTA supervision is unverified.
+          </p>
+          <p className="mt-1">
+            Same-facility PT clinicians are candidates only. Confirm supervision, payer, and service
+            rules before billing.
+          </p>
+          {assessment.supervisorCandidates.length > 0 ? (
+            <p className="mt-1">
+              PT candidates:{" "}
+              {assessment.supervisorCandidates.map((candidate) => candidate.name).join(", ")}.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {assessment?.isOta ? (
+        <div className="rounded-md border border-border bg-background p-3 text-[12.5px] text-foreground">
+          <p className="font-medium text-[var(--mp-warn-ink)]">
+            CO modifier guidance: OTA supervision is unverified.
+          </p>
+          <p className="mt-1">Confirm supervision, payer, and service rules before billing.</p>
+        </div>
+      ) : null}
+
+      {row.reasons.length > 0 ? (
+        <div>
+          <h4 className="mb-2 text-[12.5px] font-semibold text-foreground">Why billing is held</h4>
+          <ul className="space-y-1.5">
+            {row.reasons.map((reason) => (
+              <li
+                key={`${reason.severity}:${reason.label}`}
+                className="flex items-start gap-2 text-[12.5px] text-foreground"
+              >
+                <AlertCircle
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span>{reason.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="text-[11.5px] text-muted-foreground">
+        Billable Ready reflects recorded prerequisites as of the assessment date. Confirm applicable
+        payer, service, timely-filing, and retro rules for each claim.
+        {assessment?.provider.taxonomyCode
+          ? ` Clinician taxonomy: ${taxonomyLabel(assessment.provider.taxonomyCode) ?? assessment.provider.taxonomyCode}.`
+          : ""}
+      </p>
+    </div>
+  );
+}
+
+function ProviderPayerStatus({
+  data,
+  providerId,
+  onBack,
+}: {
+  data: BillingReadinessQueryData;
+  providerId: string;
+  onBack: () => void;
+}) {
+  const [openKey, setOpenKey] = useState("");
+  const provider = data.snapshot.providers.find((row) => row.id === providerId);
+  const rows = useMemo(
+    () => providerPayerStatuses(data.snapshot, providerId, data.asOf),
+    [data, providerId],
+  );
+  const open = rows.find((row) => row.key === openKey) ?? null;
+  if (!provider) {
+    return <EmptyState message="This clinician is no longer in the organization's records." />;
+  }
+  const counts = STATUS_ORDER.map((status) => ({
+    status,
+    count: rows.filter((row) => row.status === status).length,
+  })).filter((entry) => entry.count > 0);
+
+  return (
+    <Card className="rounded-md border-border shadow-none">
+      <CardContent className="space-y-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[14px] font-semibold text-foreground">
+              {provider.firstName} {provider.lastName}
+            </h2>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              {providerIdentifier(provider.npi, provider.id)}
+              {counts.length > 0
+                ? ` · ${counts.map((entry) => `${entry.count} ${STATUS_SUMMARY[entry.status]}`).join(" · ")}`
+                : ""}
+            </p>
+          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back to results
+          </Button>
+        </div>
+
+        {rows.length === 0 ? (
+          <EmptyState message="No enrollment cases are recorded for this clinician." />
+        ) : (
+          <TooltipProvider delayDuration={150}>
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Payer</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Billing status</TableHead>
+                    <TableHead>Effective date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow
+                      key={row.key}
+                      data-state={row.key === openKey ? "selected" : undefined}
+                    >
+                      <TableCell className="text-[12.5px] font-medium">
+                        <button
+                          type="button"
+                          aria-expanded={row.key === openKey}
+                          aria-label={`${row.payer.name} at ${row.locationLabel}: details`}
+                          onClick={() => setOpenKey(row.key === openKey ? "" : row.key)}
+                          className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          {row.payer.name}
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-[12.5px]">{row.locationLabel}</TableCell>
+                      <TableCell className="text-[12.5px]">{row.state ?? "Not recorded"}</TableCell>
+                      <TableCell>
+                        <ReadinessPill
+                          status={row.status}
+                          label={row.label}
+                          reasons={row.reasons}
+                        />
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-[12.5px]">
+                        {effectiveDateText(row)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TooltipProvider>
+        )}
+
+        {open ? <AssessmentDetail row={open} asOf={data.asOf} /> : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function BillingClearanceLookup({ data }: { data: BillingReadinessQueryData | undefined }) {
-  const [search, setSearch] = useState("");
-  const [selection, setSelection] = useState<BillingSelection>({
-    providerId: "",
-    facilityId: "",
-    payerId: "",
-  });
-
-  const providers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (data?.snapshot.providers ?? [])
-      .filter((provider) =>
-        fullName(provider.firstName, provider.lastName).toLowerCase().includes(query),
-      )
-      .sort((a, b) =>
-        fullName(a.firstName, a.lastName).localeCompare(fullName(b.firstName, b.lastName)),
-      );
-  }, [data?.snapshot.providers, search]);
-
-  const facilities = useMemo(
-    () => [...(data?.snapshot.facilities ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
-    [data?.snapshot.facilities],
-  );
-  const payers = useMemo(
-    () => [...(data?.snapshot.payers ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
-    [data?.snapshot.payers],
-  );
-  const assessment = useMemo(
-    () => (data ? evaluateBillingReadiness(data.snapshot, selection, data.asOf) : null),
-    [data, selection],
+  const [query, setQuery] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const search = useMemo(
+    () =>
+      data
+        ? searchBillingProviders(data.snapshot, deferredQuery, data.asOf)
+        : { matches: [], total: 0 },
+    [data, deferredQuery],
   );
 
   return (
     <div className="space-y-4 pt-3">
-      <div className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="space-y-1.5">
-          <label
-            htmlFor="billing-clinician-search"
-            className="text-[12px] font-medium text-foreground"
-          >
-            Search clinicians
-          </label>
-          <Input
-            id="billing-clinician-search"
-            aria-label="Search clinicians"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            disabled={!data}
-            className="h-9 text-[13px]"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <span className="text-[12px] font-medium text-foreground">Clinician</span>
-          <Select
-            value={selection.providerId}
-            onValueChange={(providerId) => setSelection((current) => ({ ...current, providerId }))}
-            disabled={!data}
-          >
-            <SelectTrigger aria-label="Clinician" className="h-9 text-[13px]">
-              <SelectValue placeholder="Select clinician" />
-            </SelectTrigger>
-            <SelectContent>
-              {providers.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {fullName(provider.firstName, provider.lastName)} ·{" "}
-                  {providerIdentifier(provider.npi, provider.id)}
-                </SelectItem>
-              ))}
-              {providers.length === 0 ? (
-                <SelectItem value="no-match" disabled>
-                  No matching clinicians.
-                </SelectItem>
-              ) : null}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <span className="text-[12px] font-medium text-foreground">Facility</span>
-          <Select
-            value={selection.facilityId}
-            onValueChange={(facilityId) => setSelection((current) => ({ ...current, facilityId }))}
-            disabled={!data}
-          >
-            <SelectTrigger aria-label="Facility" className="h-9 text-[13px]">
-              <SelectValue placeholder="Select facility" />
-            </SelectTrigger>
-            <SelectContent>
-              {facilities.map((facility) => (
-                <SelectItem key={facility.id} value={facility.id}>
-                  {facilityIdentity(facility, data?.snapshot.groups ?? [])}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <span className="text-[12px] font-medium text-foreground">Payer</span>
-          <Select
-            value={selection.payerId}
-            onValueChange={(payerId) => setSelection((current) => ({ ...current, payerId }))}
-            disabled={!data}
-          >
-            <SelectTrigger aria-label="Payer" className="h-9 text-[13px]">
-              <SelectValue placeholder="Select payer" />
-            </SelectTrigger>
-            <SelectContent>
-              {payers.map((payer) => (
-                <SelectItem key={payer.id} value={payer.id}>
-                  {payer.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-1.5 rounded-md border border-border p-4">
+        <label htmlFor="billing-lookup-search" className="text-[12px] font-medium text-foreground">
+          Find a clinician
+        </label>
+        <Input
+          id="billing-lookup-search"
+          type="search"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setProviderId("");
+          }}
+          disabled={!data}
+          className="h-9 max-w-xl text-[13px]"
+        />
+        <p className="text-[11.5px] text-muted-foreground">
+          Search by name, NPI, state code (for example, NC), or location.
+        </p>
       </div>
 
       {!data ? (
@@ -160,134 +305,54 @@ export function BillingClearanceLookup({ data }: { data: BillingReadinessQueryDa
           message="A current readiness assessment is unavailable."
           description="Select an organization or retry after its source records load."
         />
-      ) : !selection.providerId || !selection.facilityId || !selection.payerId ? (
-        <EmptyState message="Choose a clinician, facility, and payer to assess the exact enrollment match." />
-      ) : !assessment ? (
-        <EmptyState message="This combination cannot be assessed from the available organization records." />
+      ) : providerId ? (
+        <ProviderPayerStatus
+          key={providerId}
+          data={data}
+          providerId={providerId}
+          onBack={() => setProviderId("")}
+        />
+      ) : !query.trim() ? (
+        <EmptyState message="Search for a clinician to see billing status for every payer." />
+      ) : search.total === 0 ? (
+        <EmptyState message="No clinicians match this search." />
       ) : (
-        <Card className="rounded-md border-border shadow-none">
-          <CardContent className="space-y-4 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-[14px] font-semibold text-foreground">Current readiness</h2>
-                <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {assessment.provider.firstName} {assessment.provider.lastName} ·{" "}
-                  {providerIdentifier(assessment.provider.npi, assessment.provider.id)} ·{" "}
-                  {facilityIdentity(assessment.facility, data.snapshot.groups)} ·{" "}
-                  {assessment.payer.name}
-                </p>
-              </div>
-              <div data-testid="billing-assessment-status">
-                <StatusPill status={STATUS_TONE[assessment.status]} label={assessment.label} />
-              </div>
-            </div>
-
-            <dl className="grid gap-x-6 gap-y-3 border-y border-border py-3 text-[12.5px] sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <dt className="text-muted-foreground">Group</dt>
-                <dd className="mt-0.5 font-medium text-foreground">
-                  {assessment.group?.name ?? "Not recorded"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Enrollment state</dt>
-                <dd className="mt-0.5 font-medium text-foreground">
-                  {assessment.state ?? "Not recorded"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Recorded confirmed effective date</dt>
-                <dd className="mt-0.5 font-medium text-foreground">
-                  {assessment.confirmedEffectiveDate
-                    ? fmtDate(assessment.confirmedEffectiveDate)
-                    : "Not recorded"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Retro eligibility</dt>
-                <dd className="mt-0.5 font-medium text-foreground">Not recorded</dd>
-              </div>
-              {assessment.expectedEffectiveDate ? (
-                <div>
-                  <dt className="text-muted-foreground">Expected effective date</dt>
-                  <dd className="mt-0.5 font-medium text-foreground">
-                    {fmtDate(assessment.expectedEffectiveDate)}
-                  </dd>
-                </div>
-              ) : null}
-              {assessment.estimatedDecisionDate ? (
-                <div>
-                  <dt className="text-muted-foreground">Estimated decision date</dt>
-                  <dd className="mt-0.5 font-medium text-foreground">
-                    {fmtDate(assessment.estimatedDecisionDate)} · estimate
-                  </dd>
-                </div>
-              ) : null}
-              <div>
-                <dt className="text-muted-foreground">Assessment date</dt>
-                <dd className="mt-0.5 font-medium text-foreground">{fmtDate(data.asOf)}</dd>
-              </div>
-            </dl>
-
-            {assessment.isPta ? (
-              <div className="rounded-md border border-border bg-background p-3 text-[12.5px] text-foreground">
-                <p className="font-medium text-[var(--mp-warn-ink)]">
-                  CQ modifier guidance: PTA supervision is unverified.
-                </p>
-                <p className="mt-1">
-                  Same-facility PT clinicians are candidates only. Confirm supervision, payer, and
-                  service rules before billing.
-                </p>
-                {assessment.supervisorCandidates.length > 0 ? (
-                  <p className="mt-1">
-                    PT candidates:{" "}
-                    {assessment.supervisorCandidates.map((candidate) => candidate.name).join(", ")}.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {assessment.isOta ? (
-              <div className="rounded-md border border-border bg-background p-3 text-[12.5px] text-foreground">
-                <p className="font-medium text-[var(--mp-warn-ink)]">
-                  CO modifier guidance: OTA supervision is unverified.
-                </p>
-                <p className="mt-1">
-                  Confirm supervision, payer, and service rules before billing.
-                </p>
-              </div>
-            ) : null}
-
-            {assessment.reasons.length > 0 ? (
-              <div>
-                <h3 className="mb-2 text-[12.5px] font-semibold text-foreground">
-                  {assessment.status === "ready" ? "Readiness evidence" : "Why billing is held"}
-                </h3>
-                <ul className="space-y-1.5">
-                  {assessment.reasons.map((reason) => (
-                    <li
-                      key={`${reason.severity}:${reason.label}`}
-                      className="flex items-start gap-2 text-[12.5px] text-foreground"
-                    >
-                      <AlertCircle
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <span>{reason.label}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            <p className="text-[11.5px] text-muted-foreground">
-              Billable Ready reflects recorded prerequisites as of the assessment date. Confirm
-              applicable payer, service, timely-filing, and retro rules for each claim.
-              {assessment.provider.taxonomyCode
-                ? ` Clinician taxonomy: ${taxonomyLabel(assessment.provider.taxonomyCode) ?? assessment.provider.taxonomyCode}.`
-                : ""}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="space-y-2">
+          <p className="text-[12px] text-muted-foreground" aria-live="polite">
+            {search.total > search.matches.length
+              ? `Showing ${search.matches.length} of ${search.total.toLocaleString()} matches. Add more detail to narrow the list.`
+              : search.total === 1
+                ? "1 match"
+                : `${search.total} matches`}
+          </p>
+          <ul
+            className="overflow-hidden rounded-md border border-border"
+            aria-label="Matching clinicians"
+          >
+            {search.matches.map((match, i) => (
+              <li key={match.provider.id} className={i > 0 ? "border-t border-border" : ""}>
+                <button
+                  type="button"
+                  onClick={() => setProviderId(match.provider.id)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium text-foreground">
+                      {match.name}
+                    </span>
+                    <span className="block truncate text-[12px] text-muted-foreground">
+                      {providerIdentifier(match.provider.npi, match.provider.id)}
+                      {match.groupNames.length > 0 ? ` · ${match.groupNames.join(", ")}` : ""}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[12px] text-muted-foreground">
+                    {match.states.length > 0 ? match.states.join(", ") : "No state recorded"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

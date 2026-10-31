@@ -1,28 +1,10 @@
-// E6.6 F6.6.4 — counts-as-reports: locations per group. Org-scoped; the content gates itself.
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft } from "lucide-react";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { LocationsPerGroupReport } from "@/components/reporting/LocationsPerGroupReport";
+// Locations per Group folded into the Portfolio (Oct 20 review, RC-05): each
+// group row there carries its active-location count. The old URL stays alive
+// as a redirect so no bookmark dead-ends.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/reporting/locations-per-group")({
-  component: ReportPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/reporting/portfolio", replace: true });
+  },
 });
-
-function ReportPage() {
-  return (
-    <div>
-      <Link
-        to="/reporting"
-        className="mb-3 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" />
-        Reporting Center
-      </Link>
-      <PageHeader
-        title="Locations per Group"
-        description="Active location counts by provider group."
-      />
-      <LocationsPerGroupReport />
-    </div>
-  );
-}

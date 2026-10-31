@@ -203,7 +203,7 @@ test("the index renders the four groups with their reports (F6.6.1 / TS-115)", a
   await expect(page.getByRole("heading", { name: "Compliance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Intake" })).toBeVisible();
   await expect(
-    page.getByText("Your organizations across the business", { exact: false }),
+    page.getByText("Your organizations, groups, and states", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("Launches", { exact: true })).toBeVisible();
   await expect(page.getByText("Denials", { exact: true })).toBeVisible();
@@ -211,7 +211,9 @@ test("the index renders the four groups with their reports (F6.6.1 / TS-115)", a
   await expect(page.getByText("Audit Log", { exact: true })).toBeVisible();
   await expect(page.getByText("Inbound Leads", { exact: true })).toBeVisible();
   await expect(page.getByText("Facilities Without Providers", { exact: true })).toBeVisible();
-  await expect(page.getByText("Locations per Group", { exact: true })).toBeVisible();
+  await expect(page.getByText("Provider Onboarding", { exact: true })).toBeVisible();
+  // RC-05 folded Locations per Group into the Portfolio.
+  await expect(page.getByText("Locations per Group", { exact: true })).toHaveCount(0);
   // No new leads → no badge.
   await expect(page.getByTestId("report-badge-leads")).toHaveCount(0);
 });
@@ -246,19 +248,48 @@ test("the Intake card badges the new-lead count only when leads await (F6.6.1)",
   await expect(page.getByTestId("report-badge-leads")).toHaveText("1", { timeout: 30000 });
 });
 
-test("Portfolio report renders metrics, state breakdown, org list, and share panel", async ({
+test("Portfolio nests Organization → Group → State with provider and location counts (RC-05)", async ({
   context,
   page,
 }) => {
-  await seed(context);
+  await seed(context, {
+    provider_groups: [
+      { id: "g-ks", org_id: ORG_A, name: "Kansas Fitness Physio P.A.", is_active: true },
+      { id: "g-mo", org_id: ORG_A, name: "Missouri Fitness Physio, LLC", is_active: true },
+    ],
+    facilities: [
+      facilityRow("f-ks1", "Topeka", null, { group_id: "g-ks", state: "KS" }),
+      facilityRow("f-ks2", "Wichita", null, { group_id: "g-ks", state: "KS" }),
+      facilityRow("f-mo1", "Kansas City", null, { group_id: "g-mo", state: "MO" }),
+    ],
+    providers: [providerRow("p-1", "Lyla", "Garrity"), providerRow("p-2", "Tim", "Riggins")],
+    provider_group_assignments: [
+      { id: "m-1", provider_id: "p-1", group_id: "g-ks", end_date: null },
+      { id: "m-2", provider_id: "p-2", group_id: "g-mo", end_date: null },
+    ],
+    provider_facility_assignments: [
+      { id: "a-1", provider_id: "p-1", facility_id: "f-ks1" },
+      { id: "a-2", provider_id: "p-2", facility_id: "f-mo1" },
+    ],
+  });
   await page.goto("/reporting/portfolio");
-  // "In motion"/"Prospects" appear in the metric tile, the reused PortfolioContent
-  // section, and the all-orgs table — assert presence with .first() to avoid the
-  // strict-mode multi-match, then the unique report headings.
-  await expect(page.getByText("In motion").first()).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText("Prospects").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "By state" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "All organizations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Rose City Rehab Collective" })).toBeVisible({
+    timeout: 30000,
+  });
+  // The lifecycle tiles are gone; "Groups" replaces "Prospects".
+  const main = page.getByRole("main");
+  await expect(main.getByText("Prospects", { exact: true })).toHaveCount(0);
+  await expect(main.getByText("In motion", { exact: true })).toHaveCount(0);
+  await expect(main.getByText("Groups", { exact: true })).toBeVisible();
+  const table = page.getByRole("table", { name: "Rose City Rehab Collective groups and states" });
+  const ks = table.locator("tr", { hasText: "Kansas Fitness Physio P.A." });
+  await expect(ks.getByRole("cell").nth(1)).toHaveText("1");
+  await expect(ks.getByRole("cell").nth(2)).toHaveText("2");
+  await expect(table.locator("tr", { hasText: "KS · Kansas" })).toBeVisible();
+  await expect(table.locator("tr", { hasText: "MO · Missouri" })).toBeVisible();
+  // Collapsing a group hides its state rows.
+  await ks.getByRole("button", { name: /Kansas Fitness Physio P\.A\./ }).click();
+  await expect(table.locator("tr", { hasText: "KS · Kansas" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Share this report" })).toBeVisible();
 });
 
@@ -420,13 +451,12 @@ test("F6.6.4 — the two counts reports derive live from existing data", async (
   await expect(page.getByText("Westside Clinic")).toHaveCount(0);
   await expect(page.getByText("Closed Clinic")).toHaveCount(0);
 
+  // Locations per Group folded into the Portfolio (RC-05); the old URL redirects.
   await page.goto("/reporting/locations-per-group");
-  await expect(page.getByRole("heading", { name: "Locations per Group" })).toBeVisible({
-    timeout: 30000,
-  });
+  await expect(page).toHaveURL(/\/reporting\/portfolio$/, { timeout: 30000 });
   const groupRow = page.locator("tr", { hasText: "Shelby Sports Rehab" });
   // Two active locations (the inactive one never counts).
-  await expect(groupRow.getByText("2", { exact: true })).toBeVisible();
+  await expect(groupRow.getByRole("cell").nth(2)).toHaveText("2", { timeout: 30000 });
 });
 
 test("F6.6.4 — the Audit Log renders inside the Center with its filters and immutability banner", async ({
@@ -459,4 +489,119 @@ test("F6.6.4 — the Audit Log renders inside the Center with its filters and im
   await expect(page.getByText("All actions")).toBeVisible();
   await expect(page.getByText("All entities")).toBeVisible();
   await expect(page.getByText("Updated case")).toBeVisible();
+});
+
+test("RC-06 — Provider Onboarding places each provider in one stage and lists what they need", async ({
+  context,
+  page,
+}) => {
+  const complete = {
+    npi: "1234567893",
+    caqh_id: "CAQH-1",
+    caqh_last_attested_date: daysFromNow(-10),
+    date_of_birth: "1990-01-01",
+    ssn_last4: "1234",
+  };
+  const license = (id: string, providerId: string, state: string, verified: string) => ({
+    id,
+    org_id: ORG_A,
+    provider_id: providerId,
+    state,
+    status: "active",
+    verified_status: verified,
+    expiration_date: daysFromNow(400),
+  });
+  const membership = (id: string, providerId: string) => ({
+    id,
+    org_id: ORG_A,
+    provider_id: providerId,
+    group_id: GROUP_ID,
+    end_date: null,
+  });
+  await seed(context, {
+    providers: [
+      { ...providerRow("p-new", "Ann", "Newhire"), ...complete, npi: null },
+      { ...providerRow("p-psv", "Bea", "Pending"), ...complete },
+      { ...providerRow("p-ready", "Cal", "Ready"), ...complete },
+      { ...providerRow("p-case", "Dee", "Enrolling"), ...complete },
+      { ...providerRow("p-unassigned", "Eve", "Unassigned"), ...complete },
+      // Her only case was denied, and her profile is incomplete: still Credentialing.
+      { ...providerRow("p-denied", "Fay", "Reapply"), ...complete, npi: null },
+    ],
+    state_licenses: [
+      license("l-1", "p-new", "TX", "verified"),
+      license("l-2", "p-psv", "TX", "unverified"),
+      license("l-3", "p-ready", "MO", "verified"),
+      license("l-4", "p-case", "TX", "verified"),
+      license("l-5", "p-unassigned", "NC", "verified"),
+    ],
+    provider_groups: [{ id: GROUP_ID, org_id: ORG_A, name: "Rose City Rehab", is_active: true }],
+    provider_group_assignments: [membership("m-1", "p-psv"), membership("m-2", "p-ready")],
+    facilities: [
+      facilityRow("f-tx", "Dallas", null),
+      facilityRow("f-mo", "Kansas City", null, { state: "MO" }),
+    ],
+    provider_facility_assignments: [
+      { id: "a-1", org_id: ORG_A, provider_id: "p-psv", facility_id: "f-tx" },
+      { id: "a-2", org_id: ORG_A, provider_id: "p-ready", facility_id: "f-mo" },
+    ],
+    credential_cases: [
+      caseRow("c-1", "p-case", "payer-1", "TX", "submitted"),
+      caseRow("c-2", "p-denied", "payer-1", "TX", "denied"),
+    ],
+  });
+
+  await page.goto("/reporting");
+  await page.getByRole("link", { name: /Provider Onboarding/ }).click();
+  await expect(page.getByRole("heading", { name: "Provider Onboarding" })).toBeVisible({
+    timeout: 30000,
+  });
+  const stages = page.getByRole("list", { name: "Onboarding stages" });
+  await expect(stages.getByRole("button", { name: /Profile incomplete\s*1/ })).toBeVisible({
+    timeout: 30000,
+  });
+  // Provider stages in funnel order. Invited stays hidden until the intake
+  // tables can be read (MINT-89).
+  await expect(stages.locator("li > button > span:nth-child(2)")).toHaveText([
+    "Profile incomplete",
+    "Submitted",
+    "Ready for credentialing",
+    "Credentialing",
+  ]);
+  await expect(stages.getByRole("button", { name: /Submitted\s*2/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Ready for credentialing\s*1/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Credentialing\s*2/ })).toBeVisible();
+  await expect(page.getByText("Awaiting verification")).toHaveCount(0);
+  await expect(page.getByText("Invited", { exact: true })).toHaveCount(0);
+
+  // Default stage lists who is incomplete and why.
+  await expect(page.locator("tr", { hasText: "Ann Newhire" })).toContainText("No NPI");
+  // Date of birth and SSN last 4 are presence checks only; neither value renders.
+  await expect(page.getByText(/1990/)).toHaveCount(0);
+  await expect(page.getByText("1234", { exact: true })).toHaveCount(0);
+  await stages.getByRole("button", { name: /Submitted/ }).click();
+  await expect(page.locator("tr", { hasText: "Bea Pending" })).toContainText(
+    "TX license not board-verified",
+  );
+  // Verified but with no group and no location: Submitted, not Ready.
+  await expect(page.locator("tr", { hasText: "Eve Unassigned" })).toContainText(
+    "Needs a group and a location",
+  );
+  await expect(page.locator("tr", { hasText: "Ann Newhire" })).toHaveCount(0);
+
+  // Any case is Credentialing, a denied one too, with no case-status breakdown.
+  await stages.getByRole("button", { name: /Credentialing\s*2/ }).click();
+  const credentialing = page.getByRole("region", {
+    name: "Credentialing providers",
+    exact: true,
+  });
+  await expect(credentialing.locator("tbody tr")).toHaveCount(2);
+  await expect(credentialing).toContainText("Fay Reapply");
+  await expect(credentialing).not.toContainText(/denied|submitted|What's needed/i);
+
+  // State filter narrows every stage.
+  await page.getByRole("combobox", { name: "State" }).click();
+  await page.getByRole("option", { name: "MO", exact: true }).click();
+  await expect(stages.getByRole("button", { name: /Ready for credentialing\s*1/ })).toBeVisible();
+  await expect(stages.getByRole("button", { name: /Submitted\s*0/ })).toBeVisible();
 });
