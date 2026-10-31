@@ -27,6 +27,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { splitPortfolio } from "@/lib/portfolio";
 import {
   buildPortfolioFootprint,
+  NO_GROUP_ID,
   portfolioTotals,
   sortStates,
   UNKNOWN_STATE,
@@ -135,8 +136,12 @@ function OrgCard({
           <div>
             <h2 className="text-[15px] font-semibold text-foreground">{org.name}</h2>
             <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-              {plural(groups.filter((g) => g.name !== "No group").length, "group", "groups")} ·{" "}
-              {plural(org.stateCount, "state", "states")} ·{" "}
+              {plural(
+                groups.filter((g) => !g.groupId.startsWith(NO_GROUP_ID)).length,
+                "group",
+                "groups",
+              )}{" "}
+              · {plural(org.stateCount, "state", "states")} ·{" "}
               {plural(org.providers, "provider", "providers")} ·{" "}
               {plural(org.locations, "location", "locations")}
             </p>

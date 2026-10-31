@@ -4,12 +4,14 @@
 // exactly one of four stages, derived at read time and never stored:
 //
 //   1. Profile incomplete     missing NPI, CAQH ID, date of birth, SSN last 4,
-//                             or a license (any license, and one for each
-//                             state they are assigned to work in)
+//                             or a license (any license with a valid state
+//                             code, and one for each state they are assigned
+//                             to work in)
 //   2. Awaiting verification  profile complete, but a working-state license is
-//                             not board-verified or is expired, CAQH is not
-//                             attested within 120 days, or the record is
-//                             pending verification
+//                             not board-verified, is expired, or has no
+//                             expiration date; CAQH is not attested within
+//                             the last 120 days (a future date never counts);
+//                             or the record is pending verification
 //   3. Ready to credential    every check passes and no case exists yet
 //   4. Credentialing          at least one credentialing case exists
 //
@@ -128,14 +130,19 @@ export function buildOnboardingFunnelRows(
       const base = { providerId: p.providerId, name: p.name, npi: p.npi, states };
       if (cases.length > 0) return { ...base, stage: "credentialing", gaps: [] };
 
-      const licenseStates = new Set(licenses.map((l) => code(l.state)));
+      // A license only counts once its state code is valid: one with a blank or
+      // unknown state can never be checked against a working state.
+      const stateLicenses = licenses.filter((l) => code(l.state) !== null);
+      const licenseStates = new Set(stateLicenses.map((l) => code(l.state) as string));
       const profileGaps = [
         ...(p.npi?.trim() ? [] : ["No NPI"]),
         ...(p.caqhIdPresent ? [] : ["No CAQH ID"]),
         ...(p.dobPresent ? [] : ["No date of birth"]),
         ...(p.ssnLast4Present ? [] : ["No SSN last 4"]),
-        ...(licenses.length === 0 ? ["No state license"] : []),
-        ...(licenses.length === 0
+        ...(stateLicenses.length === 0
+          ? [licenses.length === 0 ? "No state license" : "License state is missing or invalid"]
+          : []),
+        ...(stateLicenses.length === 0
           ? []
           : workStates.filter((s) => !licenseStates.has(s)).map((s) => `No ${s} license`)),
       ];
@@ -144,10 +151,10 @@ export function buildOnboardingFunnelRows(
 
       // Judge the licenses for the states they work in; with no assignment
       // yet, every license on file.
-      const judged = workStates.length > 0 ? workStates : [...licenseStates].filter(Boolean);
+      const judged = workStates.length > 0 ? workStates : [...licenseStates];
       const verificationGaps: string[] = [];
-      for (const state of judged as string[]) {
-        const best = licenses
+      for (const state of judged) {
+        const best = stateLicenses
           .filter((l) => code(l.state) === state)
           .sort(
             (a, b) =>
@@ -157,14 +164,20 @@ export function buildOnboardingFunnelRows(
         if (!best) continue;
         if (best.verifiedStatus !== "verified")
           verificationGaps.push(`${state} license not board-verified`);
-        if (!best.expirationDate || best.expirationDate.slice(0, 10) < today)
+        // As in the enrollment readiness matrix, a license with no expiration
+        // date is not unexpired.
+        if (!best.expirationDate) verificationGaps.push(`${state} license has no expiration date`);
+        else if (best.expirationDate.slice(0, 10) < today)
           verificationGaps.push(`${state} license expired`);
       }
-      if (!isCaqhCurrent(p.caqhLastAttestedDate, today)) {
+      const attested = p.caqhLastAttestedDate?.slice(0, 10) ?? null;
+      if (!isCaqhCurrent(attested, today)) {
         verificationGaps.push(
-          p.caqhLastAttestedDate
-            ? `CAQH attestation older than ${CAQH_CURRENT_DAYS} days`
-            : "CAQH never attested",
+          !attested
+            ? "CAQH never attested"
+            : attested > today
+              ? "CAQH attestation date is in the future"
+              : `CAQH attestation older than ${CAQH_CURRENT_DAYS} days`,
         );
       }
       if (p.pendingVerification) verificationGaps.push("Record pending verification");

@@ -101,4 +101,42 @@ describe("provider onboarding funnel", () => {
       "TX",
     ]);
   });
+
+  it("names a license with no expiration date instead of calling it expired", () => {
+    const data = input();
+    data.licenses = data.licenses.map((l) =>
+      l.providerId === "ready" && l.state === "NC" ? { ...l, expirationDate: null } : l,
+    );
+    const ready = buildOnboardingFunnelRows(data, TODAY).find((r) => r.providerId === "ready");
+    expect(ready).toMatchObject({
+      stage: "awaiting_verification",
+      gaps: ["NC license has no expiration date"],
+    });
+  });
+
+  it("treats a future CAQH attestation date as not current, with its own reason", () => {
+    const data = input();
+    data.providers = [{ ...complete("ready", "Fay Ready"), caqhLastAttestedDate: "2026-11-01" }];
+    expect(buildOnboardingFunnelRows(data, TODAY)[0]).toMatchObject({
+      stage: "awaiting_verification",
+      gaps: ["CAQH attestation date is in the future"],
+    });
+  });
+
+  it("does not let a license with an invalid state code satisfy the license requirement", () => {
+    const data = input();
+    data.providers = [complete("bad", "Hal Badstate")];
+    data.licenses = [verified("bad", "Z9")];
+    data.workStates = [];
+    const [row] = buildOnboardingFunnelRows(data, TODAY);
+    expect(row).toMatchObject({
+      stage: "profile_incomplete",
+      gaps: ["License state is missing or invalid"],
+    });
+    data.licenses = [...data.licenses, verified("bad", "nc")];
+    expect(buildOnboardingFunnelRows(data, TODAY)[0]).toMatchObject({
+      stage: "ready_to_credential",
+      states: ["NC"],
+    });
+  });
 });

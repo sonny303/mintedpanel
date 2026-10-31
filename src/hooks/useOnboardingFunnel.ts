@@ -1,5 +1,7 @@
 // Provider Onboarding funnel hook (RC-06). Org-scoped; the stage derivation
-// runs on the cached read with today's local date.
+// runs on the cached read with today's local date. The roster cache set
+// (providerRosterCaches.ts) and case creation invalidate the key; profile and
+// license edits do not, so the report also refetches every time it opens.
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
@@ -15,6 +17,7 @@ export function useOnboardingFunnel() {
     queryFn: getOnboardingFunnelInput,
     enabled: Boolean(orgId),
     staleTime: FIVE_MINUTES,
+    refetchOnMount: "always",
   });
   const rows = useMemo(
     () => (query.data ? buildOnboardingFunnelRows(query.data, localTodayIso()) : undefined),

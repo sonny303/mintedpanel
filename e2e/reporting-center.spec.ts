@@ -546,6 +546,9 @@ test("RC-06 — Provider Onboarding places each provider in one stage and lists 
 
   // Default stage lists who is incomplete and why.
   await expect(page.locator("tr", { hasText: "Ann Newhire" })).toContainText("No NPI");
+  // Date of birth and SSN last 4 are presence checks only; neither value renders.
+  await expect(page.getByText(/1990/)).toHaveCount(0);
+  await expect(page.getByText("1234", { exact: true })).toHaveCount(0);
   await stages.getByRole("button", { name: /Awaiting verification/ }).click();
   await expect(page.locator("tr", { hasText: "Bea Pending" })).toContainText(
     "TX license not board-verified",
