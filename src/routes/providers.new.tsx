@@ -13,6 +13,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuthStore, useRole } from "@/lib/auth-store";
+import { localCalendarDate } from "@/lib/systemTokens";
 import { useCreateProviderWithDetails } from "@/hooks/useProviders";
 import { useLaunchLocation } from "@/hooks/useLaunches";
 import {
@@ -20,6 +21,7 @@ import {
   emptyProviderFormState,
   type ProviderFormState,
 } from "@/components/providers/ProviderForm";
+import { isBlankLicenseRow } from "@/components/providers/providerFormShared";
 import type {
   CreateProviderWithDetailsResult,
   LicenseInput,
@@ -72,7 +74,7 @@ function toProviderInput(form: ProviderFormState): ProviderInput {
 
 function toLicenseInputs(form: ProviderFormState): LicenseInput[] {
   return form.licenses
-    .filter((l) => l.state || l.number || l.type || l.issueDate || l.expirationDate)
+    .filter((l) => !isBlankLicenseRow(l))
     .map((l) => ({
       state: l.state,
       licenseNumber: l.number.trim() || null,
@@ -96,17 +98,15 @@ function Page() {
   const launchLocation = locationId ? (locationQ.data ?? null) : null;
   const create = useCreateProviderWithDetails();
 
-  const initial = useMemo(
-    () =>
-      launchLocation
-        ? {
-            ...emptyProviderFormState,
-            groupId: launchLocation.groupId ?? "",
-            facilityIds: [launchLocation.id],
-          }
-        : emptyProviderFormState,
-    [launchLocation],
-  );
+  // MINT-96: the start date opens on the coordinator's local today — the date
+  // facility assignments are saved with when it is blank — so the default is
+  // shown (and editable) before save instead of appearing on the record after.
+  const initial = useMemo(() => {
+    const base = { ...emptyProviderFormState, startDate: localCalendarDate(new Date()) };
+    return launchLocation
+      ? { ...base, groupId: launchLocation.groupId ?? "", facilityIds: [launchLocation.id] }
+      : base;
+  }, [launchLocation]);
 
   const onSubmit = async (form: ProviderFormState) => {
     try {

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { maskSsn } from "@/lib/ssnMask";
+import { localCalendarDate } from "@/lib/systemTokens";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
   CredentialsSection,
@@ -15,6 +16,7 @@ import {
   PersonalSection,
 } from "@/components/providers/ProviderFormSections";
 import {
+  isBlankLicenseRow,
   validateAll,
   validateCredentials,
   validatePersonal,
@@ -191,8 +193,15 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
     const selected = (facilities.data ?? []).filter((f) => form.facilityIds.includes(f.id));
     if (selected.length === 0) return "—";
     const primaryId = form.facilityIds[0];
-    return selected.map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name)).join(", ");
-  }, [facilities.data, form.facilityIds]);
+    const names = selected
+      .map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name))
+      .join(", ");
+    // MINT-96: insertAssignmentRows saves a blank start date as local today, so
+    // name the date the assignments will actually carry.
+    const start = form.startDate || localCalendarDate(new Date());
+    return `${names} · starts ${fmtDate(start)}`;
+  }, [facilities.data, form.facilityIds, form.startDate]);
+  const licenses = form.licenses.filter((l) => !isBlankLicenseRow(l));
 
   const Section = ({
     title,
@@ -254,12 +263,16 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
       </Section>
       <Section title="Licenses" step={3}>
         <div className="md:col-span-2 space-y-1">
-          {form.licenses.map((l, i) => (
-            <div key={i} className="text-sm text-foreground">
-              {l.state || "—"} · {l.number || "—"} · {l.type || "—"} · {fmtDate(l.issueDate)} →{" "}
-              {fmtDate(l.expirationDate)}
-            </div>
-          ))}
+          {licenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No licenses added</p>
+          ) : (
+            licenses.map((l, i) => (
+              <div key={i} className="text-sm text-foreground">
+                {l.state || "—"} · {l.number || "—"} · {l.type || "—"} · {fmtDate(l.issueDate)} →{" "}
+                {fmtDate(l.expirationDate)}
+              </div>
+            ))
+          )}
         </div>
       </Section>
       <Section title="Employment" step={4}>

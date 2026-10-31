@@ -78,6 +78,13 @@ export function emptyLicenseRow(): LicenseRow {
   return { state: "", number: "", type: "", issueDate: "", expirationDate: "" };
 }
 
+/** A license row with nothing entered — the stepper's default row when the
+ * Licenses step is skipped. Submit drops these and Review hides them, so the
+ * two cannot disagree about what will be saved. */
+export function isBlankLicenseRow(l: LicenseRow): boolean {
+  return !l.state && !l.number.trim() && !l.type && !l.issueDate && !l.expirationDate;
+}
+
 export function validateNames(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
   if (!f.firstName.trim()) e.firstName = "Required";
