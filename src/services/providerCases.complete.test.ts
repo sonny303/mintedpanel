@@ -4,7 +4,6 @@ import type { Database } from "@/integrations/supabase/types";
 import { caseStatusLabel } from "@/lib/caseStatus";
 
 import {
-  CASE_SEARCH_MAX,
   listOpenProviderCases,
   searchOrgCases,
   type OpenProviderCase,
@@ -138,8 +137,9 @@ const fillerCases = (count: number, startAt = 1) =>
 
 // The parent commit's search, verbatim over the fixture tables — the oracle:
 // one substring check over "<first> <last> <payer> <ref>", or the case
-// number containing the query's digits; sorted provider/payer/state; first 50.
-function parentSearch(tables: Tables, query: string) {
+// number containing the query's digits; sorted provider/payer/state. The
+// parent then kept the first 50; the cut is now the caller's `limit`.
+function parentMatches(tables: Tables, query: string) {
   const q = query.trim().toLowerCase();
   if (q === "") return [];
   const caseDigitsQuery = /^(?:c-?)?(\d+)$/.exec(q)?.[1] ?? null;
@@ -176,8 +176,13 @@ function parentSearch(tables: Tables, query: string) {
       (a.payerName ?? "").localeCompare(b.payerName ?? "") ||
       a.state.localeCompare(b.state),
   );
-  return rows.slice(0, CASE_SEARCH_MAX);
+  return rows;
 }
+
+// The platform default the route resolves (src/server/caseSearchLimit.ts),
+// and the parent's fixed cut, which a platform admin may set again.
+const DEFAULT_LIMIT = 5;
+const PARENT_LIMIT = 50;
 
 describe("searchOrgCases — the parent's matching, over a complete read", () => {
   const FIRST = ["Brooke", "Stan", "Mary Ann", "Addie", "Kyle", "Wendy"];
@@ -207,7 +212,7 @@ describe("searchOrgCases — the parent's matching, over a complete read", () =>
   cases.push(caseRow(900, { org_id: OTHER_ORG, provider_id: "p-0", payer_id: "pay-bcbs" }));
   const tables: Tables = { credential_cases: cases, providers, payers };
 
-  it.each([
+  const queries = [
     "brooke",
     "BROOKE",
     "ostrander0 bcbs",
@@ -223,10 +228,22 @@ describe("searchOrgCases — the parent's matching, over a complete read", () =>
     "cigna",
     "nobody",
     "   ",
-  ])("returns exactly the parent's rows, order and cut for %j", async (q) => {
-    const { db } = makeServer(tables);
-    expect((await searchOrgCases(ctxWith(db), q)).rows).toEqual(parentSearch(tables, q));
-  });
+  ];
+  const queryLimits: Array<[string, number]> = queries.flatMap((q) =>
+    [DEFAULT_LIMIT, PARENT_LIMIT].map((limit): [string, number] => [q, limit]),
+  );
+  it.each(queryLimits)(
+    "returns the parent's rows and order for %j, cut at limit %i",
+    async (q, limit) => {
+      const { db } = makeServer(tables);
+      const expected = parentMatches(tables, q);
+      expect(await searchOrgCases(ctxWith(db), q, limit)).toEqual({
+        rows: expected.slice(0, limit),
+        total: expected.length,
+        truncated: expected.length > limit,
+      });
+    },
+  );
 
   it('matches a query that spans provider and payer, like "ostrander bcbs"', async () => {
     const { db } = makeServer({
@@ -234,7 +251,7 @@ describe("searchOrgCases — the parent's matching, over a complete read", () =>
       providers: [{ id: "p-b", org_id: ORG, first_name: "Brooke", last_name: "Ostrander" }],
       payers,
     });
-    const result = await searchOrgCases(ctxWith(db), "ostrander bcbs");
+    const result = await searchOrgCases(ctxWith(db), "ostrander bcbs", DEFAULT_LIMIT);
     expect(result.rows.map((r) => r.id)).toEqual(["case-0001"]);
     expect(result).toMatchObject({ total: 1, truncated: false });
   });
@@ -245,7 +262,8 @@ describe("searchOrgCases — the parent's matching, over a complete read", () =>
       providers: [FILLER_PROVIDER],
       payers: [FILLER_PAYER],
     });
-    const ids = async (q: string) => (await searchOrgCases(ctxWith(db), q)).rows.map((r) => r.id);
+    const ids = async (q: string) =>
+      (await searchOrgCases(ctxWith(db), q, DEFAULT_LIMIT)).rows.map((r) => r.id);
     expect(await ids('a,b(1).x%_*"q\\z')).toEqual(["case-0001"]);
     expect(await ids("%")).toEqual(["case-0001"]);
     expect(await ids("smith, (john)")).toEqual([]);
@@ -253,7 +271,7 @@ describe("searchOrgCases — the parent's matching, over a complete read", () =>
 
   it("returns an empty, complete answer for a blank query without any request", async () => {
     const { db, requests } = makeServer(tables);
-    expect(await searchOrgCases(ctxWith(db), "   ")).toEqual({
+    expect(await searchOrgCases(ctxWith(db), "   ", DEFAULT_LIMIT)).toEqual({
       rows: [],
       total: 0,
       truncated: false,
@@ -277,7 +295,7 @@ describe("searchOrgCases — past the max-rows cap", () => {
       payers: [FILLER_PAYER],
     });
 
-    const result = await searchOrgCases(ctxWith(db), "brooke");
+    const result = await searchOrgCases(ctxWith(db), "brooke", DEFAULT_LIMIT);
 
     expect(result.rows.map((r) => r.id)).toEqual(["case-1150"]);
     expect(result).toMatchObject({ total: 1, truncated: false });
@@ -289,7 +307,7 @@ describe("searchOrgCases — past the max-rows cap", () => {
     }
   });
 
-  it("returns the first 50 matches across the whole org, flags truncated, and counts every match", async () => {
+  it("returns the first `limit` matches across the whole org, flags truncated, and counts every match", async () => {
     // 1,200 matching cases; the alphabetically-first providers are stored last.
     const providers = Array.from({ length: 1200 }, (_, i) => ({
       id: `p-${i}`,
@@ -306,18 +324,28 @@ describe("searchOrgCases — past the max-rows cap", () => {
       payers: [FILLER_PAYER],
     });
 
-    const result = await searchOrgCases(ctxWith(db), "brooke");
+    const result = await searchOrgCases(ctxWith(db), "brooke", DEFAULT_LIMIT);
 
     expect(result).toMatchObject({ total: 1200, truncated: true });
-    expect(result.rows).toHaveLength(CASE_SEARCH_MAX);
-    expect(result.rows[0].providerName).toBe("Brooke Z0000");
-    expect(result.rows[CASE_SEARCH_MAX - 1].providerName).toBe("Brooke Z0049");
+    expect(result.rows.map((r) => r.providerName)).toEqual([
+      "Brooke Z0000",
+      "Brooke Z0001",
+      "Brooke Z0002",
+      "Brooke Z0003",
+      "Brooke Z0004",
+    ]);
+
+    // A platform admin can raise the limit; the same read then answers more.
+    const raised = await searchOrgCases(ctxWith(db), "brooke", PARENT_LIMIT);
+    expect(raised).toMatchObject({ total: 1200, truncated: true });
+    expect(raised.rows).toHaveLength(PARENT_LIMIT);
+    expect(raised.rows[PARENT_LIMIT - 1].providerName).toBe("Brooke Z0049");
   });
 
-  it("is not truncated at exactly CASE_SEARCH_MAX matches", async () => {
+  it("is truncated one match past the limit and not at exactly the limit", async () => {
     const { db } = makeServer({
       credential_cases: [
-        ...Array.from({ length: CASE_SEARCH_MAX }, (_, i) =>
+        ...Array.from({ length: DEFAULT_LIMIT + 1 }, (_, i) =>
           caseRow(i + 1, { payer_reference_id: `REF-${i}` }),
         ),
         ...fillerCases(10, 100),
@@ -325,9 +353,13 @@ describe("searchOrgCases — past the max-rows cap", () => {
       providers: [FILLER_PROVIDER],
       payers: [FILLER_PAYER],
     });
-    const result = await searchOrgCases(ctxWith(db), "ref-");
-    expect(result.rows).toHaveLength(CASE_SEARCH_MAX);
-    expect(result).toMatchObject({ total: CASE_SEARCH_MAX, truncated: false });
+    const atLimit = await searchOrgCases(ctxWith(db), "ref-", DEFAULT_LIMIT + 1);
+    expect(atLimit.rows).toHaveLength(DEFAULT_LIMIT + 1);
+    expect(atLimit).toMatchObject({ total: DEFAULT_LIMIT + 1, truncated: false });
+
+    const past = await searchOrgCases(ctxWith(db), "ref-", DEFAULT_LIMIT);
+    expect(past.rows).toHaveLength(DEFAULT_LIMIT);
+    expect(past).toMatchObject({ total: DEFAULT_LIMIT + 1, truncated: true });
   });
 
   it("fails the search when a middle page fails, rather than answering from part of the org", async () => {
@@ -335,7 +367,7 @@ describe("searchOrgCases — past the max-rows cap", () => {
       { credential_cases: fillerCases(1250), providers: [FILLER_PROVIDER], payers: [FILLER_PAYER] },
       (table, offset) => table === "credential_cases" && offset === 500,
     );
-    await expect(searchOrgCases(ctxWith(db), "filler")).rejects.toMatchObject({
+    await expect(searchOrgCases(ctxWith(db), "filler", DEFAULT_LIMIT)).rejects.toMatchObject({
       message: "page failed",
     });
   });

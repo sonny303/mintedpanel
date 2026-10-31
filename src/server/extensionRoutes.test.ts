@@ -1432,7 +1432,7 @@ describe("provider cases handler", () => {
   });
 
   // E4.3 TE-11 — the additive ?q= case-search mode on the same route.
-  it("routes ?q= to the case search, forwarding the org-scoped ctx", async () => {
+  it("routes ?q= to the case search with the resolved limit (default 5), forwarding the org-scoped ctx", async () => {
     const rows = [
       {
         id: "c1",
@@ -1452,19 +1452,20 @@ describe("provider cases handler", () => {
     expect(res.status).toBe(200);
     const b = await body(res);
     expect(b.data).toEqual(rows);
-    expect(b.meta).toEqual({ total: 1, truncated: false });
+    expect(b.meta).toEqual({ total: 1, truncated: false, limit: 5 });
     expect(searchCasesMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       "ostrander",
+      5,
     );
     // providerId path is untouched by a q-only request.
     expect(listCasesMock).not.toHaveBeenCalled();
   });
 
-  it("says a capped ?q= answer is truncated, with the total of every match", async () => {
+  it("says a capped ?q= answer is truncated, with the total of every match and the limit", async () => {
     searchCasesMock.mockResolvedValue({ rows: [], total: 312, truncated: true });
     const b = await body(await handleListProviderCases(url("?q=a"), ctx()));
-    expect(b.meta).toEqual({ total: 312, truncated: true });
+    expect(b.meta).toEqual({ total: 312, truncated: true, limit: 5 });
   });
 
   it("prefers providerId over q when both are present (the fill flow's primary path)", async () => {

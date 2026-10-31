@@ -296,9 +296,6 @@ export interface CaseSearchRow {
   facilityId: string | null;
 }
 
-/** One search answers at most this many rows; past it the result says so. */
-export const CASE_SEARCH_MAX = 50;
-
 const CASE_SEARCH_COLUMNS =
   "id, case_number, state, provider_id, facility_id, payer_reference_id, case_status, payer_pipeline_state, " +
   "providers(id, first_name, last_name), payers(name)";
@@ -316,8 +313,8 @@ interface CaseSearchDbRow {
   payers: { name: string | null } | null;
 }
 
-/** The capped search answer: the first CASE_SEARCH_MAX matches, how many
- * cases matched in all, and whether `rows` holds fewer than that. */
+/** The capped search answer: the first `limit` matches, how many cases
+ * matched in all, and whether `rows` holds fewer than that. */
 export interface CaseSearchResult {
   rows: CaseSearchRow[];
   total: number;
@@ -338,16 +335,19 @@ export function caseNumberSearchDigits(raw: string): string | null {
 // E4.3 TE-11 — the case half of the unified standalone search. Org-scoped from
 // ctx, matching payer name / provider name / tracking id (payer_reference_id —
 // the E4.0 case-list search precedent) AND case number (C-<n> / bare digits) as
-// a case-insensitive substring, capped at CASE_SEARCH_MAX. Filtering is in
-// memory over the org's own cases (the providerCases.ts idiom, robust across
-// the provider/payer FK embeds); the service-role client is org-scoped by the
-// eq(org_id) on the read, so a cross-org row can never appear. The read runs
-// to completion (never cut at PostgREST's max-rows; a failed page fails the
-// search), so `total` counts every match and `truncated` says when `rows` is
-// only the first CASE_SEARCH_MAX of them. Blank query → no read.
+// a case-insensitive substring, capped at `limit`. The caller owns the limit:
+// the route resolves it through src/server/caseSearchLimit.ts (the platform
+// setting, default 5), so this service holds no cap of its own. Filtering is
+// in memory over the org's own cases (the providerCases.ts idiom, robust
+// across the provider/payer FK embeds); the service-role client is org-scoped
+// by the eq(org_id) on the read, so a cross-org row can never appear. The read
+// runs to completion (never cut at PostgREST's max-rows; a failed page fails
+// the search), so `total` counts every match and `truncated` says when `rows`
+// is only the first `limit` of them. Blank query → no read.
 export async function searchOrgCases(
   ctx: ProviderCasesServiceCtx,
   query: string,
+  limit: number,
 ): Promise<CaseSearchResult> {
   const { db, orgId } = ctx;
   const q = query.trim().toLowerCase();
@@ -398,8 +398,8 @@ export async function searchOrgCases(
       a.state.localeCompare(b.state),
   );
   return {
-    rows: rows.slice(0, CASE_SEARCH_MAX),
+    rows: rows.slice(0, limit),
     total: rows.length,
-    truncated: rows.length > CASE_SEARCH_MAX,
+    truncated: rows.length > limit,
   };
 }

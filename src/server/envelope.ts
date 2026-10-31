@@ -24,10 +24,16 @@ export interface ApiMeta {
   // the tab as an unrecognized page.
   registry_empty?: boolean;
   // GET /api/cases?q= only, always sent there: true when more cases matched
-  // than `data` holds (the first 50 in provider/payer/state order); `total`
-  // counts every match. A client says the list is partial ("Showing first 50
-  // — refine your search") rather than presenting it as every match.
+  // than `data` holds (the first `limit` in provider/payer/state order);
+  // `total` counts every match. A client says the list is partial ("Showing
+  // first N — refine your search", N = `limit`) rather than presenting it as
+  // every match.
   truncated?: boolean;
+  // GET /api/cases?q= only, always sent there: the most rows `data` can hold.
+  // The platform-admin case-search limit, default 5, resolved by
+  // src/server/caseSearchLimit.ts; clients take it from here rather than
+  // keeping a constant of their own.
+  limit?: number;
   /**
    * Exact-key active mapping/readiness metadata. Rows are emitted only for
    * configurations visible to the requested legacy/API scope.
