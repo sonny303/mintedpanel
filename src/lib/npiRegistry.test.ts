@@ -62,6 +62,23 @@ describe("validateNpiRegistrySearch", () => {
     ).toMatchObject({ ok: true, value: { firstName: "Lukasz", lastName: "O'Brien" } });
   });
 
+  it("asks for a name, not empty quotes, when nothing is left once folded", () => {
+    for (const firstName of [", PT", "...", "\u0301"]) {
+      const result = validateNpiRegistrySearch({ firstName, lastName: "Doe" });
+      expect(result).toEqual({
+        ok: false,
+        error: "Enter a first and last name to search the NPI Registry",
+      });
+    }
+  });
+
+  it("keeps a period inside a name in the registry query", () => {
+    expect(validateNpiRegistrySearch({ firstName: "Ana", lastName: "St. John" })).toMatchObject({
+      ok: true,
+      value: { lastName: "St. John" },
+    });
+  });
+
   it("422s a name with letters the registry cannot take, naming the character", () => {
     const chinese = validateNpiRegistrySearch({ firstName: "Wei", lastName: "\u674e" });
     expect(chinese.ok).toBe(false);
@@ -125,15 +142,39 @@ describe("foldNameForRegistry", () => {
     for (const [typed, folded] of cases) expect(foldNameForRegistry(typed)).toBe(folded);
   });
 
-  it("straightens curly apostrophes and drops periods and trailing suffixes", () => {
+  it("straightens curly apostrophes and drops trailing suffixes", () => {
     expect(foldNameForRegistry("O\u2019Brien")).toBe("O'Brien");
-    expect(foldNameForRegistry("J.")).toBe("J");
-    expect(foldNameForRegistry("St. John")).toBe("St John");
     expect(foldNameForRegistry("Smith, Jr.")).toBe("Smith");
+    expect(foldNameForRegistry("Smith Jr.")).toBe("Smith");
     expect(foldNameForRegistry("King III")).toBe("King");
     expect(foldNameForRegistry("Lee MD")).toBe("Lee");
+    expect(foldNameForRegistry("Lee M.D.")).toBe("Lee");
     // Never the only word.
     expect(foldNameForRegistry("Jr")).toBe("Jr");
+  });
+
+  it("drops only a period after a lone letter and periods ending the name", () => {
+    expect(foldNameForRegistry("J.")).toBe("J");
+    expect(foldNameForRegistry("J.R.")).toBe("JR");
+    expect(foldNameForRegistry("Mary J. Blige")).toBe("Mary J Blige");
+    // A period inside a longer word stays: NPPES is asked for "St. John".
+    expect(foldNameForRegistry("St. John")).toBe("St. John");
+    expect(foldNameForRegistry("St. John.")).toBe("St. John");
+  });
+
+  it("drops a credential typed after a comma but keeps a real surname", () => {
+    for (const typed of ["Doe, PT", "Doe, OT", "Doe, PTA", "Doe, DO", "Doe , DPT, MBA"]) {
+      expect(foldNameForRegistry(typed)).toBe("Doe");
+    }
+    expect(foldNameForRegistry("Do")).toBe("Do");
+    expect(foldNameForRegistry("Van Do")).toBe("Van Do");
+    expect(foldNameForRegistry("Pa")).toBe("Pa");
+  });
+
+  it("unfolds ligatures and compatibility forms (NFKD)", () => {
+    expect(foldNameForRegistry("\ufb01ona")).toBe("fiona");
+    expect(foldNameForRegistry("King \u2161")).toBe("King");
+    expect(foldNameForRegistry("\uff2a\uff41\uff4e\uff45")).toBe("Jane");
   });
 });
 
@@ -150,6 +191,65 @@ describe("compareNpiRegistryName", () => {
     const chris = { ...jane, firstName: "CHRISTOPHER" };
     expect(compareNpiRegistryName({ firstName: "Chris", lastName: "Doe" }, chris)).toBe("match");
     expect(compareNpiRegistryName({ firstName: "C", lastName: "Doe" }, chris)).toBe("match");
+  });
+
+  it("never matches a longer typed first name through a registry middle name", () => {
+    const cases: Array<[string, string, string]> = [
+      ["Danielle", "DANIEL", "LEE"],
+      ["Paula", "PAUL", "A"],
+      ["Paula", "PAUL", "ANTHONY"],
+      ["Roberta", "ROBERT", "ALAN"],
+      ["Erica", "ERIC", "ALLEN"],
+      ["Michaela", "MICHAEL", "A"],
+      ["Justine", "JUSTIN", "EDWARD"],
+      ["Louise", "LOUIS", "E"],
+    ];
+    for (const [typedFirst, registryFirst, registryMiddle] of cases) {
+      const record = { ...jane, firstName: registryFirst, middleName: registryMiddle };
+      expect(
+        compareNpiRegistryName({ firstName: typedFirst, lastName: "Doe" }, record),
+        `${typedFirst} vs ${registryFirst} ${registryMiddle}`,
+      ).toBe("mismatch");
+    }
+  });
+
+  it("matches a typed first + middle name word by word", () => {
+    const maryAnn = { ...jane, firstName: "MARY", middleName: "ANN" };
+    for (const firstName of ["Mary Ann", "Mary-Ann", "Mary A", "Mary"]) {
+      expect(compareNpiRegistryName({ firstName, lastName: "Doe" }, maryAnn), firstName).toBe(
+        "match",
+      );
+    }
+    const janeAlice = { ...jane, firstName: "JANE", middleName: "ALICE" };
+    expect(compareNpiRegistryName({ firstName: "Jane A", lastName: "Doe" }, janeAlice)).toBe(
+      "match",
+    );
+    // One word written together is a soft mismatch against first + middle.
+    expect(compareNpiRegistryName({ firstName: "Maryann", lastName: "Doe" }, maryAnn)).toBe(
+      "mismatch",
+    );
+    // The first word must be the registry first name, not just start it.
+    expect(compareNpiRegistryName({ firstName: "Mar Ann", lastName: "Doe" }, maryAnn)).toBe(
+      "mismatch",
+    );
+    // A registry first name holding both words still matches, and one word
+    // never reaches into its second word ("Danielle" vs "DANIEL LEE").
+    const twoWordFirst = { ...jane, firstName: "MARY ANN", middleName: null };
+    expect(compareNpiRegistryName({ firstName: "Mary Ann", lastName: "Doe" }, twoWordFirst)).toBe(
+      "match",
+    );
+    const danielLee = { ...jane, firstName: "DANIEL LEE", middleName: null };
+    expect(compareNpiRegistryName({ firstName: "Danielle", lastName: "Doe" }, danielLee)).toBe(
+      "mismatch",
+    );
+  });
+
+  it("matches a last name with a credential typed after a comma", () => {
+    for (const lastName of ["Doe, PT", "Doe, OT", "Doe, PTA", "Doe, DO"]) {
+      expect(compareNpiRegistryName({ firstName: "Jane", lastName }, jane), lastName).toBe("match");
+    }
+    const minhDo = { ...jane, firstName: "MINH", lastName: "DO" };
+    expect(compareNpiRegistryName({ firstName: "Minh", lastName: "Do" }, minhDo)).toBe("match");
   });
 
   it("never matches a longer typed first name against a shorter registry one", () => {

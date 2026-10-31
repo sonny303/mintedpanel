@@ -122,21 +122,27 @@ const NAME_SUFFIXES: ReadonlySet<string> = new Set([
   "esq",
 ]);
 // What NPPES accepts once a name is folded: a letter, then letters, spaces,
-// apostrophes and hyphens (periods are already gone).
-const REGISTRY_NAME_RE = /^[A-Za-z][A-Za-z' -]*$/;
+// apostrophes, periods and hyphens.
+const REGISTRY_NAME_RE = /^[A-Za-z][A-Za-z' .-]*$/;
 
-/** A name as the registry spells it: curly apostrophes made straight, letters
- * like "ł", "ø" and "ß" transliterated, accents and periods removed, and a
- * trailing suffix dropped. "José" → "Jose", "Łukasz" → "Lukasz",
- * "Strauß" → "Strauss", "J." → "J", "Smith, Jr." → "Smith". Used for both the
+/** A name as the registry spells it. Everything after the first comma goes
+ * (", Jr.", ", PT", ", DO" — a credential typed after the name, while a real
+ * surname like "Do" is kept); curly apostrophes are made straight; letters like
+ * "ł", "ø" and "ß" are transliterated; NFKD then removes accents and unfolds
+ * ligatures and compatibility forms ("ﬁ" → "fi", "Ⅱ" → "II"); a period after a
+ * single letter and trailing periods go ("J." → "J", "St. John" is kept); and a
+ * trailing bare suffix is dropped ("Smith Jr" → "Smith"). Used for both the
  * registry query and the name match, so the two always agree. */
 export function foldNameForRegistry(name: string): string {
-  const folded = name
+  const folded = (name.split(",")[0] ?? "")
     .replace(APOSTROPHES_RE, "'")
     .replace(TRANSLITERATE_RE, (letter) => TRANSLITERATIONS[letter] ?? letter)
-    .normalize("NFD")
+    .normalize("NFKD")
     .replace(/\p{M}/gu, "")
-    .replace(/[.,]/g, " ");
+    // "J." → "J" (a period after a lone letter), then periods ending the name.
+    .replace(/(?<![A-Za-z])([A-Za-z])\./g, "$1")
+    .trim()
+    .replace(/\.+$/, "");
   const words = folded.split(/\s+/).filter(Boolean);
   while (words.length > 1 && NAME_SUFFIXES.has(words[words.length - 1].toLowerCase())) {
     words.pop();
@@ -149,6 +155,8 @@ function readName(value: unknown): string {
 }
 
 function nameProblem(folded: string): string | null {
+  // Nothing left once folded (", PT", "..."): ask for the name itself.
+  if (!folded) return "Enter a first and last name to search the NPI Registry";
   if (!REGISTRY_NAME_RE.test(folded)) {
     const chars = [...folded];
     const bad = /[A-Za-z]/.test(chars[0] ?? "")
@@ -207,30 +215,57 @@ function matchKey(value: string | null | undefined): string {
 
 export type NpiNameMatch = "match" | "mismatch" | "unchecked";
 
+// The typed first name as words ("Mary Ann", "Mary-Ann" → ["mary", "ann"]).
+function firstNameWords(value: string): string[] {
+  return foldNameForRegistry(value)
+    .split(/[\s-]+/)
+    .map((word) => matchKey(word))
+    .filter(Boolean);
+}
+
 /** Whether the names staff typed match the registry record. Last names must be
- * equal. The typed first name must be the start of the registry's — an
- * initial or short form ("J" or "Chris" against CHRISTOPHER) — or of its first
- * and middle names together ("Mary Ann" against MARY ANN); a registry initial
- * matches any first name with that letter. A longer typed name never matches
- * a shorter registry one ("Danielle" is not DANIEL). The registry's former and
- * other names count too. "unchecked" until staff have typed both names. */
+ * equal (case, accents and punctuation ignored).
+ * - One typed first-name word must be the start of the registry first name:
+ *   an initial or short form ("J" or "Chris" against CHRISTOPHER). A registry
+ *   initial ("J") matches any first name with that letter.
+ * - Several typed words ("Mary Ann", "Mary-Ann", "Jane A"): the first must be
+ *   the registry first name (or match its initial) and the rest must be the
+ *   start of the middle name.
+ * A longer typed name never matches a shorter registry one, middle name or
+ * not: "Danielle" is not DANIEL LEE, "Paula" is not PAUL ANTHONY. "Maryann"
+ * against MARY ANN is a soft mismatch, a warning only. The registry's former
+ * and other names count too. "unchecked" until staff have typed both names. */
 export function compareNpiRegistryName(
   typed: { firstName: string; lastName: string },
   record: NpiRegistryRecord,
 ): NpiNameMatch {
-  const first = matchKey(typed.firstName);
+  const typedWords = firstNameWords(typed.firstName);
   const last = matchKey(typed.lastName);
-  if (!first || !last) return "unchecked";
+  if (typedWords.length === 0 || !last) return "unchecked";
+  const [typedFirst, ...typedRest] = typedWords;
   const names = [
     { firstName: record.firstName, middleName: record.middleName, lastName: record.lastName },
     ...record.otherNames.map((name) => ({ ...name, middleName: null })),
   ];
   const matches = names.some((name) => {
-    const registryFirst = matchKey(name.firstName);
-    if (!registryFirst || matchKey(name.lastName) !== last) return false;
-    if (registryFirst.startsWith(first)) return true;
-    if (registryFirst.length === 1) return first.startsWith(registryFirst);
-    return `${registryFirst}${matchKey(name.middleName)}`.startsWith(first);
+    if (matchKey(name.lastName) !== last) return false;
+    // A registry first name may itself hold two words ("MARY ANN"); its
+    // words after the first count as the start of the middle name.
+    const [registryFirst = "", ...registryRest] = firstNameWords(name.firstName ?? "");
+    if (!registryFirst) return false;
+    const initialMatches = registryFirst.length === 1 && typedFirst.startsWith(registryFirst);
+    if (typedRest.length === 0) {
+      // One word: the start of the registry's first word (never longer), or
+      // the whole two-word registry first name written as one ("Maryann").
+      return (
+        registryFirst.startsWith(typedFirst) ||
+        initialMatches ||
+        [registryFirst, ...registryRest].join("") === typedFirst
+      );
+    }
+    if (typedFirst !== registryFirst && !initialMatches) return false;
+    const registryMiddle = [...registryRest, matchKey(name.middleName)].join("");
+    return registryMiddle.startsWith(typedRest.join(""));
   });
   return matches ? "match" : "mismatch";
 }

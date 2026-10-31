@@ -103,12 +103,19 @@ describe("NpiRegistryAssist verification", () => {
     expect(down).toContain("You can still save this provider.");
   });
 
-  it("passes the rate-limit message through and reads any other failure as unavailable", () => {
+  it("passes the rate-limit and rejected-query messages through; anything else reads as unavailable", () => {
     lookupResult.current = {
       isError: true,
       error: new Error("Too many NPI Registry lookups — wait a minute and try again"),
     };
     expect(renderAssist()).toContain("Too many NPI Registry lookups");
+    lookupResult.current = {
+      isError: true,
+      error: new Error(
+        "The NPI Registry would not run that search — check the name for unusual characters",
+      ),
+    };
+    expect(renderAssist()).toContain("The NPI Registry would not run that search");
     lookupResult.current = { isError: true, error: new Error("Invalid or expired token") };
     const expired = renderAssist();
     expect(expired).not.toContain("Invalid or expired token");

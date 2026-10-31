@@ -18,6 +18,7 @@ import {
 } from "@/hooks/useNpiRegistry";
 import { isValidNpi } from "@/lib/providerIdentity";
 import {
+  NPI_REGISTRY_QUERY_REJECTED_MESSAGE,
   NPI_REGISTRY_RATE_LIMIT_MESSAGE,
   NPI_REGISTRY_UNAVAILABLE_MESSAGE,
   npiSearchStatusText,
@@ -32,12 +33,18 @@ import {
 } from "@/lib/npiRegistry";
 import { cn } from "@/lib/utils";
 
-// The rate-limit message is the one failure staff can act on; anything else
-// (an outage, an expired session, a dropped connection) reads as the
-// registry being unavailable.
+// The failures staff can act on — the rate limit, and the registry refusing
+// the query (a 422) — keep their own message; anything else (an outage, an
+// expired session, a dropped connection) reads as the registry being
+// unavailable.
+const ACTIONABLE_MESSAGES: ReadonlySet<string> = new Set([
+  NPI_REGISTRY_RATE_LIMIT_MESSAGE,
+  NPI_REGISTRY_QUERY_REJECTED_MESSAGE,
+]);
+
 function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message === NPI_REGISTRY_RATE_LIMIT_MESSAGE
-    ? NPI_REGISTRY_RATE_LIMIT_MESSAGE
+  return error instanceof Error && ACTIONABLE_MESSAGES.has(error.message)
+    ? error.message
     : NPI_REGISTRY_UNAVAILABLE_MESSAGE;
 }
 
