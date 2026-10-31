@@ -685,8 +685,11 @@ INSERT INTO public.fill_sessions(
   '39000000-0000-4000-a000-000000000060', 'm58_enrollment', 'web', 0, '[]'::jsonb,
   false, 2, 0, 0, 0, '[]'::jsonb, '39000000-0000-4000-a000-000000000058'
 );
+-- Same signature as the live RPC (MINT-75 added p_completed_date), so this
+-- replaces it for the rollback-only transaction instead of adding an overload.
 CREATE OR REPLACE FUNCTION public.complete_sop_task_step(
-  p_org_id uuid, p_task_id uuid, p_step_id text, p_actor_id uuid, p_source text
+  p_org_id uuid, p_task_id uuid, p_step_id text, p_actor_id uuid, p_source text,
+  p_completed_date date DEFAULT NULL
 ) RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
   SELECT jsonb_build_object('kind', 'rejected', 'status', 409, 'message', 'synthetic MINT-19 rejection')
 $$;

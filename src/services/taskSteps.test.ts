@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { completeTaskStep } from "./taskSteps";
@@ -44,6 +44,9 @@ describe("completeTaskStep", () => {
         p_step_id: "step-1",
         p_actor_id: "writer-a",
         p_source: source,
+        ...(source === "panel"
+          ? { p_completed_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }
+          : {}),
       });
       expect(from).not.toHaveBeenCalled();
       expect(result).toEqual({
@@ -95,5 +98,103 @@ describe("completeTaskStep", () => {
     rpc.mockResolvedValue({ data: null, error: failure });
     await expect(completeTaskStep(context(), "task-1", "step-1")).rejects.toBe(failure);
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+// MINT-75: ticking a task's last step from the Panel sends the browser's local
+// day for completed_date. Pinned to Denver at 11:25 PM MDT on Oct 19, when UTC
+// is already Oct 20 (the runtime re-reads TZ when it changes).
+describe("completeTaskStep completion date", () => {
+  const priorTz = process.env.TZ;
+
+  beforeAll(() => {
+    process.env.TZ = "America/Denver";
+  });
+
+  beforeEach(() => {
+    rpc.mockReset();
+    rpc.mockResolvedValue({
+      data: { kind: "ok", allDone: true, task: { id: "task-1" } },
+      error: null,
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-20T05:25:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  afterAll(() => {
+    if (priorTz === undefined) delete process.env.TZ;
+    else process.env.TZ = priorTz;
+  });
+
+  it("runs the zone the test pins", () => {
+    // MDT is UTC-6 in October; if the runtime ignored TZ the rest is moot.
+    expect(new Date().getTimezoneOffset()).toBe(360);
+  });
+
+  it("the Panel sends the local day, not the UTC day", async () => {
+    await completeTaskStep(context("panel"), "task-1", "step-1");
+    expect(rpc.mock.calls[0]?.[1]).toMatchObject({ p_completed_date: "2026-10-19" });
+  });
+
+  it("the extension route sends no date, so the RPC keeps its UTC fallback", async () => {
+    await completeTaskStep(context("extension"), "task-1", "step-1");
+    expect(rpc.mock.calls[0]?.[1]).not.toHaveProperty("p_completed_date");
+  });
+
+  // PostgREST's answer when only the old 5-argument function exists.
+  const missingArgError = {
+    code: "PGRST202",
+    message:
+      "Could not find the function public.complete_sop_task_step(p_actor_id, p_completed_date, p_org_id, p_source, p_step_id, p_task_id) in the schema cache",
+    details: null,
+    hint: "Perhaps you meant to call the function public.complete_sop_task_step(p_actor_id, p_org_id, p_source, p_step_id, p_task_id)",
+  };
+
+  it("retries once without the date when the database predates the argument", async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: missingArgError });
+
+    await expect(completeTaskStep(context("panel"), "task-1", "step-1")).resolves.toMatchObject({
+      kind: "ok",
+      allDone: true,
+    });
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls[0]?.[1]).toMatchObject({ p_completed_date: "2026-10-19" });
+    expect(rpc.mock.calls[1]).toEqual([
+      "complete_sop_task_step",
+      {
+        p_org_id: "org-a",
+        p_task_id: "task-1",
+        p_step_id: "step-1",
+        p_actor_id: "writer-a",
+        p_source: "panel",
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "another PGRST202",
+      { ...missingArgError, message: "Could not find the function", hint: null },
+    ],
+    ["a permission error", { code: "42501", message: "permission denied", details: null }],
+    ["a network fault", new Error("Failed to fetch")],
+  ])("does not retry on %s", async (_label, failure) => {
+    rpc.mockResolvedValueOnce({ data: null, error: failure });
+
+    await expect(completeTaskStep(context("panel"), "task-1", "step-1")).rejects.toBe(failure);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("the extension route never retries, since it sent no date", async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: missingArgError });
+
+    await expect(completeTaskStep(context("extension"), "task-1", "step-1")).rejects.toBe(
+      missingArgError,
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 });
