@@ -31,6 +31,7 @@ import {
   useUpsertPayerContact,
 } from "@/hooks/usePayerContacts";
 import { useIsAdmin } from "@/lib/permissions";
+import { isValidUsPhone } from "@/lib/phone";
 import type { Payer, PayerContact, PayerContactPurpose } from "@/types";
 
 const PURPOSES: PayerContactPurpose[] = ["credentialing", "enrollment", "escalation", "general"];
@@ -93,6 +94,11 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
     // the obviously-incomplete path.
     if (draft.email.trim() === "" && draft.phone.trim() === "") {
       setFormError(REACHABILITY_ERROR);
+      return;
+    }
+    // MINT-91: an entered phone must be a US number (this form only adds).
+    if (draft.phone.trim() && !isValidUsPhone(draft.phone)) {
+      setFormError("Enter a 10-digit US phone number.");
       return;
     }
     setFormError(null);

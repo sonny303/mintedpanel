@@ -90,7 +90,13 @@ export function ProviderForm({
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
       // Jump back to the first step with an error so the user sees it.
-      if (allErrors.firstName || allErrors.lastName || allErrors.ssnLast4 || allErrors.email) {
+      if (
+        allErrors.firstName ||
+        allErrors.lastName ||
+        allErrors.ssnLast4 ||
+        allErrors.email ||
+        allErrors.phone
+      ) {
         setStep(1);
       } else if (allErrors.npi || allErrors.caqhId) {
         setStep(2);

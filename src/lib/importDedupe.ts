@@ -1,3 +1,4 @@
+import { isValidUsPhone } from "@/lib/phone";
 import { matchGroupLocator } from "@/lib/groupLocator";
 
 // E3.1 — the pure five-part dedupe / conflict-review / commit-plan core
@@ -189,6 +190,22 @@ const norm = (v: string | null | undefined): string =>
   (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 const digits = (v: string | null | undefined): string => (v ?? "").replace(/\D/g, "");
+
+// MINT-91: an imported phone is checked only where the import writes it — a NEW
+// provider, group, or facility. A row matched to an existing record never
+// writes its phone, so a stored legacy value never blocks a re-import.
+function invalidPhoneColumn(
+  mapped: Record<string, string | null>,
+  columns: readonly string[],
+): string | null {
+  const bad = columns.find((column) => {
+    const value = mapped[column]?.trim() ?? "";
+    return value !== "" && !isValidUsPhone(value);
+  });
+  return bad ?? null;
+}
+
+const phoneReason = (column: string): string => `${column} must be a 10-digit US phone number`;
 
 function field(row: StagedImportRow, key: string): string | null {
   const v = row.mapped?.[key];
@@ -704,6 +721,17 @@ export function dedupeImportRows(inputs: DedupeInputs): ImportRowDisposition[] {
       continue;
     }
 
+    const badPhone = invalidPhoneColumn(row.mapped, ["phone"]);
+    if (badPhone) {
+      ordered.push({
+        kind: "blocked",
+        line: row.line,
+        column: badPhone,
+        displayName,
+        reason: phoneReason(badPhone),
+      });
+      continue;
+    }
     const create: CreateDisposition = {
       kind: "create",
       line: row.line,
@@ -1099,6 +1127,16 @@ export function dedupeGroupRows(
       });
       continue;
     }
+    const badPhone = invalidPhoneColumn(row.mapped, ["billing_phone", "corr_phone", "cred_phone"]);
+    if (badPhone) {
+      result.blocked.push({
+        line: row.line,
+        column: badPhone,
+        displayName,
+        reason: phoneReason(badPhone),
+      });
+      continue;
+    }
     seenTins.add(tin);
     result.creates.push({
       line: row.line,
@@ -1198,6 +1236,16 @@ export function dedupeFacilityRows(
         line: row.line,
         displayName,
         reason: "Duplicate facility (same group, name and address) in this file",
+      });
+      continue;
+    }
+    const badPhone = invalidPhoneColumn(row.mapped, ["phone", "appointment_phone"]);
+    if (badPhone) {
+      result.blocked.push({
+        line: row.line,
+        column: badPhone,
+        displayName,
+        reason: phoneReason(badPhone),
       });
       continue;
     }

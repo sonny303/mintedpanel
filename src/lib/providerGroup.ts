@@ -8,6 +8,7 @@
 // instead of rewriting the form (table-register sprawl-target note).
 import type { ProviderGroup } from "@/types";
 import type { ProviderGroupInput } from "@/services/orgSettings";
+import { usPhoneError } from "@/lib/phone";
 
 // ---------- TIN / NPI (format-level only, v1) ----------
 
@@ -217,13 +218,18 @@ export interface GroupFormErrors {
   billingState?: string;
   billingZip?: string;
   billingEmail?: string;
+  billingPhone?: string;
+  correspondencePhone?: string;
+  credentialingPhone?: string;
 }
 
 // Required: legal name, TIN (9 digits), ≥1 operating state, and the billing
 // address (the required block; correspondence/credentialing are optional with
 // a same-as-billing quick-fill). Type 2 NPI is optional but must be 10 digits
-// when present.
-export function groupFormErrors(v: GroupFormValue): GroupFormErrors {
+// when present. A block phone is optional but must be a US number when entered
+// or changed — on an edit, pass the stored value so an untouched legacy phone
+// never blocks the save (MINT-91).
+export function groupFormErrors(v: GroupFormValue, stored?: GroupFormValue): GroupFormErrors {
   const e: GroupFormErrors = {};
   if (!v.name.trim()) e.name = "Legal name is required";
   if (!v.tin.trim()) e.tin = "TIN is required";
@@ -237,6 +243,10 @@ export function groupFormErrors(v: GroupFormValue): GroupFormErrors {
   if (!v.billing.city.trim()) e.billingCity = "Billing city is required";
   if (!v.billing.state.trim()) e.billingState = "Billing state is required";
   if (!v.billing.zip.trim()) e.billingZip = "Billing ZIP is required";
+  for (const block of ["billing", "correspondence", "credentialing"] as const) {
+    const phoneError = usPhoneError(v[block].phone, stored?.[block].phone);
+    if (phoneError) e[`${block}Phone`] = phoneError;
+  }
   return e;
 }
 

@@ -1,6 +1,7 @@
 // Shared constants, types, and validation for the Add Provider stepper.
 // Record edit uses a separate inline Identity path (EditProviderForm retired).
 import { isKnownTaxonomyCode } from "@/lib/providerTaxonomy";
+import { usPhoneError } from "@/lib/phone";
 
 // Re-export the single mastered state list (src/lib/usStates.ts) rather than
 // keep a second copy in sync — the provider forms import US_STATES from here.
@@ -89,6 +90,8 @@ export function validatePersonal(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = { ...validateNames(f) };
   if (f.ssnLast4 && !SSN_LAST4_RE.test(f.ssnLast4)) e.ssnLast4 = "Enter exactly 4 digits";
   if (f.email && !EMAIL_RE.test(f.email)) e.email = "Invalid email";
+  const phoneError = usPhoneError(f.phone);
+  if (phoneError) e.phone = phoneError;
   return e;
 }
 

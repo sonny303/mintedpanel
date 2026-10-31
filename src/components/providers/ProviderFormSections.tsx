@@ -93,7 +93,7 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
       <Field label="Email" error={errors.email}>
         <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} />
       </Field>
-      <Field label="Phone">
+      <Field label="Phone" error={errors.phone}>
         <Input value={form.phone} onChange={(e) => update("phone", e.target.value)} />
       </Field>
     </div>

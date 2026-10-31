@@ -15,6 +15,7 @@ import type {
   RosterValidationIssue,
   RosterValidationResult,
 } from "@/types";
+import { isValidUsPhone } from "@/lib/phone";
 
 export interface RosterEvaluation {
   mapping: RosterMapping;
@@ -65,11 +66,6 @@ function templateRequiresLocation(template: RosterTemplate): boolean {
       `${column.key} ${column.header}`,
     ),
   );
-}
-
-function phoneHasUsLength(value: string): boolean {
-  const digits = value.replace(/\D/g, "");
-  return /^\d{10}$/.test(digits) || /^1\d{10}$/.test(digits);
 }
 
 function isValidNpiExportValue(value: string): boolean {
@@ -302,11 +298,7 @@ export function evaluateRosterSource(
           true,
         );
       }
-      if (
-        assignment?.sourceField === "facility.phone" &&
-        value != null &&
-        !phoneHasUsLength(value)
-      ) {
+      if (assignment?.sourceField === "facility.phone" && value != null && !isValidUsPhone(value)) {
         appendIssue(
           issues,
           rowKey,
