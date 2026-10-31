@@ -152,20 +152,34 @@ describe("notification template catalog", () => {
     );
   });
 
-  it("lets the digest render its rows and team counts, and nothing a cc rule forbids", () => {
+  it("lets the digest render a coordinator's own rows, with no at-risk or team field", () => {
     const digest = getNotificationTemplate("followup_digest_daily");
-    expect(digest?.recipientFields).toEqual(
-      expect.arrayContaining([
-        "caseNumber",
-        "caseLink",
-        "providerFullName",
-        "payerName",
-        "followUpDueDate",
-        "followUpStatus",
-        "daysSinceSubmission",
-        "payerDecisionDays",
-      ]),
-    );
+    expect(digest?.recipientFields).toEqual([
+      "practiceName",
+      "recipientFirstName",
+      "digestDate",
+      "followUpCount",
+      "overdueFollowUpCount",
+      "dueTodayFollowUpCount",
+      "workQueueLink",
+      "caseNumber",
+      "caseLink",
+      "providerFullName",
+      "payerName",
+      "followUpDueDate",
+      "followUpStatus",
+    ]);
+    // Sowmya, Oct 30: no at-risk flag until MINT-111, and nothing for anyone
+    // but the coordinator (no cc copy, no other coordinator's counts).
+    for (const gone of [
+      "atRiskFollowUpCount",
+      "daysSinceSubmission",
+      "payerDecisionDays",
+      "coordinatorName",
+    ]) {
+      expect(digest?.recipientFields as readonly string[]).not.toContain(gone);
+    }
+    expect(digest?.ccFields).toEqual([]);
     expect(digest?.recipientFields).not.toContain("intakeLink");
   });
 });

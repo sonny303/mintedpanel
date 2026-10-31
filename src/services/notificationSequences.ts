@@ -15,14 +15,15 @@
 // `{ status: "unavailable" }` rather than throwing, so the card says the
 // feature is not switched on yet and the query never retries an error.
 //
-// Browser-only for now. A server consumer (the digest job) will read with the
-// service-role client through the same `listNotificationSequences(ctx)`, but
-// must never call the save RPC on ctx.db: under the service key auth.uid()
-// and user_role() are null and the RPC refuses.
+// The follow-up digest job (MINT-108) reads with the service-role client
+// through `listEnabledNotificationSequences`, the one cross-org read, but must
+// never call the save RPC on ctx.db: under the service key auth.uid() and
+// user_role() are null and the RPC refuses.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
 import { requireActiveOrg } from "@/lib/audit";
+import { readCompletePages } from "@/lib/completePages";
 import { isMissingNotificationSequenceTablesError, pgWireText } from "@/lib/dbErrors";
 import {
   NOTIFICATION_PURPOSES,
@@ -219,6 +220,18 @@ function toDefaults(rows: DefaultRow[], steps: DefaultStepRow[]): NotificationSe
   return byPurpose as NotificationSequenceDefaults;
 }
 
+// Platform rows: no org_id to filter on. RLS lets any member read them; the
+// service role reads them under its grant. Two purposes, a few steps each.
+function readDefaultRows(db: SupabaseClient<Database>) {
+  return [
+    db.from("notification_sequence_defaults").select(DEFAULT_COLUMNS),
+    db
+      .from("notification_sequence_default_steps")
+      .select(DEFAULT_STEP_COLUMNS)
+      .order("position", { ascending: true }),
+  ] as const;
+}
+
 export async function listNotificationSequences(
   ctx: NotificationSequenceServiceCtx = browserCtx(),
 ): Promise<NotificationSequencesResult> {
@@ -229,12 +242,7 @@ export async function listNotificationSequences(
       .select(STEP_COLUMNS)
       .eq("org_id", ctx.orgId)
       .order("position", { ascending: true }),
-    // Platform rows: no org_id to filter on. RLS lets any member read them.
-    ctx.db.from("notification_sequence_defaults").select(DEFAULT_COLUMNS),
-    ctx.db
-      .from("notification_sequence_default_steps")
-      .select(DEFAULT_STEP_COLUMNS)
-      .order("position", { ascending: true }),
+    ...readDefaultRows(ctx.db),
   ]);
   for (const result of [sequences, steps, defaults, defaultSteps]) {
     if (result.error && isMissingNotificationSequenceTablesError(result.error)) {
@@ -257,6 +265,91 @@ export async function listNotificationSequences(
       (defaultSteps.data ?? []) as DefaultStepRow[],
     ),
   };
+}
+
+/** Sequence ids per steps read in the cross-org read: keeps each URL short. */
+export const ENABLED_SEQUENCE_STEP_CHUNK = 100;
+
+/**
+ * `available`: every org's enabled sequence for the purpose, each with its own
+ * steps (none: it uses Minted's default steps), and Minted's default for the
+ * purpose. `unavailable`: the notification tables are missing.
+ */
+export type EnabledNotificationSequencesResult =
+  | {
+      status: "available";
+      sequences: NotificationSequenceConfig[];
+      platformDefault: NotificationSequenceDefaultConfig;
+    }
+  | { status: "unavailable" };
+
+/**
+ * Every org's switched-on sequence for one purpose, plus Minted's default:
+ * the follow-up digest job's discovery read (MINT-108). Server-only and
+ * cross-org: pass the service-role client, which bypasses RLS. Nothing here
+ * is one org's, so a caller scopes every later read to the org it serves.
+ * Settings rows only (no PHI). Both lists page to completion: hosted
+ * PostgREST caps a response at 1,000 rows and says nothing.
+ */
+export async function listEnabledNotificationSequences(
+  ctx: { db: SupabaseClient<Database> },
+  purpose: NotificationPurpose,
+): Promise<EnabledNotificationSequencesResult> {
+  try {
+    const sequenceQuery = ctx.db
+      .from("notification_sequences")
+      .select(SEQUENCE_COLUMNS, { count: "exact" })
+      .eq("purpose", purpose)
+      .eq("enabled", true)
+      .order("org_id", { ascending: true })
+      .order("id", { ascending: true });
+    const sequences = await readCompletePages<SequenceRow>(
+      async (from, to) => await sequenceQuery.range(from, to),
+      { label: "Enabled notification sequences" },
+    );
+    const ids = sequences.map((row) => row.id);
+    const steps: StepRow[] = [];
+    for (let start = 0; start < ids.length; start += ENABLED_SEQUENCE_STEP_CHUNK) {
+      const stepQuery = ctx.db
+        .from("notification_sequence_steps")
+        .select(STEP_COLUMNS, { count: "exact" })
+        .in("sequence_id", ids.slice(start, start + ENABLED_SEQUENCE_STEP_CHUNK))
+        .order("sequence_id", { ascending: true })
+        .order("position", { ascending: true })
+        .order("id", { ascending: true });
+      steps.push(
+        ...(await readCompletePages<StepRow>(async (from, to) => await stepQuery.range(from, to), {
+          label: "Enabled notification sequence steps",
+        })),
+      );
+    }
+    const [defaults, defaultSteps] = await Promise.all(readDefaultRows(ctx.db));
+    for (const result of [defaults, defaultSteps]) if (result.error) throw result.error;
+
+    const stepsBySequence = new Map<string, StepRow[]>();
+    for (const step of steps) {
+      const list = stepsBySequence.get(step.sequence_id) ?? [];
+      list.push(step);
+      stepsBySequence.set(step.sequence_id, list);
+    }
+    const configs = sequences.flatMap((row) => {
+      // The filters are the read's; re-checked so a stray row cannot pass.
+      if (row.purpose !== purpose || row.enabled !== true) return [];
+      const config = toConfig(row, stepsBySequence.get(row.id) ?? []);
+      return config ? [config] : [];
+    });
+    return {
+      status: "available",
+      sequences: configs,
+      platformDefault: toDefaults(
+        (defaults.data ?? []) as DefaultRow[],
+        (defaultSteps.data ?? []) as DefaultStepRow[],
+      )[purpose],
+    };
+  } catch (error) {
+    if (isMissingNotificationSequenceTablesError(error)) return { status: "unavailable" };
+    throw error;
+  }
 }
 
 export interface SaveNotificationSequenceInput {

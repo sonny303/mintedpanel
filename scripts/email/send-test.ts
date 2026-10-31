@@ -52,7 +52,7 @@ const SAMPLES: { [K in TemplateKey]: TemplateDataMap[K] } = {
     recipientFirstName: "Anita",
     digestDate: "2026-10-31",
     workQueueLink: "https://example.invalid/work",
-    own: {
+    followUps: {
       rows: [
         {
           caseNumber: 1001,
@@ -61,16 +61,12 @@ const SAMPLES: { [K in TemplateKey]: TemplateDataMap[K] } = {
           payerName: "Sample Payer",
           dueDate: "2026-10-28",
           status: "overdue",
-          atRisk: { daysSinceSubmission: 62, avgDecisionDays: 45 },
         },
       ],
       more: 0,
       overdue: 1,
       dueToday: 0,
-      atRisk: 1,
     },
-    unassigned: { rows: [], more: 0, overdue: 0, dueToday: 0, atRisk: 0 },
-    team: [],
   },
 };
 

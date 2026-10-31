@@ -1,5 +1,6 @@
-// An in-memory stand-in for the tables the follow-up digest job reads and for
-// public.notification_sends and its two RPCs
+// An in-memory stand-in for the tables the follow-up digest job reads, for
+// public.notification_sends and its two RPCs, and for
+// public.notification_org_slots and complete_notification_org_slot
 // (supabase/migrations/20261031060000_notification_sends.sql), for the
 // MINT-108 job tests.
 //
@@ -13,16 +14,19 @@
 // RPCs: the claim answers {status:"exhausted"} after three failed rows for the
 // key, {status:"taken"} while a claimed or sent row holds it, else
 // {status:"claimed", id}; the finish takes only a closed error code and a safe
-// message id, and touches only a claimed row. job_runs RPCs go to an optional FakeJobDb, so one fake
-// can back runJob end to end. The SQL itself is exercised by
+// message id, and touches only a claimed row. The org-slot completion inserts
+// into `tables.notification_org_slots` once per (job, org, slot), so the job's
+// own read of that table sees it. job_runs RPCs go to an optional FakeJobDb,
+// so one fake can back runJob end to end. The SQL itself is exercised by
 // supabase/tests/mint108-notification-sends.sql.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { FakeJobDb } from "@/__fixtures__/jobRunsFakeDb";
-import { JOB_NAME_RE, RUN_KEY_RE } from "@/server/jobs/registry";
+import { JOB_NAME_RE } from "@/server/jobs/registry";
 import {
   NOTIFICATION_SEND_ERROR_CODES,
   NOTIFICATION_SEND_MAX_FAILURES,
+  NOTIFICATION_SLOT_RE,
   PROVIDER_MESSAGE_ID_RE,
 } from "@/server/jobs/notificationSends";
 
@@ -46,7 +50,7 @@ export interface FakeRead {
 export interface FakeNotificationSend {
   id: string;
   job: string;
-  run_key: string;
+  slot: string;
   org_id: string;
   recipient_user_id: string;
   outcome: "claimed" | "sent" | "failed";
@@ -54,7 +58,8 @@ export interface FakeNotificationSend {
   error_code: string | null;
 }
 
-type SendRpc = "claim_notification_send" | "finish_notification_send";
+type SendRpc =
+  "claim_notification_send" | "finish_notification_send" | "complete_notification_org_slot";
 
 export interface FakeDigestDb {
   db: SupabaseClient<Database>;
@@ -183,10 +188,10 @@ export function createFollowUpDigestFakeDb(
 
   const claim = (args: Record<string, unknown>): Result => {
     const job = String(args.p_job);
-    const runKey = String(args.p_run_key);
+    const slot = String(args.p_slot);
     const orgId = String(args.p_org_id);
     const recipient = String(args.p_recipient_user_id);
-    if (!JOB_NAME_RE.test(job) || !RUN_KEY_RE.test(runKey)) {
+    if (!JOB_NAME_RE.test(job) || !NOTIFICATION_SLOT_RE.test(slot)) {
       return { data: null, error: { code: "23514", message: "notification_sends check" } };
     }
     if (state.failClaimFor.has(recipient)) {
@@ -195,7 +200,7 @@ export function createFollowUpDigestFakeDb(
     const forKey = state.sends.filter(
       (row) =>
         row.job === job &&
-        row.run_key === runKey &&
+        row.slot === slot &&
         row.org_id === orgId &&
         row.recipient_user_id === recipient,
     );
@@ -210,7 +215,7 @@ export function createFollowUpDigestFakeDb(
     state.sends.push({
       id,
       job,
-      run_key: runKey,
+      slot,
       org_id: orgId,
       recipient_user_id: recipient,
       outcome: "claimed",
@@ -245,19 +250,39 @@ export function createFollowUpDigestFakeDb(
     return { data: true, error: null };
   };
 
+  const completeOrgSlot = (args: Record<string, unknown>): Result => {
+    const job = String(args.p_job);
+    const slot = String(args.p_slot);
+    const orgId = String(args.p_org_id);
+    if (!JOB_NAME_RE.test(job) || !NOTIFICATION_SLOT_RE.test(slot)) {
+      return { data: null, error: { code: "23514", message: "notification_org_slots check" } };
+    }
+    const rows = (state.tables.notification_org_slots ??= []);
+    if (rows.some((r) => r.job === job && r.org_id === orgId && r.slot === slot)) {
+      return { data: false, error: null };
+    }
+    rows.push({ job, org_id: orgId, slot, completed_at: "2026-10-31T00:00:00Z" });
+    return { data: true, error: null };
+  };
+
   const rpc = async (fn: string, args: Record<string, unknown>): Promise<Result> => {
     if (fn === "claim_job_run" || fn === "finish_job_run") {
       if (!jobDb) return { data: null, error: { code: "PGRST202", message: "no job_runs" } };
       return (await jobDb.db.rpc(fn, args as never)) as unknown as Result;
     }
     state.rpcCalls.push({ fn, args });
-    if (fn === "claim_notification_send" || fn === "finish_notification_send") {
+    if (
+      fn === "claim_notification_send" ||
+      fn === "finish_notification_send" ||
+      fn === "complete_notification_org_slot"
+    ) {
       const injected = state.failNextRpc[fn];
       if (injected) {
         delete state.failNextRpc[fn];
         return { data: null, error: injected };
       }
-      return fn === "claim_notification_send" ? claim(args) : finish(args);
+      if (fn === "claim_notification_send") return claim(args);
+      return fn === "finish_notification_send" ? finish(args) : completeOrgSlot(args);
     }
     return { data: null, error: { code: "PGRST202", message: "Could not find the function" } };
   };

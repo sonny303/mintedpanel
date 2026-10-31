@@ -1873,6 +1873,35 @@ export type Database = {
         };
         Relationships: [];
       };
+      notification_org_slots: {
+        Row: {
+          completed_at: string;
+          job: string;
+          org_id: string;
+          slot: string;
+        };
+        Insert: {
+          completed_at?: string;
+          job: string;
+          org_id: string;
+          slot: string;
+        };
+        Update: {
+          completed_at?: string;
+          job?: string;
+          org_id?: string;
+          slot?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_org_slots_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       notification_sends: {
         Row: {
           claimed_at: string;
@@ -1884,7 +1913,7 @@ export type Database = {
           outcome: string;
           provider_message_id: string | null;
           recipient_user_id: string;
-          run_key: string;
+          slot: string;
         };
         Insert: {
           claimed_at?: string;
@@ -1896,7 +1925,7 @@ export type Database = {
           outcome?: string;
           provider_message_id?: string | null;
           recipient_user_id: string;
-          run_key: string;
+          slot: string;
         };
         Update: {
           claimed_at?: string;
@@ -1908,7 +1937,7 @@ export type Database = {
           outcome?: string;
           provider_message_id?: string | null;
           recipient_user_id?: string;
-          run_key?: string;
+          slot?: string;
         };
         Relationships: [
           {
@@ -4817,9 +4846,13 @@ export type Database = {
           p_job: string;
           p_org_id: string;
           p_recipient_user_id: string;
-          p_run_key: string;
+          p_slot: string;
         };
         Returns: Json;
+      };
+      complete_notification_org_slot: {
+        Args: { p_job: string; p_org_id: string; p_slot: string };
+        Returns: boolean;
       };
       finish_job_run: {
         Args: {

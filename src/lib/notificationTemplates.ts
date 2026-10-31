@@ -50,18 +50,15 @@ export type NotificationTemplateField =
   | "followUpCount"
   | "overdueFollowUpCount"
   | "workQueueLink"
-  // MINT-108: the daily follow-up digest's rows and team summary.
+  // MINT-108: the daily follow-up digest's rows. No at-risk fields until
+  // MINT-111 gives payers a real decision time.
   | "digestDate"
   | "dueTodayFollowUpCount"
-  | "atRiskFollowUpCount"
   | "caseNumber"
   | "caseLink"
   | "payerName"
   | "followUpDueDate"
-  | "followUpStatus"
-  | "daysSinceSubmission"
-  | "payerDecisionDays"
-  | "coordinatorName";
+  | "followUpStatus";
 
 export interface NotificationTemplateEntry {
   /** Registered later under the same key in src/server/email/templates.ts. */
@@ -116,7 +113,6 @@ const DIGEST_ROW_FIELDS: readonly NotificationTemplateField[] = [
   "followUpCount",
   "overdueFollowUpCount",
   "dueTodayFollowUpCount",
-  "atRiskFollowUpCount",
   "workQueueLink",
   "caseNumber",
   "caseLink",
@@ -124,8 +120,6 @@ const DIGEST_ROW_FIELDS: readonly NotificationTemplateField[] = [
   "payerName",
   "followUpDueDate",
   "followUpStatus",
-  "daysSinceSubmission",
-  "payerDecisionDays",
 ];
 
 export const NOTIFICATION_TEMPLATES: readonly NotificationTemplateEntry[] = [
@@ -191,9 +185,9 @@ export const NOTIFICATION_TEMPLATES: readonly NotificationTemplateEntry[] = [
     // A list of follow-ups does not fit in a text, so the digest has no SMS
     // body. Adding one is a catalog change, not a migration.
     channels: ["email"],
-    // The coordinator's own copy: each of their cases with a follow-up due
-    // today or overdue, flagged when it has been with the payer longer than
-    // the payer usually takes to decide.
+    // The coordinator's own email: each of their cases with a follow-up due
+    // today or overdue. The at-risk flag waits for MINT-111 (decision time
+    // from closed cases).
     recipientFields: DIGEST_ROW_FIELDS,
     // Coordinators only: the digest has no cc list, so no cc copy.
     ccFields: [],

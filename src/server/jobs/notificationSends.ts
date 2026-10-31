@@ -1,17 +1,24 @@
-// The notification_sends ledger (MINT-108), reached only through its two
-// service-role RPCs (supabase/migrations/20261031060000_notification_sends.sql).
+// The notification ledgers (MINT-108): notification_sends, reached only
+// through its two service-role RPCs, and notification_org_slots, read here and
+// written only through complete_notification_org_slot
+// (supabase/migrations/20261031060000_notification_sends.sql).
 //
 // A job run is at-least-once (./types.ts), so a job that emails people claims
-// each send on (job, runKey, org, recipient) before sending it. The claim
-// answers `taken` when that send is already claimed or sent for the slot, and
-// `exhausted` after NOTIFICATION_SEND_MAX_FAILURES failed rows: skip it either
-// way.
+// each send on (job, slot, org, recipient) before sending it. The slot is what
+// the send is once-only for, and it is not the job_runs run key: the hourly
+// follow-up digest's slot is the org's local date. The claim answers `taken`
+// when that send is already claimed or sent for the slot, and `exhausted`
+// after NOTIFICATION_SEND_MAX_FAILURES failed rows: skip it either way.
 //
 // Only a definite rejection (the codes below: nothing was accepted) is
 // finished as failed, and a later attempt may claim it again. A send that may
 // have been delivered (a network error or timeout, an unexplained error, a
 // function that died mid-send) is never finished and stays claimed: SendGrid
 // has no idempotency key, so it is never resent.
+//
+// Once every planned send for an org's slot is settled (nothing a later run
+// could retry), the job records the slot complete; a later run reads that and
+// skips the org.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -35,10 +42,18 @@ export const NOTIFICATION_SEND_MAX_FAILURES = 3;
  *  finish fail after the email went out. */
 export const PROVIDER_MESSAGE_ID_RE = /^[A-Za-z0-9._=-]{1,128}$/;
 
-export interface NotificationSendKey {
+/** Mirrored by notification_sends_slot_check and notification_org_slots_slot_check:
+ *  the run-key alphabet, though a slot is not a run key. */
+export const NOTIFICATION_SLOT_RE = /^[0-9A-Za-z:_-]{1,64}$/;
+
+/** One org's slot for one job: for followup-digest, the org's local date. */
+export interface NotificationOrgSlotKey {
   job: string;
-  runKey: string;
   orgId: string;
+  slot: string;
+}
+
+export interface NotificationSendKey extends NotificationOrgSlotKey {
   recipientUserId: string;
 }
 
@@ -70,6 +85,10 @@ export interface NotificationSendLedger {
   claim(key: NotificationSendKey): Promise<NotificationSendClaim>;
   /** False when the row is not claimed. */
   finish(id: string, result: NotificationSendFinish): Promise<boolean>;
+  /** True once the org's sends for the slot were recorded settled. */
+  isOrgSlotComplete(key: NotificationOrgSlotKey): Promise<boolean>;
+  /** Record the org's sends for the slot settled. False when already recorded. */
+  completeOrgSlot(key: NotificationOrgSlotKey): Promise<boolean>;
 }
 
 export function safeProviderMessageId(value: string | null | undefined): string | null {
@@ -83,7 +102,7 @@ export function supabaseNotificationSendLedger(
     async claim(key) {
       const { data, error } = await db.rpc("claim_notification_send", {
         p_job: key.job,
-        p_run_key: key.runKey,
+        p_slot: key.slot,
         p_org_id: key.orgId,
         p_recipient_user_id: key.recipientUserId,
       });
@@ -98,6 +117,26 @@ export function supabaseNotificationSendLedger(
         p_outcome: result.outcome,
         ...(messageId ? { p_provider_message_id: messageId } : {}),
         ...(result.outcome === "failed" ? { p_error_code: result.errorCode } : {}),
+      });
+      if (error) throw error;
+      return data === true;
+    },
+    async isOrgSlotComplete(key) {
+      // A primary-key lookup: at most one row, so no paging.
+      const { data, error } = await db
+        .from("notification_org_slots")
+        .select("slot")
+        .eq("job", key.job)
+        .eq("org_id", key.orgId)
+        .eq("slot", key.slot);
+      if (error) throw error;
+      return Array.isArray(data) && data.length > 0;
+    },
+    async completeOrgSlot(key) {
+      const { data, error } = await db.rpc("complete_notification_org_slot", {
+        p_job: key.job,
+        p_org_id: key.orgId,
+        p_slot: key.slot,
       });
       if (error) throw error;
       return data === true;

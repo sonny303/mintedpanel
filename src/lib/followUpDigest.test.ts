@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
-import type { NotificationCcRecipient } from "@/types";
 import { resolveActiveFollowUp } from "./followUps";
+import * as digest from "./followUpDigest";
 import {
   MAX_DIGEST_SECTION_ROWS,
-  caseAtRisk,
+  digestSlot,
   dueFollowUps,
-  memberDisplayName,
   planFollowUpDigests,
-  resolveDigestCc,
   touchCanResolveFollowUp,
+  zonedDateHour,
   type DigestCase,
   type DigestMember,
   type DigestTouchpoint,
   type FollowUpDigestPlanInput,
 } from "./followUpDigest";
 
-// MINT-108 digest rules. "Today" is the UTC day 2026-10-31 throughout.
+// MINT-108 digest rules. "Today" is the org's local date 2026-10-31 unless a
+// test says otherwise.
 const TODAY = "2026-10-31";
 const BASE = "https://app.example.test";
 
@@ -24,22 +24,11 @@ const OMAR = "22222222-2222-4222-8222-222222222222";
 const ADA = "33333333-3333-4333-8333-333333333333";
 const FORMER = "99999999-9999-4999-8999-999999999999";
 
-function member(userId: string, role: string, first: string, last: string): DigestMember {
-  return {
-    userId,
-    role,
-    firstName: first,
-    lastName: last,
-    fullName: `${first} ${last}`,
-    email: `${first.toLowerCase()}@example.test`,
-  };
+function member(userId: string, first: string): DigestMember {
+  return { userId, firstName: first, email: `${first.toLowerCase()}@example.test` };
 }
 
-const MEMBERS: DigestMember[] = [
-  member(JANE, "specialist", "Jane", "Doe"),
-  member(OMAR, "specialist", "Omar", "Ali"),
-  member(ADA, "admin", "Ada", "Admin"),
-];
+const MEMBERS: DigestMember[] = [member(JANE, "Jane"), member(OMAR, "Omar"), member(ADA, "Ada")];
 
 let caseSeq = 0;
 function kase(overrides: Partial<DigestCase> = {}): DigestCase {
@@ -49,10 +38,8 @@ function kase(overrides: Partial<DigestCase> = {}): DigestCase {
     caseNumber: 1000 + caseSeq,
     assignedTo: JANE,
     caseStatus: "in_progress",
-    submittedDate: null,
     providerName: `Provider ${caseSeq}`,
     payerName: "Aetna",
-    avgDecisionDays: null,
     ...overrides,
   };
 }
@@ -83,10 +70,160 @@ function plan(overrides: Partial<FollowUpDigestPlanInput>) {
     cases: [],
     touchpoints: [],
     members: MEMBERS,
-    ccRecipients: [],
     ...overrides,
   });
 }
+
+const CHICAGO = { sendHour: 8, sendTimeZone: "America/Chicago" };
+const at = (iso: string) => new Date(iso);
+
+describe("zonedDateHour: the org's wall clock", () => {
+  it("reads the local date and hour in the zone, not the server's or UTC's", () => {
+    // 04:30 UTC on Nov 1 is still Oct 31 in Chicago (CDT, UTC-5) and already
+    // Nov 1 in Tokyo.
+    expect(zonedDateHour(at("2026-11-01T04:30:00Z"), "America/Chicago")).toEqual({
+      date: "2026-10-31",
+      hour: 23,
+    });
+    expect(zonedDateHour(at("2026-10-31T23:30:00Z"), "Asia/Tokyo")).toEqual({
+      date: "2026-11-01",
+      hour: 8,
+    });
+    expect(zonedDateHour(at("2026-10-31T00:00:00Z"), "UTC")).toEqual({
+      date: "2026-10-31",
+      hour: 0,
+    });
+  });
+
+  it("repeats the 1 am hour on the same date when DST ends (Chicago, Nov 1 2026)", () => {
+    expect(zonedDateHour(at("2026-11-01T05:59:00Z"), "America/Chicago")).toEqual({
+      date: "2026-11-01",
+      hour: 0,
+    });
+    // 1:00 CDT, then 1:00 CST an hour later.
+    expect(zonedDateHour(at("2026-11-01T06:00:00Z"), "America/Chicago").hour).toBe(1);
+    expect(zonedDateHour(at("2026-11-01T07:00:00Z"), "America/Chicago")).toEqual({
+      date: "2026-11-01",
+      hour: 1,
+    });
+    expect(zonedDateHour(at("2026-11-01T08:00:00Z"), "America/Chicago").hour).toBe(2);
+  });
+
+  it("skips the 2 am hour when DST starts (Chicago, Mar 14 2027)", () => {
+    expect(zonedDateHour(at("2027-03-14T07:00:00Z"), "America/Chicago").hour).toBe(1);
+    expect(zonedDateHour(at("2027-03-14T08:00:00Z"), "America/Chicago")).toEqual({
+      date: "2027-03-14",
+      hour: 3,
+    });
+  });
+
+  it("refuses a zone that is not an IANA name this runtime knows", () => {
+    expect(() => zonedDateHour(at("2026-10-31T12:00:00Z"), "Mars/Olympus")).toThrow(RangeError);
+    expect(() => zonedDateHour(at("2026-10-31T12:00:00Z"), "CST")).toThrow(RangeError);
+  });
+});
+
+describe("digestSlot: the hour gate", () => {
+  it("is not due before the send hour, and due at it and every hour after, the same local date", () => {
+    // Oct 31 is CDT (UTC-5): 8 am Central is 13:00 UTC.
+    expect(digestSlot(CHICAGO, at("2026-10-31T12:59:59Z"))).toEqual({
+      due: false,
+      localDate: "2026-10-31",
+      localHour: 7,
+    });
+    expect(digestSlot(CHICAGO, at("2026-10-31T13:00:00Z"))).toEqual({
+      due: true,
+      localDate: "2026-10-31",
+      localHour: 8,
+    });
+    // A run missed at 8 catches up at 9, and as late as 11 pm, same date.
+    expect(digestSlot(CHICAGO, at("2026-10-31T14:00:00Z"))).toMatchObject({
+      due: true,
+      localDate: "2026-10-31",
+    });
+    expect(digestSlot(CHICAGO, at("2026-11-01T04:59:00Z"))).toEqual({
+      due: true,
+      localDate: "2026-10-31",
+      localHour: 23,
+    });
+    // Local midnight starts the next date, not yet due.
+    expect(digestSlot(CHICAGO, at("2026-11-01T05:00:00Z"))).toEqual({
+      due: false,
+      localDate: "2026-11-01",
+      localHour: 0,
+    });
+  });
+
+  it("follows the zone across DST ending: 8 am Central is 13:00 UTC on Oct 31, 14:00 UTC on Nov 1", () => {
+    expect(digestSlot(CHICAGO, at("2026-11-01T13:00:00Z"))).toEqual({
+      due: false,
+      localDate: "2026-11-01",
+      localHour: 7,
+    });
+    expect(digestSlot(CHICAGO, at("2026-11-01T14:00:00Z"))).toEqual({
+      due: true,
+      localDate: "2026-11-01",
+      localHour: 8,
+    });
+    // A 1 am send hour is due in both 1 am hours, for the same local date.
+    const oneAm = { sendHour: 1, sendTimeZone: "America/Chicago" };
+    expect(digestSlot(oneAm, at("2026-11-01T06:00:00Z"))).toMatchObject({
+      due: true,
+      localDate: "2026-11-01",
+    });
+    expect(digestSlot(oneAm, at("2026-11-01T07:00:00Z"))).toMatchObject({
+      due: true,
+      localDate: "2026-11-01",
+    });
+  });
+
+  it("follows the zone across DST starting, and a send hour that does not exist that day goes at the next hour", () => {
+    expect(digestSlot(CHICAGO, at("2027-03-13T13:00:00Z"))).toMatchObject({ due: false });
+    expect(digestSlot(CHICAGO, at("2027-03-13T14:00:00Z"))).toMatchObject({ due: true });
+    expect(digestSlot(CHICAGO, at("2027-03-14T13:00:00Z"))).toMatchObject({
+      due: true,
+      localHour: 8,
+    });
+    const twoAm = { sendHour: 2, sendTimeZone: "America/Chicago" };
+    expect(digestSlot(twoAm, at("2027-03-14T07:00:00Z"))).toMatchObject({
+      due: false,
+      localHour: 1,
+    });
+    expect(digestSlot(twoAm, at("2027-03-14T08:00:00Z"))).toEqual({
+      due: true,
+      localDate: "2027-03-14",
+      localHour: 3,
+    });
+  });
+
+  it("uses whichever hour and zone it is given (an org override or Minted's default)", () => {
+    const now = at("2026-10-31T15:30:00Z");
+    expect(digestSlot({ sendHour: 8, sendTimeZone: "America/Los_Angeles" }, now)).toEqual({
+      due: true,
+      localDate: "2026-10-31",
+      localHour: 8,
+    });
+    expect(digestSlot({ sendHour: 11, sendTimeZone: "America/New_York" }, now)).toEqual({
+      due: true,
+      localDate: "2026-10-31",
+      localHour: 11,
+    });
+    expect(digestSlot({ sendHour: 12, sendTimeZone: "America/New_York" }, now)).toMatchObject({
+      due: false,
+    });
+    expect(digestSlot({ sendHour: 0, sendTimeZone: "UTC" }, now)).toMatchObject({ due: true });
+  });
+
+  it("is null for a send time it cannot use", () => {
+    const now = at("2026-10-31T13:00:00Z");
+    expect(digestSlot({ sendHour: null, sendTimeZone: "America/Chicago" }, now)).toBeNull();
+    expect(digestSlot({ sendHour: 8, sendTimeZone: null }, now)).toBeNull();
+    expect(digestSlot({ sendHour: 24, sendTimeZone: "America/Chicago" }, now)).toBeNull();
+    expect(digestSlot({ sendHour: -1, sendTimeZone: "America/Chicago" }, now)).toBeNull();
+    expect(digestSlot({ sendHour: 7.5, sendTimeZone: "America/Chicago" }, now)).toBeNull();
+    expect(digestSlot({ sendHour: 8, sendTimeZone: "Mars/Olympus" }, now)).toBeNull();
+  });
+});
 
 describe("dueFollowUps: what is listed", () => {
   it("lists overdue and due-today follow-ups, and leaves out upcoming and none", () => {
@@ -108,6 +245,14 @@ describe("dueFollowUps: what is listed", () => {
       [overdue.id]: { dueDate: "2026-10-28", status: "overdue" },
       [dueToday.id]: { dueDate: TODAY, status: "due_today" },
     });
+  });
+
+  it("measures overdue and due today against the local date it is given", () => {
+    const c = kase();
+    const touches = [touch(c.id, "2026-10-20", "2026-10-31")];
+    expect(dueFollowUps([c], touches, "2026-10-31").get(c.id)?.status).toBe("due_today");
+    expect(dueFollowUps([c], touches, "2026-11-01").get(c.id)?.status).toBe("overdue");
+    expect(dueFollowUps([c], touches, "2026-10-30").has(c.id)).toBe(false);
   });
 
   it("uses the carry-forward reducer: a date-less touch keeps the follow-up, a clear ends it", () => {
@@ -191,88 +336,6 @@ describe("touchCanResolveFollowUp: the touches read can skip the rest", () => {
   });
 });
 
-describe("caseAtRisk", () => {
-  const submitted = (
-    submittedDate: string | null,
-    avgDecisionDays: number | null,
-    caseStatus = "submitted",
-  ) => caseAtRisk({ caseStatus, submittedDate, avgDecisionDays }, TODAY);
-
-  it("flags a case past the payer's usual decision time, with its days", () => {
-    // Aug 30 to Oct 31 is 62 days.
-    expect(submitted("2026-08-30", 45)).toEqual({ daysSinceSubmission: 62, avgDecisionDays: 45 });
-    expect(submitted("2026-08-30", 45, "in_review")).toEqual({
-      daysSinceSubmission: 62,
-      avgDecisionDays: 45,
-    });
-  });
-
-  it("does not flag a case inside or exactly at the usual decision time", () => {
-    expect(submitted("2026-10-01", 45)).toBeNull();
-    // Sep 16 to Oct 31 is exactly 45 days: not yet past it.
-    expect(submitted("2026-09-16", 45)).toBeNull();
-    expect(submitted("2026-09-15", 45)).toEqual({ daysSinceSubmission: 46, avgDecisionDays: 45 });
-  });
-
-  it("has no flag when the payer has no avg_decision_days, or a meaningless one", () => {
-    expect(submitted("2026-01-01", null)).toBeNull();
-    expect(submitted("2026-01-01", 0)).toBeNull();
-    expect(submitted("2026-01-01", -5)).toBeNull();
-    expect(submitted("2026-01-01", 2.5)).toBeNull();
-  });
-
-  it("has no flag without a usable submission date, or before the case waits on the payer", () => {
-    expect(submitted(null, 45)).toBeNull();
-    expect(submitted("2026-13-01", 45)).toBeNull();
-    expect(submitted("2026-11-05", 45)).toBeNull();
-    for (const status of ["not_started", "in_progress", "action_required", "approved", "denied"]) {
-      expect(submitted("2026-01-01", 45, status)).toBeNull();
-    }
-  });
-});
-
-describe("resolveDigestCc", () => {
-  it("resolves users and roles in order, once each, and drops former members", () => {
-    const cc: NotificationCcRecipient[] = [
-      { kind: "user", userId: OMAR },
-      { kind: "user", userId: FORMER },
-      { kind: "role", role: "specialist" },
-      { kind: "role", role: "billing" },
-      { kind: "role", role: "admin" },
-    ];
-    expect(resolveDigestCc(cc, MEMBERS)).toEqual({
-      userIds: [OMAR, JANE, ADA],
-      droppedFormerMembers: 1,
-    });
-  });
-});
-
-describe("memberDisplayName", () => {
-  it("prefers first and last, then the stored full name, and never shows the email", () => {
-    expect(memberDisplayName(member(JANE, "admin", " Jane ", "Doe"))).toBe("Jane Doe");
-    expect(memberDisplayName({ ...member(JANE, "admin", "", ""), fullName: "J. Doe" })).toBe(
-      "J. Doe",
-    );
-    expect(
-      memberDisplayName({
-        ...member(JANE, "admin", "", ""),
-        fullName: null,
-        email: "jane@example.test",
-      }),
-    ).toBe("Unnamed member");
-    expect(
-      memberDisplayName({
-        userId: JANE,
-        role: "admin",
-        firstName: null,
-        lastName: null,
-        fullName: null,
-        email: null,
-      }),
-    ).toBe("Unnamed member");
-  });
-});
-
 describe("planFollowUpDigests", () => {
   it("sends a coordinator their own overdue and due-today rows, oldest overdue first", () => {
     const a = kase({ caseNumber: 2002 });
@@ -289,177 +352,113 @@ describe("planFollowUpDigests", () => {
       ],
     });
     expect(result.digests).toHaveLength(1);
-    const [digest] = result.digests;
-    expect(digest.recipientUserId).toBe(JANE);
-    expect(digest.email).toBe("jane@example.test");
-    expect(digest.data.own.rows.map((r) => [r.caseNumber, r.status])).toEqual([
+    const [only] = result.digests;
+    expect(only.recipientUserId).toBe(JANE);
+    expect(only.email).toBe("jane@example.test");
+    expect(only.data.followUps.rows.map((r) => [r.caseNumber, r.status])).toEqual([
       [2003, "overdue"],
       [2001, "overdue"],
       [2002, "due_today"],
     ]);
-    expect(digest.data.own).toMatchObject({ overdue: 2, dueToday: 1, atRisk: 0, more: 0 });
-    expect(digest.data.own.rows[0]).toEqual({
+    expect(only.data.followUps).toMatchObject({ overdue: 2, dueToday: 1, more: 0 });
+    expect(only.data.followUps.rows[0]).toEqual({
       caseNumber: 2003,
       caseLink: `${BASE}/cases/${c.id}`,
       providerName: c.providerName,
       payerName: "Aetna",
       dueDate: "2026-10-20",
       status: "overdue",
-      atRisk: null,
     });
-    expect(digest.data).toMatchObject({
+    expect(only.data).toMatchObject({
       practiceName: "Shelby Rehab",
       recipientFirstName: "Jane",
       digestDate: TODAY,
       workQueueLink: `${BASE}/work`,
-      team: [],
     });
-    expect(digest.data.unassigned.rows).toEqual([]);
   });
 
-  it("flags at-risk rows on and off, and never for a payer without avg_decision_days", () => {
-    const late = kase({
-      caseStatus: "submitted",
-      submittedDate: "2026-08-30",
-      avgDecisionDays: 45,
-    });
-    const fresh = kase({
-      caseStatus: "submitted",
-      submittedDate: "2026-10-20",
-      avgDecisionDays: 45,
-    });
-    const unknown = kase({
-      caseStatus: "submitted",
-      submittedDate: "2026-01-01",
-      avgDecisionDays: null,
-    });
-    const result = plan({
-      cases: [late, fresh, unknown],
-      touchpoints: [late, fresh, unknown].map((c) => touch(c.id, "2026-10-01", "2026-10-30")),
-    });
-    const rows = result.digests[0].data.own.rows;
-    const byNumber = new Map(rows.map((r) => [r.caseNumber, r.atRisk]));
-    expect(byNumber.get(late.caseNumber)).toEqual({ daysSinceSubmission: 62, avgDecisionDays: 45 });
-    expect(byNumber.get(fresh.caseNumber)).toBeNull();
-    expect(byNumber.get(unknown.caseNumber)).toBeNull();
-    expect(result.digests[0].data.own.atRisk).toBe(1);
-  });
-
-  it("routes unassigned and former-member cases to the cc'd members only, in an Unassigned section", () => {
-    const mine = kase({ assignedTo: JANE });
-    const nobody = kase({ assignedTo: null });
-    const leaver = kase({ assignedTo: FORMER });
-    const touches = [mine, nobody, leaver].map((c) => touch(c.id, "2026-10-01", "2026-10-30"));
-    const result = plan({
-      cases: [mine, nobody, leaver],
-      touchpoints: touches,
-      ccRecipients: [{ kind: "role", role: "admin" }],
-    });
-    const byRecipient = new Map(result.digests.map((d) => [d.recipientUserId, d.data]));
-    expect([...byRecipient.keys()]).toEqual([JANE, ADA]);
-    // Jane is not cc'd: her own row, nothing unassigned, no team table.
-    expect(byRecipient.get(JANE)?.own.rows.map((r) => r.caseNumber)).toEqual([mine.caseNumber]);
-    expect(byRecipient.get(JANE)?.unassigned.rows).toEqual([]);
-    expect(byRecipient.get(JANE)?.team).toEqual([]);
-    // Ada (cc'd by role) coordinates nothing: the unassigned rows and the team line.
-    const ada = byRecipient.get(ADA);
-    expect(ada?.own.rows).toEqual([]);
-    expect(ada?.unassigned.rows.map((r) => r.caseNumber)).toEqual([
-      nobody.caseNumber,
-      leaver.caseNumber,
-    ]);
-    expect(ada?.team).toEqual([
-      { coordinatorName: "Jane Doe", overdue: 1, dueToday: 0, atRisk: 0 },
-    ]);
-    expect(result.unassignedUnrouted).toBe(0);
-  });
-
-  it("counts unassigned follow-ups as unrouted, and sends them nowhere, when no one is cc'd", () => {
-    const nobody = kase({ assignedTo: null });
-    const leaver = kase({ assignedTo: FORMER });
-    const result = plan({
-      cases: [nobody, leaver],
-      touchpoints: [nobody, leaver].map((c) => touch(c.id, "2026-10-01", "2026-10-30")),
-      ccRecipients: [{ kind: "user", userId: FORMER }],
-    });
-    expect(result.digests).toEqual([]);
-    expect(result.unassignedUnrouted).toBe(2);
-    expect(result.ccMembersDropped).toBe(1);
-  });
-
-  it("suppresses a recipient with nothing due, coordinator or cc'd", () => {
-    const upcoming = kase({ assignedTo: JANE });
-    const result = plan({
-      cases: [upcoming],
-      touchpoints: [touch(upcoming.id, "2026-10-01", "2026-11-10")],
-      ccRecipients: [{ kind: "user", userId: OMAR }],
-    });
-    expect(result.digests).toEqual([]);
-    // Jane (assigned an open case) and Omar (cc'd) each had an empty digest.
-    expect(result.suppressed).toBe(2);
-  });
-
-  it("gives a cc'd coordinator one email: their rows, the unassigned rows and the team", () => {
+  it("gives each coordinator one email with only their own rows, in member order", () => {
     const janes = kase({ assignedTo: JANE });
-    const omars = kase({
-      assignedTo: OMAR,
-      caseStatus: "in_review",
-      submittedDate: "2026-08-01",
-      avgDecisionDays: 30,
-    });
-    const nobody = kase({ assignedTo: null });
+    const omars = kase({ assignedTo: OMAR });
     const result = plan({
-      cases: [janes, omars, nobody],
+      cases: [omars, janes],
       touchpoints: [
         touch(janes.id, "2026-10-01", TODAY),
         touch(omars.id, "2026-10-01", "2026-10-02"),
-        touch(nobody.id, "2026-10-01", TODAY),
-      ],
-      ccRecipients: [
-        { kind: "user", userId: OMAR },
-        { kind: "role", role: "specialist" },
       ],
     });
     expect(result.digests.map((d) => d.recipientUserId)).toEqual([JANE, OMAR]);
-    const omar = result.digests[1].data;
-    expect(omar.own.rows.map((r) => r.caseNumber)).toEqual([omars.caseNumber]);
-    expect(omar.unassigned.rows.map((r) => r.caseNumber)).toEqual([nobody.caseNumber]);
-    expect(omar.team).toEqual([
-      { coordinatorName: "Jane Doe", overdue: 0, dueToday: 1, atRisk: 0 },
-      { coordinatorName: "Omar Ali", overdue: 1, dueToday: 0, atRisk: 1 },
+    expect(result.digests[0].data.followUps.rows.map((r) => r.caseNumber)).toEqual([
+      janes.caseNumber,
     ]);
-    // Jane is cc'd through her role, so she sees the same unassigned and team.
-    expect(result.digests[0].data.unassigned.rows).toHaveLength(1);
-    expect(result.digests[0].data.team).toHaveLength(2);
+    expect(result.digests[1].data.followUps.rows.map((r) => r.caseNumber)).toEqual([
+      omars.caseNumber,
+    ]);
   });
 
-  it("caps a section's rows and counts the rest", () => {
+  it("sends unassigned and former-member follow-ups to no one, and counts them", () => {
+    const mine = kase({ assignedTo: JANE });
+    const nobody = kase({ assignedTo: null });
+    const leaver = kase({ assignedTo: FORMER });
+    const notDue = kase({ assignedTo: null });
+    const result = plan({
+      cases: [mine, nobody, leaver, notDue],
+      touchpoints: [
+        ...[mine, nobody, leaver].map((c) => touch(c.id, "2026-10-01", "2026-10-30")),
+        touch(notDue.id, "2026-10-01", "2026-11-30"),
+      ],
+    });
+    // Ada is an admin with no cases: nothing, not even the unassigned rows.
+    expect(result.digests.map((d) => d.recipientUserId)).toEqual([JANE]);
+    expect(result.digests[0].data.followUps.rows.map((r) => r.caseNumber)).toEqual([
+      mine.caseNumber,
+    ]);
+    expect(result.unassignedFollowUps).toBe(2);
+    expect(JSON.stringify(result.digests)).not.toContain(nobody.id);
+    expect(JSON.stringify(result.digests)).not.toContain(leaver.id);
+  });
+
+  it("suppresses a coordinator with nothing due, and plans nothing for a member with no case", () => {
+    const upcoming = kase({ assignedTo: JANE });
+    const closed = kase({ assignedTo: OMAR, caseStatus: "approved" });
+    const result = plan({
+      cases: [upcoming, closed],
+      touchpoints: [
+        touch(upcoming.id, "2026-10-01", "2026-11-10"),
+        touch(closed.id, "2026-10-01", "2026-10-02"),
+      ],
+    });
+    expect(result.digests).toEqual([]);
+    // Only Jane coordinates an open case; Omar's is closed, Ada has none.
+    expect(result.suppressed).toBe(1);
+    expect(result.unassignedFollowUps).toBe(0);
+  });
+
+  it("caps the rows and counts the rest", () => {
     const cases = Array.from({ length: MAX_DIGEST_SECTION_ROWS + 7 }, () => kase());
     const result = plan({
       cases,
       touchpoints: cases.map((c) => touch(c.id, "2026-10-01", "2026-10-15")),
     });
-    const own = result.digests[0].data.own;
-    expect(own.rows).toHaveLength(MAX_DIGEST_SECTION_ROWS);
-    expect(own.more).toBe(7);
-    expect(own.overdue).toBe(MAX_DIGEST_SECTION_ROWS + 7);
+    const { followUps } = result.digests[0].data;
+    expect(followUps.rows).toHaveLength(MAX_DIGEST_SECTION_ROWS);
+    expect(followUps.more).toBe(7);
+    expect(followUps.overdue).toBe(MAX_DIGEST_SECTION_ROWS + 7);
   });
 
-  it("carries only the declared fields: no case id, provider id or anything else", () => {
-    const c = kase({ caseStatus: "submitted", submittedDate: "2026-08-30", avgDecisionDays: 45 });
+  it("carries only the declared fields: no case id, provider id, at-risk or team data", () => {
+    const c = kase();
     const result = plan({ cases: [c], touchpoints: [touch(c.id, "2026-10-01", TODAY)] });
     const data = result.digests[0].data;
     expect(Object.keys(data).sort()).toEqual([
       "digestDate",
-      "own",
+      "followUps",
       "practiceName",
       "recipientFirstName",
-      "team",
-      "unassigned",
       "workQueueLink",
     ]);
-    expect(Object.keys(data.own.rows[0]).sort()).toEqual([
-      "atRisk",
+    expect(Object.keys(data.followUps).sort()).toEqual(["dueToday", "more", "overdue", "rows"]);
+    expect(Object.keys(data.followUps.rows[0]).sort()).toEqual([
       "caseLink",
       "caseNumber",
       "dueDate",
@@ -467,5 +466,17 @@ describe("planFollowUpDigests", () => {
       "providerName",
       "status",
     ]);
+    expect(Object.keys(result).sort()).toEqual(["digests", "suppressed", "unassignedFollowUps"]);
+  });
+
+  it("exports no at-risk or cc routing (Sowmya, Oct 30)", () => {
+    for (const gone of [
+      "caseAtRisk",
+      "AWAITING_DECISION_STATUSES",
+      "resolveDigestCc",
+      "memberDisplayName",
+    ]) {
+      expect(Object.hasOwn(digest, gone), gone).toBe(false);
+    }
   });
 });

@@ -1,5 +1,6 @@
--- MINT-108 notification_sends packet: claim_notification_send /
--- finish_notification_send and the ledger's access boundary
+-- MINT-108 notification ledgers packet: claim_notification_send /
+-- finish_notification_send, complete_notification_org_slot, and the access
+-- boundary of notification_sends and notification_org_slots
 -- (supabase/migrations/20261031060000_notification_sends.sql).
 --
 -- Run after all migrations in a disposable PostgreSQL database, never against
@@ -8,14 +9,16 @@
 -- Every row it writes is synthetic and rolled back.
 --
 -- It needs only what that job seeds: a superuser connection (it writes
--- fixtures, reads notification_sends and switches role) and the anon,
+-- fixtures, reads the ledgers and switches role) and the anon,
 -- authenticated and service_role roles, created NOLOGIN with none of
 -- Supabase's attributes. So service_role has no BYPASSRLS here, and the
--- packet reads notification_sends only as the superuser. The first block
--- checks these and stops with a plain message.
+-- packet reads the ledgers only as the superuser. The first block checks
+-- these and stops with a plain message.
 --
--- Single session. Concurrency rests on notification_sends_one_live_send,
--- which is proved here by a direct second live insert failing 23505.
+-- Single session. Concurrency rests on notification_sends_one_live_send and
+-- notification_org_slots_pkey, each proved here by a direct second insert
+-- failing 23505. A check never shares a statement with a call that writes:
+-- it would read that statement's snapshot, from before the write.
 --
 \set ON_ERROR_STOP on
 \set QUIET on
@@ -37,7 +40,14 @@ BEGIN
     RAISE EXCEPTION 'mint108-notification-sends.sql needs the anon, authenticated and service_role roles';
   END IF;
   IF to_regclass('public.notification_sends') IS NULL
+     OR to_regclass('public.notification_org_slots') IS NULL
      OR to_regclass('public.organizations') IS NULL
+     OR to_regprocedure('public.complete_notification_org_slot(text, uuid, text)') IS NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_catalog.pg_attribute
+        WHERE attrelid = 'public.notification_sends'::regclass
+          AND attname = 'slot' AND NOT attisdropped
+     )
      OR to_regprocedure('public.claim_notification_send(text, text, uuid, uuid)') IS NULL
      OR to_regprocedure('public.finish_notification_send(uuid, text, text, text)') IS NULL
      OR (SELECT prorettype FROM pg_catalog.pg_proc
@@ -50,8 +60,10 @@ $$;
 
 CREATE TEMP TABLE m108_results (name text PRIMARY KEY, passed boolean NOT NULL);
 CREATE TEMP TABLE m108_ids (name text PRIMARY KEY, id uuid);
+CREATE TEMP TABLE m108_flags (name text PRIMARY KEY, flag boolean);
 GRANT ALL ON m108_results TO authenticated, service_role;
 GRANT ALL ON m108_ids TO authenticated, service_role;
+GRANT ALL ON m108_flags TO authenticated, service_role;
 
 CREATE FUNCTION pg_temp.m108_mark(p_name text, p_passed boolean) RETURNS void
 LANGUAGE sql AS $$
@@ -79,10 +91,10 @@ $$;
 
 -- The claim answers jsonb; this returns the new row's id, or NULL when the
 -- answer is taken or exhausted.
-CREATE FUNCTION pg_temp.m108_claim(p_job text, p_run_key text, p_org uuid, p_recipient uuid)
+CREATE FUNCTION pg_temp.m108_claim(p_job text, p_slot text, p_org uuid, p_recipient uuid)
 RETURNS uuid
 LANGUAGE sql AS $$
-  SELECT (public.claim_notification_send(p_job, p_run_key, p_org, p_recipient) ->> 'id')::uuid
+  SELECT (public.claim_notification_send(p_job, p_slot, p_org, p_recipient) ->> 'id')::uuid
 $$;
 
 -- Two synthetic orgs and two recipients (actor ids; no profile needed).
@@ -104,7 +116,7 @@ SELECT pg_temp.m108_mark('claim_returns_a_claimed_row',
   EXISTS (
     SELECT 1 FROM public.notification_sends
      WHERE id = pg_temp.m108_id('a1')
-       AND job = 'followup-digest' AND run_key = '2026-10-31'
+       AND job = 'followup-digest' AND slot = '2026-10-31'
        AND org_id = '10800000-0000-4000-a000-0000000000a1'
        AND recipient_user_id = '10800000-0000-4000-a000-0000000000b1'
        AND outcome = 'claimed' AND finished_at IS NULL
@@ -144,7 +156,7 @@ SELECT pg_temp.m108_mark('finish_on_a_finished_row_returns_false',
 SELECT pg_temp.m108_mark('a_refused_finish_leaves_a_sent_row_sent',
   (SELECT outcome FROM public.notification_sends WHERE id = pg_temp.m108_id('a1')) = 'sent');
 
--- Each part of the key is its own slot: another day, org, recipient or job.
+-- Each part of the key is its own: another local date, org, recipient or job.
 SELECT pg_temp.m108_mark('every_part_of_the_key_is_its_own_slot',
   pg_temp.m108_claim('followup-digest', '2026-11-01',
     '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1') IS NOT NULL
@@ -176,27 +188,27 @@ SELECT pg_temp.m108_mark('claim_after_failure_takes_a_new_row',
       FROM public.notification_sends
      WHERE org_id = '10800000-0000-4000-a000-0000000000a2'
        AND recipient_user_id = '10800000-0000-4000-a000-0000000000b2'
-       AND run_key = '2026-10-31'
+       AND slot = '2026-10-31'
   ) = ARRAY['claimed:-', 'failed:provider_rejected']);
 
 SELECT pg_temp.m108_mark('index_refuses_a_second_live_row',
   pg_temp.m108_expect_state('23505',
-    $$INSERT INTO public.notification_sends (job, run_key, org_id, recipient_user_id)
+    $$INSERT INTO public.notification_sends (job, slot, org_id, recipient_user_id)
       VALUES ('followup-digest', '2026-10-31',
               '10800000-0000-4000-a000-0000000000a2', '10800000-0000-4000-a000-0000000000b2')$$));
 SELECT pg_temp.m108_mark('index_refuses_a_claimed_row_beside_a_sent_one',
   pg_temp.m108_expect_state('23505',
-    $$INSERT INTO public.notification_sends (job, run_key, org_id, recipient_user_id)
+    $$INSERT INTO public.notification_sends (job, slot, org_id, recipient_user_id)
       VALUES ('followup-digest', '2026-10-31',
               '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1')$$));
 -- The claim's ON CONFLICT names the partial index, so it swallows only a
 -- live-key conflict; a primary key collision on a free key still raises.
 SELECT pg_temp.m108_mark('named_conflict_target_lets_a_primary_key_collision_raise',
   pg_temp.m108_expect_state('23505',
-    format($$INSERT INTO public.notification_sends (id, job, run_key, org_id, recipient_user_id)
+    format($$INSERT INTO public.notification_sends (id, job, slot, org_id, recipient_user_id)
              VALUES (%L, 'followup-digest', '2026-12-25',
                      '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1')
-             ON CONFLICT (job, run_key, org_id, recipient_user_id)
+             ON CONFLICT (job, slot, org_id, recipient_user_id)
                WHERE outcome IN ('claimed', 'sent') DO NOTHING$$,
            pg_temp.m108_id('a1'))));
 
@@ -207,7 +219,7 @@ SELECT pg_temp.m108_mark('claim_refuses_an_invalid_job_name',
   pg_temp.m108_expect_state('23514',
     $$SELECT pg_temp.m108_claim('Followup Digest', '2026-10-31',
         '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3')$$));
-SELECT pg_temp.m108_mark('claim_refuses_an_invalid_run_key',
+SELECT pg_temp.m108_mark('claim_refuses_an_invalid_slot',
   pg_temp.m108_expect_state('23514',
     $$SELECT pg_temp.m108_claim('followup-digest', '2026 10 31',
         '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3')$$));
@@ -288,7 +300,7 @@ SELECT pg_temp.m108_mark('claim_answers_claimed_with_the_id_then_taken',
   (SELECT answer FROM pg_temp.m108_answers WHERE name = 'first')
     = pg_catalog.jsonb_build_object('status', 'claimed', 'id',
         (SELECT id FROM public.notification_sends
-          WHERE run_key = 'answers' AND outcome = 'claimed'))
+          WHERE slot = 'answers' AND outcome = 'claimed'))
   AND (SELECT answer FROM pg_temp.m108_answers WHERE name = 'second')
     = '{"status": "taken"}'::jsonb);
 
@@ -306,7 +318,7 @@ SELECT pg_temp.m108_mark('a_fourth_claim_after_three_failures_is_exhausted_and_w
   (SELECT answer FROM pg_temp.m108_answers WHERE name = 'fourth')
     = '{"status": "exhausted"}'::jsonb
   AND (SELECT array_agg(outcome) FROM public.notification_sends
-        WHERE run_key = 'capped'
+        WHERE slot = 'capped'
           AND recipient_user_id = '10800000-0000-4000-a000-0000000000b3')
       = ARRAY['failed', 'failed', 'failed']);
 SELECT pg_temp.m108_mark('the_cap_is_per_key',
@@ -333,6 +345,66 @@ INSERT INTO pg_temp.m108_answers VALUES ('after-sent', public.claim_notification
 SELECT pg_temp.m108_mark('a_sent_row_after_two_failures_answers_taken',
   (SELECT answer FROM pg_temp.m108_answers WHERE name = 'after-sent')
     = '{"status": "taken"}'::jsonb);
+
+-- ---------------------------------------------------------------------------
+-- notification_org_slots: an org's slot (for the digest, its local date) is
+-- recorded once. Each call is its own statement; each check reads after it.
+-- ---------------------------------------------------------------------------
+INSERT INTO pg_temp.m108_flags VALUES ('slot-first', public.complete_notification_org_slot(
+  'followup-digest', '10800000-0000-4000-a000-0000000000a1', '2026-10-31'));
+INSERT INTO pg_temp.m108_flags VALUES ('slot-second', public.complete_notification_org_slot(
+  'followup-digest', '10800000-0000-4000-a000-0000000000a1', '2026-10-31'));
+
+SELECT pg_temp.m108_mark('org_slot_completes_once_then_answers_false',
+  (SELECT flag FROM pg_temp.m108_flags WHERE name = 'slot-first')
+  AND NOT (SELECT flag FROM pg_temp.m108_flags WHERE name = 'slot-second'));
+
+SELECT pg_temp.m108_mark('org_slot_row_is_recorded_once_with_its_time',
+  (SELECT count(*) FROM public.notification_org_slots
+    WHERE job = 'followup-digest'
+      AND org_id = '10800000-0000-4000-a000-0000000000a1'
+      AND slot = '2026-10-31'
+      AND completed_at IS NOT NULL) = 1);
+
+INSERT INTO pg_temp.m108_flags VALUES ('slot-next-date', public.complete_notification_org_slot(
+  'followup-digest', '10800000-0000-4000-a000-0000000000a1', '2026-11-01'));
+INSERT INTO pg_temp.m108_flags VALUES ('slot-other-org', public.complete_notification_org_slot(
+  'followup-digest', '10800000-0000-4000-a000-0000000000a2', '2026-10-31'));
+INSERT INTO pg_temp.m108_flags VALUES ('slot-other-job', public.complete_notification_org_slot(
+  'intake-reminders', '10800000-0000-4000-a000-0000000000a1', '2026-10-31'));
+
+SELECT pg_temp.m108_mark('every_part_of_the_org_slot_key_is_its_own',
+  (SELECT bool_and(flag) FROM pg_temp.m108_flags
+    WHERE name IN ('slot-next-date', 'slot-other-org', 'slot-other-job'))
+  AND (SELECT count(*) FROM public.notification_org_slots
+        WHERE org_id IN ('10800000-0000-4000-a000-0000000000a1',
+                         '10800000-0000-4000-a000-0000000000a2')) = 4);
+
+SELECT pg_temp.m108_mark('org_slot_primary_key_refuses_a_second_row',
+  pg_temp.m108_expect_state('23505',
+    $$INSERT INTO public.notification_org_slots (job, org_id, slot)
+      VALUES ('followup-digest', '10800000-0000-4000-a000-0000000000a1', '2026-10-31')$$));
+SELECT pg_temp.m108_mark('org_slot_refuses_an_invalid_job_name',
+  pg_temp.m108_expect_state('23514',
+    $$SELECT public.complete_notification_org_slot('Followup Digest',
+        '10800000-0000-4000-a000-0000000000a1', '2026-10-31')$$));
+SELECT pg_temp.m108_mark('org_slot_refuses_an_invalid_slot',
+  pg_temp.m108_expect_state('23514',
+    $$SELECT public.complete_notification_org_slot('followup-digest',
+        '10800000-0000-4000-a000-0000000000a1', 'Oct 31, 2026')$$));
+SELECT pg_temp.m108_mark('org_slot_refuses_an_unknown_org',
+  pg_temp.m108_expect_state('23503',
+    $$SELECT public.complete_notification_org_slot('followup-digest',
+        '10800000-0000-4000-a000-00000000ffff', '2026-10-31')$$));
+SELECT pg_temp.m108_mark('org_slot_refuses_a_missing_slot',
+  pg_temp.m108_expect_state('23502',
+    $$SELECT public.complete_notification_org_slot('followup-digest',
+        '10800000-0000-4000-a000-0000000000a1', NULL)$$));
+
+SELECT pg_temp.m108_mark('refused_org_slots_write_nothing',
+  (SELECT count(*) FROM public.notification_org_slots
+        WHERE org_id IN ('10800000-0000-4000-a000-0000000000a1',
+                         '10800000-0000-4000-a000-0000000000a2')) = 4);
 
 -- ---------------------------------------------------------------------------
 -- Access boundary.
@@ -375,14 +447,45 @@ SELECT pg_temp.m108_mark('only_service_role_executes_the_rpcs',
   AND NOT has_function_privilege('public',
     'public.finish_notification_send(uuid, text, text, text)', 'EXECUTE'));
 
+SELECT pg_temp.m108_mark('org_slots_rls_is_enabled_with_no_policy',
+  (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.notification_org_slots'::regclass)
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_policies
+     WHERE schemaname = 'public' AND tablename = 'notification_org_slots'
+  ));
+
+SELECT pg_temp.m108_mark('anon_and_authenticated_cannot_touch_org_slots',
+  NOT has_table_privilege('anon', 'public.notification_org_slots',
+        'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+  AND NOT has_table_privilege('authenticated', 'public.notification_org_slots',
+        'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+  AND NOT has_table_privilege('public', 'public.notification_org_slots',
+        'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER'));
+
+SELECT pg_temp.m108_mark('service_role_reads_org_slots_and_writes_only_through_the_rpc',
+  has_table_privilege('service_role', 'public.notification_org_slots', 'SELECT')
+  AND NOT has_table_privilege('service_role', 'public.notification_org_slots',
+        'INSERT, UPDATE, DELETE, TRUNCATE'));
+
+SELECT pg_temp.m108_mark('only_service_role_completes_an_org_slot',
+  has_function_privilege('service_role',
+    'public.complete_notification_org_slot(text, uuid, text)', 'EXECUTE')
+  AND NOT has_function_privilege('anon',
+    'public.complete_notification_org_slot(text, uuid, text)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated',
+    'public.complete_notification_org_slot(text, uuid, text)', 'EXECUTE')
+  AND NOT has_function_privilege('public',
+    'public.complete_notification_org_slot(text, uuid, text)', 'EXECUTE'));
+
 SELECT pg_temp.m108_mark('rpcs_are_security_definer_with_an_empty_search_path',
   (SELECT count(*) FROM pg_proc AS p
      WHERE p.pronamespace = 'public'::regnamespace
-       AND p.proname IN ('claim_notification_send', 'finish_notification_send')
+       AND p.proname IN ('claim_notification_send', 'finish_notification_send',
+                         'complete_notification_org_slot')
        AND p.prosecdef
        AND EXISTS (
          SELECT 1 FROM unnest(p.proconfig) AS c WHERE c IN ('search_path=""', 'search_path=')
-       )) = 2);
+       )) = 3);
 
 SET LOCAL ROLE service_role;
 INSERT INTO pg_temp.m108_ids VALUES ('s1', pg_temp.m108_claim(
@@ -390,7 +493,15 @@ INSERT INTO pg_temp.m108_ids VALUES ('s1', pg_temp.m108_claim(
   '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
 SELECT pg_temp.m108_mark('service_role_can_finish',
   public.finish_notification_send(pg_temp.m108_id('s1'), 'sent', 'abc123'));
+INSERT INTO pg_temp.m108_flags VALUES ('slot-service-role', public.complete_notification_org_slot(
+  'followup-digest', '10800000-0000-4000-a000-0000000000a1', '2026-12-31'));
 RESET ROLE;
+SELECT pg_temp.m108_mark('service_role_can_complete_an_org_slot',
+  (SELECT flag FROM pg_temp.m108_flags WHERE name = 'slot-service-role')
+  AND EXISTS (
+    SELECT 1 FROM public.notification_org_slots
+     WHERE org_id = '10800000-0000-4000-a000-0000000000a1' AND slot = '2026-12-31'
+  ));
 SELECT pg_temp.m108_mark('service_role_can_claim',
   EXISTS (
     SELECT 1 FROM public.notification_sends
@@ -402,6 +513,12 @@ SELECT pg_temp.m108_mark('authenticated_cannot_call_the_claim',
   pg_temp.m108_expect_state('42501',
     $$SELECT public.claim_notification_send('followup-digest', 'slot-x',
         '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1')$$));
+SELECT pg_temp.m108_mark('authenticated_cannot_complete_an_org_slot',
+  pg_temp.m108_expect_state('42501',
+    $$SELECT public.complete_notification_org_slot('followup-digest',
+        '10800000-0000-4000-a000-0000000000a1', '2026-12-30')$$));
+SELECT pg_temp.m108_mark('authenticated_cannot_read_org_slots',
+  pg_temp.m108_expect_state('42501', $$SELECT count(*) FROM public.notification_org_slots$$));
 RESET ROLE;
 
 SELECT name, CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END
@@ -413,7 +530,7 @@ BEGIN
   SELECT string_agg(name, ', ' ORDER BY name) INTO v_failed
     FROM pg_temp.m108_results WHERE NOT passed;
   IF v_failed IS NOT NULL THEN
-    RAISE EXCEPTION 'MINT-108 notification_sends assertions failed: %', v_failed;
+    RAISE EXCEPTION 'MINT-108 notification ledger assertions failed: %', v_failed;
   END IF;
 END;
 $$;

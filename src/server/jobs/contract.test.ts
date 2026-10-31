@@ -6,6 +6,7 @@ import { JOB_STALE_AFTER_MINUTES } from "./ledger";
 import {
   NOTIFICATION_SEND_ERROR_CODES,
   NOTIFICATION_SEND_MAX_FAILURES,
+  NOTIFICATION_SLOT_RE,
   PROVIDER_MESSAGE_ID_RE,
 } from "./notificationSends";
 import { JOB_NAME_RE, RUN_KEY_RE } from "./registry";
@@ -119,14 +120,34 @@ describe("notification_sends migration and code agree", () => {
     expect(at("20261031050000_job_runs.sql")).toBeGreaterThan(-1);
   });
 
-  it("allows one claimed or sent row per (job, run_key, org_id, recipient_user_id)", () => {
+  it("allows one claimed or sent row per (job, slot, org_id, recipient_user_id)", () => {
     expect(SENDS_MIGRATION).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS notification_sends_one_live_send\s+ON public\.notification_sends \(job, run_key, org_id, recipient_user_id\)\s+WHERE outcome IN \('claimed', 'sent'\);/,
+      /CREATE UNIQUE INDEX IF NOT EXISTS notification_sends_one_live_send\s+ON public\.notification_sends \(job, slot, org_id, recipient_user_id\)\s+WHERE outcome IN \('claimed', 'sent'\);/,
     );
     expect(SENDS_MIGRATION).toMatch(
-      /ON CONFLICT \(job, run_key, org_id, recipient_user_id\)\s+WHERE outcome IN \('claimed', 'sent'\) DO NOTHING/,
+      /ON CONFLICT \(job, slot, org_id, recipient_user_id\)\s+WHERE outcome IN \('claimed', 'sent'\) DO NOTHING/,
     );
     expect(SENDS_MIGRATION).not.toMatch(/ON CONFLICT DO NOTHING/);
+    // The slot is not the job_runs run key (the digest's is the UTC hour).
+    expect(SENDS_MIGRATION).not.toMatch(/\brun_key\b/);
+  });
+
+  it("records an org's slot once, keyed (job, org_id, slot), insert-only through its RPC", () => {
+    expect(SENDS_MIGRATION).toContain(
+      "CONSTRAINT notification_org_slots_pkey PRIMARY KEY (job, org_id, slot)",
+    );
+    expect(SENDS_MIGRATION).toMatch(
+      /INSERT INTO public\.notification_org_slots \(job, org_id, slot\)\s+VALUES \(p_job, p_org_id, p_slot\)\s+ON CONFLICT \(job, org_id, slot\) DO NOTHING;\s+RETURN FOUND;/,
+    );
+    expect(sendsLedgerSource).toContain('db.rpc("complete_notification_org_slot", {');
+    expect(sendsLedgerSource).toContain('.from("notification_org_slots")');
+    for (const filter of [
+      '.eq("job", key.job)',
+      '.eq("org_id", key.orgId)',
+      '.eq("slot", key.slot)',
+    ]) {
+      expect(sendsLedgerSource).toContain(filter);
+    }
   });
 
   it("caps a key at the failed rows the code expects, and answers with the statuses it parses", () => {
@@ -153,10 +174,15 @@ describe("notification_sends migration and code agree", () => {
     expect(SENDS_MIGRATION).toContain(`AND p_error_code NOT IN (${list}) THEN`);
   });
 
-  it("checks job, run key and message id with the code's patterns", () => {
+  it("checks job, slot and message id with the code's patterns, in both tables", () => {
     const sqlPattern = (re: RegExp) => `'${re.source}'`;
-    expect(SENDS_MIGRATION).toContain(`CHECK (job ~ ${sqlPattern(JOB_NAME_RE)})`);
-    expect(SENDS_MIGRATION).toContain(`CHECK (run_key ~ ${sqlPattern(RUN_KEY_RE)})`);
+    expect(SENDS_MIGRATION.split(`CHECK (job ~ ${sqlPattern(JOB_NAME_RE)})`)).toHaveLength(3);
+    expect(
+      SENDS_MIGRATION.split(`CHECK (slot ~ ${sqlPattern(NOTIFICATION_SLOT_RE)})`),
+    ).toHaveLength(3);
+    // A local date (the digest's slot) fits it.
+    expect("2026-10-31").toMatch(NOTIFICATION_SLOT_RE);
+    expect(NOTIFICATION_SLOT_RE.source).toBe(RUN_KEY_RE.source);
     expect(SENDS_MIGRATION).toContain(
       `provider_message_id IS NULL OR provider_message_id ~ ${sqlPattern(PROVIDER_MESSAGE_ID_RE)}`,
     );
@@ -164,16 +190,19 @@ describe("notification_sends migration and code agree", () => {
 
   it("calls the RPCs by the names and arguments the migration defines", () => {
     expect(SENDS_MIGRATION).toMatch(
-      /FUNCTION public\.claim_notification_send\(\s+p_job text,\s+p_run_key text,\s+p_org_id uuid,\s+p_recipient_user_id uuid\s+\)/,
+      /FUNCTION public\.claim_notification_send\(\s+p_job text,\s+p_slot text,\s+p_org_id uuid,\s+p_recipient_user_id uuid\s+\)/,
     );
     expect(SENDS_MIGRATION).toMatch(
       /FUNCTION public\.finish_notification_send\(\s+p_id uuid,\s+p_outcome text,\s+p_provider_message_id text DEFAULT NULL,\s+p_error_code text DEFAULT NULL\s+\)/,
     );
     expect(sendsLedgerSource).toContain('db.rpc("claim_notification_send", {');
+    expect(SENDS_MIGRATION).toMatch(
+      /FUNCTION public\.complete_notification_org_slot\(\s+p_job text,\s+p_org_id uuid,\s+p_slot text\s+\) RETURNS boolean/,
+    );
     expect(sendsLedgerSource).toContain('db.rpc("finish_notification_send", {');
     for (const arg of [
       "p_job:",
-      "p_run_key:",
+      "p_slot:",
       "p_org_id:",
       "p_recipient_user_id:",
       "p_id:",
@@ -186,20 +215,20 @@ describe("notification_sends migration and code agree", () => {
   });
 
   it("is service_role only: RLS on, no policy, nothing for anon or authenticated", () => {
-    expect(SENDS_MIGRATION).toContain(
-      "ALTER TABLE public.notification_sends ENABLE ROW LEVEL SECURITY;",
-    );
     expect(SENDS_MIGRATION).not.toMatch(/CREATE POLICY/i);
-    expect(SENDS_MIGRATION).toContain(
-      "REVOKE ALL ON TABLE public.notification_sends FROM public, anon, authenticated, service_role;",
-    );
-    expect(SENDS_MIGRATION).toContain(
-      "GRANT SELECT ON TABLE public.notification_sends TO service_role;",
-    );
+    for (const table of ["notification_sends", "notification_org_slots"]) {
+      expect(SENDS_MIGRATION).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`);
+      expect(SENDS_MIGRATION).toContain(
+        `REVOKE ALL ON TABLE public.${table} FROM public, anon, authenticated, service_role;`,
+      );
+      expect(SENDS_MIGRATION).toContain(`GRANT SELECT ON TABLE public.${table} TO service_role;`);
+    }
     expect(SENDS_MIGRATION).not.toMatch(/GRANT [^;]* TO [^;]*\b(anon|authenticated)\b/);
+    expect(SENDS_MIGRATION).not.toMatch(/GRANT (INSERT|UPDATE|DELETE|ALL)[^;]* ON TABLE/);
     for (const fn of [
       "claim_notification_send(text, text, uuid, uuid)",
       "finish_notification_send(uuid, text, text, text)",
+      "complete_notification_org_slot(text, uuid, text)",
     ]) {
       expect(SENDS_MIGRATION).toMatch(
         new RegExp(
@@ -208,7 +237,7 @@ describe("notification_sends migration and code agree", () => {
       );
       expect(SENDS_MIGRATION).toContain(`GRANT EXECUTE ON FUNCTION public.${fn} TO service_role;`);
     }
-    expect(SENDS_MIGRATION.match(/SECURITY DEFINER\nSET search_path = ''/g)).toHaveLength(2);
+    expect(SENDS_MIGRATION.match(/SECURITY DEFINER\nSET search_path = ''/g)).toHaveLength(3);
   });
 
   it("stores no PHI: ids, the slot, timestamps and codes only", () => {
@@ -222,7 +251,7 @@ describe("notification_sends migration and code agree", () => {
     expect(columns).toEqual([
       "id",
       "job",
-      "run_key",
+      "slot",
       "org_id",
       "recipient_user_id",
       "outcome",
@@ -232,6 +261,15 @@ describe("notification_sends migration and code agree", () => {
       "error_code",
     ]);
     expect(table).toContain("REFERENCES public.organizations(id) ON DELETE CASCADE");
+
+    const slots = SENDS_MIGRATION.slice(
+      SENDS_MIGRATION.indexOf("CREATE TABLE IF NOT EXISTS public.notification_org_slots"),
+      SENDS_MIGRATION.indexOf("ALTER TABLE public.notification_org_slots"),
+    );
+    expect(
+      [...slots.matchAll(/^ {2}([a-z_]+) (?:uuid|text|timestamptz)/gm)].map((m) => m[1]),
+    ).toEqual(["job", "org_id", "slot", "completed_at"]);
+    expect(slots).toContain("REFERENCES public.organizations(id) ON DELETE CASCADE");
   });
 });
 

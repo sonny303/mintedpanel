@@ -77,21 +77,13 @@ function plural(n: number, one: string, many: string): string {
 }
 
 function sectionSummary(section: FollowUpDigestSection): string {
-  const parts = [`${section.overdue} overdue`, `${section.dueToday} due today`];
-  if (section.atRisk > 0) parts.push(`${section.atRisk} at risk`);
-  return parts.join(", ");
+  return `${section.overdue} overdue, ${section.dueToday} due today`;
 }
 
+// The status alone. An at-risk line ("submitted N days ago") waits for
+// MINT-111, which gives payers a decision time from their closed cases.
 function statusLabel(row: FollowUpDigestRow): string {
   return row.status === "overdue" ? "Overdue" : "Due today";
-}
-
-// What is on record, not a prediction: avg_decision_days has had no writer
-// since E6.7 (TD-45) and submitted_date survives a reapply.
-function atRiskText(row: FollowUpDigestRow): string | null {
-  if (!row.atRisk) return null;
-  const { daysSinceSubmission, avgDecisionDays } = row.atRisk;
-  return `Submitted ${plural(daysSinceSubmission, "day", "days")} ago, longer than the ${plural(avgDecisionDays, "day", "days")} on record for this payer`;
 }
 
 function rowText(row: FollowUpDigestRow): string {
@@ -102,20 +94,17 @@ function rowText(row: FollowUpDigestRow): string {
     `due ${formatDay(row.dueDate)}`,
     statusLabel(row),
   ];
-  const risk = atRiskText(row);
-  if (risk) parts.push(risk);
   return `- ${parts.join(" · ")}\n  ${row.caseLink}`;
 }
 
 function rowHtml(row: FollowUpDigestRow): string {
-  const risk = atRiskText(row);
   return [
     "<tr>",
     `<td><a href="${escapeHtml(row.caseLink)}">C-${row.caseNumber}</a></td>`,
     `<td>${escapeHtml(row.providerName)}</td>`,
     `<td>${escapeHtml(row.payerName)}</td>`,
     `<td>${formatDay(row.dueDate)}</td>`,
-    `<td>${statusLabel(row)}${risk ? `<br>${escapeHtml(risk)}` : ""}</td>`,
+    `<td>${statusLabel(row)}</td>`,
     "</tr>",
   ].join("");
 }
@@ -129,86 +118,28 @@ function moreLine(section: FollowUpDigestSection): string | null {
     : null;
 }
 
-interface DigestBlock {
-  text: string;
-  html: string;
-}
-
-function rowsBlock(
-  title: string,
-  intro: string | null,
-  section: FollowUpDigestSection,
-): DigestBlock {
-  const more = moreLine(section);
-  return {
-    text: [
-      `${title.toUpperCase()} (${sectionSummary(section)})`,
-      ...(intro ? [intro] : []),
-      ...section.rows.map(rowText),
-      ...(more ? [more] : []),
-    ].join("\n"),
-    html: [
-      `<h3>${escapeHtml(title)}</h3>`,
-      `<p>${escapeHtml(sectionSummary(section))}.${intro ? ` ${escapeHtml(intro)}` : ""}</p>`,
-      `<table cellpadding="4" cellspacing="0">${ROW_HEADER}${section.rows.map(rowHtml).join("")}</table>`,
-      ...(more ? [`<p>${escapeHtml(more)}</p>`] : []),
-    ].join(""),
-  };
-}
-
+// One coordinator's own follow-ups (MINT-108). Nobody else gets a copy: the
+// digest has no cc list, and unassigned follow-ups go to no one.
 function followUpDigest(data: FollowUpDigestEmailData): RenderedEmail {
   const day = formatDay(data.digestDate);
-  const blocks: DigestBlock[] = [];
-  if (data.own.overdue + data.own.dueToday > 0) {
-    blocks.push(rowsBlock("Your follow-ups", null, data.own));
-  }
-  if (data.unassigned.overdue + data.unassigned.dueToday > 0) {
-    blocks.push(
-      rowsBlock(
-        "Unassigned",
-        "Cases with no coordinator, or whose coordinator is no longer a member.",
-        data.unassigned,
-      ),
-    );
-  }
-  if (data.team.length > 0) {
-    blocks.push({
-      text: [
-        "TEAM",
-        ...data.team.map(
-          (row) =>
-            `- ${plainInline(row.coordinatorName)}: ${row.overdue} overdue, ${row.dueToday} due today, ${row.atRisk} at risk`,
-        ),
-      ].join("\n"),
-      html: [
-        "<h3>Team</h3>",
-        '<table cellpadding="4" cellspacing="0">',
-        '<tr><th align="left">Coordinator</th><th align="left">Overdue</th><th align="left">Due today</th><th align="left">At risk</th></tr>',
-        ...data.team.map(
-          (row) =>
-            `<tr><td>${escapeHtml(row.coordinatorName)}</td><td>${row.overdue}</td><td>${row.dueToday}</td><td>${row.atRisk}</td></tr>`,
-        ),
-        "</table>",
-      ].join(""),
-    });
-  }
-
+  const section = data.followUps;
+  const more = moreLine(section);
   const name = data.recipientFirstName;
   const practice = data.practiceName.trim();
   // `day` is already HTML-safe (formatDay), so the intro is not escaped again.
-  const intro = `Here are the follow-ups due on ${day}, and the ones that are overdue.`;
+  const intro = `Here are your follow-ups due on ${day}, and the ones that are overdue.`;
   const footer =
     "You get this email because your organization turned on the daily follow-up digest.";
-  const ownTotal = data.own.overdue + data.own.dueToday;
   return {
-    subject:
-      ownTotal > 0
-        ? `Your follow-ups for ${day}: ${data.own.overdue} overdue, ${data.own.dueToday} due today`
-        : `Follow-up digest for ${day}`,
+    subject: `Your follow-ups for ${day}: ${sectionSummary(section)}`,
     text: [
       name ? `Hi ${plainInline(name)},` : "Hi,",
       intro,
-      ...blocks.map((block) => block.text),
+      [
+        `YOUR FOLLOW-UPS (${sectionSummary(section)})`,
+        ...section.rows.map(rowText),
+        ...(more ? [more] : []),
+      ].join("\n"),
       `Open Work: ${data.workQueueLink}`,
       footer,
       ...(practice ? [`${plainInline(practice)} via Minted Panel`] : []),
@@ -216,7 +147,10 @@ function followUpDigest(data: FollowUpDigestEmailData): RenderedEmail {
     html: [
       `<p>${name ? `Hi ${escapeHtml(name)},` : "Hi,"}</p>`,
       `<p>${intro}</p>`,
-      ...blocks.map((block) => block.html),
+      "<h3>Your follow-ups</h3>",
+      `<p>${escapeHtml(sectionSummary(section))}.</p>`,
+      `<table cellpadding="4" cellspacing="0">${ROW_HEADER}${section.rows.map(rowHtml).join("")}</table>`,
+      ...(more ? [`<p>${escapeHtml(more)}</p>`] : []),
       `<p><a href="${escapeHtml(data.workQueueLink)}">Open Work</a></p>`,
       `<p>${escapeHtml(footer)}</p>`,
       ...(practice ? [`<p>${escapeHtml(practice)} via Minted Panel</p>`] : []),

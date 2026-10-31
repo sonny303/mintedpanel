@@ -36,9 +36,8 @@ describe("intake_code", () => {
   });
 });
 
-// MINT-108: the daily follow-up digest.
+// MINT-108: the daily follow-up digest, one coordinator's own rows.
 describe("followup_digest_daily", () => {
-  const EMPTY = { rows: [], more: 0, overdue: 0, dueToday: 0, atRisk: 0 };
   const row = (overrides: Partial<FollowUpDigestRow> = {}): FollowUpDigestRow => ({
     caseNumber: 1071,
     caseLink: "https://app.example.test/cases/5f0c8a1e-0000-4000-8000-000000000001",
@@ -46,7 +45,6 @@ describe("followup_digest_daily", () => {
     payerName: "Aetna",
     dueDate: "2026-10-28",
     status: "overdue",
-    atRisk: { daysSinceSubmission: 62, avgDecisionDays: 45 },
     ...overrides,
   });
   const base: FollowUpDigestEmailData = {
@@ -54,48 +52,51 @@ describe("followup_digest_daily", () => {
     recipientFirstName: "Anita",
     digestDate: "2026-10-31",
     workQueueLink: "https://app.example.test/work",
-    own: {
-      rows: [
-        row(),
-        row({ caseNumber: 1080, status: "due_today", dueDate: "2026-10-31", atRisk: null }),
-      ],
+    followUps: {
+      rows: [row(), row({ caseNumber: 1080, status: "due_today", dueDate: "2026-10-31" })],
       more: 0,
       overdue: 1,
       dueToday: 1,
-      atRisk: 1,
     },
-    unassigned: EMPTY,
-    team: [],
   };
 
-  it("lists each row with its case link, provider, payer, due date, status and at-risk days", () => {
+  it("lists each row with its case link, provider, payer, due date and status", () => {
     const email = TEMPLATES.followup_digest_daily(base);
     expect(email.subject).toBe("Your follow-ups for Oct 31, 2026: 1 overdue, 1 due today");
     expect(email.html).toContain(
       '<a href="https://app.example.test/cases/5f0c8a1e-0000-4000-8000-000000000001">C-1071</a>',
     );
-    expect(email.html).toContain("<td>Jane Smith</td><td>Aetna</td><td>Oct 28, 2026</td>");
     expect(email.html).toContain(
-      "<td>Overdue<br>Submitted 62 days ago, longer than the 45 days on record for this payer</td>",
+      "<td>Jane Smith</td><td>Aetna</td><td>Oct 28, 2026</td><td>Overdue</td>",
     );
-    expect(email.html).toContain("<td>Due today</td>");
+    expect(email.html).toContain("<td>Oct 31, 2026</td><td>Due today</td>");
     expect(email.html).toContain("<p>Hi Anita,</p>");
+    expect(email.html).toContain("<h3>Your follow-ups</h3><p>1 overdue, 1 due today.</p>");
     expect(email.html).toContain('<a href="https://app.example.test/work">Open Work</a>');
-    expect(email.html).not.toContain("<h3>Unassigned</h3>");
-    expect(email.html).not.toContain("<h3>Team</h3>");
   });
 
   it("has a plain-text part with the same rows and links", () => {
     const { text } = TEMPLATES.followup_digest_daily(base);
     expect(text).toContain("Hi Anita,");
-    expect(text).toContain("YOUR FOLLOW-UPS (1 overdue, 1 due today, 1 at risk)");
+    expect(text).toContain("YOUR FOLLOW-UPS (1 overdue, 1 due today)");
     expect(text).toContain(
-      "- C-1071 · Jane Smith · Aetna · due Oct 28, 2026 · Overdue · Submitted 62 days ago, longer than the 45 days on record for this payer\n  https://app.example.test/cases/5f0c8a1e-0000-4000-8000-000000000001",
+      "- C-1071 · Jane Smith · Aetna · due Oct 28, 2026 · Overdue\n  https://app.example.test/cases/5f0c8a1e-0000-4000-8000-000000000001",
     );
     expect(text).toContain("- C-1080 · Jane Smith · Aetna · due Oct 31, 2026 · Due today\n");
     expect(text).toContain("Open Work: https://app.example.test/work");
     expect(text).toContain("Shelby Rehab via Minted Panel");
     expect(text).not.toMatch(/<[a-z]/i);
+  });
+
+  it("has no at-risk line, no Unassigned section and no team table (Sowmya, Oct 30)", () => {
+    const { html, text } = TEMPLATES.followup_digest_daily(base);
+    for (const part of [html, text]) {
+      expect(part).not.toMatch(/at risk|on record|submitted \d+ days? ago/i);
+      expect(part).not.toMatch(/unassigned/i);
+      expect(part).not.toMatch(/\bteam\b|coordinator/i);
+    }
+    expect(html).not.toContain("<h3>Unassigned</h3>");
+    expect(html).not.toContain("<h3>Team</h3>");
   });
 
   it("HTML-escapes every name and link, and keeps the text part on one line per name", () => {
@@ -104,78 +105,48 @@ describe("followup_digest_daily", () => {
       practiceName: 'Shelby <b>"Rehab"</b>',
       recipientFirstName: "<img src=x onerror=alert(1)>",
       workQueueLink: 'https://app.example.test/work?a="b"&c=<d>',
-      own: {
-        ...base.own,
+      followUps: {
+        ...base.followUps,
         rows: [
           row({
             providerName: "<script>alert('p')</script>",
             payerName: "Payer & Sons <Health>",
             caseLink: 'https://app.example.test/cases/x"><script>',
           }),
+          row({ providerName: "Line\r\nBreak" }),
         ],
       },
-      unassigned: { ...base.own, rows: [row({ providerName: "Line\r\nBreak" })] },
-      team: [{ coordinatorName: "<i>Omar</i>\nAli", overdue: 1, dueToday: 0, atRisk: 0 }],
     };
     const email = TEMPLATES.followup_digest_daily(hostile);
-    for (const raw of ["<script>", "<img", "<b>", "<Health>", "<i>Omar", '"><script>', "<d>"]) {
+    for (const raw of ["<script>", "<img", "<b>", "<Health>", '"><script>', "<d>"]) {
       expect(email.html).not.toContain(raw);
     }
     expect(email.html).toContain("&lt;script&gt;alert(&#39;p&#39;)&lt;/script&gt;");
     expect(email.html).toContain("Payer &amp; Sons &lt;Health&gt;");
     expect(email.html).toContain("Hi &lt;img src=x onerror=alert(1)&gt;,");
     expect(email.html).toContain('href="https://app.example.test/cases/x&quot;&gt;&lt;script&gt;"');
-    expect(email.html).toContain("&lt;i&gt;Omar&lt;/i&gt;");
     expect(email.html).toContain("Shelby &lt;b&gt;&quot;Rehab&quot;&lt;/b&gt; via Minted Panel");
     expect(email.text).toContain("Line Break");
-    expect(email.text).toContain("- <i>Omar</i> Ali: 1 overdue, 0 due today, 0 at risk");
   });
 
-  it("shows a cc'd copy's Unassigned rows and team counts, and says how many more are in Work", () => {
+  it("says how many more are in Work when the list is capped, and greets without a name", () => {
     const email = TEMPLATES.followup_digest_daily({
       ...base,
       recipientFirstName: null,
-      own: EMPTY,
-      unassigned: { rows: [row({ atRisk: null })], more: 3, overdue: 4, dueToday: 0, atRisk: 0 },
-      team: [{ coordinatorName: "Omar Ali", overdue: 2, dueToday: 1, atRisk: 1 }],
+      followUps: { rows: [row()], more: 3, overdue: 4, dueToday: 0 },
     });
-    expect(email.subject).toBe("Follow-up digest for Oct 31, 2026");
+    expect(email.subject).toBe("Your follow-ups for Oct 31, 2026: 4 overdue, 0 due today");
     expect(email.html).toContain("<p>Hi,</p>");
-    expect(email.html).not.toContain("Your follow-ups");
-    expect(email.html).toContain("<h3>Unassigned</h3>");
-    expect(email.html).toContain(
-      "Cases with no coordinator, or whose coordinator is no longer a member.",
-    );
     expect(email.html).toContain("<p>And 3 more follow-ups in Work.</p>");
-    expect(email.html).toContain("<tr><td>Omar Ali</td><td>2</td><td>1</td><td>1</td></tr>");
-    expect(email.text).toContain("UNASSIGNED (4 overdue, 0 due today)");
+    expect(email.text).toContain("YOUR FOLLOW-UPS (4 overdue, 0 due today)");
     expect(email.text).toContain("And 3 more follow-ups in Work.");
-    expect(email.text).toContain("TEAM\n- Omar Ali: 2 overdue, 1 due today, 1 at risk");
-  });
-
-  it("words the at-risk flag as what is on record, not a prediction", () => {
-    const { html, text } = TEMPLATES.followup_digest_daily(base);
-    for (const part of [html, text]) {
-      expect(part).not.toMatch(/usually decides|will decide|expected to/i);
-      expect(part).toContain("on record for this payer");
-    }
-    const one = TEMPLATES.followup_digest_daily({
-      ...base,
-      own: {
-        ...base.own,
-        rows: [row({ atRisk: { daysSinceSubmission: 2, avgDecisionDays: 1 } })],
-      },
-    });
-    expect(one.text).toContain(
-      "Submitted 2 days ago, longer than the 1 day on record for this payer",
-    );
   });
 
   it("HTML-escapes a date it cannot read instead of printing it raw", () => {
     const { html } = TEMPLATES.followup_digest_daily({
       ...base,
       digestDate: "<b>soon</b>",
-      own: { ...base.own, rows: [row({ dueDate: '<img src=x onerror="1">' })] },
+      followUps: { ...base.followUps, rows: [row({ dueDate: '<img src=x onerror="1">' })] },
     });
     expect(html).not.toContain("<b>soon</b>");
     expect(html).not.toContain("<img");
