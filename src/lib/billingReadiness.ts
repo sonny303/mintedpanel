@@ -223,17 +223,24 @@ function shiftDays(date: string, days: number): string | null {
   return value.toISOString().slice(0, 10);
 }
 
+// A membership with no start date counts as started (PM decision 2026-10-20),
+// as in the enrollment readiness matrix (`evaluateEnrollmentReadiness`), which
+// drops a membership only once its end date has passed. Here a recorded future
+// start still holds, and a passed end date takes the clinician off the group.
 function isCurrentMembership(
   row: BillingGroupMembership,
   today: string,
-): { current: boolean; missing: boolean; invalid: boolean } {
-  if (!row.startDate) return { current: false, missing: true, invalid: false };
-  if (!validIsoDate(row.startDate) || (row.endDate !== null && !validIsoDate(row.endDate))) {
-    return { current: false, missing: false, invalid: true };
+): { current: boolean; invalid: boolean } {
+  if (
+    (row.startDate !== null && !validIsoDate(row.startDate)) ||
+    (row.endDate !== null && !validIsoDate(row.endDate))
+  ) {
+    return { current: false, invalid: true };
   }
   return {
-    current: row.startDate <= today && (row.endDate === null || row.endDate >= today),
-    missing: false,
+    current:
+      (row.startDate === null || row.startDate <= today) &&
+      (row.endDate === null || row.endDate >= today),
     invalid: false,
   };
 }
@@ -343,8 +350,19 @@ function providerFacilityEvidence(
   includeCase: boolean,
 ): BillingReason[] {
   const reasons: BillingReason[] = [];
-  if (provider.status !== "active") {
-    reasons.push({ severity: "stop", label: "The clinician is not active." });
+  // Only a terminated clinician is Do Not Bill. "onboarding" is the create
+  // default and rarely flipped, so it holds rather than stops (PM decision
+  // 2026-10-20): an approved, effective enrollment must never read as a stop.
+  if (provider.status === "terminated") {
+    reasons.push({ severity: "stop", label: "The clinician is terminated." });
+  } else if (provider.status === "onboarding") {
+    reasons.push({
+      severity: "hold",
+      label:
+        "Clinician is still marked Onboarding. Mark them Active once they start seeing patients.",
+    });
+  } else if (provider.status !== "active") {
+    reasons.push({ severity: "hold", label: "The clinician status is not recorded." });
   }
   if (provider.verificationState !== "verified") {
     reasons.push({ severity: "hold", label: "Clinician verification is incomplete." });
@@ -376,8 +394,6 @@ function providerFacilityEvidence(
           label: "Conflicting current group memberships are recorded.",
         });
       }
-    } else if (states.some((result) => result.missing)) {
-      reasons.push({ severity: "hold", label: "A group membership start date is missing." });
     } else {
       reasons.push({ severity: "hold", label: "Current group membership is not established." });
     }
