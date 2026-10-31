@@ -1,10 +1,17 @@
 // The daily coordinator follow-up digest job (MINT-108): its registry entry.
 //
-// GET /api/jobs/followup-digest, called by Vercel cron every hour
-// (vercel.json). The run key is the default UTC day, so the first call of a
-// UTC day does the work and later calls that day are skipped by job_runs; a
-// failed run is retried by the next hourly call, and the per-recipient
-// notification_sends ledger keeps a retry from resending what already went.
+// GET /api/jobs/followup-digest, called by Vercel cron once a day at 13:00
+// UTC (vercel.json `"0 13 * * *"`): 8 to 9 am Eastern, 5 to 6 am Pacific, an
+// hour at which the UTC date is every US time zone's local date, so "due
+// today" and "overdue" agree with the app. A daily schedule deploys on any
+// Vercel plan; Hobby rejects anything more frequent, which would fail every
+// production deploy.
+//
+// The run key is the default UTC day, so a second call that day is skipped
+// by job_runs, and a call after a failed run (an operator's, or a schedule
+// with retries) runs it again; the per-recipient notification_sends ledger
+// keeps that rerun from resending what already went. On the Pro plan,
+// `"0 12-23 * * *"` adds hourly retries with no other change.
 //
 // The work lives in ./followupDigestRun.ts and is imported when the job runs,
 // so the registry, the cron route and their tests stay free of the Supabase
@@ -35,8 +42,14 @@ export const FOLLOWUP_DIGEST_COUNT_KEYS = [
   "cc_members_dropped",
   /** Unassigned follow-ups that reached no one because no one is cc'd. */
   "unassigned_unrouted",
-  /** Sends that did not go out (claim, render or provider failure). */
+  /** Sends that definitely did not go out: the claim failed, or the mailer
+   *  rejected it before or at SendGrid. A later attempt may retry them. */
   "send_failures",
+  /** Sends that may have been delivered (network error, timeout, an
+   *  unexplained error): left claimed, never resent. */
+  "sends_uncertain",
+  /** Recipients whose send already failed three times for the day: not tried again. */
+  "sends_exhausted",
   /** Sends that went out but whose ledger row could not be finished. */
   "sends_unrecorded",
 ] as const;

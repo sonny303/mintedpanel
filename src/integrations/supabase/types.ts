@@ -4739,7 +4739,7 @@ export type Database = {
           p_recipient_user_id: string;
           p_run_key: string;
         };
-        Returns: string;
+        Returns: Json;
       };
       finish_job_run: {
         Args: {

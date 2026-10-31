@@ -36,10 +36,12 @@ describe("vercel.json crons and the job registry agree", () => {
     }
   });
 
-  it("runs the follow-up digest hourly, on the hour", () => {
-    // Hourly with the default daily run key: the first call of a UTC day
-    // sends, later calls skip, and a failed hour is retried the next hour.
-    expect(crons).toContainEqual({ path: "/api/jobs/followup-digest", schedule: "0 * * * *" });
+  it("runs the follow-up digest once a day at 13:00 UTC", () => {
+    // Daily deploys on any Vercel plan (Hobby rejects more frequent crons, and
+    // a rejected cron fails the production deploy). At 13:00 UTC the UTC date
+    // is the local date in every US time zone, 8 to 9 am Eastern. On Pro,
+    // "0 12-23 * * *" adds hourly retries with no other change.
+    expect(crons).toEqual([{ path: "/api/jobs/followup-digest", schedule: "0 13 * * *" }]);
   });
 
   it("rejects a malformed cron list", () => {

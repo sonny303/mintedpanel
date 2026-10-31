@@ -3,16 +3,17 @@
 // (supabase/migrations/20261031060000_notification_sends.sql), for the
 // MINT-108 job tests.
 //
-// Reads: from(table).select(columns, { count }).eq().in().order(), then
+// Reads: from(table).select(columns, { count }).eq().in().or().order(), then
 // either .range(from, to) or a bare await. Like hosted PostgREST, a bare read
 // returns at most 1,000 rows and says nothing, so a caller that does not page
 // silently loses rows. Rows come back WHOLE, whatever the select names: the
 // worst case for PHI, so a test proves the caller maps field by field. Every
 // read is recorded with its table, columns and filters.
 //
-// RPCs: the claim is a no-op while a claimed or sent row holds the key; the
-// finish takes only a closed error code and a safe message id, and touches
-// only a claimed row. job_runs RPCs go to an optional FakeJobDb, so one fake
+// RPCs: the claim answers {status:"exhausted"} after three failed rows for the
+// key, {status:"taken"} while a claimed or sent row holds it, else
+// {status:"claimed", id}; the finish takes only a closed error code and a safe
+// message id, and touches only a claimed row. job_runs RPCs go to an optional FakeJobDb, so one fake
 // can back runJob end to end. The SQL itself is exercised by
 // supabase/tests/mint108-notification-sends.sql.
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +22,7 @@ import type { FakeJobDb } from "@/__fixtures__/jobRunsFakeDb";
 import { JOB_NAME_RE, RUN_KEY_RE } from "@/server/jobs/registry";
 import {
   NOTIFICATION_SEND_ERROR_CODES,
+  NOTIFICATION_SEND_MAX_FAILURES,
   PROVIDER_MESSAGE_ID_RE,
 } from "@/server/jobs/notificationSends";
 
@@ -37,7 +39,7 @@ export interface FakeError {
 export interface FakeRead {
   table: string;
   columns: string;
-  filters: Array<[op: "eq" | "in", column: string, value: unknown]>;
+  filters: Array<[op: "eq" | "in" | "or", column: string, value: unknown]>;
   ranged: boolean;
 }
 
@@ -71,6 +73,20 @@ export interface FakeDigestDb {
 }
 
 type Result = { data: unknown; error: FakeError | null; count?: number | null };
+
+// The subset of PostgREST's or=() grammar the digest uses:
+// `col.is.null`, `col.is.true`, `col.is.false`, `col.not.is.null`, `col.eq.value`.
+function orClauseMatches(row: FakeRow, clause: string): boolean {
+  const [column, ...rest] = clause.split(".");
+  const op = rest.join(".");
+  const value = row[column];
+  if (op === "is.null") return value === null || value === undefined;
+  if (op === "not.is.null") return value !== null && value !== undefined;
+  if (op === "is.true") return value === true;
+  if (op === "is.false") return value === false;
+  if (op.startsWith("eq.")) return String(value) === op.slice(3);
+  throw new Error(`followUpDigestFakeDb: unsupported or() clause ${clause}`);
+}
 
 function compare(a: unknown, b: unknown): number {
   if (a === b) return 0;
@@ -110,7 +126,9 @@ export function createFollowUpDigestFakeDb(
         read.filters.every(([op, column, value]) =>
           op === "eq"
             ? row[column] === value
-            : Array.isArray(value) && (value as unknown[]).includes(row[column]),
+            : op === "or"
+              ? column.split(",").some((clause) => orClauseMatches(row, clause))
+              : Array.isArray(value) && (value as unknown[]).includes(row[column]),
         ),
       );
       rows = [...rows].sort((a, b) => {
@@ -145,6 +163,10 @@ export function createFollowUpDigestFakeDb(
         read.filters.push(["in", column, [...values]]);
         return builder;
       },
+      or(expression: string) {
+        read.filters.push(["or", expression, null]);
+        return builder;
+      },
       order(column: string, options?: { ascending?: boolean }) {
         orders.push({ column, ascending: options?.ascending !== false });
         return builder;
@@ -170,15 +192,19 @@ export function createFollowUpDigestFakeDb(
     if (state.failClaimFor.has(recipient)) {
       return { data: null, error: { code: "08006", message: "connection failure" } };
     }
-    const live = state.sends.some(
+    const forKey = state.sends.filter(
       (row) =>
         row.job === job &&
         row.run_key === runKey &&
         row.org_id === orgId &&
-        row.recipient_user_id === recipient &&
-        (row.outcome === "claimed" || row.outcome === "sent"),
+        row.recipient_user_id === recipient,
     );
-    if (live) return { data: null, error: null };
+    if (forKey.filter((row) => row.outcome === "failed").length >= NOTIFICATION_SEND_MAX_FAILURES) {
+      return { data: { status: "exhausted" }, error: null };
+    }
+    if (forKey.some((row) => row.outcome === "claimed" || row.outcome === "sent")) {
+      return { data: { status: "taken" }, error: null };
+    }
     sequence += 1;
     const id = `10800000-0000-4000-b000-${String(sequence).padStart(12, "0")}`;
     state.sends.push({
@@ -191,7 +217,7 @@ export function createFollowUpDigestFakeDb(
       provider_message_id: null,
       error_code: null,
     });
-    return { data: id, error: null };
+    return { data: { status: "claimed", id }, error: null };
   };
 
   const finish = (args: Record<string, unknown>): Result => {

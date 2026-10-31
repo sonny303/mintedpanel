@@ -17,19 +17,22 @@
 //
 // "Today" is the UTC day of the run, which is also its run key: the schema
 // has no organization time zone, and a server job has no viewer's local
-// day. The first call after 00:00 UTC sends, so US inboxes get the next
-// day's digest the evening before (after 7 pm Eastern, 4 pm Pacific).
+// day. The cron runs at 13:00 UTC (./followupDigest.ts), when the UTC date is
+// the local date in every US time zone.
 //
 // Failure semantics. One recipient's failed send, one org's failed read, or
 // a send whose ledger row could not be finished never stops the rest: every
 // other digest still goes out. If anything failed, the run then throws
-// FollowUpDigestIncompleteError, so job_runs records it failed and the next
-// hourly call runs it again. That attempt skips every recipient already
-// claimed or sent, so only what failed is retried, until the UTC day ends.
-// Missing configuration (the SendGrid env, or an APP_BASE_URL that is not a
-// bare origin) throws before any send. A template problem is one org's
-// setting: retrying cannot fix it, so it is counted and logged but does not
-// fail the run.
+// FollowUpDigestIncompleteError, so job_runs records it failed and a later
+// call the same UTC day (an operator's, or the Pro plan's hourly retries)
+// runs it again. That attempt skips every recipient already claimed or sent.
+// Only a definite rejection is retried, at most three times a day per
+// recipient: a network error, a timeout or an unexplained error may have been
+// delivered, so that send stays claimed and is never resent. Missing
+// configuration (the SendGrid env, or an APP_BASE_URL that is not a bare
+// origin) throws before any send. A template problem is one org's setting:
+// retrying cannot fix it, so it is counted and logged but does not fail the
+// run.
 //
 // Logging: ctx.log.error only, with closed snake_case events. Nothing here
 // logs an address, a name, a case or a count.
@@ -56,6 +59,7 @@ import {
   type FollowUpDigestCounts,
 } from "./followupDigest";
 import {
+  NOTIFICATION_SEND_ERROR_CODES,
   supabaseNotificationSendLedger,
   type NotificationSendErrorCode,
   type NotificationSendKey,
@@ -78,6 +82,9 @@ export class FollowUpDigestTemplateError extends Error {
 }
 export class NotificationSendFinishLostError extends Error {
   override name = "NotificationSendFinishLostError";
+}
+export class NotificationSendRetriesExhaustedError extends Error {
+  override name = "NotificationSendRetriesExhaustedError";
 }
 /** Something failed; everything else was sent. Carries the attempt's counts
  *  for tests and callers; the runner records the run failed without them. */
@@ -141,11 +148,19 @@ function zeroCounts(): FollowUpDigestCounts {
   ) as FollowUpDigestCounts;
 }
 
-function sendErrorCode(error: unknown): NotificationSendErrorCode {
-  return error instanceof EmailError ? error.kind : "send_error";
+/** The code of a definite rejection, or null when the send may have been
+ *  delivered (a network error or timeout, or an error the mailer did not
+ *  classify). */
+export function definiteRejectionCode(error: unknown): NotificationSendErrorCode | null {
+  if (!(error instanceof EmailError)) return null;
+  const kind: string = error.kind;
+  return (NOTIFICATION_SEND_ERROR_CODES as readonly string[]).includes(kind)
+    ? (kind as NotificationSendErrorCode)
+    : null;
 }
 
-type DeliveryOutcome = "sent" | "already_sent" | "failed" | "unrecorded";
+type DeliveryOutcome =
+  "sent" | "already_sent" | "failed" | "uncertain" | "exhausted" | "unrecorded";
 
 async function deliver(
   log: JobLogger,
@@ -154,21 +169,31 @@ async function deliver(
   key: NotificationSendKey,
   input: SendEmailInput<DigestTemplate>,
 ): Promise<DeliveryOutcome> {
-  let claimId: string | null;
+  let claimId: string;
   try {
-    claimId = await ledger.claim(key);
+    const claim = await ledger.claim(key);
+    if (claim.status === "taken") return "already_sent";
+    if (claim.status === "exhausted") {
+      log.error("send_retries_exhausted", new NotificationSendRetriesExhaustedError());
+      return "exhausted";
+    }
+    claimId = claim.id;
   } catch (error) {
     // No claim, no send: the ledger is what keeps a retry from resending.
     log.error("send_claim_failed", error);
     return "failed";
   }
-  if (claimId === null) return "already_sent";
 
   let result: SendEmailResult;
   try {
     result = await deps.send(input);
   } catch (error) {
-    const errorCode = sendErrorCode(error);
+    const errorCode = definiteRejectionCode(error);
+    if (errorCode === null) {
+      // It may have been delivered: leave the claim, so it is never resent.
+      log.error(`send_uncertain_${error instanceof EmailError ? error.kind : "error"}`, error);
+      return "uncertain";
+    }
     log.error(`send_failed_${errorCode}`, error);
     try {
       await ledger.finish(claimId, { outcome: "failed", errorCode });
@@ -256,6 +281,8 @@ async function runOrg(
     if (outcome === "sent") counts.digests_sent += 1;
     else if (outcome === "already_sent") counts.digests_already_sent += 1;
     else if (outcome === "failed") counts.send_failures += 1;
+    else if (outcome === "uncertain") counts.sends_uncertain += 1;
+    else if (outcome === "exhausted") counts.sends_exhausted += 1;
     else {
       counts.digests_sent += 1;
       counts.sends_unrecorded += 1;
@@ -293,7 +320,11 @@ export async function runFollowUpDigest(
     }
   }
 
-  if (counts.orgs_failed + counts.send_failures + counts.sends_unrecorded > 0) {
+  // Exhausted sends do not fail the run: nothing is left to try for them.
+  if (
+    counts.orgs_failed + counts.send_failures + counts.sends_uncertain + counts.sends_unrecorded >
+    0
+  ) {
     throw new FollowUpDigestIncompleteError(counts);
   }
   return counts;

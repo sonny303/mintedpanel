@@ -4,7 +4,7 @@
 // bridge, sandbox detection, editor error loggers) are intentionally dropped; the
 // build-relevant behavior below is reproduced 1:1.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -26,8 +26,9 @@ export default defineConfig(({ command, mode }) => {
   // vercel.json's crons, for nitro's Vercel Build Output. Nitro writes
   // .vercel/output/config.json itself and never reads vercel.json's crons, and
   // the deploy ships that output prebuilt (src/server/jobs/vercelCrons.ts).
+  // Next to this file, whatever directory the build runs from.
   const vercelCrons = vercelCronsFrom(
-    JSON.parse(readFileSync(join(process.cwd(), "vercel.json"), "utf8")),
+    JSON.parse(readFileSync(fileURLToPath(new URL("./vercel.json", import.meta.url)), "utf8")),
   );
 
   return {

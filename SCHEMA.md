@@ -759,19 +759,23 @@ to; an actor id, not a foreign key), `outcome` (`claimed | sent | failed`),
 `claimed_at`, `finished_at` (set exactly when no longer claimed),
 `provider_message_id` (SendGrid's `x-message-id`, only on `sent`,
 `^[A-Za-z0-9._=-]{1,128}$`), `error_code` (set exactly when `failed`;
-`misconfigured`, `invalid_input`, `provider_rejected`, `network` or
-`send_error`). The partial unique index `notification_sends_one_live_send` on
-`(job, run_key, org_id, recipient_user_id) WHERE outcome IN ('claimed',
-'sent')` is the once-per-slot guarantee. A claim that never finishes stays
-`claimed`: its outcome is unknown and it is never resent (SendGrid has no
-idempotency key). No PHI: no address, name, subject or body. RLS on with no
-policies; service_role has SELECT and nothing else.
+`misconfigured`, `invalid_input` or `provider_rejected`, the mailer's error
+kinds that prove nothing was accepted). The partial unique index
+`notification_sends_one_live_send` on `(job, run_key, org_id,
+recipient_user_id) WHERE outcome IN ('claimed', 'sent')` is the once-per-slot
+guarantee. Only a definite rejection is `failed`, and a later attempt may claim
+again, up to three failed rows per key. A send that may have been delivered (a
+network error or timeout, an unexplained error, a function that died
+mid-send) stays `claimed` and is never resent: SendGrid has no idempotency
+key. No PHI: no address, name, subject or body. RLS on with no policies;
+service_role has SELECT and nothing else.
 
 ### RPCs (service_role only, SECURITY DEFINER, `search_path = ''`)
 
 - `claim_notification_send(p_job, p_run_key, p_org_id, p_recipient_user_id)
-→ uuid | null` — inserts a `claimed` row unless that send is already claimed
-  or sent for the slot (null).
+→ jsonb` — `{"status":"claimed","id":…}` for a new claimed row,
+  `{"status":"taken"}` when that send is already claimed or sent for the slot,
+  `{"status":"exhausted"}` after three failed rows for the key.
 - `finish_notification_send(p_id, p_outcome, p_provider_message_id DEFAULT
 NULL, p_error_code DEFAULT NULL) → boolean` — records `sent` or `failed` on a
   `claimed` row; false when the row is not claimed. Refuses an outcome or an

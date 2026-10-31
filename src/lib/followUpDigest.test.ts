@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationCcRecipient } from "@/types";
+import { resolveActiveFollowUp } from "./followUps";
 import {
   MAX_DIGEST_SECTION_ROWS,
   caseAtRisk,
@@ -7,6 +8,7 @@ import {
   memberDisplayName,
   planFollowUpDigests,
   resolveDigestCc,
+  touchCanResolveFollowUp,
   type DigestCase,
   type DigestMember,
   type DigestTouchpoint,
@@ -147,6 +149,48 @@ describe("dueFollowUps: what is listed", () => {
   });
 });
 
+describe("touchCanResolveFollowUp: the touches read can skip the rest", () => {
+  // Every sequence of up to four touches drawn from: a date, another date, a
+  // date-less touch, a clear, with touch dates that tie. Reading only the
+  // touches that set or clear a follow-up must give the reducer's same answer.
+  const kinds = ["date_a", "date_b", "none", "clear"] as const;
+  const sequences: (typeof kinds)[number][][] = [[]];
+  for (let length = 1; length <= 4; length += 1) {
+    for (const prefix of sequences.filter((seq) => seq.length === length - 1)) {
+      for (const kind of kinds) sequences.push([...prefix, kind]);
+    }
+  }
+
+  it.each([false, true])(
+    "matches resolveActiveFollowUp over every touch (tied dates: %s)",
+    (tied) => {
+      let checked = 0;
+      for (const seq of sequences) {
+        const touches = seq.map((kind, i) => ({
+          id: `t${i}`,
+          touchDate: tied ? "2026-10-01" : `2026-10-0${i + 1}`,
+          createdAt: `2026-10-01T0${i}:00:00Z`,
+          nextFollowUpDate:
+            kind === "date_a" ? "2026-10-20" : kind === "date_b" ? "2026-11-20" : null,
+          clearsFollowUp: kind === "clear",
+        }));
+        expect(resolveActiveFollowUp(touches.filter(touchCanResolveFollowUp))).toEqual(
+          resolveActiveFollowUp(touches),
+        );
+        checked += 1;
+      }
+      expect(checked).toBe(1 + 4 + 16 + 64 + 256);
+    },
+  );
+
+  it("keeps exactly the touches that set or clear a follow-up", () => {
+    const base = { nextFollowUpDate: null, clearsFollowUp: false };
+    expect(touchCanResolveFollowUp(base)).toBe(false);
+    expect(touchCanResolveFollowUp({ ...base, nextFollowUpDate: "2026-10-20" })).toBe(true);
+    expect(touchCanResolveFollowUp({ ...base, clearsFollowUp: true })).toBe(true);
+  });
+});
+
 describe("caseAtRisk", () => {
   const submitted = (
     submittedDate: string | null,
@@ -204,7 +248,7 @@ describe("resolveDigestCc", () => {
 });
 
 describe("memberDisplayName", () => {
-  it("prefers first and last, then the stored full name, then the email", () => {
+  it("prefers first and last, then the stored full name, and never shows the email", () => {
     expect(memberDisplayName(member(JANE, "admin", " Jane ", "Doe"))).toBe("Jane Doe");
     expect(memberDisplayName({ ...member(JANE, "admin", "", ""), fullName: "J. Doe" })).toBe(
       "J. Doe",
@@ -215,7 +259,7 @@ describe("memberDisplayName", () => {
         fullName: null,
         email: "jane@example.test",
       }),
-    ).toBe("jane@example.test");
+    ).toBe("Unnamed member");
     expect(
       memberDisplayName({
         userId: JANE,

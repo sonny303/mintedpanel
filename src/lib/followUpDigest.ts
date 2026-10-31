@@ -16,7 +16,11 @@
 // (`submitted` or `in_review`, the statuses billing readiness estimates a
 // decision date for), its `submitted_date` is on or before today, the payer's
 // `avg_decision_days` is a positive whole number, and the whole days since
-// submission exceed it. A null `avg_decision_days` means no flag.
+// submission exceed it. A null `avg_decision_days` means no flag. Both inputs
+// are soft: `avg_decision_days` has had no writer since E6.7 (TD-45), and
+// `submitted_date` is not reset when a denied case is reapplied. So the email
+// states what is on record ("Submitted N days ago, longer than the M days on
+// record for this payer"), not a prediction.
 //
 // Who gets what.
 //   * A coordinator is a current member assigned (credential_cases.assigned_to)
@@ -242,13 +246,27 @@ export function dueFollowUps(
   return due;
 }
 
+/**
+ * Whether a touch can decide a case's active follow-up: it sets a date or
+ * clears one. resolveActiveFollowUp skips every other touch (a date-less touch
+ * carries the prior follow-up forward), so reading only these touches gives
+ * the same answer. src/services/followUpDigest.ts asks PostgREST for exactly
+ * these (DIGEST_TOUCH_FILTER).
+ */
+export function touchCanResolveFollowUp(
+  touch: Pick<FollowUpTouch, "nextFollowUpDate" | "clearsFollowUp">,
+): boolean {
+  return Boolean(touch.nextFollowUpDate) || touch.clearsFollowUp;
+}
+
 /** A staff member's name for the team summary. */
 export function memberDisplayName(member: DigestMember): string {
   const composed = [member.firstName, member.lastName]
     .map((part) => part?.trim() ?? "")
     .filter(Boolean)
     .join(" ");
-  return composed || member.fullName?.trim() || member.email?.trim() || "Unnamed member";
+  // Never the email address: a name is all the team table needs.
+  return composed || member.fullName?.trim() || "Unnamed member";
 }
 
 export interface ResolvedCc {

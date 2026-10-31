@@ -76,7 +76,7 @@ describe("followup_digest_daily", () => {
     );
     expect(email.html).toContain("<td>Jane Smith</td><td>Aetna</td><td>Oct 28, 2026</td>");
     expect(email.html).toContain(
-      "<td>Overdue<br>At risk: 62 days since submission; this payer usually decides in 45 days</td>",
+      "<td>Overdue<br>Submitted 62 days ago, longer than the 45 days on record for this payer</td>",
     );
     expect(email.html).toContain("<td>Due today</td>");
     expect(email.html).toContain("<p>Hi Anita,</p>");
@@ -90,7 +90,7 @@ describe("followup_digest_daily", () => {
     expect(text).toContain("Hi Anita,");
     expect(text).toContain("YOUR FOLLOW-UPS (1 overdue, 1 due today, 1 at risk)");
     expect(text).toContain(
-      "- C-1071 · Jane Smith · Aetna · due Oct 28, 2026 · Overdue · At risk: 62 days since submission; this payer usually decides in 45 days\n  https://app.example.test/cases/5f0c8a1e-0000-4000-8000-000000000001",
+      "- C-1071 · Jane Smith · Aetna · due Oct 28, 2026 · Overdue · Submitted 62 days ago, longer than the 45 days on record for this payer\n  https://app.example.test/cases/5f0c8a1e-0000-4000-8000-000000000001",
     );
     expect(text).toContain("- C-1080 · Jane Smith · Aetna · due Oct 31, 2026 · Due today\n");
     expect(text).toContain("Open Work: https://app.example.test/work");
@@ -151,6 +151,36 @@ describe("followup_digest_daily", () => {
     expect(email.text).toContain("UNASSIGNED (4 overdue, 0 due today)");
     expect(email.text).toContain("And 3 more follow-ups in Work.");
     expect(email.text).toContain("TEAM\n- Omar Ali: 2 overdue, 1 due today, 1 at risk");
+  });
+
+  it("words the at-risk flag as what is on record, not a prediction", () => {
+    const { html, text } = TEMPLATES.followup_digest_daily(base);
+    for (const part of [html, text]) {
+      expect(part).not.toMatch(/usually decides|will decide|expected to/i);
+      expect(part).toContain("on record for this payer");
+    }
+    const one = TEMPLATES.followup_digest_daily({
+      ...base,
+      own: {
+        ...base.own,
+        rows: [row({ atRisk: { daysSinceSubmission: 2, avgDecisionDays: 1 } })],
+      },
+    });
+    expect(one.text).toContain(
+      "Submitted 2 days ago, longer than the 1 day on record for this payer",
+    );
+  });
+
+  it("HTML-escapes a date it cannot read instead of printing it raw", () => {
+    const { html } = TEMPLATES.followup_digest_daily({
+      ...base,
+      digestDate: "<b>soon</b>",
+      own: { ...base.own, rows: [row({ dueDate: '<img src=x onerror="1">' })] },
+    });
+    expect(html).not.toContain("<b>soon</b>");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("due on &lt;b&gt;soon&lt;/b&gt;,");
+    expect(html).toContain("<td>&lt;img src=x onerror=&quot;1&quot;&gt;</td>");
   });
 
   it("keeps provider and payer names out of the subject", () => {

@@ -8,11 +8,16 @@
 -- skips a recipient whose send for that slot is already claimed or sent.
 --
 -- Idempotency is the partial unique index notification_sends_one_live_send:
--- at most one row per key is claimed or sent. A failed row is outside it, so
--- the next attempt claims again with a new row and the failure stays on
--- record. A claimed row that never finishes (the function died mid-send) has
--- an unknown outcome and is left claimed: SendGrid has no idempotency key, so
--- the job never resends what may already have been delivered.
+-- at most one row per key is claimed or sent. Only a definite rejection (the
+-- provider refused it, the input was invalid, or the mailer was misconfigured,
+-- each before anything was accepted) is finished as failed; a failed row is
+-- outside the index, so a later attempt may claim again with a new row, and
+-- the failure stays on record. After three failed rows for a key the claim
+-- answers `exhausted` and the job stops trying that send for the slot.
+--
+-- Anything that may have been delivered is never resent: a network error or
+-- timeout, an unexplained error, or a function that died mid-send leaves the
+-- row claimed, because SendGrid has no idempotency key.
 --
 -- No PHI, ever: ids, the slot, timestamps, the provider's message id (a
 -- token, CHECK-limited to a short safe alphabet) and an error code from a
@@ -30,7 +35,7 @@
 --   SELECT to_regclass('public.notification_sends');               -- non-null
 --   SELECT pg_get_function_identity_arguments(oid), prosecdef
 --     FROM pg_proc WHERE proname IN ('claim_notification_send', 'finish_notification_send');
---     -> p_job text, p_run_key text, p_org_id uuid, p_recipient_user_id uuid | true
+--     -> p_job text, p_run_key text, p_org_id uuid, p_recipient_user_id uuid | true (returns jsonb)
 --     -> p_id uuid, p_outcome text, p_provider_message_id text, p_error_code text | true
 --   Then run supabase/tests/mint108-notification-sends.sql (rolled back).
 
@@ -56,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.notification_sends (
   ),
   CONSTRAINT notification_sends_error_code_check CHECK (
     error_code IS NULL
-    OR error_code IN ('misconfigured', 'invalid_input', 'provider_rejected', 'network', 'send_error')
+    OR error_code IN ('misconfigured', 'invalid_input', 'provider_rejected')
   ),
   -- A send is finished exactly when it is no longer claimed, carries an error
   -- code exactly when it failed, and a message id only when it was sent.
@@ -72,6 +77,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS notification_sends_one_live_send
   WHERE outcome IN ('claimed', 'sent');
 CREATE INDEX IF NOT EXISTS notification_sends_org_claimed_idx
   ON public.notification_sends (org_id, claimed_at DESC);
+-- Serves the claim's count of a key's failed rows.
+CREATE INDEX IF NOT EXISTS notification_sends_key_idx
+  ON public.notification_sends (job, run_key, org_id, recipient_user_id);
 
 ALTER TABLE public.notification_sends ENABLE ROW LEVEL SECURITY;
 
@@ -79,7 +87,7 @@ REVOKE ALL ON TABLE public.notification_sends FROM public, anon, authenticated, 
 GRANT SELECT ON TABLE public.notification_sends TO service_role;
 
 COMMENT ON TABLE public.notification_sends IS
-  'Per-recipient send ledger for scheduled notification jobs (MINT-108). At most one claimed or sent row per (job, run_key, org_id, recipient_user_id), so a rerun of the same slot never resends. Ids, timestamps and closed codes only, never PHI. service_role only; written by claim_notification_send and finish_notification_send.';
+  'Per-recipient send ledger for scheduled notification jobs (MINT-108). At most one claimed or sent row per (job, run_key, org_id, recipient_user_id), so a rerun of the same slot never resends; at most three failed rows per key. Ids, timestamps and closed codes only, never PHI. service_role only; written by claim_notification_send and finish_notification_send.';
 COMMENT ON COLUMN public.notification_sends.job IS
   'The registered job name that sent it, e.g. followup-digest.';
 COMMENT ON COLUMN public.notification_sends.run_key IS
@@ -87,47 +95,68 @@ COMMENT ON COLUMN public.notification_sends.run_key IS
 COMMENT ON COLUMN public.notification_sends.recipient_user_id IS
   'The org member the message went to (an actor id, not a foreign key). Never an address.';
 COMMENT ON COLUMN public.notification_sends.outcome IS
-  'claimed (the job is sending, or died while sending: outcome unknown, never resent), then sent or failed. A failed send may be claimed again by a later attempt as a new row.';
+  'claimed (the job is sending, or the send may have been delivered: a network error, a timeout, an unexplained error or a function that died; never resent), then sent or failed. failed means a definite rejection; a later attempt may claim again as a new row, up to three failed rows per key.';
 COMMENT ON COLUMN public.notification_sends.finished_at IS
   'When the send was recorded sent (the provider accepted it) or failed. NULL while claimed.';
 COMMENT ON COLUMN public.notification_sends.provider_message_id IS
   'SendGrid''s x-message-id for a sent row, when it returned one. Limited to [A-Za-z0-9._=-], at most 128 characters.';
 COMMENT ON COLUMN public.notification_sends.error_code IS
-  'Set exactly when outcome is failed: misconfigured, invalid_input, provider_rejected or network (the mailer''s error kinds), or send_error (anything else). Never an error message.';
+  'Set exactly when outcome is failed: misconfigured, invalid_input or provider_rejected, the mailer''s error kinds that prove nothing was accepted. Never an error message.';
 
 -- ---------------------------------------------------------------------------
--- claim_notification_send: claim one recipient's send for a job slot. Returns
--- the new claimed row's id, or NULL when that send is already claimed or sent.
+-- claim_notification_send: claim one recipient's send for a job slot.
+-- Returns {"status":"claimed","id":<uuid>} for a new claimed row,
+-- {"status":"taken"} when that send is already claimed or sent, or
+-- {"status":"exhausted"} when it has already failed three times. jsonb, not
+-- a uuid, so the job can tell "already sent" from "gave up".
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.claim_notification_send(
+DROP FUNCTION IF EXISTS public.claim_notification_send(text, text, uuid, uuid);
+CREATE FUNCTION public.claim_notification_send(
   p_job text,
   p_run_key text,
   p_org_id uuid,
   p_recipient_user_id uuid
-) RETURNS uuid
+) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
 DECLARE
   v_id uuid;
+  v_failed integer;
 BEGIN
+  SELECT pg_catalog.count(*) INTO v_failed
+    FROM public.notification_sends
+   WHERE job = p_job
+     AND run_key = p_run_key
+     AND org_id = p_org_id
+     AND recipient_user_id = p_recipient_user_id
+     AND outcome = 'failed';
+  IF v_failed >= 3 THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'exhausted');
+  END IF;
+
   -- A live send for the key makes this insert a no-op, which leaves v_id
   -- NULL. The target names the partial index, so any other conflict raises.
+  -- Two concurrent claims after a failure: one inserts, the other is taken.
   INSERT INTO public.notification_sends (job, run_key, org_id, recipient_user_id)
   VALUES (p_job, p_run_key, p_org_id, p_recipient_user_id)
   ON CONFLICT (job, run_key, org_id, recipient_user_id)
     WHERE outcome IN ('claimed', 'sent') DO NOTHING
   RETURNING id INTO v_id;
 
-  RETURN v_id;
+  IF v_id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'taken');
+  END IF;
+  RETURN pg_catalog.jsonb_build_object('status', 'claimed', 'id', v_id);
 END;
 $function$;
 
 -- ---------------------------------------------------------------------------
 -- finish_notification_send: record sent (with the provider's message id, if
--- any) or failed (with a closed error code) on a claimed row. Returns false
--- when the row is not claimed.
+-- any) or failed (a definite rejection, with a closed error code) on a
+-- claimed row. Returns false when the row is not claimed. A send that may
+-- have been delivered is never finished: it stays claimed.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.finish_notification_send(
   p_id uuid,
@@ -145,7 +174,7 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
   IF p_error_code IS NOT NULL
-     AND p_error_code NOT IN ('misconfigured', 'invalid_input', 'provider_rejected', 'network', 'send_error') THEN
+     AND p_error_code NOT IN ('misconfigured', 'invalid_input', 'provider_rejected') THEN
     RAISE EXCEPTION 'finish_notification_send: error code is not in the closed set'
       USING ERRCODE = '22023';
   END IF;
@@ -171,8 +200,8 @@ GRANT EXECUTE ON FUNCTION public.claim_notification_send(text, text, uuid, uuid)
 GRANT EXECUTE ON FUNCTION public.finish_notification_send(uuid, text, text, text) TO service_role;
 
 COMMENT ON FUNCTION public.claim_notification_send(text, text, uuid, uuid) IS
-  'MINT-108: claim one recipient''s send for a job slot. Returns the new claimed row id, or NULL when the send is already claimed or sent. service_role only.';
+  'MINT-108: claim one recipient''s send for a job slot. Returns {"status":"claimed","id":...}, {"status":"taken"} (already claimed or sent) or {"status":"exhausted"} (three failed rows already). service_role only.';
 COMMENT ON FUNCTION public.finish_notification_send(uuid, text, text, text) IS
-  'MINT-108: record sent (optional provider message id) or failed (error code misconfigured, invalid_input, provider_rejected, network or send_error) on a claimed row. Returns false when the row is not claimed. service_role only.';
+  'MINT-108: record sent (optional provider message id) or failed (error code misconfigured, invalid_input or provider_rejected) on a claimed row. Returns false when the row is not claimed. service_role only.';
 
 NOTIFY pgrst, 'reload schema';

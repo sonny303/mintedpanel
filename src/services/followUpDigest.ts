@@ -15,6 +15,13 @@
 // only provider columns read; touches are read for their follow-up fields,
 // never `notes`.
 //
+// Touches: only those of the org's open cases (in chunks of
+// DIGEST_TOUCH_CASE_CHUNK ids, which keeps each URL short and each read far
+// under readCompletePages' row limit), and only those that set or clear a
+// follow-up (DIGEST_TOUCH_FILTER). resolveActiveFollowUp skips a touch with
+// neither, so leaving those out yields the same active follow-up
+// (touchCanResolveFollowUp in src/lib/followUpDigest.ts, pinned by its test).
+//
 // Complete reads: hosted PostgREST caps a response at 1,000 rows and says
 // nothing, so every list that can grow runs through readCompletePages with an
 // exact count and a stable order. A sequence's steps are not paged: the
@@ -40,7 +47,8 @@ export interface FollowUpDigestOrgData {
   members: DigestMember[];
   /** The org's open cases, with display-ready provider and payer names. */
   cases: DigestCase[];
-  /** Every touchpoint of the org, follow-up fields only. */
+  /** The open cases' touchpoints that set or clear a follow-up, follow-up
+   *  fields only. */
   touchpoints: DigestTouchpoint[];
 }
 
@@ -51,6 +59,10 @@ export const DIGEST_CASE_COLUMNS =
   "id, org_id, case_number, assigned_to, case_status, submitted_date, providers(org_id, first_name, last_name), payers(name, avg_decision_days)";
 export const DIGEST_TOUCH_COLUMNS =
   "id, case_id, touch_date, created_at, next_follow_up_date, clears_follow_up";
+/** PostgREST's spelling of touchCanResolveFollowUp. */
+export const DIGEST_TOUCH_FILTER = "next_follow_up_date.not.is.null,clears_follow_up.is.true";
+/** Open case ids per touches read. */
+export const DIGEST_TOUCH_CASE_CHUNK = 100;
 
 const UNKNOWN_PROVIDER = "Unknown provider";
 const UNKNOWN_PAYER = "Unknown payer";
@@ -177,16 +189,24 @@ async function listOpenCases(ctx: FollowUpDigestReadCtx, orgId: string): Promise
 async function listTouchpoints(
   ctx: FollowUpDigestReadCtx,
   orgId: string,
+  caseIds: readonly string[],
 ): Promise<DigestTouchpoint[]> {
-  const query = ctx.db
-    .from("touches")
-    .select(DIGEST_TOUCH_COLUMNS, { count: "exact" })
-    .eq("org_id", orgId)
-    .eq("entry_type", "touchpoint")
-    .order("id", { ascending: true });
-  const rows = await readCompletePages(async (from, to) => await query.range(from, to), {
-    label: "Digest touchpoints",
-  });
+  const rows: unknown[] = [];
+  for (let start = 0; start < caseIds.length; start += DIGEST_TOUCH_CASE_CHUNK) {
+    const query = ctx.db
+      .from("touches")
+      .select(DIGEST_TOUCH_COLUMNS, { count: "exact" })
+      .eq("org_id", orgId)
+      .eq("entry_type", "touchpoint")
+      .in("case_id", caseIds.slice(start, start + DIGEST_TOUCH_CASE_CHUNK))
+      .or(DIGEST_TOUCH_FILTER)
+      .order("id", { ascending: true });
+    rows.push(
+      ...(await readCompletePages(async (from, to) => await query.range(from, to), {
+        label: "Digest touchpoints",
+      })),
+    );
+  }
   return rows.flatMap((raw) => {
     const row = record(raw);
     const id = text(row?.id);
@@ -214,6 +234,10 @@ export async function loadFollowUpDigestOrgData(
 ): Promise<FollowUpDigestOrgData> {
   const members = await listMembers(ctx, orgId);
   const cases = await listOpenCases(ctx, orgId);
-  const touchpoints = await listTouchpoints(ctx, orgId);
+  const touchpoints = await listTouchpoints(
+    ctx,
+    orgId,
+    cases.map((c) => c.id),
+  );
   return { members, cases, touchpoints };
 }

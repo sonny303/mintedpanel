@@ -2,25 +2,33 @@
 // service-role RPCs (supabase/migrations/20261031060000_notification_sends.sql).
 //
 // A job run is at-least-once (./types.ts), so a job that emails people claims
-// each send on (job, runKey, org, recipient) before sending it. A claim that
-// returns null means that send is already claimed or sent for the slot: skip
-// it. A failed send is recorded failed, and a later attempt claims it again.
-// A claim that is never finished (the function died mid-send) stays claimed:
-// SendGrid has no idempotency key, so it is never resent.
+// each send on (job, runKey, org, recipient) before sending it. The claim
+// answers `taken` when that send is already claimed or sent for the slot, and
+// `exhausted` after NOTIFICATION_SEND_MAX_FAILURES failed rows: skip it either
+// way.
+//
+// Only a definite rejection (the codes below: nothing was accepted) is
+// finished as failed, and a later attempt may claim it again. A send that may
+// have been delivered (a network error or timeout, an unexplained error, a
+// function that died mid-send) is never finished and stays claimed: SendGrid
+// has no idempotency key, so it is never resent.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
 /** Mirrored by notification_sends_error_code_check and finish_notification_send.
- *  The first four are the mailer's EmailErrorKind values; `send_error` is
- *  anything else. */
+ *  The mailer's EmailErrorKind values that prove nothing was accepted: each is
+ *  thrown before the request, or is SendGrid's own non-2xx answer. `network`
+ *  is not one: a timeout may have been delivered. */
 export const NOTIFICATION_SEND_ERROR_CODES = [
   "misconfigured",
   "invalid_input",
   "provider_rejected",
-  "network",
-  "send_error",
 ] as const;
 export type NotificationSendErrorCode = (typeof NOTIFICATION_SEND_ERROR_CODES)[number];
+
+/** After this many failed rows for a key the claim answers `exhausted`.
+ *  Mirrored by claim_notification_send. */
+export const NOTIFICATION_SEND_MAX_FAILURES = 3;
 
 /** Mirrored by notification_sends_provider_message_id_check. A message id
  *  outside it is not recorded (null), so a provider oddity cannot make the
@@ -38,9 +46,28 @@ export type NotificationSendFinish =
   | { outcome: "sent"; providerMessageId: string | null }
   | { outcome: "failed"; errorCode: NotificationSendErrorCode };
 
+export type NotificationSendClaim =
+  { status: "claimed"; id: string } | { status: "taken" } | { status: "exhausted" };
+
+export class InvalidNotificationSendClaimError extends Error {
+  override name = "InvalidNotificationSendClaimError";
+}
+
+/** The claim RPC's jsonb answer, narrowed. Anything else throws. */
+export function parseNotificationSendClaim(value: unknown): NotificationSendClaim {
+  const answer =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as { status?: unknown; id?: unknown })
+      : {};
+  if (answer.status === "claimed" && typeof answer.id === "string" && answer.id.length > 0) {
+    return { status: "claimed", id: answer.id };
+  }
+  if (answer.status === "taken" || answer.status === "exhausted") return { status: answer.status };
+  throw new InvalidNotificationSendClaimError("claim_notification_send answered an unknown shape");
+}
+
 export interface NotificationSendLedger {
-  /** The new claim's id, or null when the send is already claimed or sent. */
-  claim(key: NotificationSendKey): Promise<string | null>;
+  claim(key: NotificationSendKey): Promise<NotificationSendClaim>;
   /** False when the row is not claimed. */
   finish(id: string, result: NotificationSendFinish): Promise<boolean>;
 }
@@ -61,7 +88,7 @@ export function supabaseNotificationSendLedger(
         p_recipient_user_id: key.recipientUserId,
       });
       if (error) throw error;
-      return typeof data === "string" && data.length > 0 ? data : null;
+      return parseNotificationSendClaim(data);
     },
     async finish(id, result) {
       const messageId =

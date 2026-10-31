@@ -62,11 +62,14 @@ export function escapeHtml(value: string): string {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // "Oct 31, 2026" (the app's fmtDate spelling) for a YYYY-MM-DD date, read as a
-// calendar date so no time zone can move it.
+// calendar date so no time zone can move it. Anything else comes back as it
+// was, HTML-escaped, so the result is safe in either part.
 function formatDay(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   const month = MONTHS[m - 1];
-  return month && Number.isInteger(y) && Number.isInteger(d) ? `${month} ${d}, ${y}` : iso;
+  return month && Number.isInteger(y) && Number.isInteger(d)
+    ? `${month} ${d}, ${y}`
+    : escapeHtml(iso);
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -83,10 +86,12 @@ function statusLabel(row: FollowUpDigestRow): string {
   return row.status === "overdue" ? "Overdue" : "Due today";
 }
 
+// What is on record, not a prediction: avg_decision_days has had no writer
+// since E6.7 (TD-45) and submitted_date survives a reapply.
 function atRiskText(row: FollowUpDigestRow): string | null {
   if (!row.atRisk) return null;
   const { daysSinceSubmission, avgDecisionDays } = row.atRisk;
-  return `At risk: ${plural(daysSinceSubmission, "day", "days")} since submission; this payer usually decides in ${plural(avgDecisionDays, "day", "days")}`;
+  return `Submitted ${plural(daysSinceSubmission, "day", "days")} ago, longer than the ${plural(avgDecisionDays, "day", "days")} on record for this payer`;
 }
 
 function rowText(row: FollowUpDigestRow): string {
@@ -190,6 +195,7 @@ function followUpDigest(data: FollowUpDigestEmailData): RenderedEmail {
 
   const name = data.recipientFirstName;
   const practice = data.practiceName.trim();
+  // `day` is already HTML-safe (formatDay), so the intro is not escaped again.
   const intro = `Here are the follow-ups due on ${day}, and the ones that are overdue.`;
   const footer =
     "You get this email because your organization turned on the daily follow-up digest.";
@@ -209,7 +215,7 @@ function followUpDigest(data: FollowUpDigestEmailData): RenderedEmail {
     ].join("\n\n"),
     html: [
       `<p>${name ? `Hi ${escapeHtml(name)},` : "Hi,"}</p>`,
-      `<p>${escapeHtml(intro)}</p>`,
+      `<p>${intro}</p>`,
       ...blocks.map((block) => block.html),
       `<p><a href="${escapeHtml(data.workQueueLink)}">Open Work</a></p>`,
       `<p>${escapeHtml(footer)}</p>`,

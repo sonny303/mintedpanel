@@ -39,7 +39,10 @@ BEGIN
   IF to_regclass('public.notification_sends') IS NULL
      OR to_regclass('public.organizations') IS NULL
      OR to_regprocedure('public.claim_notification_send(text, text, uuid, uuid)') IS NULL
-     OR to_regprocedure('public.finish_notification_send(uuid, text, text, text)') IS NULL THEN
+     OR to_regprocedure('public.finish_notification_send(uuid, text, text, text)') IS NULL
+     OR (SELECT prorettype FROM pg_catalog.pg_proc
+          WHERE oid = to_regprocedure('public.claim_notification_send(text, text, uuid, uuid)'))
+        <> 'jsonb'::regtype THEN
     RAISE EXCEPTION 'mint108-notification-sends.sql runs after supabase/migrations/20261031060000_notification_sends.sql';
   END IF;
 END;
@@ -74,6 +77,14 @@ BEGIN
 END;
 $$;
 
+-- The claim answers jsonb; this returns the new row's id, or NULL when the
+-- answer is taken or exhausted.
+CREATE FUNCTION pg_temp.m108_claim(p_job text, p_run_key text, p_org uuid, p_recipient uuid)
+RETURNS uuid
+LANGUAGE sql AS $$
+  SELECT (public.claim_notification_send(p_job, p_run_key, p_org, p_recipient) ->> 'id')::uuid
+$$;
+
 -- Two synthetic orgs and two recipients (actor ids; no profile needed).
 INSERT INTO public.organizations (id, name) VALUES
   ('10800000-0000-4000-a000-0000000000a1', 'MINT-108 packet org A'),
@@ -82,10 +93,10 @@ INSERT INTO public.organizations (id, name) VALUES
 -- ---------------------------------------------------------------------------
 -- Key A: claim, skip while claimed, finish sent, skip after sent.
 -- ---------------------------------------------------------------------------
-INSERT INTO pg_temp.m108_ids VALUES ('a1', public.claim_notification_send(
+INSERT INTO pg_temp.m108_ids VALUES ('a1', pg_temp.m108_claim(
   'followup-digest', '2026-10-31',
   '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
-INSERT INTO pg_temp.m108_ids VALUES ('a2', public.claim_notification_send(
+INSERT INTO pg_temp.m108_ids VALUES ('a2', pg_temp.m108_claim(
   'followup-digest', '2026-10-31',
   '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
 
@@ -117,7 +128,7 @@ SELECT pg_temp.m108_mark('sent_row_is_finished_with_its_message_id',
        AND provider_message_id = 'W5Z1yLQe.Qiqcjv3z1dQ5DQ' AND error_code IS NULL
   ));
 
-INSERT INTO pg_temp.m108_ids VALUES ('a3', public.claim_notification_send(
+INSERT INTO pg_temp.m108_ids VALUES ('a3', pg_temp.m108_claim(
   'followup-digest', '2026-10-31',
   '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
 SELECT pg_temp.m108_mark('claim_after_sent_returns_null_and_writes_nothing',
@@ -127,30 +138,30 @@ SELECT pg_temp.m108_mark('claim_after_sent_returns_null_and_writes_nothing',
           AND recipient_user_id = '10800000-0000-4000-a000-0000000000b1') = 1);
 
 SELECT pg_temp.m108_mark('finish_on_a_finished_row_returns_false',
-  NOT public.finish_notification_send(pg_temp.m108_id('a1'), 'failed', NULL, 'network')
+  NOT public.finish_notification_send(pg_temp.m108_id('a1'), 'failed', NULL, 'provider_rejected')
   AND (SELECT outcome FROM public.notification_sends WHERE id = pg_temp.m108_id('a1')) = 'sent');
 
 -- Each part of the key is its own slot: another day, org, recipient or job.
 SELECT pg_temp.m108_mark('every_part_of_the_key_is_its_own_slot',
-  public.claim_notification_send('followup-digest', '2026-11-01',
+  pg_temp.m108_claim('followup-digest', '2026-11-01',
     '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1') IS NOT NULL
-  AND public.claim_notification_send('followup-digest', '2026-10-31',
+  AND pg_temp.m108_claim('followup-digest', '2026-10-31',
     '10800000-0000-4000-a000-0000000000a2', '10800000-0000-4000-a000-0000000000b1') IS NOT NULL
-  AND public.claim_notification_send('followup-digest', '2026-10-31',
+  AND pg_temp.m108_claim('followup-digest', '2026-10-31',
     '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b2') IS NOT NULL
-  AND public.claim_notification_send('intake-reminders', '2026-10-31',
+  AND pg_temp.m108_claim('intake-reminders', '2026-10-31',
     '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1') IS NOT NULL);
 
 -- ---------------------------------------------------------------------------
 -- Key B: a failed send may be claimed again, as a new row; a sent row with no
 -- message id is allowed (sandbox mode returns none).
 -- ---------------------------------------------------------------------------
-INSERT INTO pg_temp.m108_ids VALUES ('b1', public.claim_notification_send(
+INSERT INTO pg_temp.m108_ids VALUES ('b1', pg_temp.m108_claim(
   'followup-digest', '2026-10-31',
   '10800000-0000-4000-a000-0000000000a2', '10800000-0000-4000-a000-0000000000b2'));
 SELECT pg_temp.m108_mark('finish_records_failure_with_its_code',
   public.finish_notification_send(pg_temp.m108_id('b1'), 'failed', NULL, 'provider_rejected'));
-INSERT INTO pg_temp.m108_ids VALUES ('b2', public.claim_notification_send(
+INSERT INTO pg_temp.m108_ids VALUES ('b2', pg_temp.m108_claim(
   'followup-digest', '2026-10-31',
   '10800000-0000-4000-a000-0000000000a2', '10800000-0000-4000-a000-0000000000b2'));
 
@@ -191,19 +202,19 @@ SELECT pg_temp.m108_mark('named_conflict_target_lets_a_primary_key_collision_rai
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.m108_mark('claim_refuses_an_invalid_job_name',
   pg_temp.m108_expect_state('23514',
-    $$SELECT public.claim_notification_send('Followup Digest', '2026-10-31',
+    $$SELECT pg_temp.m108_claim('Followup Digest', '2026-10-31',
         '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3')$$));
 SELECT pg_temp.m108_mark('claim_refuses_an_invalid_run_key',
   pg_temp.m108_expect_state('23514',
-    $$SELECT public.claim_notification_send('followup-digest', '2026 10 31',
+    $$SELECT pg_temp.m108_claim('followup-digest', '2026 10 31',
         '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3')$$));
 SELECT pg_temp.m108_mark('claim_refuses_an_unknown_org',
   pg_temp.m108_expect_state('23503',
-    $$SELECT public.claim_notification_send('followup-digest', '2026-10-31',
+    $$SELECT pg_temp.m108_claim('followup-digest', '2026-10-31',
         '10800000-0000-4000-a000-00000000ffff', '10800000-0000-4000-a000-0000000000b3')$$));
 SELECT pg_temp.m108_mark('claim_refuses_a_missing_recipient',
   pg_temp.m108_expect_state('23502',
-    $$SELECT public.claim_notification_send('followup-digest', '2026-10-31',
+    $$SELECT pg_temp.m108_claim('followup-digest', '2026-10-31',
         '10800000-0000-4000-a000-0000000000a1', NULL)$$));
 
 SELECT pg_temp.m108_mark('finish_refuses_' || label,
@@ -216,8 +227,11 @@ SELECT pg_temp.m108_mark('finish_refuses_' || label,
     ('an_identifier_outside_the_closed_codes', '22023', 'failed', NULL, 'smtp_bounced'),
     ('free_text_as_an_error_code', '22023', 'failed', NULL, 'DOB 1961-04-12'),
     ('failure_without_an_error_code', '23514', 'failed', NULL, NULL),
-    ('success_with_an_error_code', '23514', 'sent', NULL, 'network'),
-    ('a_message_id_on_a_failure', '23514', 'failed', 'W5Z1yLQeQiqcjv3z1dQ5DQ', 'network'),
+    ('success_with_an_error_code', '23514', 'sent', NULL, 'provider_rejected'),
+    ('a_message_id_on_a_failure', '23514', 'failed', 'W5Z1yLQeQiqcjv3z1dQ5DQ', 'invalid_input'),
+    -- A network error or timeout may have been delivered: it is never failed.
+    ('network_as_an_error_code', '22023', 'failed', NULL, 'network'),
+    ('send_error_as_an_error_code', '22023', 'failed', NULL, 'send_error'),
     ('a_message_id_with_spaces', '23514', 'sent', 'jane doe 1961-04-12', NULL),
     ('a_message_id_with_an_address', '23514', 'sent', 'jane@example.com', NULL),
     ('a_message_id_over_128_characters', '23514', 'sent', repeat('a', 129), NULL)
@@ -246,11 +260,72 @@ SELECT pg_temp.m108_mark('finish_records_sent_without_a_message_id',
 
 SELECT pg_temp.m108_mark('every_closed_error_code_is_accepted',
   (SELECT bool_and(public.finish_notification_send(
-            public.claim_notification_send('followup-digest', 'codes-' || code,
+            pg_temp.m108_claim('followup-digest', 'codes-' || code,
               '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'),
             'failed', NULL, code))
-     FROM unnest(ARRAY['misconfigured', 'invalid_input', 'provider_rejected', 'network',
-                       'send_error']) AS code));
+     FROM unnest(ARRAY['misconfigured', 'invalid_input', 'provider_rejected']) AS code));
+
+-- ---------------------------------------------------------------------------
+-- The claim's answers, and the cap of three failed rows per key. Each step
+-- that depends on an earlier one is its own statement.
+-- ---------------------------------------------------------------------------
+CREATE TEMP TABLE m108_answers (name text PRIMARY KEY, answer jsonb);
+
+INSERT INTO pg_temp.m108_answers VALUES ('first', public.claim_notification_send(
+  'followup-digest', 'answers',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+INSERT INTO pg_temp.m108_answers VALUES ('second', public.claim_notification_send(
+  'followup-digest', 'answers',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+SELECT pg_temp.m108_mark('claim_answers_claimed_with_the_id_then_taken',
+  (SELECT answer FROM pg_temp.m108_answers WHERE name = 'first')
+    = pg_catalog.jsonb_build_object('status', 'claimed', 'id',
+        (SELECT id FROM public.notification_sends
+          WHERE run_key = 'answers' AND outcome = 'claimed'))
+  AND (SELECT answer FROM pg_temp.m108_answers WHERE name = 'second')
+    = '{"status": "taken"}'::jsonb);
+
+-- generate_series calls the claim and the finish once per row, in order.
+SELECT pg_temp.m108_mark('three_failures_are_allowed',
+  (SELECT bool_and(public.finish_notification_send(
+            pg_temp.m108_claim('followup-digest', 'capped',
+              '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3'),
+            'failed', NULL, 'provider_rejected'))
+     FROM generate_series(1, 3)));
+INSERT INTO pg_temp.m108_answers VALUES ('fourth', public.claim_notification_send(
+  'followup-digest', 'capped',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3'));
+SELECT pg_temp.m108_mark('a_fourth_claim_after_three_failures_is_exhausted_and_writes_nothing',
+  (SELECT answer FROM pg_temp.m108_answers WHERE name = 'fourth')
+    = '{"status": "exhausted"}'::jsonb
+  AND (SELECT array_agg(outcome) FROM public.notification_sends
+        WHERE run_key = 'capped'
+          AND recipient_user_id = '10800000-0000-4000-a000-0000000000b3')
+      = ARRAY['failed', 'failed', 'failed']);
+SELECT pg_temp.m108_mark('the_cap_is_per_key',
+  pg_temp.m108_claim('followup-digest', 'capped',
+    '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1') IS NOT NULL
+  AND pg_temp.m108_claim('followup-digest', 'capped-next-day',
+    '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b3') IS NOT NULL);
+
+-- Two failures, then a send: the sent row holds the key (taken, not exhausted).
+SELECT pg_temp.m108_mark('two_failures_are_recorded',
+  (SELECT bool_and(public.finish_notification_send(
+            pg_temp.m108_claim('followup-digest', 'two-then-sent',
+              '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'),
+            'failed', NULL, 'invalid_input'))
+     FROM generate_series(1, 2)));
+INSERT INTO pg_temp.m108_ids VALUES ('t3', pg_temp.m108_claim(
+  'followup-digest', 'two-then-sent',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+SELECT pg_temp.m108_mark('a_third_attempt_may_be_sent',
+  public.finish_notification_send(pg_temp.m108_id('t3'), 'sent'));
+INSERT INTO pg_temp.m108_answers VALUES ('after-sent', public.claim_notification_send(
+  'followup-digest', 'two-then-sent',
+  '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
+SELECT pg_temp.m108_mark('a_sent_row_after_two_failures_answers_taken',
+  (SELECT answer FROM pg_temp.m108_answers WHERE name = 'after-sent')
+    = '{"status": "taken"}'::jsonb);
 
 -- ---------------------------------------------------------------------------
 -- Access boundary.
@@ -303,7 +378,7 @@ SELECT pg_temp.m108_mark('rpcs_are_security_definer_with_an_empty_search_path',
        )) = 2);
 
 SET LOCAL ROLE service_role;
-INSERT INTO pg_temp.m108_ids VALUES ('s1', public.claim_notification_send(
+INSERT INTO pg_temp.m108_ids VALUES ('s1', pg_temp.m108_claim(
   'followup-digest', 'slot-s',
   '10800000-0000-4000-a000-0000000000a1', '10800000-0000-4000-a000-0000000000b1'));
 SELECT pg_temp.m108_mark('service_role_can_finish',

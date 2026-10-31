@@ -18,6 +18,7 @@ import {
   followupDigestJob,
   type FollowUpDigestCounts,
 } from "./followupDigest";
+import { DIGEST_TOUCH_CASE_CHUNK, DIGEST_TOUCH_FILTER } from "@/services/followUpDigest";
 import {
   FollowUpDigestIncompleteError,
   FollowUpDigestNotConfiguredError,
@@ -524,10 +525,10 @@ describe("followup-digest: at-least-once runs, once-per-day sends", () => {
     expect(fake.sends.filter((r) => r.run_key === "2026-11-01")).toHaveLength(4);
   });
 
-  it("keeps sending when one recipient fails, fails the run, and the retry sends only that one", async () => {
+  it("keeps sending when one recipient is rejected, fails the run, and a later call retries only that one", async () => {
     const send = mailer((input) =>
       input.to === "jane@example.test"
-        ? new EmailError("network", "SendGrid request failed")
+        ? new EmailError("provider_rejected", "SendGrid rejected the send (503)", 503)
         : null,
     );
     const first = await incomplete(runFollowUpDigest(ctx(), deps({ send })));
@@ -539,10 +540,10 @@ describe("followup-digest: at-least-once runs, once-per-day sends", () => {
     ]);
     expect(fake.sends.find((r) => r.recipient_user_id === JANE)).toMatchObject({
       outcome: "failed",
-      error_code: "network",
+      error_code: "provider_rejected",
       provider_message_id: null,
     });
-    expect(logged()).toContain("[jobs:followup-digest] send_failed_network");
+    expect(logged()).toContain("[jobs:followup-digest] send_failed_provider_rejected");
 
     const retry = await runFollowUpDigest(ctx(), deps());
     expect(retry).toEqual(counts({ ...BASELINE, digests_sent: 1, digests_already_sent: 3 }));
@@ -552,19 +553,72 @@ describe("followup-digest: at-least-once runs, once-per-day sends", () => {
     expect(sent).toHaveLength(4);
   });
 
-  it("maps a provider rejection and a non-mailer throw to their closed codes", async () => {
+  it("records only definite rejections as failed; a timeout or an unexplained error stays claimed", async () => {
+    const send = mailer((input) => {
+      if (input.to === "jane@example.test") return new EmailError("provider_rejected", "400", 400);
+      if (input.to === "omar@example.test") {
+        return new EmailError("invalid_input", "Recipient is not a valid email address");
+      }
+      if (input.to === "ada@example.test")
+        return new EmailError("network", "SendGrid request failed");
+      return new TypeError("something unexplained");
+    });
+    const first = await incomplete(runFollowUpDigest(ctx(), deps({ send })));
+    expect(first).toEqual(
+      counts({ ...BASELINE, digests_sent: 0, send_failures: 2, sends_uncertain: 2 }),
+    );
+    const byRecipient = Object.fromEntries(
+      fake.sends.map((r) => [r.recipient_user_id, [r.outcome, r.error_code]]),
+    );
+    expect(byRecipient).toEqual({
+      [JANE]: ["failed", "provider_rejected"],
+      [OMAR]: ["failed", "invalid_input"],
+      [ADA]: ["claimed", null],
+      [BILL]: ["claimed", null],
+    });
+    expect(logged()).toContain("[jobs:followup-digest] send_uncertain_network");
+    expect(logged()).toContain("[jobs:followup-digest] send_uncertain_error");
+
+    // A later call resends only the definite rejections: the timeout and the
+    // unexplained error may have been delivered.
+    const retry = await runFollowUpDigest(ctx(), deps());
+    expect(retry).toEqual(counts({ ...BASELINE, digests_sent: 2, digests_already_sent: 2 }));
+    expect(sent.map((input) => input.to).sort()).toEqual([
+      "jane@example.test",
+      "omar@example.test",
+    ]);
+  });
+
+  it("stops retrying a recipient after three rejections that day, without failing the run", async () => {
     const send = mailer((input) =>
       input.to === "jane@example.test"
         ? new EmailError("provider_rejected", "SendGrid rejected the send (400)", 400)
-        : input.to === "omar@example.test"
-          ? new TypeError("render blew up")
-          : null,
+        : null,
     );
-    const result = await incomplete(runFollowUpDigest(ctx(), deps({ send })));
-    expect(result).toEqual(counts({ ...BASELINE, digests_sent: 2, send_failures: 2 }));
-    const codes = Object.fromEntries(fake.sends.map((r) => [r.recipient_user_id, r.error_code]));
-    expect(codes[JANE]).toBe("provider_rejected");
-    expect(codes[OMAR]).toBe("send_error");
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await incomplete(runFollowUpDigest(ctx(), deps({ send })));
+    }
+    const janeAttempts = () =>
+      send.mock.calls.filter(([input]) => input.to === "jane@example.test");
+    expect(janeAttempts()).toHaveLength(3);
+    expect(fake.sends.filter((r) => r.recipient_user_id === JANE).map((r) => r.outcome)).toEqual([
+      "failed",
+      "failed",
+      "failed",
+    ]);
+
+    const fourth = await runFollowUpDigest(ctx(), deps({ send }));
+    expect(fourth).toEqual(
+      counts({ ...BASELINE, digests_sent: 0, digests_already_sent: 3, sends_exhausted: 1 }),
+    );
+    expect(janeAttempts()).toHaveLength(3);
+    expect(logged()).toContain("[jobs:followup-digest] send_retries_exhausted");
+
+    // The cap is per day: tomorrow's digest is tried again.
+    await incomplete(
+      runFollowUpDigest(ctx("2026-11-01", new Date("2026-11-01T13:00:00Z")), deps({ send })),
+    );
+    expect(janeAttempts()).toHaveLength(4);
   });
 
   it("does not send to a recipient whose claim fails, and still sends the rest", async () => {
@@ -602,12 +656,14 @@ describe("followup-digest: at-least-once runs, once-per-day sends", () => {
     expect(logged()).toContain("[jobs:followup-digest] org_failed");
   });
 
-  it("through the runner: a failed hour is retried the next hour, then the day is skipped", async () => {
+  it("through the runner: a failed run is run again by a later call that day, then skipped", async () => {
     const jobDb = createFakeJobDb(NOW.getTime());
     fake = createFollowUpDigestFakeDb(world().tables, jobDb);
     let failJane = true;
     const send = mailer((input) =>
-      failJane && input.to === "jane@example.test" ? new EmailError("network", "x") : null,
+      failJane && input.to === "jane@example.test"
+        ? new EmailError("provider_rejected", "x", 503)
+        : null,
     );
     const job = {
       ...followupDigestJob,
@@ -616,14 +672,14 @@ describe("followup-digest: at-least-once runs, once-per-day sends", () => {
     const runAt = (date: Date) =>
       runJob(job, { ledger: supabaseJobLedger(fake.db), db: fake.db, now: date, site: SITE });
 
-    const hour1 = await runAt(NOW);
-    expect(hour1).toMatchObject({ outcome: "failed", runKey: TODAY, counts: {} });
+    const first = await runAt(NOW);
+    expect(first).toMatchObject({ outcome: "failed", runKey: TODAY, counts: {} });
     expect(sent).toHaveLength(3);
 
     failJane = false;
     jobDb.clock.now = NOW.getTime() + 60 * 60_000;
-    const hour2 = await runAt(new Date(jobDb.clock.now));
-    expect(hour2).toEqual({
+    const second = await runAt(new Date(jobDb.clock.now));
+    expect(second).toEqual({
       job: "followup-digest",
       runKey: TODAY,
       outcome: "succeeded",
@@ -632,8 +688,8 @@ describe("followup-digest: at-least-once runs, once-per-day sends", () => {
     expect(sent).toHaveLength(4);
 
     jobDb.clock.now += 60 * 60_000;
-    const hour3 = await runAt(new Date(jobDb.clock.now));
-    expect(hour3.outcome).toBe("skipped");
+    const third = await runAt(new Date(jobDb.clock.now));
+    expect(third.outcome).toBe("skipped");
     expect(sent).toHaveLength(4);
     expect(jobDb.rows.map((r) => r.outcome)).toEqual(["failed", "succeeded"]);
   });
@@ -703,7 +759,114 @@ describe("followup-digest: today, paging and tenant scope", () => {
     }
     // The provider's display name is the one provider value that is sent.
     expect(payloads).toContain("Jane Smith");
-    expect(logged()).toContain("send_failed_send_error");
+    expect(logged()).toContain("send_uncertain_error");
+  });
+});
+
+describe("followup-digest: the touches read", () => {
+  const touchReads = (orgId: string) =>
+    fake.reads.filter(
+      (r) => r.table === "touches" && r.filters.some(([, c, v]) => c === "org_id" && v === orgId),
+    );
+  const askedCaseIds = (orgId: string) =>
+    touchReads(orgId).flatMap((r) =>
+      r.filters
+        .filter(([op, c]) => op === "in" && c === "case_id")
+        .flatMap(([, , v]) => v as string[]),
+    );
+
+  it("asks only for the open cases' touches that set or clear a follow-up", async () => {
+    const w = world();
+    const closed = caseRow(ORG_A, JANE, { case_status: "approved" });
+    w.tables.credential_cases.push(closed);
+    w.tables.touches.push(touchRow(ORG_A, String(closed.id), "2026-10-29"));
+    fake = createFollowUpDigestFakeDb(w.tables);
+    await runFollowUpDigest(ctx(), deps());
+    for (const orgId of [ORG_A, ORG_B]) {
+      expect(touchReads(orgId).length).toBeGreaterThan(0);
+      for (const read of touchReads(orgId)) {
+        expect(read.filters).toContainEqual(["or", DIGEST_TOUCH_FILTER, null]);
+        expect(read.filters).toContainEqual(["eq", "entry_type", "touchpoint"]);
+      }
+    }
+    const openA = [w.cases.janeLate, w.cases.omarToday, w.cases.unassigned, w.cases.janeUpcoming];
+    expect(askedCaseIds(ORG_A).sort()).toEqual(openA.map((c) => String(c.id)).sort());
+    expect(askedCaseIds(ORG_A)).not.toContain(closed.id);
+  });
+
+  it("still ends a follow-up on a clear, and carries one past a date-less touch", async () => {
+    const w = world();
+    const cleared = caseRow(ORG_B, BILL);
+    const carried = caseRow(ORG_B, BILL);
+    w.tables.credential_cases.push(cleared, carried);
+    w.tables.touches.push(
+      { ...touchRow(ORG_B, String(cleared.id), "2026-10-25"), touch_date: "2026-10-01" },
+      {
+        ...touchRow(ORG_B, String(cleared.id), null),
+        touch_date: "2026-10-10",
+        clears_follow_up: true,
+      },
+      { ...touchRow(ORG_B, String(cleared.id), null), touch_date: "2026-10-20" },
+      { ...touchRow(ORG_B, String(carried.id), "2026-10-26"), touch_date: "2026-10-01" },
+      { ...touchRow(ORG_B, String(carried.id), null), touch_date: "2026-10-20" },
+    );
+    fake = createFollowUpDigestFakeDb(w.tables);
+    await runFollowUpDigest(ctx(), deps());
+    const bill = sent.find((input) => input.to === "bill@example.test")?.data;
+    expect(bill?.own.rows.map((r) => [r.caseNumber, r.dueDate]).sort()).toEqual(
+      [
+        [w.cases.billLate.case_number, "2026-10-29"],
+        [carried.case_number, "2026-10-26"],
+      ].sort(),
+    );
+  });
+
+  it("asks for at most DIGEST_TOUCH_CASE_CHUNK case ids per read, covering every open case", async () => {
+    const w = world();
+    const filler = Array.from({ length: 250 }, () => caseRow(ORG_A, OMAR));
+    const last = caseRow(ORG_A, JANE, { id: "case-zzzzz", case_number: 9999 });
+    w.tables.credential_cases.push(...filler, last);
+    w.tables.touches.push(
+      ...filler.map((c) => touchRow(ORG_A, String(c.id), "2026-12-01")),
+      touchRow(ORG_A, "case-zzzzz", "2026-10-30"),
+    );
+    fake = createFollowUpDigestFakeDb(w.tables);
+    await runFollowUpDigest(ctx(), deps());
+    const sizes = touchReads(ORG_A).map(
+      (r) => (r.filters.find(([op, c]) => op === "in" && c === "case_id")?.[2] as string[]).length,
+    );
+    expect(sizes.every((size) => size > 0 && size <= DIGEST_TOUCH_CASE_CHUNK)).toBe(true);
+    expect(new Set(askedCaseIds(ORG_A)).size).toBe(4 + 250 + 1);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(4 + 250 + 1);
+    const jane = sent.find((input) => input.to === "jane@example.test")?.data;
+    expect(jane?.own.rows.map((r) => r.caseNumber)).toContain(9999);
+  });
+
+  it("reads no touches for an org with no open case", async () => {
+    const w = world();
+    (w.cases.billLate as FakeRow).case_status = "approved";
+    fake = createFollowUpDigestFakeDb(w.tables);
+    const result = await runFollowUpDigest(ctx(), deps());
+    expect(touchReads(ORG_B)).toEqual([]);
+    expect(result).toEqual(counts({ ...BASELINE, digests_sent: 3 }));
+  });
+});
+
+describe("followup-digest: tenant isolation under the service key", () => {
+  it("never shows a provider embedded from another org", async () => {
+    const w = world();
+    // Org B's case points at a provider row that belongs to org A.
+    w.cases.billLate.providers = {
+      org_id: ORG_A,
+      first_name: "Crossorg",
+      last_name: "Provider",
+      date_of_birth: SENTINEL_DOB,
+    };
+    fake = createFollowUpDigestFakeDb(w.tables);
+    await runFollowUpDigest(ctx(), deps());
+    const bill = sent.find((input) => input.to === "bill@example.test")?.data;
+    expect(bill?.own.rows.map((r) => r.providerName)).toEqual(["Unknown provider"]);
+    expect(JSON.stringify(sent)).not.toContain("Crossorg");
   });
 });
 

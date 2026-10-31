@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { JOB_COUNT_KEY_RE, MAX_JOB_COUNT_KEYS } from "./counts";
 import { JOB_STALE_AFTER_MINUTES } from "./ledger";
-import { NOTIFICATION_SEND_ERROR_CODES, PROVIDER_MESSAGE_ID_RE } from "./notificationSends";
+import {
+  NOTIFICATION_SEND_ERROR_CODES,
+  NOTIFICATION_SEND_MAX_FAILURES,
+  PROVIDER_MESSAGE_ID_RE,
+} from "./notificationSends";
 import { JOB_NAME_RE, RUN_KEY_RE } from "./registry";
 import { JOB_ERROR_CODES } from "./types";
 
@@ -123,6 +127,24 @@ describe("notification_sends migration and code agree", () => {
       /ON CONFLICT \(job, run_key, org_id, recipient_user_id\)\s+WHERE outcome IN \('claimed', 'sent'\) DO NOTHING/,
     );
     expect(SENDS_MIGRATION).not.toMatch(/ON CONFLICT DO NOTHING/);
+  });
+
+  it("caps a key at the failed rows the code expects, and answers with the statuses it parses", () => {
+    expect(SENDS_MIGRATION).toContain(`  IF v_failed >= ${NOTIFICATION_SEND_MAX_FAILURES} THEN`);
+    expect(SENDS_MIGRATION).toMatch(/\) RETURNS jsonb\nLANGUAGE plpgsql/);
+    for (const status of ["exhausted", "taken"]) {
+      expect(SENDS_MIGRATION).toContain(`jsonb_build_object('status', '${status}')`);
+    }
+    expect(SENDS_MIGRATION).toContain("jsonb_build_object('status', 'claimed', 'id', v_id)");
+    // A changed return type needs DROP + CREATE, never CREATE OR REPLACE.
+    expect(SENDS_MIGRATION).toContain(
+      "DROP FUNCTION IF EXISTS public.claim_notification_send(text, text, uuid, uuid);",
+    );
+  });
+
+  it("never records a send that may have been delivered as failed", () => {
+    expect(NOTIFICATION_SEND_ERROR_CODES).not.toContain("network");
+    expect(SENDS_MIGRATION).not.toMatch(/'network'|'send_error'/);
   });
 
   it("closes error_code to the codes the job writes, in the CHECK and in the finish", () => {
