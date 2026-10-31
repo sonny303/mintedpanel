@@ -27,7 +27,7 @@ export const REPORTS: ReportDef[] = [
   {
     key: "portfolio",
     title: "Portfolio",
-    description: "Your organizations across the business — prospects, in motion, and geography.",
+    description: "Your organizations, groups, and states, with provider and location counts.",
     path: "/reporting/portfolio",
     group: "performance",
   },
@@ -47,12 +47,13 @@ export const REPORTS: ReportDef[] = [
     path: "/reporting/facilities-without-providers",
     group: "performance",
   },
+  // RC-06 — the onboarding funnel: who cannot start credentialing yet, and why.
   {
-    key: "locations-per-group",
-    title: "Locations per Group",
-    description: "Active location counts by provider group.",
-    path: "/reporting/locations-per-group",
-    group: "performance",
+    key: "provider-onboarding",
+    title: "Provider Onboarding",
+    description: "Where each provider stands before credentialing, and what they still need.",
+    path: "/reporting/provider-onboarding",
+    group: "credentialing",
   },
   // E6.6 F6.6.3 — provider-first denials over the unified statuses + reasons.
   {
