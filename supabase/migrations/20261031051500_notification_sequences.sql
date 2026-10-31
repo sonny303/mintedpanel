@@ -201,7 +201,9 @@ $function$;
 -- of the row, even one that leaves the zone alone. The trigger checks only
 -- when the zone is written, and pg_restore creates triggers after loading the
 -- data. A stored zone a later tzdata no longer knows is still possible, so a
--- sender that cannot format in it uses Minted's default zone instead.
+-- reader that cannot format in it uses Minted's default zone instead:
+-- resolveNotificationSequence() in src/lib/notificationSequences.ts does
+-- that, and falls back to America/Chicago if the default is unusable too.
 CREATE OR REPLACE FUNCTION private.notification_time_zone_valid(p_zone text)
 RETURNS boolean
 LANGUAGE sql
@@ -698,6 +700,24 @@ BEGIN
 END;
 $function$;
 
+-- A default is never deleted, by anyone: every org inherits it, and an org
+-- with no default for a purpose cannot load its settings. Minted changes a
+-- default instead (Mission Control M6 edits it in place).
+CREATE OR REPLACE FUNCTION private.notification_defaults_refuse_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $function$
+BEGIN
+  RAISE EXCEPTION USING
+    ERRCODE = '23514',
+    MESSAGE = 'notification_default_cannot_be_deleted',
+    DETAIL = 'Every organization inherits Minted''s default for ' || OLD.purpose
+             || '. Change the default instead of deleting it.';
+END;
+$function$;
+
 -- The digest's send_time_zone, on an org row or the default, checked when it
 -- is written (see private.notification_time_zone_valid for why not a CHECK).
 -- SECURITY DEFINER only so the lookup of the `private` validator works for
@@ -753,6 +773,8 @@ REVOKE ALL ON FUNCTION private.notification_default_check_set()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.notification_send_time_zone_check()
   FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.notification_defaults_refuse_delete()
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.sms_consents_guard_update()
   FROM PUBLIC, anon, authenticated, service_role;
 
@@ -802,6 +824,12 @@ CREATE CONSTRAINT TRIGGER notification_sequence_defaults_set_check
   AFTER INSERT OR UPDATE ON public.notification_sequence_defaults
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION private.notification_default_check_set();
+
+DROP TRIGGER IF EXISTS notification_sequence_defaults_no_delete
+  ON public.notification_sequence_defaults;
+CREATE TRIGGER notification_sequence_defaults_no_delete
+  BEFORE DELETE ON public.notification_sequence_defaults
+  FOR EACH ROW EXECUTE FUNCTION private.notification_defaults_refuse_delete();
 
 DROP TRIGGER IF EXISTS notification_sequences_send_time_zone_check
   ON public.notification_sequences;
@@ -1224,7 +1252,7 @@ GRANT EXECUTE ON FUNCTION public.save_notification_sequence(uuid, text, jsonb) T
 -- 7. Comments.
 -- ---------------------------------------------------------------------------
 COMMENT ON TABLE public.notification_sequence_defaults IS
-  'MINT-107: Minted''s platform default for one purpose (followup_digest | intake_reminder), which every org inherits field by field. No org, no PHI, no enabled column: a default never switches an org on. Any member of any org reads it; only service_role writes it (Mission Control M6 adds the platform-admin write policy). Seeded by migration 20261031051500.';
+  'MINT-107: Minted''s platform default for one purpose (followup_digest | intake_reminder), which every org inherits field by field. No org, no PHI, no enabled column: a default never switches an org on. Never deleted (trigger notification_sequence_defaults_no_delete): change it instead. Any member of any org reads it; only service_role writes it (Mission Control M6 adds the platform-admin write policy). Seeded by migration 20261031051500.';
 COMMENT ON COLUMN public.notification_sequence_defaults.compress_toward_start_date IS
   'Intake: whether reminders tighten toward a near start date (scheduleSequenceSends). Platform-managed; false in R1.';
 COMMENT ON COLUMN public.notification_sequence_defaults.send_hour IS

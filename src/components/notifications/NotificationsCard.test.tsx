@@ -358,6 +358,23 @@ describe("NotificationsCard: other members", () => {
     expect(html.match(/Cc: /g)).toHaveLength(3);
   });
 
+  it("never shows a stored zone it cannot use: Minted's zone stands in", () => {
+    const digestRow = {
+      ...intakeConfig({ steps: [], stopConditions: null, targetDaysToReady: null }),
+      purpose: "followup_digest",
+      sendHour: 6,
+      sendTimeZone: "Gone/Zone",
+    };
+    state.sequences = { followup_digest: digestRow };
+    const summary = renderToStaticMarkup(<NotificationsCard />);
+    expect(summary).toContain("Sent around 6 am Central time. Minted sets this.");
+    expect(summary).not.toContain("Gone/Zone");
+    state.isAdmin = true;
+    const editor = renderToStaticMarkup(<NotificationsCard />);
+    expect(editor).toContain("Sent around 6 am Central time. Minted sets this.");
+    expect(editor).not.toContain("Gone/Zone");
+  });
+
   it("shows an override Minted set for this org", () => {
     state.sequences = {
       followup_digest: {

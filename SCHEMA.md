@@ -704,9 +704,13 @@ effective sequence is `resolveNotificationSequence()` in
   (`private.notification_time_zone_valid`: Area/Location shape and listed in
   `pg_timezone_names`), not by a CHECK: a later tzdata release could drop a
   stored name, and a CHECK would then fail a restore and every update of the
-  row. Seeded: intake = all four stop conditions, 14 days,
+  row. A reader that cannot use a stored zone gets Minted's default zone
+  (`resolveNotificationSequence`), or America/Chicago if that is unusable
+  too. Seeded: intake = all four stop conditions, 14 days,
   compression off; digest = 8 in America/Chicago (the old 13:00 UTC cron in
-  CDT). Any member of any org reads it; only service_role writes it
+  CDT). Never deleted, by anyone (BEFORE DELETE trigger
+  `notification_sequence_defaults_no_delete`): Minted changes it instead.
+  Any member of any org reads it; only service_role writes it
   (Mission Control M6 adds the platform-admin write policy).
 - **`notification_sequence_default_steps`**: the default's steps,
   `(purpose, position)` unique, FK `purpose → notification_sequence_defaults`

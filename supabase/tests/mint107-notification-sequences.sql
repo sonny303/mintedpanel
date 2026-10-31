@@ -1017,17 +1017,29 @@ SELECT pg_temp.m107_mark('defaults_keep_at_least_one_step',
   pg_temp.m107_expect_message('notification_default_needs_a_step', $$
     DELETE FROM public.notification_sequence_default_steps WHERE purpose = 'followup_digest'$$)
   AND pg_temp.m107_expect_message('notification_default_needs_a_step', $$
-    DELETE FROM public.notification_sequence_default_steps WHERE purpose = 'intake_reminder'$$)
-  AND pg_temp.m107_expect_message('notification_default_needs_a_step', $$DO $d$ BEGIN
+    DELETE FROM public.notification_sequence_default_steps WHERE purpose = 'intake_reminder'$$));
+-- A default inserted without steps is refused. Getting there takes deleting
+-- one first, which only works with the delete guard off (rolled back).
+SELECT pg_temp.m107_mark('a_default_inserted_without_steps_is_refused',
+  pg_temp.m107_expect_message('notification_default_needs_a_step', $$DO $d$ BEGIN
+      ALTER TABLE public.notification_sequence_defaults
+        DISABLE TRIGGER notification_sequence_defaults_no_delete;
       DELETE FROM public.notification_sequence_defaults WHERE purpose = 'followup_digest';
       INSERT INTO public.notification_sequence_defaults (purpose, send_hour, send_time_zone)
       VALUES ('followup_digest', 8, 'America/Chicago');
     END $d$ $$));
+-- A default is never deleted, even by the owner: every org would lose it.
+SELECT pg_temp.m107_mark('owner_cannot_delete_a_default', pg_temp.m107_expect_message(
+  'notification_default_cannot_be_deleted',
+  $$DELETE FROM public.notification_sequence_defaults WHERE purpose = 'followup_digest'$$));
 SELECT pg_temp.m107_mark('defaults_still_complete_after_the_probes',
   (SELECT count(*) = 3 FROM public.notification_sequence_default_steps
     WHERE purpose = 'intake_reminder')
   AND (SELECT count(*) = 1 FROM public.notification_sequence_default_steps
-        WHERE purpose = 'followup_digest'));
+        WHERE purpose = 'followup_digest')
+  AND (SELECT count(*) = 2 FROM public.notification_sequence_defaults)
+  AND (SELECT tgenabled = 'O' FROM pg_trigger
+        WHERE tgname = 'notification_sequence_defaults_no_delete'));
 SELECT pg_temp.m107_mark('no_row_means_off',
   NOT EXISTS (SELECT 1 FROM public.notification_sequences
                WHERE org_id = '10700000-0000-4000-a000-00000000000b'));
@@ -1061,6 +1073,13 @@ SELECT pg_temp.m107_mark('platform_only_change_keeps_the_org_revision_and_author
     WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder')
   AND (SELECT revision = 2 FROM public.notification_sequences
         WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest'));
+-- Nor can Minted delete a default, though service_role holds DELETE.
+SELECT pg_temp.m107_mark('service_role_cannot_delete_a_default', pg_temp.m107_expect_message(
+  'notification_default_cannot_be_deleted',
+  $$DELETE FROM public.notification_sequence_defaults$$));
+SELECT pg_temp.m107_mark('both_defaults_remain',
+  (SELECT count(*) = 2 FROM public.notification_sequence_defaults)
+  AND (SELECT count(*) = 4 FROM public.notification_sequence_default_steps));
 -- A change by Minted to an org-owned setting does bump it, and names no one.
 UPDATE public.notification_sequences SET enabled = false
  WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'followup_digest';

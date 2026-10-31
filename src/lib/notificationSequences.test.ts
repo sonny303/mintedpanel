@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   IANA_TIME_ZONE_PATTERN,
+  LAST_RESORT_TIME_ZONE,
   NOTIFICATION_LIMITS,
   PURPOSE_RULES,
   addCcRecipient,
@@ -810,6 +811,53 @@ describe("resolveNotificationSequence (answer 3: org row over Minted's default)"
     expect(leaky.steps[0].ccRecipients).toEqual([]);
   });
 
+  it("falls back to Minted's zone when the org's zone cannot be used, and says so", () => {
+    for (const zone of ["Gone/Zone", "Mars/Olympus_Mons", "america/chicago", "CST", ""]) {
+      const effective = resolveNotificationSequence(
+        "followup_digest",
+        orgRow({ purpose: "followup_digest", sendHour: 6, sendTimeZone: zone }),
+        DIGEST_DEFAULT,
+      );
+      expect([effective.sendHour, effective.sendTimeZone]).toEqual([6, "America/Chicago"]);
+      expect(effective.inherited).toMatchObject({ sendHour: false, sendTimeZone: true });
+      expect(describeSendTime(effective.sendHour, effective.sendTimeZone)).toBe(
+        "6 am Central time",
+      );
+    }
+    // A usable org zone stays the org's own.
+    const own = resolveNotificationSequence(
+      "followup_digest",
+      orgRow({ purpose: "followup_digest", sendTimeZone: "Europe/Paris" }),
+      DIGEST_DEFAULT,
+    );
+    expect([own.sendTimeZone, own.inherited.sendTimeZone]).toEqual(["Europe/Paris", false]);
+  });
+
+  it("falls back to the last-resort zone when Minted's default zone cannot be used either", () => {
+    expect(LAST_RESORT_TIME_ZONE).toBe("America/Chicago");
+    const broken = { ...DIGEST_DEFAULT, sendTimeZone: "Gone/Zone" };
+    for (const org of [
+      undefined,
+      orgRow({ purpose: "followup_digest" }),
+      orgRow({ purpose: "followup_digest", sendTimeZone: "Also/Gone" }),
+    ]) {
+      const effective = resolveNotificationSequence("followup_digest", org, broken);
+      expect(effective.sendTimeZone).toBe(LAST_RESORT_TIME_ZONE);
+      expect(effective.inherited.sendTimeZone).toBe(true);
+      expect(describeSendTime(effective.sendHour, effective.sendTimeZone)).toBe(
+        "8 am Central time",
+      );
+    }
+    // A usable org zone still wins over a broken default.
+    expect(
+      resolveNotificationSequence(
+        "followup_digest",
+        orgRow({ purpose: "followup_digest", sendTimeZone: "America/Denver" }),
+        broken,
+      ).sendTimeZone,
+    ).toBe("America/Denver");
+  });
+
   it("gives intake no send time", () => {
     const effective = resolveNotificationSequence(
       "intake_reminder",
@@ -876,9 +924,11 @@ describe("send time (answer 5)", () => {
     expect(describeSendTime(17, "America/Los_Angeles")).toBe("5 pm Pacific time");
   });
 
-  it("names other zones from Intl, and an unknown one by its id", () => {
+  it("names other zones from Intl, and never shows a zone it cannot use", () => {
     expect(describeSendTime(9, "Europe/Paris")).toMatch(/^9 am .*European time$/);
-    expect(describeSendTime(9, "Mars/Olympus_Mons")).toBe("9 am Mars/Olympus_Mons time");
+    for (const zone of ["Mars/Olympus_Mons", "Gone/Zone", "america/chicago", "CST", ""]) {
+      expect(describeSendTime(9, zone)).toBeNull();
+    }
   });
 
   it("says nothing when the hour or zone is missing or out of range", () => {

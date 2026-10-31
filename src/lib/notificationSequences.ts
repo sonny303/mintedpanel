@@ -772,7 +772,7 @@ export interface EffectiveNotificationSequence {
   compressTowardStartDate: boolean;
   /** Digest: the local hour (0 to 23); null for intake. */
   sendHour: number | null;
-  /** Digest: the IANA zone of sendHour; null for intake. */
+  /** Digest: the IANA zone of sendHour, always one this runtime can use; null for intake. */
   sendTimeZone: string | null;
   /** True where the value is Minted's default rather than the org's own. */
   inherited: Record<InheritableSetting, boolean>;
@@ -788,11 +788,30 @@ function inherit<T>(own: T | null | undefined, fallback: T | null): [T | null, b
 }
 
 /**
+ * The digest's zone, always one this runtime can format in. The database
+ * checks a zone against its own tz database when it is written, but that can
+ * change under a stored row, and JavaScript's Intl may not match it. So an
+ * org zone that fails isIanaTimeZone gives way to Minted's default zone
+ * (marked inherited), and an unusable default gives way to
+ * LAST_RESORT_TIME_ZONE. It never throws and never returns an unusable zone.
+ */
+function resolveTimeZone(
+  own: string | null | undefined,
+  fallback: string | null,
+): [string, boolean] {
+  if (own != null && isIanaTimeZone(own)) return [own, false];
+  if (fallback != null && isIanaTimeZone(fallback)) return [fallback, true];
+  return [LAST_RESORT_TIME_ZONE, true];
+}
+
+/**
  * The effective sequence for one purpose: the org's row (or none) over
  * Minted's default. Field by field, a null org value takes the default's; an
  * org with no steps of its own takes the default steps, which cc no one.
  * `enabled` comes from the org's row alone, so a default cannot switch an
- * org on. Throws when the rows are for a different purpose.
+ * org on. The digest's zone is always usable (see resolveTimeZone): an org
+ * zone this runtime cannot use reads as inherited. Throws when the rows are
+ * for a different purpose.
  */
 export function resolveNotificationSequence(
   purpose: NotificationPurpose,
@@ -838,7 +857,7 @@ export function resolveNotificationSequence(
   const timed = rules.hasSendTime;
   const [sendHour, hourInherited] = timed ? inherit(org?.sendHour, platformDefault.sendHour) : none;
   const [sendTimeZone, zoneInherited] = timed
-    ? inherit(org?.sendTimeZone, platformDefault.sendTimeZone)
+    ? resolveTimeZone(org?.sendTimeZone, platformDefault.sendTimeZone)
     : none;
 
   return {
@@ -878,6 +897,17 @@ export function describeStep(
 
 /** Same pattern as private.notification_time_zone_valid in migration 20261031051500. */
 export const IANA_TIME_ZONE_PATTERN = /^(UTC|[A-Z][A-Za-z_]+(\/[A-Za-z0-9_+-]+){1,2})$/;
+
+/**
+ * The digest's zone when even Minted's default zone cannot be used by this
+ * runtime: the zone that default is seeded with (8 am Central, the old 13:00
+ * UTC cron in CDT). Reached only through a tz-data gap between the database
+ * and this runtime, never through bad data (the database checks the default
+ * when it is written). Falling back beats throwing: a throw would stop every
+ * org's digest and break the card for everyone; this keeps the digest at
+ * the hour Minted chose, in the zone it ships with.
+ */
+export const LAST_RESORT_TIME_ZONE = "America/Chicago";
 
 /** True for an IANA zone name ("America/Chicago") that this runtime can format in. */
 export function isIanaTimeZone(zone: string): boolean {
@@ -926,12 +956,15 @@ function hourLabel(hour: number): string {
 
 /**
  * "8 am Central time" for the digest's read-only send time. Null when the
- * hour or zone is missing or the hour is out of range.
+ * hour or zone is missing, the hour is out of range, or the zone is not one
+ * this runtime can use: the card never shows an unusable zone name. (The
+ * resolver never returns one; this guards direct callers.)
  */
 export function describeSendTime(hour: number | null, zone: string | null): string | null {
   if (hour == null || zone == null || !Number.isInteger(hour) || hour < 0 || hour > 23) {
     return null;
   }
+  if (!isIanaTimeZone(zone)) return null;
   return `${hourLabel(hour)} ${timeZoneName(zone)}`;
 }
 
