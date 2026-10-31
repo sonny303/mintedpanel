@@ -355,6 +355,13 @@ before any schema work.
   `isMissingContractSpecialtyKeyError` in `src/lib/dbErrors.ts`); contract
   saves fail until it is applied. Verify the objects listed in the
   migration header.
+- `20261030200000_mint75_sop_step_local_completed_date.sql` — replaces
+  `complete_sop_task_step`'s 5-argument signature with one that adds
+  `p_completed_date date DEFAULT NULL` (DROP + CREATE, one overload). The Panel
+  sends it on every step tick, so **apply it before deploying a `main` that
+  includes it**; older Panels keep working against it. Verify:
+  `pg_get_function_arguments` ends in `p_completed_date date DEFAULT NULL::date`
+  and only one `complete_sop_task_step` row exists in `pg_proc`.
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
   never applied. Do not resurrect.
 

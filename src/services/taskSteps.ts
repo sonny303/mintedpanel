@@ -4,6 +4,7 @@
 // committed together. The server supplies its service-role client only after
 // JWT verification, and the RPC independently rechecks actor membership.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { format } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
 import type { Task } from "@/types";
@@ -40,6 +41,8 @@ export async function completeTaskStep(
     p_step_id: stepId,
     p_actor_id: ctx.userId,
     p_source: ctx.source,
+    // MINT-75: the browser's local day; the server route omits it (UTC fallback).
+    ...(ctx.source === "panel" ? { p_completed_date: format(new Date(), "yyyy-MM-dd") } : {}),
   });
   if (error) throw error;
 

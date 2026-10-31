@@ -4556,6 +4556,7 @@ export type Database = {
       complete_sop_task_step: {
         Args: {
           p_actor_id: string;
+          p_completed_date?: string;
           p_org_id: string;
           p_source: string;
           p_step_id: string;
