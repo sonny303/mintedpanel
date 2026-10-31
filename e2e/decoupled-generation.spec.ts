@@ -10,6 +10,8 @@
 //   TS-127  Provider-record scoped entry renders only that provider's slice;
 //           the manual escape hatch stays pinned by case-creation TS-52 and
 //           the code-level oneDoor.test.ts — not re-covered here.
+//   MINT-97 A candidate with no matching SOP is a visible blocked bucket in
+//           the reconciliation (2 of 2), not silently left out (1 of 1).
 // The harness write-throughs the create_case_with_tasks RPC (enforcing the
 // UNIQUE NULLS NOT DISTINCT 4-part key → 23505 on a duplicate) and records
 // every write so the read-only posture of the grid render is pinned.
@@ -775,4 +777,60 @@ test("TS-127: a provider-record entry scopes the grid to that provider's slice; 
   await expect(page.getByTestId("grid-reconciliation")).toHaveText(
     "Create 2 — 2 of 2 accounted for",
   );
+});
+
+test("MINT-97: a candidate with no matching SOP is its own blocked bucket — 2 of 2 accounted for, never 1 of 1", async ({
+  context,
+  page,
+}) => {
+  // The Oct 19 super-user state: Brooke already holds an Aetna case, and no
+  // SOP (not even the generic fallback) matches BCBS-NC, so that candidate
+  // is blocked.
+  const f = baseFixtures("g-ob", "Outer Banks Rehab Group LLC");
+  f.providers = [providerRow("pr-1", "Brooke", "Ostrander")];
+  f.provider_group_assignments = [groupAssignment("pr-1", "g-ob")];
+  f.provider_facility_assignments = [facilityAssignment("pr-1", "f-1")];
+  f.payer_network_targets = [target("p1", "g-ob"), target("p2", "g-ob")];
+  f.sop_templates = [];
+  f.sop_template_versions = [];
+  f.credential_cases = [
+    {
+      id: "case-aetna",
+      org_id: ORG_ID,
+      provider_id: "pr-1",
+      payer_id: "p1",
+      state: "NC",
+      group_id: "g-ob",
+      credentialing_status_id: null,
+      case_status: "in_progress",
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:00Z",
+    },
+  ];
+  const { handler, writes } = makeHandler(f);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/generation?group=g-ob");
+  await expect(page.getByTestId("grid-reconciliation")).toHaveText(
+    "Create 0 · 1 blocked · 1 existing — 2 of 2 accounted for",
+    { timeout: 30000 },
+  );
+
+  // The blocked row sits in the grid itself — grayed, never selectable, its
+  // blocker named and linked to the payer's SOP setup step.
+  const blockedRow = page.getByRole("row", { name: /BCBS-NC/ });
+  await expect(blockedRow.getByText("Blocked — no matching SOP")).toBeVisible();
+  await expect(blockedRow.getByRole("link", { name: "Review payer SOPs" })).toHaveAttribute(
+    "href",
+    /\/admin\/payer-admin\/setup\/p2\?tab=templates/,
+  );
+  await expect(page.getByLabel("Include Brooke Ostrander — BCBS-NC NC")).toHaveCount(0);
+
+  // The banner keeps its setup link and agrees with the count.
+  await expect(page.getByTestId("generation-unmatched-sop")).toContainText(
+    "1 Enrollment case has no matching SOP",
+  );
+  await expect(page.getByRole("button", { name: "Confirm & create 0 cases" })).toBeDisabled();
+  expect(writes.filter((w) => w.method === "POST" || w.method === "PATCH")).toHaveLength(0);
 });

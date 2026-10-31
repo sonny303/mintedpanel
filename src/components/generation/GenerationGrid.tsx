@@ -10,7 +10,9 @@
 // skipped/enrolled dispositions, concurrent duplicates degrade to safe
 // skips); full success lands on Cases filtered to the run, partial failure
 // stays here naming the failed rows. The E4.2 profile gating + release cap +
-// generic-fallback warning ride unchanged.
+// generic-fallback warning ride unchanged. Gated, tied-SOP and SOP-less rows
+// stay in the grid as the grayed "blocked" bucket, so the reconciliation
+// counts them and each row links to its setup step.
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -46,9 +48,11 @@ import { outreachTaskTitle } from "@/lib/profileGating";
 import {
   bucketGridRows,
   filterGridRows,
+  GRID_BLOCKER_LABELS,
   groupGridRows,
   reconcileGrid,
   splitGridSelection,
+  type GridBlocker,
   type GridPivot,
   type GridRow,
   type GridScope,
@@ -111,46 +115,27 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   // Release scope: "" = release all; a positive number = first-N cap (TE-14).
   const [releaseCap, setReleaseCap] = useState<string>("");
 
-  const gatedKeys = useMemo(
-    () => new Set((preview.gated ?? []).map((g) => previewRowKey(g.row))),
-    [preview.gated],
-  );
-  const ambiguousKeys = useMemo(
-    () => new Set((preview.ambiguous ?? []).map(previewRowKey)),
-    [preview.ambiguous],
-  );
-  const unmatchedKeys = useMemo(
-    () => new Set((preview.unmatched ?? []).map(previewRowKey)),
-    [preview.unmatched],
-  );
+  // E4.2 gating — every proposed row that cannot generate this run, keyed to
+  // the setup gap that blocks it (the three sets are disjoint).
+  const blockers = useMemo(() => {
+    const map = new Map<string, GridBlocker>();
+    for (const g of preview.gated ?? []) map.set(previewRowKey(g.row), "gated");
+    for (const r of preview.ambiguous ?? []) map.set(previewRowKey(r), "ambiguous");
+    for (const r of preview.unmatched ?? []) map.set(previewRowKey(r), "unmatched");
+    return map;
+  }, [preview.gated, preview.ambiguous, preview.unmatched]);
   const fallbackKeys = useMemo(
     () => preview.fallbackRowKeys ?? new Set<string>(),
     [preview.fallbackRowKeys],
   );
 
-  // Bucket + scope-filter the grid rows. Gated proposed rows are pulled out of
-  // the grid entirely (shown in their own banner, never confirmable).
+  // Bucket + scope-filter the grid rows. Blocked rows stay in the grid (and
+  // the count) as their own bucket; they are never selectable or confirmed.
   const gridRows = useMemo<GridRow[] | undefined>(() => {
     if (!preview.rows || factsQ.data === undefined) return undefined;
-    const bucketed = bucketGridRows(
-      preview.rows.filter(
-        (r) =>
-          !gatedKeys.has(previewRowKey(r)) &&
-          !ambiguousKeys.has(previewRowKey(r)) &&
-          !unmatchedKeys.has(previewRowKey(r)),
-      ),
-      factsQ.data,
-    );
+    const bucketed = bucketGridRows(preview.rows, factsQ.data, blockers);
     return filterGridRows(bucketed, scope, preview.providerFacilities);
-  }, [
-    preview.rows,
-    factsQ.data,
-    gatedKeys,
-    ambiguousKeys,
-    unmatchedKeys,
-    scope,
-    preview.providerFacilities,
-  ]);
+  }, [preview.rows, factsQ.data, blockers, scope, preview.providerFacilities]);
 
   const selectedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -183,8 +168,13 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   const released = applyReleaseScope(split.selectedRows, releaseScope);
   const releasedCount = released.length;
   const releasedFallbackCount = released.filter((r) => fallbackKeys.has(previewRowKey(r))).length;
-  const gated = preview.gated ?? [];
-  const unmatched = preview.unmatched ?? [];
+  // The banners list exactly the grid's blocked rows (in scope, not covered by
+  // a live fact), so their counts always agree with the reconciliation line.
+  const blockedKeys = new Set(gridRows.filter((r) => r.bucket === "blocked").map((r) => r.key));
+  const gated = (preview.gated ?? []).filter((g) => blockedKeys.has(previewRowKey(g.row)));
+  const ambiguous = (preview.ambiguous ?? []).filter((r) => blockedKeys.has(previewRowKey(r)));
+  const unmatched = (preview.unmatched ?? []).filter((r) => blockedKeys.has(previewRowKey(r)));
+  const unmetByKey = new Map(gated.map((g) => [previewRowKey(g.row), g.unmet]));
   const skips = preview.skips ?? [];
   const groups = groupGridRows(gridRows, pivot);
 
@@ -243,7 +233,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
     });
   };
 
-  if (gridRows.length === 0 && unmatched.length === 0) {
+  if (gridRows.length === 0) {
     return (
       <div className="rounded-md border border-[#E8E5E0] p-4">
         <p className="text-[13px] font-medium">Nothing to review here yet</p>
@@ -340,14 +330,14 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
         </div>
       ) : null}
 
-      {(preview.ambiguous?.length ?? 0) > 0 ? (
+      {ambiguous.length > 0 ? (
         <div
           className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]"
           role="alert"
         >
-          {preview.ambiguous?.length} case{preview.ambiguous?.length === 1 ? "" : "s"} blocked
-          because multiple SOP templates have equal priority. Create these cases manually and select
-          a template, or archive an obsolete template.
+          {ambiguous.length} case{ambiguous.length === 1 ? "" : "s"} blocked because multiple SOP
+          templates have equal priority. Create these cases manually and select a template, or
+          archive an obsolete template.
         </div>
       ) : null}
 
@@ -469,7 +459,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {group.rows.map(({ key, bucket, row }) => {
+                {group.rows.map(({ key, bucket, row, blocker }) => {
                   const grayed = bucket !== "candidate";
                   return (
                     <TableRow key={key} className={grayed ? "text-muted-foreground" : undefined}>
@@ -505,6 +495,36 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                                 reapply from the case
                               </Link>
                             ) : null}
+                          </span>
+                        ) : bucket === "blocked" && blocker ? (
+                          <span className="inline-flex flex-wrap items-center gap-2">
+                            <Badge
+                              className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]"
+                              title={unmetByKey
+                                .get(key)
+                                ?.map((u) => u.label)
+                                .join(", ")}
+                            >
+                              {GRID_BLOCKER_LABELS[blocker]}
+                            </Badge>
+                            {blocker === "gated" ? (
+                              <Link
+                                to="/providers/$id"
+                                params={{ id: row.providerId }}
+                                className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                              >
+                                Open provider
+                              </Link>
+                            ) : (
+                              <Link
+                                to="/admin/payer-admin/setup/$payerId"
+                                params={{ payerId: row.payerId }}
+                                search={{ tab: "templates" }}
+                                className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                              >
+                                Review payer SOPs
+                              </Link>
+                            )}
                           </span>
                         ) : bucket === "enrolled" ? (
                           <Badge className="rounded-full border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
