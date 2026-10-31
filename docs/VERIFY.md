@@ -142,6 +142,19 @@ npx playwright test e2e/<spec>.spec.ts
 | `/import/$runId` preview / dedupe / conflict review / commit     | `import-preview.spec.ts`   |
 | Per-section uploads, combined-template retirement, capture fence | `sectioned-intake.spec.ts` |
 
+### Opt-in scale harness (skipped unless `LUNA_SCALE=1`)
+
+| Surface                                                                                                      | Spec(s)                     |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| MINT-14 completeness and client-side timings at Luna scale (roster, Cases list, Matrix, Enrollment Explorer) | `luna-scale-paging.spec.ts` |
+
+`LUNA_SCALE=1 npx playwright test e2e/luna-scale-paging.spec.ts` serves the
+generated Luna-scale dataset through a PostgREST stand-in with the hosted
+1,000-row cap and writes `test-results/luna-scale/results.json`. It is a probe,
+not a gate: on `main` the roster, Cases list and Matrix checks fail by design
+until the MINT-14 fixes land. Runbook and the latest numbers:
+[`scripts/luna-scale/README.md`](../scripts/luna-scale/README.md).
+
 ### Skipped placeholders (awaiting a seeded tenant — `test.skip` today)
 
 `case-status-update.spec.ts`, `create-case.spec.ts`, `task-complete.spec.ts`,

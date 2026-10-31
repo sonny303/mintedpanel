@@ -157,6 +157,169 @@ jobs:
           after="$(psql "$UAT_DATABASE_URL" -Atc "select md5(string_agg(row_to_json(c)::text,',' order by c.id)) from credential_cases c where c.id::text <> all(string_to_array('$deletion_ids',','))")"
           test "$before" = "$after"
 
+  luna-scale-seed:
+    name: Luna-scale seed (local Supabase)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Restore Supabase built-in registry fallback
+        shell: bash
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Start and reset local Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          luna_workdir="$RUNNER_TEMP/mintedpanel-luna"
+          mkdir -p "$luna_workdir"
+          cp -R supabase "$luna_workdir/supabase"
+          printf '\n[db.seed]\nenabled = false\n' >> "$luna_workdir/supabase/config.toml"
+          # The seed sends no mail; skipping the mail catcher avoids its fixed
+          # host port (54324), which collided on a runner, and one image pull.
+          printf '\n[inbucket]\nenabled = false\n' >> "$luna_workdir/supabase/config.toml"
+          # Same duplicate-version workaround as the UAT seed job: the isolated
+          # copy gives the second 20260903210000 file its next timestamp.
+          mv "$luna_workdir/supabase/migrations/20260903210000_delete_org_sop_template.sql" \
+             "$luna_workdir/supabase/migrations/20260903210001_delete_org_sop_template.sql"
+          echo "LUNA_SUPABASE_WORKDIR=$luna_workdir" >> "$GITHUB_ENV"
+          supabase --workdir "$luna_workdir" start
+          supabase --workdir "$luna_workdir" db reset --no-seed
+      - name: Point the seed at the loopback stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          status_json="$(supabase --workdir "$LUNA_SUPABASE_WORKDIR" status -o json)"
+          api_url="$(jq -r '.API_URL // empty' <<<"$status_json")"
+          db_url="$(jq -r '.DB_URL // empty' <<<"$status_json")"
+          service_key="$(jq -r '.SERVICE_ROLE_KEY // empty' <<<"$status_json")"
+          # One check per line: under set -e a failed test inside an && chain
+          # does not stop the script.
+          test -n "$api_url"
+          test -n "$db_url"
+          test -n "$service_key"
+          echo "::add-mask::$service_key"
+          luna_org="$(node -e 'import("./scripts/luna-scale/luna-fixture.mjs").then((m) => console.log(m.LUNA_ORG_ID))')"
+          {
+            echo "SUPABASE_URL=$api_url"
+            echo "LUNA_DATABASE_URL=$db_url"
+            echo "UAT_DATABASE_URL=$db_url"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$service_key"
+            echo "LUNA_ORG=$luna_org"
+          } >> "$GITHUB_ENV"
+      - name: Seed the UAT fixture as pre-existing data
+        shell: bash
+        run: |
+          set -euo pipefail
+          export UAT_SHARED_PASSWORD="$(openssl rand -base64 24)Aa1!"
+          npm run seed:staging-uat
+      - name: Create a member login and a login that belongs to a UAT org
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_user() {
+            curl -fsS -X POST "$SUPABASE_URL/auth/v1/admin/users" \
+              -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "Content-Type: application/json" \
+              -d "{\"email\":\"$1\",\"password\":\"$(openssl rand -hex 16)Aa1!\",\"email_confirm\":true}" |
+              jq -r '.id'
+          }
+          member_id="$(create_user ci.luna.member@example.test)"
+          uat_member_id="$(create_user ci.luna.uat-member@example.test)"
+          uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          [[ "$member_id" =~ $uuid_re ]]
+          [[ "$uat_member_id" =~ $uuid_re ]]
+          uat_org="$(node -e 'import("./scripts/uat/uat-fixture.mjs").then((m) => console.log(m.ids.organizations[0]))')"
+          psql "$LUNA_DATABASE_URL" -X -q -v ON_ERROR_STOP=1 \
+            -v member_id="$member_id" -v uat_member_id="$uat_member_id" -v uat_org="$uat_org" <<'SQL'
+          INSERT INTO public.profiles (id, email, full_name) VALUES
+            (:'member_id', 'ci.luna.member@example.test', 'CI Luna Member'),
+            (:'uat_member_id', 'ci.luna.uat-member@example.test', 'CI UAT Member')
+          ON CONFLICT (id) DO NOTHING;
+          INSERT INTO public.memberships (org_id, user_id, role) VALUES (:'uat_org', :'uat_member_id', 'specialist');
+          SQL
+          echo "LUNA_MEMBER_ID=$member_id" >> "$GITHUB_ENV"
+      - name: Fingerprint every row outside the Luna org
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint outside > "$RUNNER_TEMP/outside-before.json"
+          jq -e 'length > 0' "$RUNNER_TEMP/outside-before.json" > /dev/null
+      - name: Dry run
+        run: npm run seed:luna-scale -- --dry-run --local-rehearsal --member-email ci.luna.member@example.test
+      - name: Apply
+        run: npm run seed:luna-scale -- --apply --local-rehearsal --confirm "SEED LUNA SCALE ON local" --member-email ci.luna.member@example.test
+      - name: Verify the planned row count of every table (strict)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run verify:luna-scale -- --local-rehearsal --strict
+          test "$(psql "$LUNA_DATABASE_URL" -X -At -c "select count(*) from public.memberships where org_id = '$LUNA_ORG' and user_id = '$LUNA_MEMBER_ID' and role = 'admin'")" = 1
+      - name: A second apply is a no-op repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint seed > "$RUNNER_TEMP/seed-1.json"
+          npm run seed:luna-scale -- --apply --local-rehearsal --confirm "SEED LUNA SCALE ON local" --member-email ci.luna.member@example.test
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint seed > "$RUNNER_TEMP/seed-2.json"
+          diff "$RUNNER_TEMP/seed-1.json" "$RUNNER_TEMP/seed-2.json"
+          npm run verify:luna-scale -- --local-rehearsal --strict
+          test "$(psql "$LUNA_DATABASE_URL" -X -At -c "select count(*) from public.audit_log where org_id = '$LUNA_ORG' and after -> 'minted_luna_scale_fixture' ->> 'event' = 'apply'")" = 2
+      - name: A member of a UAT org is refused and the transaction rolls back
+        shell: bash
+        run: |
+          set -euo pipefail
+          if output="$(npm run seed:luna-scale -- --apply --local-rehearsal --confirm "SEED LUNA SCALE ON local" --member-email ci.luna.uat-member@example.test 2>&1)"; then
+            echo "$output"
+            echo "::error::the seed accepted a member of a UAT org"
+            exit 1
+          fi
+          echo "$output"
+          # The refusal must be the UAT-org guard, not some other failure.
+          grep -q "the member belongs to a UAT fixture org" <<<"$output"
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint seed > "$RUNNER_TEMP/seed-3.json"
+          diff "$RUNNER_TEMP/seed-1.json" "$RUNNER_TEMP/seed-3.json"
+      - name: Data outside the Luna org is unchanged after the applies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint outside > "$RUNNER_TEMP/outside-after-apply.json"
+          diff "$RUNNER_TEMP/outside-before.json" "$RUNNER_TEMP/outside-after-apply.json"
+      - name: Teardown
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run seed:luna-scale -- --dry-run --teardown --local-rehearsal
+          npm run seed:luna-scale -- --teardown --local-rehearsal --confirm "TEAR DOWN LUNA SCALE ON local"
+      - name: Only the inactive org shell and its 3 roster templates remain (strict)
+        run: npm run verify:luna-scale -- --local-rehearsal --strict
+      - name: Data outside the Luna org is unchanged after the teardown
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint outside > "$RUNNER_TEMP/outside-after-teardown.json"
+          diff "$RUNNER_TEMP/outside-before.json" "$RUNNER_TEMP/outside-after-teardown.json"
+      - name: The shell re-seeds and tears down again
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run seed:luna-scale -- --apply --local-rehearsal --confirm "SEED LUNA SCALE ON local"
+          npm run verify:luna-scale -- --local-rehearsal --strict
+          npm run seed:luna-scale -- --teardown --local-rehearsal --confirm "TEAR DOWN LUNA SCALE ON local"
+          npm run verify:luna-scale -- --local-rehearsal --strict
+          npm run --silent verify:luna-scale -- --local-rehearsal --fingerprint outside > "$RUNNER_TEMP/outside-final.json"
+          diff "$RUNNER_TEMP/outside-before.json" "$RUNNER_TEMP/outside-final.json"
+
   release-guardrails:
     name: Release guardrails
     runs-on: ubuntu-latest
@@ -186,6 +349,9 @@ jobs:
 
       - name: Check backup credential isolation and identity gates
         run: npm run test:backup
+
+      - name: Check the Luna-scale seed generator, SQL and target guards
+        run: npm run test:luna-scale
 
   build:
     runs-on: ubuntu-latest
