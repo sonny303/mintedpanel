@@ -138,8 +138,11 @@ SELECT pg_temp.m108_mark('claim_after_sent_returns_null_and_writes_nothing',
           AND recipient_user_id = '10800000-0000-4000-a000-0000000000b1') = 1);
 
 SELECT pg_temp.m108_mark('finish_on_a_finished_row_returns_false',
-  NOT public.finish_notification_send(pg_temp.m108_id('a1'), 'failed', NULL, 'provider_rejected')
-  AND (SELECT outcome FROM public.notification_sends WHERE id = pg_temp.m108_id('a1')) = 'sent');
+  NOT public.finish_notification_send(pg_temp.m108_id('a1'), 'failed', NULL, 'provider_rejected'));
+
+-- Its own statement, so it sees any write the refused finish made.
+SELECT pg_temp.m108_mark('a_refused_finish_leaves_a_sent_row_sent',
+  (SELECT outcome FROM public.notification_sends WHERE id = pg_temp.m108_id('a1')) = 'sent');
 
 -- Each part of the key is its own slot: another day, org, recipient or job.
 SELECT pg_temp.m108_mark('every_part_of_the_key_is_its_own_slot',
@@ -251,9 +254,13 @@ SELECT pg_temp.m108_mark('check_refuses_a_finished_claim',
 SELECT pg_temp.m108_mark('refused_finishes_leave_the_row_claimed',
   (SELECT outcome FROM public.notification_sends WHERE id = pg_temp.m108_id('b2')) = 'claimed');
 
+-- Two statements, as with a1 above: a check in the same statement as the
+-- finish reads that statement's snapshot and still sees the row claimed.
 SELECT pg_temp.m108_mark('finish_records_sent_without_a_message_id',
-  public.finish_notification_send(pg_temp.m108_id('b2'), 'sent')
-  AND EXISTS (
+  public.finish_notification_send(pg_temp.m108_id('b2'), 'sent'));
+
+SELECT pg_temp.m108_mark('sent_row_without_a_message_id_is_finished',
+  EXISTS (
     SELECT 1 FROM public.notification_sends
      WHERE id = pg_temp.m108_id('b2') AND outcome = 'sent' AND provider_message_id IS NULL
   ));
