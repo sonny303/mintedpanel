@@ -2,6 +2,7 @@ import { canonicalLabel } from "@/lib/canonicalStatuses";
 import { isStatusHistorySeed } from "@/lib/caseStatus";
 import { APPROVED_LABEL, IN_NETWORK_LABEL } from "@/lib/statusLabels";
 import { taxonomyLabel } from "@/lib/providerTaxonomy";
+import type { ProviderStatus } from "@/types";
 
 export type BillingReadinessStatus = "ready" | "hold" | "stop";
 export type BillingFeedKind = "approval" | "facility_added" | "termination" | "license_expiration";
@@ -13,7 +14,7 @@ export interface BillingProvider {
   lastName: string;
   npi: string | null;
   taxonomyCode: string | null;
-  status: string;
+  status: ProviderStatus;
   verificationState: string | null;
   isTestProvider: boolean;
 }
@@ -362,7 +363,9 @@ function providerFacilityEvidence(
         "Clinician is still marked Onboarding. Mark them Active once they start seeing patients.",
     });
   } else if (provider.status !== "active") {
-    reasons.push({ severity: "hold", label: "The clinician status is not recorded." });
+    // Unreachable under today's providers_status_check; a status added later
+    // holds until this rule learns it.
+    reasons.push({ severity: "hold", label: "The clinician status is not recognized." });
   }
   if (provider.verificationState !== "verified") {
     reasons.push({ severity: "hold", label: "Clinician verification is incomplete." });

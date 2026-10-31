@@ -166,12 +166,27 @@ describe("billing readiness evaluator", () => {
       });
     });
 
-    it("holds an unrecorded clinician status instead of stopping it", () => {
+    it("holds an unrecognized clinician status instead of stopping it", () => {
       const snapshot = readySnapshot();
-      snapshot.providers[0].status = "";
+      // Not a value providers_status_check allows today; a future one must hold.
+      Object.assign(snapshot.providers[0], { status: "inactive" });
       expect(assess(snapshot)).toMatchObject({
         status: "hold",
-        reasons: [{ severity: "hold", label: "The clinician status is not recorded." }],
+        reasons: [{ severity: "hold", label: "The clinician status is not recognized." }],
+      });
+    });
+
+    it("lists both holds for an Onboarding clinician who is also unverified", () => {
+      const snapshot = readySnapshot();
+      snapshot.providers[0].status = "onboarding";
+      snapshot.providers[0].verificationState = "pending_verification";
+      expect(assess(snapshot)).toMatchObject({
+        status: "hold",
+        label: "Hold",
+        reasons: [
+          { severity: "hold", label: ONBOARDING_REASON },
+          { severity: "hold", label: "Clinician verification is incomplete." },
+        ],
       });
     });
 
