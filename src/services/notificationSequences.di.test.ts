@@ -8,6 +8,11 @@ import {
   type NotificationSequenceServiceCtx,
 } from "./notificationSequences";
 
+// Every call here goes through the injected ctx.db. The mock only keeps the
+// module-level browser client from being built, which throws in CI's build
+// job where VITE_SUPABASE_* is unset.
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
+
 const ORG = "66666666-6666-4666-8666-666666666666";
 const USER = "11111111-1111-4111-8111-111111111111";
 
