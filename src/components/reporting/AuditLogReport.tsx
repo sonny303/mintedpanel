@@ -399,8 +399,8 @@ export function AuditLogReport() {
                         <button
                           type="button"
                           aria-expanded={isOpen}
-                          aria-controls={detailId}
-                          aria-label="Show changes"
+                          aria-controls={isOpen ? detailId : undefined}
+                          aria-label={`Show changes: ${r.description ?? auditEntityLabel(r.entityType)}`}
                           className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -430,17 +430,15 @@ export function AuditLogReport() {
                         {r.description ?? <span className="text-muted-foreground">—</span>}
                       </TableCell>
                     </TableRow>
-                    {/* Always in the DOM so aria-controls resolves; the diff
-                        itself renders only while open. */}
-                    <TableRow
-                      id={detailId}
-                      hidden={!isOpen}
-                      className="bg-[#FAFAF9] hover:bg-[#FAFAF9]"
-                    >
-                      <TableCell colSpan={6} className="p-4">
-                        {isOpen ? <DiffView before={r.before} after={r.after} /> : null}
-                      </TableCell>
-                    </TableRow>
+                    {/* Rendered only while open (aria-controls is set only
+                        then), so the last visible row stays tr:last-child. */}
+                    {isOpen ? (
+                      <TableRow id={detailId} className="bg-[#FAFAF9] hover:bg-[#FAFAF9]">
+                        <TableCell colSpan={6} className="p-4">
+                          <DiffView before={r.before} after={r.after} />
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                   </Fragment>
                 );
               })

@@ -111,6 +111,7 @@ npx playwright test e2e/<spec>.spec.ts
 | `/portfolio` redirect + all-inactive fallback                  | `portfolio-inactive-fallback.spec.ts` |
 | `/reporting/expiring-credentials` + document tables (provider, | `document-storage.spec.ts`            |
 | group, case verification, signed upload/download)              |                                       |
+| `/reporting/audit-log` (entity links, labels, keyboard expand) | `audit-log-report.spec.ts`            |
 
 ### Payers & admin
 

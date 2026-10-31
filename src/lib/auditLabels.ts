@@ -5,15 +5,24 @@
 // words. The maps hold the common keys whose humanized form is wrong or
 // unclear; every other key falls back to humanizeAuditKey, so a new writer
 // never shows a raw key. The raw key stays on hover for support staff. Pure.
-import { humanizeTokenField } from "@/lib/quickCardCatalog";
+//
+// Keys come from stored rows, so every lookup is own-property only: a field
+// named `constructor` or `toString` must read as words, never reach
+// Object.prototype. (humanizeTokenField in quickCardCatalog.ts indexes its
+// acronym table unguarded, which is why this file keeps its own humanizer.)
 import type { AuditActionType } from "@/types";
 
-// humanizeTokenField already knows NPI / TIN / CAQH / SSN / ID; these are the
-// audit-only words it would otherwise leave lower-case.
-const AUDIT_ACRONYMS: Readonly<Record<string, string>> = {
+const ACRONYMS: Readonly<Record<string, string>> = {
+  npi: "NPI",
+  tin: "TIN",
+  caqh: "CAQH",
+  dea: "DEA",
+  ssn: "SSN",
   sop: "SOP",
-  ids: "IDs",
   pdf: "PDF",
+  url: "URL",
+  id: "ID",
+  ids: "IDs",
 };
 
 const ACTION_LABELS: Readonly<Record<string, string>> = {
@@ -41,25 +50,34 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   removedReason: "Removal reason",
 };
 
+function own(map: Readonly<Record<string, string>>, key: string): string | undefined {
+  return Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 /** Any audit key as words: `credential_case` → "Credential case",
  * `STATUS_CHANGE` → "Status change", `sopTemplateId` → "SOP template ID". */
 export function humanizeAuditKey(key: string): string {
-  const spaced = key.replace(/_+/g, " ").trim();
-  if (!spaced) return key;
-  return humanizeTokenField(spaced)
-    .split(" ")
-    .map((word) => AUDIT_ACRONYMS[word.toLowerCase()] ?? word)
-    .join(" ");
+  const words = key
+    .replace(/_+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Za-z])(\d)/g, "$1 $2")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => own(ACRONYMS, word) ?? word);
+  if (words.length === 0) return key;
+  const [first, ...rest] = words;
+  return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(" ");
 }
 
 export function auditActionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? humanizeAuditKey(action);
+  return own(ACTION_LABELS, action) ?? humanizeAuditKey(action);
 }
 
 export function auditEntityLabel(entityType: string): string {
-  return ENTITY_LABELS[entityType] ?? humanizeAuditKey(entityType);
+  return own(ENTITY_LABELS, entityType) ?? humanizeAuditKey(entityType);
 }
 
 export function auditFieldLabel(key: string): string {
-  return FIELD_LABELS[key] ?? humanizeAuditKey(key);
+  return own(FIELD_LABELS, key) ?? humanizeAuditKey(key);
 }

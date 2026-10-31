@@ -62,3 +62,19 @@ describe("humanizeAuditKey", () => {
     expect(humanizeAuditKey("__")).toBe("__");
   });
 });
+
+describe("Object.prototype names are plain keys", () => {
+  it("humanizes them instead of reading the prototype", () => {
+    expect(auditFieldLabel("constructorId")).toBe("Constructor ID");
+    expect(auditFieldLabel("toString")).toBe("To string");
+    expect(auditFieldLabel("__proto__")).toBe("Proto");
+    expect(auditFieldLabel("hasOwnProperty")).toBe("Has own property");
+  });
+
+  it("guards the action and entity maps too", () => {
+    expect(auditActionLabel("constructor")).toBe("Constructor");
+    expect(auditActionLabel("__proto__")).toBe("Proto");
+    expect(auditEntityLabel("toString")).toBe("To string");
+    expect(auditEntityLabel("valueOf")).toBe("Value of");
+  });
+});
