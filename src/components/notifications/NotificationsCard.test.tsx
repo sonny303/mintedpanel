@@ -9,16 +9,63 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   starterDraft,
+  stepsFromDefault,
   validateDraft,
   type CcMemberOption,
   type NotificationSequenceConfig,
+  type NotificationSequenceDefaultConfig,
   type SequenceDraft,
   type StepDraft,
 } from "@/lib/notificationSequences";
 
+/** Minted's seeded defaults (migration 20261031051500). */
+const INTAKE_DEFAULT: NotificationSequenceDefaultConfig = {
+  purpose: "intake_reminder",
+  stopConditions: ["submitted", "paused", "withdrawn", "provider_replied"],
+  targetDaysToReady: 14,
+  compressTowardStartDate: false,
+  sendHour: null,
+  sendTimeZone: null,
+  createdAt: "",
+  updatedAt: "",
+  steps: [2, 4, 7].map((offsetDays, i) => ({
+    id: `d${i + 1}`,
+    purpose: "intake_reminder" as const,
+    position: i + 1,
+    offsetDays,
+    channel: "email" as const,
+    templateKey: ["intake_reminder_first", "intake_reminder_second", "intake_reminder_final"][i],
+    createdAt: "",
+    updatedAt: "",
+  })),
+};
+const DIGEST_DEFAULT: NotificationSequenceDefaultConfig = {
+  purpose: "followup_digest",
+  stopConditions: null,
+  targetDaysToReady: null,
+  compressTowardStartDate: null,
+  sendHour: 8,
+  sendTimeZone: "America/Chicago",
+  createdAt: "",
+  updatedAt: "",
+  steps: [
+    {
+      id: "dd1",
+      purpose: "followup_digest",
+      position: 1,
+      offsetDays: 0,
+      channel: "email",
+      templateKey: "followup_digest_daily",
+      createdAt: "",
+      updatedAt: "",
+    },
+  ],
+};
+
 const state = vi.hoisted(() => ({
   isAdmin: true,
   sequences: {} as Record<string, unknown>,
+  defaults: {} as Record<string, unknown>,
   unavailable: false,
   isLoading: false,
   isError: false,
@@ -35,7 +82,7 @@ vi.mock("@/hooks/useNotificationSequences", () => ({
         ? undefined
         : state.unavailable
           ? { status: "unavailable" }
-          : { status: "available", sequences: state.sequences },
+          : { status: "available", sequences: state.sequences, defaults: state.defaults },
     isLoading: state.isLoading,
     isError: state.isError,
   }),
@@ -66,7 +113,9 @@ function intakeConfig(over: Partial<NotificationSequenceConfig> = {}): Notificat
     enabled: true,
     stopConditions: ["submitted", "withdrawn"],
     targetDaysToReady: 14,
-    compressTowardStartDate: true,
+    compressTowardStartDate: null,
+    sendHour: null,
+    sendTimeZone: null,
     revision: 2,
     createdAt: "2026-10-30T00:00:00Z",
     updatedAt: "2026-10-30T00:00:00Z",
@@ -125,12 +174,23 @@ type EditorOverrides = Partial<
   Omit<NotificationSequenceEditorProps, "onChange" | "onSave" | "onCancel">
 >;
 
+/** An intake draft with its own steps (Minted's, customized) and settings. */
+function ownIntake(): SequenceDraft & { steps: StepDraft[] } {
+  return {
+    enabled: false,
+    stopConditions: ["submitted", "paused", "withdrawn", "provider_replied"],
+    targetDaysToReady: 14,
+    steps: stepsFromDefault(INTAKE_DEFAULT),
+  };
+}
+
 function editorProps(over: EditorOverrides = {}) {
-  const draft = over.draft ?? starterDraft("intake_reminder");
+  const draft = over.draft ?? ownIntake();
   return {
     purpose: "intake_reminder" as const,
     draft,
     issues: validateDraft("intake_reminder", draft),
+    platformDefault: INTAKE_DEFAULT,
     members: MEMBERS,
     isNew: false,
     dirty: false,
@@ -145,6 +205,7 @@ function editorProps(over: EditorOverrides = {}) {
 beforeEach(() => {
   state.isAdmin = true;
   state.sequences = {};
+  state.defaults = { intake_reminder: INTAKE_DEFAULT, followup_digest: DIGEST_DEFAULT };
   state.unavailable = false;
   state.isLoading = false;
   state.isError = false;
@@ -164,14 +225,17 @@ beforeEach(() => {
 });
 
 describe("NotificationsCard: admin", () => {
-  it("offers Set up with an editable starter when a purpose has no row, and writes nothing", () => {
+  it("offers Set up from Minted's default when a purpose has no row, and writes nothing", () => {
     const html = renderToStaticMarkup(<NotificationsCard />);
     expect(html).toContain("Notifications");
     expect(html).toContain("Provider intake reminders");
     expect(html).toContain("Daily follow-up digest");
     expect(html.match(/>Set up</g)).toHaveLength(2);
     expect(html).toContain(
-      "3 emails, on day 2, day 4 and day 7 after the invite, cc&#x27;ing no one, switched off until you turn it on. You can change any of it before you save.",
+      "Set up starts you with Minted&#x27;s default: 3 emails, on day 2, day 4 and day 7 after the invite, cc&#x27;ing no one, switched off until you turn it on. You can change any of it before you save.",
+    );
+    expect(html).toContain(
+      "Set up starts you with Minted&#x27;s default: one email a day to each coordinator, switched off until you turn it on.",
     );
     expect(html.match(/Not set up/g)).toHaveLength(2);
     expect(html).not.toContain("<input");
@@ -186,8 +250,14 @@ describe("NotificationsCard: admin", () => {
     expect(html).toContain('value="7"');
     expect(html).toContain("Send intake reminders");
     expect(html).toContain("Target days from invite to ready");
+    expect(html).toContain('value="14"');
+    expect(html).toContain("Minted&#x27;s default is 14 days. Clear the box to use it.");
     expect(html).toContain("Stop reminders when");
-    expect(html).toContain("Move reminders closer together when a start date is near");
+    // Answer 4: compression is Minted's, shown read-only, never a switch.
+    expect(html).not.toContain("Move reminders closer together");
+    expect(html).not.toContain("notifications-intake_reminder-compress");
+    expect(html.match(/role="switch"/g)).toHaveLength(1);
+    expect(html).toContain("Near a start date: reminders keep their days. Minted sets this.");
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save<\/button>/);
     expect(html).toContain("Discard changes");
     expect(html).toContain(">On<");
@@ -250,9 +320,9 @@ describe("NotificationsCard: other members", () => {
     expect(html).toContain("Step 1 · day 2 after the invite · Email · First reminder");
     expect(html).toContain("Cc: no one");
     expect(html).toContain("Cc: Jane Doe, then All admins");
-    expect(html).toContain("14 days from invite to ready");
-    expect(html).toContain("the provider submits the intake form; the provider withdraws");
-    expect(html).toContain("reminders move closer together");
+    expect(html).toContain("14 days from invite to ready<");
+    expect(html).toContain("the provider submits the intake form; the provider withdraws<");
+    expect(html).toContain("reminders keep their days. Minted sets this.");
     expect(html).toContain("Only admins can change notifications.");
     expect(html).not.toContain("<input");
     expect(html).not.toContain("<button");
@@ -263,6 +333,60 @@ describe("NotificationsCard: other members", () => {
     const html = renderToStaticMarkup(<NotificationsCard />);
     expect(html.match(/Not set up\. An admin can set this up\./g)).toHaveLength(2);
     expect(html).not.toContain("<button");
+  });
+
+  it("marks what follows Minted's default, and shows the digest's send time with no cc", () => {
+    state.sequences = {
+      intake_reminder: intakeConfig({ steps: [], stopConditions: null, targetDaysToReady: null }),
+      followup_digest: {
+        ...intakeConfig({ steps: [], stopConditions: null, targetDaysToReady: null }),
+        id: "seq-digest",
+        purpose: "followup_digest",
+      },
+    };
+    const html = renderToStaticMarkup(<NotificationsCard />);
+    expect(html).toContain("Minted&#x27;s default steps");
+    expect(html).toContain("Step 3 · day 7 after the invite · Email · Final reminder");
+    expect(html).toContain("14 days from invite to ready (Minted&#x27;s default)");
+    expect(html).toContain(
+      "the provider submits the intake form; onboarding is paused; the provider withdraws; the provider replies (Minted&#x27;s default)",
+    );
+    expect(html).toContain("Step 1 · once a day · Email · Daily follow-up digest");
+    expect(html).toContain("Sent around 8 am Central time. Minted sets this.");
+    expect(html).toContain("Goes to each coordinator only. No one is cc&#x27;d.");
+    // Intake's three steps carry a cc line; the digest's step does not.
+    expect(html.match(/Cc: /g)).toHaveLength(3);
+  });
+
+  it("never shows a stored zone it cannot use: Minted's zone stands in", () => {
+    const digestRow = {
+      ...intakeConfig({ steps: [], stopConditions: null, targetDaysToReady: null }),
+      purpose: "followup_digest",
+      sendHour: 6,
+      sendTimeZone: "Gone/Zone",
+    };
+    state.sequences = { followup_digest: digestRow };
+    const summary = renderToStaticMarkup(<NotificationsCard />);
+    expect(summary).toContain("Sent around 6 am Central time. Minted sets this.");
+    expect(summary).not.toContain("Gone/Zone");
+    state.isAdmin = true;
+    const editor = renderToStaticMarkup(<NotificationsCard />);
+    expect(editor).toContain("Sent around 6 am Central time. Minted sets this.");
+    expect(editor).not.toContain("Gone/Zone");
+  });
+
+  it("shows an override Minted set for this org", () => {
+    state.sequences = {
+      followup_digest: {
+        ...intakeConfig({ steps: [], stopConditions: null, targetDaysToReady: null }),
+        purpose: "followup_digest",
+        sendHour: 6,
+        sendTimeZone: "America/New_York",
+      },
+    };
+    expect(renderToStaticMarkup(<NotificationsCard />)).toContain(
+      "Sent around 6 am Eastern time. Minted sets this.",
+    );
   });
 });
 
@@ -275,7 +399,7 @@ describe("NotificationSequenceEditor: an admin edits and saves", () => {
       target: { value: "5" },
     });
     const edited = props.onChange.mock.calls[0][0] as SequenceDraft;
-    expect(edited.steps.map((s) => s.offsetDays)).toEqual([2, 5, 7]);
+    expect(edited.steps?.map((s) => s.offsetDays)).toEqual([2, 5, 7]);
 
     // Re-render with the edit, as the section does: Save is now enabled.
     const saveProps = editorProps({ draft: edited, dirty: true });
@@ -287,7 +411,7 @@ describe("NotificationSequenceEditor: an admin edits and saves", () => {
   });
 
   it("blocks Save while the draft is invalid and says why", () => {
-    const draft = { ...starterDraft("intake_reminder") };
+    const draft = ownIntake();
     draft.steps = draft.steps.map((s, i) => (i === 1 ? { ...s, offsetDays: 1 } : s));
     const props = editorProps({ draft, dirty: true });
     const html = renderToStaticMarkup(<NotificationSequenceEditor {...props} />);
@@ -302,33 +426,140 @@ describe("NotificationSequenceEditor: an admin edits and saves", () => {
     expect(byLabel(tree, "Move step 1 up").props.disabled).toBe(true);
     (byLabel(tree, "Move step 3 up").props.onClick as () => void)();
     const moved = props.onChange.mock.calls[0][0] as SequenceDraft;
-    expect(moved.steps.map((s) => s.offsetDays)).toEqual([2, 4, 7]);
-    expect(moved.steps[1].templateKey).toBe("intake_reminder_final");
+    expect(moved.steps?.map((s) => s.offsetDays)).toEqual([2, 4, 7]);
+    expect(moved.steps?.[1].templateKey).toBe("intake_reminder_final");
   });
 
-  it("shows the digest as one daily step with no offset input and no intake settings", () => {
-    const draft = starterDraft("followup_digest");
+  it("shows the digest as one read-only daily step: no cc, no inputs, Minted's send time", () => {
+    const draft = starterDraft();
     const html = renderToStaticMarkup(
       <NotificationSequenceEditor
         {...editorProps({
           purpose: "followup_digest",
           draft,
           issues: validateDraft("followup_digest", draft),
+          platformDefault: DIGEST_DEFAULT,
         })}
       />,
     );
-    expect(html).toContain("Once a day");
+    expect(html).toContain("Step 1 · once a day · Email · Daily follow-up digest");
+    expect(html).toContain("Goes to each coordinator only. No one is cc&#x27;d.");
+    expect(html).toContain("Sent around 8 am Central time. Minted sets this.");
+    expect(html).not.toContain("Add someone to cc");
+    expect(html).not.toContain("People cc&#x27;d on a step");
+    expect(html).not.toContain("Customize steps");
     expect(html).not.toContain("days after invite");
     expect(html).not.toContain("Target days from invite to ready");
     expect(html).not.toContain("+ Add step");
     expect(html).not.toContain('aria-label="Move step 1 up"');
+    expect(html).not.toContain('type="number"');
+    expect(html).not.toContain('role="combobox"');
+    // The only control besides Save and Cancel is the on/off switch.
+    expect(html.match(/role="switch"/g)).toHaveLength(1);
+  });
+});
+
+describe("NotificationSequenceEditor: Minted's default and going back to it (answer 3)", () => {
+  it("lets a digest row with steps of its own go back to Minted's step", () => {
+    const own: SequenceDraft = { ...starterDraft(), steps: stepsFromDefault(DIGEST_DEFAULT) };
+    const props = editorProps({
+      purpose: "followup_digest",
+      draft: own,
+      issues: validateDraft("followup_digest", own),
+      platformDefault: DIGEST_DEFAULT,
+    });
+    const tree = NotificationSequenceEditor(props);
+    expect(findAll(tree, (e) => e.props.children === "Customize steps")).toHaveLength(0);
+    (byText(tree, "Use Minted's default steps").props.onClick as () => void)();
+    expect((props.onChange.mock.calls[0][0] as SequenceDraft).steps).toBeNull();
+    // On Minted's step there is nothing to reset.
+    const inherited = renderToStaticMarkup(
+      <NotificationSequenceEditor
+        {...editorProps({
+          purpose: "followup_digest",
+          draft: starterDraft(),
+          issues: [],
+          platformDefault: DIGEST_DEFAULT,
+        })}
+      />,
+    );
+    expect(inherited).not.toContain("Use Minted&#x27;s default steps");
+  });
+
+  it("shows Minted's default steps and settings when the org has none of its own", () => {
+    const html = renderToStaticMarkup(
+      <NotificationSequenceEditor {...editorProps({ draft: starterDraft(), isNew: true })} />,
+    );
+    expect(html).toContain("Minted&#x27;s default steps");
+    expect(html).toContain("Step 2 · day 4 after the invite · Email · Second reminder");
+    expect(html).toContain(
+      "Minted&#x27;s default steps cc no one, so a bounce on step 1 reaches no one.",
+    );
+    expect(html).toContain("Customize steps");
+    expect(html).not.toContain('aria-label="Step 1 days after invite"');
+    expect(html).not.toContain("Add someone to cc");
+    expect(html).toContain('placeholder="14"');
+    expect(html).toContain("Using Minted&#x27;s default, 14 days. Enter a number to change it.");
+    expect(html).toContain("Using Minted&#x27;s default.");
+    // The default's stop conditions show ticked.
+    expect(html.match(/role="checkbox"[^>]*aria-checked="true"/g)).toHaveLength(4);
+  });
+
+  it("customizes from Minted's steps, and goes back to them", () => {
+    const props = editorProps({ draft: starterDraft(), isNew: true });
+    (byText(NotificationSequenceEditor(props), "Customize steps").props.onClick as () => void)();
+    const customized = props.onChange.mock.calls[0][0] as SequenceDraft;
+    expect(customized.steps?.map((s) => [s.offsetDays, s.ccRecipients])).toEqual([
+      [2, []],
+      [4, []],
+      [7, []],
+    ]);
+
+    const ownProps = editorProps({ draft: customized, dirty: true });
+    (
+      byText(NotificationSequenceEditor(ownProps), "Use Minted's default steps").props
+        .onClick as () => void
+    )();
+    expect((ownProps.onChange.mock.calls[0][0] as SequenceDraft).steps).toBeNull();
+  });
+
+  it("overrides the target by typing and goes back by clearing it", () => {
+    const props = editorProps({ draft: starterDraft() });
+    const target = findAll(
+      NotificationSequenceEditor(props),
+      (e) => e.props.id === "notifications-intake_reminder-target",
+    )[0];
+    const change = target.props.onChange as (e: { target: { value: string } }) => void;
+    change({ target: { value: "21" } });
+    change({ target: { value: "" } });
+    expect(props.onChange.mock.calls.map((c) => (c[0] as SequenceDraft).targetDaysToReady)).toEqual(
+      [21, null],
+    );
+  });
+
+  it("overrides the stop conditions from the default set, and goes back to it", () => {
+    const props = editorProps({ draft: starterDraft() });
+    const [submitted] = findAll(
+      NotificationSequenceEditor(props),
+      (e) => e.props.id === "notifications-intake_reminder-stop-submitted",
+    );
+    (submitted.props.onCheckedChange as (v: boolean) => void)(false);
+    const overridden = props.onChange.mock.calls[0][0] as SequenceDraft;
+    expect(overridden.stopConditions).toEqual(["paused", "withdrawn", "provider_replied"]);
+
+    const backProps = editorProps({ draft: overridden, dirty: true });
+    (
+      byLabel(NotificationSequenceEditor(backProps), "Use Minted's default stop conditions").props
+        .onClick as () => void
+    )();
+    expect((backProps.onChange.mock.calls[0][0] as SequenceDraft).stopConditions).toBeNull();
   });
 });
 
 describe("NotificationCcRecipients: filling an empty cc list", () => {
   it("adds a role, then a member, in the order picked", () => {
     const onChange = vi.fn();
-    const step: StepDraft = starterDraft("intake_reminder").steps[0];
+    const step: StepDraft = ownIntake().steps[0];
     const pick = (current: StepDraft, value: string) => {
       const tree = NotificationCcRecipients({
         step: current,
@@ -424,11 +655,11 @@ describe("NotificationSequenceEditor: concurrent edits and keyboard moves", () =
       <NotificationSequenceEditor {...editorProps({ staleNotice: true, dirty: true })} />,
     );
     expect(html).toContain(
-      "Another admin saved changes. Reload to see them; your edits aren&#x27;t saved.",
+      "Someone else saved changes. Reload to see them; your edits aren&#x27;t saved.",
     );
     expect(html).toContain('role="status"');
     expect(renderToStaticMarkup(<NotificationSequenceEditor {...editorProps()} />)).not.toContain(
-      "Another admin saved changes",
+      "Someone else saved changes",
     );
   });
 

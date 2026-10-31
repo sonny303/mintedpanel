@@ -4,13 +4,23 @@
 // on, its ordered steps (offset in days, channel, template, ordered cc list),
 // and, for intake reminders only, the stop conditions, the target days from
 // invite to ready, and whether the schedule tightens as a known start date
-// approaches. Cadence is configuration, never a constant: how many messages,
-// how often, what each says and who is cc'd all come from the saved rows.
+// approaches; for the digest, the local hour and time zone it goes out in.
+// Cadence is configuration, never a constant.
+//
+// Two layers. Minted's platform default (one per purpose, no org, no cc,
+// no on/off) and the org's own row, which overrides it field by field: a
+// null setting uses the default, and an org with no steps of its own uses
+// the default steps. `enabled` is never inherited, so a default can never
+// switch an org on. `resolveNotificationSequence` turns the two into the
+// effective sequence; every consumer calls it rather than re-deriving it.
+// Compression and the digest's send hour and time zone are platform-managed:
+// only Minted sets them, on the default or as an org override, never an org
+// admin.
 //
 // Nothing here sends anything. The consumers (the daily follow-up digest, and
-// intake reminders once the intake back end lands) read the saved config and
-// call `scheduleSequenceSends` and `bounceEscalationRecipients` below, so the
-// rules they apply are pinned by tests now.
+// intake reminders once the intake back end lands) resolve the effective
+// sequence and call `scheduleSequenceSends` and `bounceEscalationRecipients`
+// below, so the rules they apply are pinned by tests now.
 //
 // Consumer contract for template keys: before rendering a step, the sender
 // must look its `template_key` up in NOTIFICATION_TEMPLATES
@@ -22,7 +32,8 @@
 //
 // The database enforces the same bounds (migration 20261031051500): offsets 0
 // to 90, at most 10 steps, offsets strictly increasing, the digest at most one
-// step, cc lists of at most 20 users or roles, target 1 to 90 days. Rules that
+// step and no cc, cc lists of at most 20 users or roles, target 1 to 90 days,
+// send hour 0 to 23 in an IANA zone. Rules that
 // a later PR may relax without a migration (the digest offset fixed at 0,
 // intake offsets from day 1) are enforced here and in the card only.
 //
@@ -34,11 +45,14 @@ import type {
   NotificationChannel,
   NotificationPurpose,
   NotificationSequence,
+  NotificationSequenceDefault,
+  NotificationSequenceDefaultStep,
   NotificationSequenceStep,
   NotificationStopCondition,
 } from "@/types";
 import {
   getNotificationTemplate,
+  purposeHasCcList,
   selectableTemplates,
   templateSupportsChannel,
 } from "./notificationTemplates";
@@ -110,14 +124,17 @@ export function describeCcList(
   return recipients.map((r) => ccRecipientLabel(r, members, membersLoaded)).join(", then ");
 }
 
-/** Mirrors the CHECK constraints in migration 20261031051500. */
+/**
+ * Mirrors the CHECK constraints in migration 20261031051500. Default values
+ * (14 days, the default steps, the send time) are not here: they are Minted's
+ * platform default rows, read through the service.
+ */
 export const NOTIFICATION_LIMITS = {
   maxOffsetDays: 90,
   maxSteps: 10,
   maxCcRecipients: 20,
   minTargetDays: 1,
   maxTargetDays: 90,
-  defaultTargetDays: 14,
 } as const;
 
 export interface PurposeRules {
@@ -131,6 +148,12 @@ export interface PurposeRules {
   fixedOffsetDays: number | null;
   /** Stop conditions, target days and start-date compression. */
   hasIntakeSettings: boolean;
+  /** Steps carry an ordered cc list. False for the digest (coordinators only). */
+  hasCcList: boolean;
+  /** Admins can replace Minted's default steps with their own on the card. */
+  stepsEditable: boolean;
+  /** A platform-managed local send hour and time zone. */
+  hasSendTime: boolean;
 }
 
 export const PURPOSE_RULES: Record<NotificationPurpose, PurposeRules> = {
@@ -144,6 +167,9 @@ export const PURPOSE_RULES: Record<NotificationPurpose, PurposeRules> = {
     minOffsetDays: 1,
     fixedOffsetDays: null,
     hasIntakeSettings: true,
+    hasCcList: purposeHasCcList("intake_reminder"),
+    stepsEditable: true,
+    hasSendTime: false,
   },
   followup_digest: {
     label: "Daily follow-up digest",
@@ -156,8 +182,17 @@ export const PURPOSE_RULES: Record<NotificationPurpose, PurposeRules> = {
     // it one; 0 keeps the shared step shape. Relaxing this needs no migration.
     fixedOffsetDays: 0,
     hasIntakeSettings: false,
+    // Coordinators only (answer 2).
+    hasCcList: purposeHasCcList("followup_digest"),
+    // One email, one message, no cc: nothing for an org to change but on/off.
+    stepsEditable: false,
+    // Minted sets when it goes out (answer 5).
+    hasSendTime: true,
   },
 };
+
+/** How the card names the platform layer. */
+export const PLATFORM_DEFAULT_LABEL = "Minted's default";
 
 /* ---------------------------------- Drafts --------------------------------- */
 
@@ -169,64 +204,70 @@ export interface StepDraft {
   ccRecipients: NotificationCcRecipient[];
 }
 
+/**
+ * What an org admin edits: the org-owned settings only. A null field uses
+ * Minted's default; `steps: null` uses Minted's default steps. The
+ * platform-managed settings (compression, the digest's send time) are not
+ * here at all: the card cannot set them.
+ */
 export interface SequenceDraft {
   enabled: boolean;
-  stopConditions: NotificationStopCondition[];
+  /** Intake only. null: Minted's default. [] is a real choice: never stop early. */
+  stopConditions: NotificationStopCondition[] | null;
+  /** Intake only. null: Minted's default (the input is blank). */
   targetDaysToReady: number | null;
-  compressTowardStartDate: boolean;
-  steps: StepDraft[];
+  /** null: Minted's default steps. Otherwise the org's own, never empty. */
+  steps: StepDraft[] | null;
 }
 
-/** A saved sequence with its ordered steps, as the service returns it. */
+/** A saved org sequence with its own ordered steps (none: it uses the default steps). */
 export interface NotificationSequenceConfig extends NotificationSequence {
   steps: NotificationSequenceStep[];
 }
 
+/** Minted's platform default for one purpose with its ordered steps. */
+export interface NotificationSequenceDefaultConfig extends NotificationSequenceDefault {
+  steps: NotificationSequenceDefaultStep[];
+}
+
 /**
- * The suggested starting point behind "Set up". It is OFF: saving a starter
- * never emails anyone until an admin switches the sequence on. Every value is
- * an editable suggestion.
+ * The starting point behind "Set up": switched OFF, with every setting left
+ * to Minted's default. Saving it never emails anyone until an admin switches
+ * the sequence on, and any setting can be changed before saving.
  */
-export function starterDraft(purpose: NotificationPurpose): SequenceDraft {
-  if (purpose === "followup_digest") {
-    return {
-      enabled: false,
-      stopConditions: [],
-      targetDaysToReady: null,
-      compressTowardStartDate: false,
-      steps: [
-        { offsetDays: 0, channel: "email", templateKey: "followup_digest_daily", ccRecipients: [] },
-      ],
-    };
-  }
-  return {
-    enabled: false,
-    stopConditions: [...STOP_CONDITIONS],
-    targetDaysToReady: NOTIFICATION_LIMITS.defaultTargetDays,
-    compressTowardStartDate: true,
-    steps: [
-      { offsetDays: 2, channel: "email", templateKey: "intake_reminder_first", ccRecipients: [] },
-      { offsetDays: 4, channel: "email", templateKey: "intake_reminder_second", ccRecipients: [] },
-      { offsetDays: 7, channel: "email", templateKey: "intake_reminder_final", ccRecipients: [] },
-    ],
-  };
+export function starterDraft(): SequenceDraft {
+  return { enabled: false, stopConditions: null, targetDaysToReady: null, steps: null };
 }
 
 export function draftFromSequence(config: NotificationSequenceConfig): SequenceDraft {
   return {
     enabled: config.enabled,
-    stopConditions: [...config.stopConditions],
+    stopConditions: config.stopConditions ? [...config.stopConditions] : null,
     targetDaysToReady: config.targetDaysToReady,
-    compressTowardStartDate: config.compressTowardStartDate,
-    steps: [...config.steps]
-      .sort((a, b) => a.position - b.position)
-      .map((step) => ({
-        offsetDays: step.offsetDays,
-        channel: step.channel,
-        templateKey: step.templateKey,
-        ccRecipients: step.ccRecipients.map((r) => ({ ...r })),
-      })),
+    steps:
+      config.steps.length === 0
+        ? null
+        : [...config.steps]
+            .sort((a, b) => a.position - b.position)
+            .map((step) => ({
+              offsetDays: step.offsetDays,
+              channel: step.channel,
+              templateKey: step.templateKey,
+              ccRecipients: step.ccRecipients.map((r) => ({ ...r })),
+            })),
   };
+}
+
+/** Minted's default steps as the org's own, to edit: "Customize steps". A default cc's no one. */
+export function stepsFromDefault(platformDefault: NotificationSequenceDefaultConfig): StepDraft[] {
+  return [...platformDefault.steps]
+    .sort((a, b) => a.position - b.position)
+    .map((step) => ({
+      offsetDays: step.offsetDays,
+      channel: step.channel,
+      templateKey: step.templateKey,
+      ccRecipients: [],
+    }));
 }
 
 export function draftsEqual(a: SequenceDraft, b: SequenceDraft): boolean {
@@ -250,6 +291,7 @@ function swap<T>(items: readonly T[], index: number, other: number): T[] {
  * range is a no-op.
  */
 export function moveStep(draft: SequenceDraft, index: number, direction: -1 | 1): SequenceDraft {
+  if (!draft.steps) return draft;
   const other = index + direction;
   if (index < 0 || other < 0 || index >= draft.steps.length || other >= draft.steps.length) {
     return draft;
@@ -265,7 +307,7 @@ export function moveStep(draft: SequenceDraft, index: number, direction: -1 | 1)
 /** Append a step a few days after the last one, using the next unused message. */
 export function addStep(purpose: NotificationPurpose, draft: SequenceDraft): SequenceDraft {
   const rules = PURPOSE_RULES[purpose];
-  if (draft.steps.length >= rules.maxSteps) return draft;
+  if (!draft.steps || draft.steps.length >= rules.maxSteps) return draft;
   const last = draft.steps.at(-1);
   const templates = selectableTemplates(purpose);
   const used = new Set(draft.steps.map((s) => s.templateKey));
@@ -290,7 +332,9 @@ export function addStep(purpose: NotificationPurpose, draft: SequenceDraft): Seq
   };
 }
 
+/** Removes a step. The last one stays: use Minted's default steps instead. */
 export function removeStep(draft: SequenceDraft, index: number): SequenceDraft {
+  if (!draft.steps || draft.steps.length <= 1) return draft;
   if (index < 0 || index >= draft.steps.length) return draft;
   return { ...draft, steps: draft.steps.filter((_, i) => i !== index) };
 }
@@ -300,10 +344,26 @@ export function updateStep(
   index: number,
   patch: Partial<StepDraft>,
 ): SequenceDraft {
-  if (index < 0 || index >= draft.steps.length) return draft;
+  if (!draft.steps || index < 0 || index >= draft.steps.length) return draft;
   return {
     ...draft,
     steps: draft.steps.map((step, i) => (i === index ? { ...step, ...patch } : step)),
+  };
+}
+
+/** Toggle one stop condition, starting from Minted's default when the draft inherits. */
+export function toggleStopCondition(
+  draft: SequenceDraft,
+  platformDefault: NotificationSequenceDefaultConfig,
+  condition: NotificationStopCondition,
+  checked: boolean,
+): SequenceDraft {
+  const current = draft.stopConditions ?? platformDefault.stopConditions ?? [];
+  return {
+    ...draft,
+    stopConditions: checked
+      ? STOP_CONDITIONS.filter((c) => c === condition || current.includes(c))
+      : current.filter((c) => c !== condition),
   };
 }
 
@@ -351,8 +411,7 @@ export type SequenceIssueField =
   | "templateKey"
   | "ccRecipients"
   | "stopConditions"
-  | "targetDaysToReady"
-  | "compressTowardStartDate";
+  | "targetDaysToReady";
 
 export interface SequenceIssue {
   field: SequenceIssueField;
@@ -381,15 +440,19 @@ export function validateDraft(
   const add = (field: SequenceIssueField, stepIndex: number | null, message: string) =>
     issues.push({ field, stepIndex, message });
 
-  if (draft.steps.length === 0) add("steps", null, "Add at least one step.");
-  if (purpose === "followup_digest" && draft.steps.length > 1) {
+  // null: Minted's default steps, nothing to check here.
+  const steps = draft.steps ?? [];
+  if (draft.steps && draft.steps.length === 0) {
+    add("steps", null, "Add at least one step, or use Minted's default steps.");
+  }
+  if (purpose === "followup_digest" && steps.length > 1) {
     add("steps", null, "The daily digest has exactly one step.");
-  } else if (draft.steps.length > rules.maxSteps) {
+  } else if (steps.length > rules.maxSteps) {
     add("steps", null, `A sequence can have at most ${rules.maxSteps} steps.`);
   }
 
   let previous: number | null = null;
-  draft.steps.forEach((step, index) => {
+  steps.forEach((step, index) => {
     const n = index + 1;
     const offset = step.offsetDays;
     if (!isWholeNumber(offset)) {
@@ -425,6 +488,13 @@ export function validateDraft(
       );
     }
 
+    if (!rules.hasCcList && step.ccRecipients.length > 0) {
+      add(
+        "ccRecipients",
+        index,
+        "The daily digest goes to coordinators only, so it has no cc list.",
+      );
+    }
     if (step.ccRecipients.length > NOTIFICATION_LIMITS.maxCcRecipients) {
       add(
         "ccRecipients",
@@ -455,34 +525,34 @@ export function validateDraft(
   });
 
   if (rules.hasIntakeSettings) {
+    // null on either: Minted's default.
     const conditions = draft.stopConditions;
     if (
-      conditions.some((c) => !STOP_CONDITIONS.includes(c)) ||
-      new Set(conditions).size !== conditions.length
+      conditions &&
+      (conditions.some((c) => !STOP_CONDITIONS.includes(c)) ||
+        new Set(conditions).size !== conditions.length)
     ) {
       add("stopConditions", null, "Choose stop conditions from the list.");
     }
     const target = draft.targetDaysToReady;
     if (
-      !isWholeNumber(target) ||
-      target < NOTIFICATION_LIMITS.minTargetDays ||
-      target > NOTIFICATION_LIMITS.maxTargetDays
+      target != null &&
+      (!isWholeNumber(target) ||
+        target < NOTIFICATION_LIMITS.minTargetDays ||
+        target > NOTIFICATION_LIMITS.maxTargetDays)
     ) {
       add(
         "targetDaysToReady",
         null,
-        `Enter a target between ${NOTIFICATION_LIMITS.minTargetDays} and ${NOTIFICATION_LIMITS.maxTargetDays} days.`,
+        `Enter a target between ${NOTIFICATION_LIMITS.minTargetDays} and ${NOTIFICATION_LIMITS.maxTargetDays} days, or leave it blank for Minted's default.`,
       );
     }
   } else {
-    if (draft.stopConditions.length > 0) {
+    if (draft.stopConditions != null) {
       add("stopConditions", null, "The daily digest has no stop conditions.");
     }
     if (draft.targetDaysToReady != null) {
       add("targetDaysToReady", null, "The daily digest has no target.");
-    }
-    if (draft.compressTowardStartDate) {
-      add("compressTowardStartDate", null, "The daily digest has no start-date schedule.");
     }
   }
 
@@ -501,15 +571,21 @@ export interface SequenceStepPayload {
   cc_recipients: CcRecipientPayload[];
 }
 
-/** The `p_payload` of save_notification_sequence(p_org_id, p_purpose, p_payload). */
+/**
+ * The `p_payload` of save_notification_sequence(p_org_id, p_purpose, p_payload).
+ * A null setting uses Minted's default. There is no key for compression or the
+ * send time: the RPC refuses them (notification_platform_setting).
+ */
 export interface SaveSequencePayload {
   enabled: boolean;
-  stop_conditions: NotificationStopCondition[];
+  /** Intake only; null for Minted's default and always null for the digest. */
+  stop_conditions: NotificationStopCondition[] | null;
+  /** Intake only; null for Minted's default and always null for the digest. */
   target_days_to_ready: number | null;
-  compress_toward_start_date: boolean;
   /** The revision the editor loaded; null when no row existed yet. */
   expected_revision: number | null;
-  steps: SequenceStepPayload[];
+  /** null: Minted's default steps. */
+  steps: SequenceStepPayload[] | null;
 }
 
 export function ccRecipientToPayload(recipient: NotificationCcRecipient): CcRecipientPayload {
@@ -533,19 +609,21 @@ export function buildSavePayload(
   if (issues.length > 0) {
     throw new Error(`Invalid notification sequence: ${issues[0].message}`);
   }
-  const intake = PURPOSE_RULES[purpose].hasIntakeSettings;
+  const rules = PURPOSE_RULES[purpose];
+  const stops = draft.stopConditions;
   return {
     enabled: draft.enabled,
-    stop_conditions: intake ? STOP_CONDITIONS.filter((c) => draft.stopConditions.includes(c)) : [],
-    target_days_to_ready: intake ? draft.targetDaysToReady : null,
-    compress_toward_start_date: intake ? draft.compressTowardStartDate : false,
+    stop_conditions:
+      rules.hasIntakeSettings && stops ? STOP_CONDITIONS.filter((c) => stops.includes(c)) : null,
+    target_days_to_ready: rules.hasIntakeSettings ? draft.targetDaysToReady : null,
     expected_revision: expectedRevision,
-    steps: draft.steps.map((step) => ({
-      offset_days: step.offsetDays as number,
-      channel: step.channel,
-      template_key: step.templateKey,
-      cc_recipients: step.ccRecipients.map(ccRecipientToPayload),
-    })),
+    steps:
+      draft.steps?.map((step) => ({
+        offset_days: step.offsetDays as number,
+        channel: step.channel,
+        template_key: step.templateKey,
+        cc_recipients: rules.hasCcList ? step.ccRecipients.map(ccRecipientToPayload) : [],
+      })) ?? null,
   };
 }
 
@@ -582,6 +660,11 @@ const SAVE_ERROR_MESSAGES: ReadonlyArray<[string, string]> = [
     "Someone cc'd on a step is no longer a member of this organization. Remove them and save again.",
   ],
   ["notification_digest_single_step", "The daily digest has exactly one step."],
+  [
+    "notification_digest_has_no_cc",
+    "The daily digest goes to coordinators only, so it can't cc anyone.",
+  ],
+  ["notification_platform_setting", "Minted sets that setting, so it can't be changed here."],
   ["notification_step_offsets_not_increasing", "Each step must go out after the one before it."],
 ];
 
@@ -618,7 +701,7 @@ export interface ReconcileInput {
  *   adopt_server  reload the draft from the server: nothing unsaved would be
  *                 lost (the draft is untouched, already equals the server's
  *                 copy, or the change is this editor's own save).
- *   keep_draft    another admin saved while this draft has unsaved edits.
+ *   keep_draft    someone else saved while this draft has unsaved edits.
  *                 Keep the edits and say so; saving then sends the old
  *                 revision and gets the conflict, as designed.
  */
@@ -650,13 +733,250 @@ export function stepMoveFocusTarget(
   return destIndex === stepCount - 1 ? "up" : "down";
 }
 
+/* ---------------------- Resolution (org row + default) --------------------- */
+
+/** A step as it will actually go out. */
+export interface EffectiveStep {
+  position: number;
+  offsetDays: number;
+  channel: NotificationChannel;
+  templateKey: string;
+  /** Always empty for the digest, and for Minted's default steps. */
+  ccRecipients: NotificationCcRecipient[];
+}
+
+/** The settings an org can leave to Minted's default. */
+export type InheritableSetting =
+  | "steps"
+  | "stopConditions"
+  | "targetDaysToReady"
+  | "compressTowardStartDate"
+  | "sendHour"
+  | "sendTimeZone";
+
+/**
+ * One purpose as it applies to one org: its own values where it set them,
+ * Minted's default everywhere else. A setting that does not apply to the
+ * purpose is empty ([] / null / false) and never inherited.
+ */
+export interface EffectiveNotificationSequence {
+  purpose: NotificationPurpose;
+  /** The org's own switch: false with no row. Never inherited. */
+  enabled: boolean;
+  steps: EffectiveStep[];
+  /** Intake; [] for the digest. */
+  stopConditions: NotificationStopCondition[];
+  /** Intake; null for the digest. */
+  targetDaysToReady: number | null;
+  /** Intake; false for the digest. */
+  compressTowardStartDate: boolean;
+  /** Digest: the local hour (0 to 23); null for intake. */
+  sendHour: number | null;
+  /** Digest: the IANA zone of sendHour, always one this runtime can use; null for intake. */
+  sendTimeZone: string | null;
+  /** True where the value is Minted's default rather than the org's own. */
+  inherited: Record<InheritableSetting, boolean>;
+}
+
+function sortedByPosition<T extends { position: number }>(steps: readonly T[]): T[] {
+  return [...steps].sort((a, b) => a.position - b.position);
+}
+
+/** The org's value when it set one, else the default's, and whether it was inherited. */
+function inherit<T>(own: T | null | undefined, fallback: T | null): [T | null, boolean] {
+  return own != null ? [own, false] : [fallback, true];
+}
+
+/**
+ * The digest's zone, always one this runtime can format in. The database
+ * checks a zone against its own tz database when it is written, but that can
+ * change under a stored row, and JavaScript's Intl may not match it. So an
+ * org zone that fails isIanaTimeZone gives way to Minted's default zone
+ * (marked inherited), and an unusable default gives way to
+ * LAST_RESORT_TIME_ZONE. It never throws and never returns an unusable zone.
+ */
+function resolveTimeZone(
+  own: string | null | undefined,
+  fallback: string | null,
+): [string, boolean] {
+  if (own != null && isIanaTimeZone(own)) return [own, false];
+  if (fallback != null && isIanaTimeZone(fallback)) return [fallback, true];
+  return [LAST_RESORT_TIME_ZONE, true];
+}
+
+/**
+ * The effective sequence for one purpose: the org's row (or none) over
+ * Minted's default. Field by field, a null org value takes the default's; an
+ * org with no steps of its own takes the default steps, which cc no one.
+ * `enabled` comes from the org's row alone, so a default cannot switch an
+ * org on. The digest's zone is always usable (see resolveTimeZone): an org
+ * zone this runtime cannot use reads as inherited. Throws when the rows are
+ * for a different purpose.
+ */
+export function resolveNotificationSequence(
+  purpose: NotificationPurpose,
+  org: NotificationSequenceConfig | undefined,
+  platformDefault: NotificationSequenceDefaultConfig,
+): EffectiveNotificationSequence {
+  if (platformDefault.purpose !== purpose || (org && org.purpose !== purpose)) {
+    throw new RangeError(`Notification settings are not for ${purpose}`);
+  }
+  const rules = PURPOSE_RULES[purpose];
+  const ownSteps = org != null && org.steps.length > 0;
+  const steps: EffectiveStep[] = (ownSteps ? sortedByPosition(org.steps) : []).map((step) => ({
+    position: step.position,
+    offsetDays: step.offsetDays,
+    channel: step.channel,
+    templateKey: step.templateKey,
+    // The database refuses a digest cc; never pass one on regardless.
+    ccRecipients: rules.hasCcList ? step.ccRecipients.map((r) => ({ ...r })) : [],
+  }));
+  if (!ownSteps) {
+    for (const step of sortedByPosition(platformDefault.steps)) {
+      steps.push({
+        position: step.position,
+        offsetDays: step.offsetDays,
+        channel: step.channel,
+        templateKey: step.templateKey,
+        ccRecipients: [],
+      });
+    }
+  }
+
+  const none: [null, false] = [null, false];
+  const intake = rules.hasIntakeSettings;
+  const [stopConditions, stopsInherited] = intake
+    ? inherit(org?.stopConditions, platformDefault.stopConditions)
+    : none;
+  const [targetDaysToReady, targetInherited] = intake
+    ? inherit(org?.targetDaysToReady, platformDefault.targetDaysToReady)
+    : none;
+  const [compress, compressInherited] = intake
+    ? inherit(org?.compressTowardStartDate, platformDefault.compressTowardStartDate)
+    : none;
+  const timed = rules.hasSendTime;
+  const [sendHour, hourInherited] = timed ? inherit(org?.sendHour, platformDefault.sendHour) : none;
+  const [sendTimeZone, zoneInherited] = timed
+    ? resolveTimeZone(org?.sendTimeZone, platformDefault.sendTimeZone)
+    : none;
+
+  return {
+    purpose,
+    enabled: org?.enabled ?? false,
+    steps,
+    stopConditions: stopConditions ? STOP_CONDITIONS.filter((c) => stopConditions.includes(c)) : [],
+    targetDaysToReady,
+    compressTowardStartDate: compress ?? false,
+    sendHour,
+    sendTimeZone,
+    inherited: {
+      steps: !ownSteps,
+      stopConditions: stopsInherited,
+      targetDaysToReady: targetInherited,
+      compressTowardStartDate: compressInherited,
+      sendHour: hourInherited,
+      sendTimeZone: zoneInherited,
+    },
+  };
+}
+
+/** "Step 1 · day 2 after the invite · Email · First reminder" for the read-only views. */
+export function describeStep(
+  purpose: NotificationPurpose,
+  step: Pick<EffectiveStep, "position" | "offsetDays" | "channel" | "templateKey">,
+): string {
+  const when =
+    PURPOSE_RULES[purpose].fixedOffsetDays == null
+      ? `day ${step.offsetDays} after the invite`
+      : "once a day";
+  const label = getNotificationTemplate(step.templateKey)?.label ?? step.templateKey;
+  return `Step ${step.position} · ${when} · ${CHANNEL_LABELS[step.channel]} · ${label}`;
+}
+
+/* ------------------------------- Send time --------------------------------- */
+
+/** Same pattern as private.notification_time_zone_valid in migration 20261031051500. */
+export const IANA_TIME_ZONE_PATTERN = /^(UTC|[A-Z][A-Za-z_]+(\/[A-Za-z0-9_+-]+){1,2})$/;
+
+/**
+ * The digest's zone when even Minted's default zone cannot be used by this
+ * runtime: the zone that default is seeded with (8 am Central, the old 13:00
+ * UTC cron in CDT). Reached only through a tz-data gap between the database
+ * and this runtime, never through bad data (the database checks the default
+ * when it is written). Falling back beats throwing: a throw would stop every
+ * org's digest and break the card for everyone; this keeps the digest at
+ * the hour Minted chose, in the zone it ships with.
+ */
+export const LAST_RESORT_TIME_ZONE = "America/Chicago";
+
+/** True for an IANA zone name ("America/Chicago") that this runtime can format in. */
+export function isIanaTimeZone(zone: string): boolean {
+  if (!IANA_TIME_ZONE_PATTERN.test(zone)) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Plain names for the US zones Minted's customers work in. */
+const US_ZONE_NAMES: Readonly<Record<string, string>> = {
+  "America/New_York": "Eastern",
+  "America/Detroit": "Eastern",
+  "America/Indiana/Indianapolis": "Eastern",
+  "America/Chicago": "Central",
+  "America/Denver": "Mountain",
+  "America/Boise": "Mountain",
+  "America/Phoenix": "Arizona",
+  "America/Los_Angeles": "Pacific",
+  "America/Anchorage": "Alaska",
+  "Pacific/Honolulu": "Hawaii",
+};
+
+function timeZoneName(zone: string): string {
+  const known = US_ZONE_NAMES[zone];
+  if (known) return `${known} time`;
+  if (isIanaTimeZone(zone)) {
+    // A fixed instant: the generic name ("Central European Time") does not
+    // depend on the date, and a pure lib never reads the clock.
+    const part = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longGeneric" })
+      .formatToParts(new Date(Date.UTC(2026, 0, 1)))
+      .find((p) => p.type === "timeZoneName")?.value;
+    if (part) return part.replace(/ Time$/, " time");
+  }
+  return `${zone} time`;
+}
+
+function hourLabel(hour: number): string {
+  if (hour === 0) return "12 am";
+  if (hour === 12) return "12 pm";
+  return hour < 12 ? `${hour} am` : `${hour - 12} pm`;
+}
+
+/**
+ * "8 am Central time" for the digest's read-only send time. Null when the
+ * hour or zone is missing, the hour is out of range, or the zone is not one
+ * this runtime can use: the card never shows an unusable zone name. (The
+ * resolver never returns one; this guards direct callers.)
+ */
+export function describeSendTime(hour: number | null, zone: string | null): string | null {
+  if (hour == null || zone == null || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+    return null;
+  }
+  if (!isIanaTimeZone(zone)) return null;
+  return `${hourLabel(hour)} ${timeZoneName(zone)}`;
+}
+
 /* ------------------------------ Bounce rule -------------------------------- */
 
 /**
  * Decision 4: when step 1 of an intake reminder bounces, the people cc'd on
  * step 1 are told (with the bounce notice template), in their saved order. No
  * other bounce escalates, and the digest has no bounce rule. An empty cc list
- * means a bounce reaches no one, which the card warns about.
+ * means a bounce reaches no one, which the card warns about. Pass the
+ * effective steps (resolveNotificationSequence): Minted's default steps cc no
+ * one.
  */
 export function bounceEscalationRecipients(
   purpose: NotificationPurpose,

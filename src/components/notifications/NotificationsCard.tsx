@@ -7,8 +7,10 @@
 // would only surprise them. RLS gives members the same read and admins alone
 // the write.
 //
-// A purpose with no saved row is off. "Set up" loads a suggested starter into
-// the editor (switched off, cc'ing no one); nothing is written until Save.
+// A purpose with no saved row is off. "Set up" opens the editor on Minted's
+// default (switched off, cc'ing no one); nothing is written until Save. Every
+// setting the org leaves alone follows Minted's default, which only Minted
+// changes (Mission Control later).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/StatusPill";
@@ -24,6 +26,7 @@ import { useMemberships } from "@/hooks/useOrgSettings";
 import { useIsAdmin } from "@/lib/permissions";
 import {
   NOTIFICATION_PURPOSES,
+  PLATFORM_DEFAULT_LABEL,
   PURPOSE_RULES,
   buildSavePayload,
   describeOffsets,
@@ -34,30 +37,38 @@ import {
   validateDraft,
   type CcMemberOption,
   type NotificationSequenceConfig,
+  type NotificationSequenceDefaultConfig,
   type SequenceDraft,
 } from "@/lib/notificationSequences";
 import type { NotificationPurpose } from "@/types";
 import { NotificationSequenceEditor } from "./NotificationSequenceEditor";
 import { NotificationSequenceSummary } from "./NotificationSequenceSummary";
 
-function starterSummary(purpose: NotificationPurpose): string {
-  const starter = starterDraft(purpose);
+function starterSummary(
+  purpose: NotificationPurpose,
+  platformDefault: NotificationSequenceDefaultConfig,
+): string {
   if (purpose === "followup_digest") {
-    return "Set up starts you with a suggestion: one email a day, cc'ing no one, switched off until you turn it on. You can change it before you save.";
+    return `Set up starts you with ${PLATFORM_DEFAULT_LABEL}: one email a day to each coordinator, switched off until you turn it on.`;
   }
-  const offsets = starter.steps.map((s) => s.offsetDays ?? 0);
-  return `Set up starts you with a suggestion: ${starter.steps.length} emails, on ${describeOffsets(offsets)} after the invite, cc'ing no one, switched off until you turn it on. You can change any of it before you save.`;
+  const steps = [...platformDefault.steps].sort((a, b) => a.position - b.position);
+  const allEmail = steps.every((s) => s.channel === "email");
+  const noun = allEmail ? (steps.length === 1 ? "email" : "emails") : "messages";
+  const offsets = steps.map((s) => s.offsetDays);
+  return `Set up starts you with ${PLATFORM_DEFAULT_LABEL}: ${steps.length} ${noun}, on ${describeOffsets(offsets)} after the invite, cc'ing no one, switched off until you turn it on. You can change any of it before you save.`;
 }
 
 function AdminSequence({
   purpose,
   saved,
+  platformDefault,
   members,
   membersLoaded,
   memberUserIds,
 }: {
   purpose: NotificationPurpose;
   saved: NotificationSequenceConfig | undefined;
+  platformDefault: NotificationSequenceDefaultConfig;
   members: ReadonlyMap<string, CcMemberOption>;
   membersLoaded: boolean;
   memberUserIds: ReadonlySet<string> | undefined;
@@ -89,12 +100,14 @@ function AdminSequence({
   if (!draft) {
     return (
       <div className="space-y-2">
-        <p className="text-[13px] text-muted-foreground">{starterSummary(purpose)}</p>
+        <p className="text-[13px] text-muted-foreground">
+          {starterSummary(purpose, platformDefault)}
+        </p>
         <Button
           type="button"
           variant="outline"
           aria-label={`Set up ${PURPOSE_RULES[purpose].label.toLowerCase()}`}
-          onClick={() => setDraft(starterDraft(purpose))}
+          onClick={() => setDraft(starterDraft())}
         >
           Set up
         </Button>
@@ -127,6 +140,8 @@ function AdminSequence({
       purpose={purpose}
       draft={draft}
       issues={issues}
+      platformDefault={platformDefault}
+      saved={saved}
       members={members}
       membersLoaded={membersLoaded}
       isNew={!base}
@@ -145,6 +160,7 @@ function AdminSequence({
 function SequenceSection({
   purpose,
   saved,
+  platformDefault,
   isAdmin,
   members,
   membersLoaded,
@@ -152,6 +168,7 @@ function SequenceSection({
 }: {
   purpose: NotificationPurpose;
   saved: NotificationSequenceConfig | undefined;
+  platformDefault: NotificationSequenceDefaultConfig;
   isAdmin: boolean;
   members: ReadonlyMap<string, CcMemberOption>;
   membersLoaded: boolean;
@@ -179,6 +196,7 @@ function SequenceSection({
         <AdminSequence
           purpose={purpose}
           saved={saved}
+          platformDefault={platformDefault}
           members={members}
           membersLoaded={membersLoaded}
           memberUserIds={memberUserIds}
@@ -186,6 +204,7 @@ function SequenceSection({
       ) : saved ? (
         <NotificationSequenceSummary
           config={saved}
+          platformDefault={platformDefault}
           members={members}
           membersLoaded={membersLoaded}
         />
@@ -228,7 +247,7 @@ export function NotificationsCard() {
             <p className="text-[13px] text-muted-foreground">
               Reminder and digest schedules for this organization. Minted Panel doesn't send these
               messages yet; what you save here takes effect once sending is switched on. Nothing is
-              sent while a schedule is off.
+              sent while a schedule is off. Anything you leave alone follows Minted's default.
             </p>
           )}
         </div>
@@ -241,13 +260,14 @@ export function NotificationsCard() {
           <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-[13px] text-[#B91C1C]">
             We couldn't load this organization's notification settings.
           </div>
-        ) : (
+        ) : result?.status === "available" ? (
           NOTIFICATION_PURPOSES.map((purpose, index) => (
             <div key={purpose} className="space-y-4">
               {index > 0 ? <Separator /> : null}
               <SequenceSection
                 purpose={purpose}
-                saved={result?.status === "available" ? result.sequences[purpose] : undefined}
+                saved={result.sequences[purpose]}
+                platformDefault={result.defaults[purpose]}
                 isAdmin={isAdmin}
                 members={members}
                 membersLoaded={membersLoaded}
@@ -255,7 +275,7 @@ export function NotificationsCard() {
               />
             </div>
           ))
-        )}
+        ) : null}
         {!isAdmin && result?.status === "available" ? (
           <p className="text-[12px] text-muted-foreground">Only admins can change notifications.</p>
         ) : null}

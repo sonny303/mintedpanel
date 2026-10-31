@@ -4,16 +4,18 @@ import {
   CC_PERSONAL_FIELDS,
   INTAKE_BOUNCE_NOTICE_TEMPLATE,
   NOTIFICATION_TEMPLATES,
+  PURPOSES_WITH_CC,
   TEMPLATE_KEY_PATTERN,
   catalogViolations,
   ccCopyFields,
   getNotificationTemplate,
+  purposeHasCcList,
   selectableTemplates,
   templateSendProblem,
   templateSupportsChannel,
   type NotificationTemplateEntry,
 } from "./notificationTemplates";
-import { starterDraft } from "./notificationSequences";
+import type { NotificationChannel } from "@/types";
 
 const MIGRATION = readFileSync(
   "supabase/migrations/20261031051500_notification_sequences.sql",
@@ -99,12 +101,39 @@ describe("notification template catalog", () => {
     expect(templateSupportsChannel(INTAKE_BOUNCE_NOTICE_TEMPLATE, "sms")).toBe(false);
   });
 
-  it("covers every template the starters name", () => {
-    for (const purpose of ["intake_reminder", "followup_digest"] as const) {
-      for (const step of starterDraft(purpose).steps) {
-        expect(getNotificationTemplate(step.templateKey)?.purpose).toBe(purpose);
-      }
+  it("covers every step of Minted's seeded defaults, on its channel", () => {
+    // ('<purpose>', <position>, <offset>, '<channel>', '<template_key>') in the seed.
+    const seeded = [
+      ...MIGRATION.matchAll(
+        /\('(intake_reminder|followup_digest)', (\d+), (\d+), '(email|sms)', '([a-z0-9_]+)'\)/g,
+      ),
+    ];
+    expect(seeded.map((m) => m[5])).toEqual([
+      "intake_reminder_first",
+      "intake_reminder_second",
+      "intake_reminder_final",
+      "followup_digest_daily",
+    ]);
+    for (const [, purpose, , , channel, key] of seeded) {
+      const entry = getNotificationTemplate(key);
+      expect(entry?.purpose).toBe(purpose);
+      expect(entry?.selectable).toBe(true);
+      expect(templateSupportsChannel(key, channel as NotificationChannel)).toBe(true);
     }
+  });
+
+  it("renders no cc copy for the digest, which goes to coordinators only (answer 2)", () => {
+    expect(PURPOSES_WITH_CC).toEqual(["intake_reminder"]);
+    expect(purposeHasCcList("followup_digest")).toBe(false);
+    for (const entry of NOTIFICATION_TEMPLATES.filter((t) => t.purpose === "followup_digest")) {
+      expect(entry.ccFields).toEqual([]);
+      expect(ccCopyFields(entry)).toEqual([]);
+    }
+    const digest = getNotificationTemplate("followup_digest_daily");
+    if (!digest) throw new Error("followup_digest_daily is missing");
+    expect(catalogViolations([{ ...digest, ccFields: ["practiceName"] }])).toEqual([
+      "followup_digest_daily: followup_digest has no cc list, so it renders no cc copy",
+    ]);
   });
 
   it("applies the consumer contract to a saved step: exists, purpose, selectable, channel", () => {
@@ -137,8 +166,6 @@ describe("notification template catalog", () => {
         "payerDecisionDays",
       ]),
     );
-    expect(digest?.recipientFields).not.toContain("coordinatorName");
-    expect(digest?.ccFields).toContain("coordinatorName");
-    expect(digest?.ccFields).not.toContain("intakeLink");
+    expect(digest?.recipientFields).not.toContain("intakeLink");
   });
 });

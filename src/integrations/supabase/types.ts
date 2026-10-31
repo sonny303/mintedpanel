@@ -1920,6 +1920,80 @@ export type Database = {
           },
         ];
       };
+      notification_sequence_default_steps: {
+        Row: {
+          channel: string;
+          created_at: string;
+          id: string;
+          offset_days: number;
+          position: number;
+          purpose: string;
+          template_key: string;
+          updated_at: string;
+        };
+        Insert: {
+          channel: string;
+          created_at?: string;
+          id?: string;
+          offset_days: number;
+          position: number;
+          purpose: string;
+          template_key: string;
+          updated_at?: string;
+        };
+        Update: {
+          channel?: string;
+          created_at?: string;
+          id?: string;
+          offset_days?: number;
+          position?: number;
+          purpose?: string;
+          template_key?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_sequence_default_steps_purpose_fkey";
+            columns: ["purpose"];
+            isOneToOne: false;
+            referencedRelation: "notification_sequence_defaults";
+            referencedColumns: ["purpose"];
+          },
+        ];
+      };
+      notification_sequence_defaults: {
+        Row: {
+          compress_toward_start_date: boolean | null;
+          created_at: string;
+          purpose: string;
+          send_hour: number | null;
+          send_time_zone: string | null;
+          stop_conditions: string[] | null;
+          target_days_to_ready: number | null;
+          updated_at: string;
+        };
+        Insert: {
+          compress_toward_start_date?: boolean | null;
+          created_at?: string;
+          purpose: string;
+          send_hour?: number | null;
+          send_time_zone?: string | null;
+          stop_conditions?: string[] | null;
+          target_days_to_ready?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          compress_toward_start_date?: boolean | null;
+          created_at?: string;
+          purpose?: string;
+          send_hour?: number | null;
+          send_time_zone?: string | null;
+          stop_conditions?: string[] | null;
+          target_days_to_ready?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       notification_sequence_steps: {
         Row: {
           cc_recipients: Json;
@@ -1969,40 +2043,46 @@ export type Database = {
       };
       notification_sequences: {
         Row: {
-          compress_toward_start_date: boolean;
+          compress_toward_start_date: boolean | null;
           created_at: string;
           enabled: boolean;
           id: string;
           org_id: string;
           purpose: string;
           revision: number;
-          stop_conditions: string[];
+          send_hour: number | null;
+          send_time_zone: string | null;
+          stop_conditions: string[] | null;
           target_days_to_ready: number | null;
           updated_at: string;
           updated_by: string | null;
         };
         Insert: {
-          compress_toward_start_date?: boolean;
+          compress_toward_start_date?: boolean | null;
           created_at?: string;
           enabled?: boolean;
           id?: string;
           org_id: string;
           purpose: string;
           revision?: number;
-          stop_conditions?: string[];
+          send_hour?: number | null;
+          send_time_zone?: string | null;
+          stop_conditions?: string[] | null;
           target_days_to_ready?: number | null;
           updated_at?: string;
           updated_by?: string | null;
         };
         Update: {
-          compress_toward_start_date?: boolean;
+          compress_toward_start_date?: boolean | null;
           created_at?: string;
           enabled?: boolean;
           id?: string;
           org_id?: string;
           purpose?: string;
           revision?: number;
-          stop_conditions?: string[];
+          send_hour?: number | null;
+          send_time_zone?: string | null;
+          stop_conditions?: string[] | null;
           target_days_to_ready?: number | null;
           updated_at?: string;
           updated_by?: string | null;

@@ -22,6 +22,15 @@ describe("SMS provider seam", () => {
     expect(resolveSmsProvider({ SMS_PROVIDER: "twilio", SMS_API_KEY: "x" })).toBe(
       disabledSmsProvider,
     );
+    // Twilio is the chosen vendor, but there is no adapter until the HIPAA BAA
+    // tier and 10DLC registration are confirmed: its settings switch nothing on.
+    expect(
+      resolveSmsProvider({
+        TWILIO_ACCOUNT_SID: "test-account",
+        TWILIO_AUTH_TOKEN: "test-token",
+        TWILIO_MESSAGING_SERVICE_SID: "test-service",
+      }),
+    ).toBe(disabledSmsProvider);
   });
 
   it("refuses to send, as a result rather than a throw, and logs nothing", async () => {

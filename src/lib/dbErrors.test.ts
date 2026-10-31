@@ -247,7 +247,7 @@ describe("toError — PostgREST objects become Error", () => {
 });
 
 describe("isMissingNotificationSequenceTablesError (MINT-107 deploy order)", () => {
-  it("recognises the schema-cache and statement errors for either table", () => {
+  it("recognises the schema-cache and statement errors for any of the four tables", () => {
     expect(
       isMissingNotificationSequenceTablesError({
         code: "PGRST205",
@@ -258,6 +258,19 @@ describe("isMissingNotificationSequenceTablesError (MINT-107 deploy order)", () 
       isMissingNotificationSequenceTablesError({
         code: "42P01",
         message: 'relation "public.notification_sequence_steps" does not exist',
+      }),
+    ).toBe(true);
+    expect(
+      isMissingNotificationSequenceTablesError({
+        code: "PGRST205",
+        message:
+          "Could not find the table 'public.notification_sequence_defaults' in the schema cache",
+      }),
+    ).toBe(true);
+    expect(
+      isMissingNotificationSequenceTablesError({
+        code: "42P01",
+        message: 'relation "public.notification_sequence_default_steps" does not exist',
       }),
     ).toBe(true);
   });
