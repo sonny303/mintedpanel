@@ -53,6 +53,7 @@ export function AddTouchForm({
   saving,
   bumpTargets = [],
   variant = "inline",
+  disabledReason,
   onCancel,
   onSave,
 }: {
@@ -64,6 +65,9 @@ export function AddTouchForm({
   bumpTargets?: readonly TouchBumpTarget[];
   /** inline = the case-detail panel strip; dialog = inside AddTouchDialog. */
   variant?: "inline" | "dialog";
+  /** MINT-92 — a block the caller owns (the dialog's case selection): Save
+   * stays disabled and the reason shows beside it. Absent = none. */
+  disabledReason?: string | null;
   onCancel: () => void;
   onSave: (input: TouchInput, acceptedBumps: AcceptedTouchBump[]) => void;
 }) {
@@ -82,7 +86,7 @@ export function AddTouchForm({
 
   const requiresContext = dispositionRequiresContext(outcome as TouchOutcome);
   const contextMissing = requiresContext && !notes.trim();
-  const disableSave = saving || contextMissing;
+  const disableSave = saving || contextMissing || Boolean(disabledReason);
 
   // The closed F6.0.3 rule table, applied per target against the LIVE
   // type/outcome; corrections never suggest.
@@ -281,7 +285,10 @@ export function AddTouchForm({
         </label>
       ))}
 
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-2">
+        {disabledReason ? (
+          <p className="mr-auto text-[11px] text-muted-foreground">{disabledReason}</p>
+        ) : null}
         <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
