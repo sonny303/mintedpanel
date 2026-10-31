@@ -5360,14 +5360,6 @@ export type Database = {
         Args: { p_actor_user_id: string; p_audience?: string; p_org_id?: string };
         Returns: Json;
       };
-      notification_cc_recipients_valid: {
-        Args: { p_recipients: Json };
-        Returns: boolean;
-      };
-      notification_stop_conditions_valid: {
-        Args: { p_conditions: string[] };
-        Returns: boolean;
-      };
       reveal_ssn: {
         Args: { p_justification: string; p_provider_id: string };
         Returns: Json;

@@ -31,12 +31,15 @@ export function NotificationCcRecipients({
   step,
   stepNumber,
   members,
+  membersLoaded = true,
   bounceNote,
   onChange,
 }: {
   step: StepDraft;
   stepNumber: number;
   members: ReadonlyMap<string, CcMemberOption>;
+  /** False while the member list is loading or failed: no "Former member" yet. */
+  membersLoaded?: boolean;
   /** True on intake step 1, where a bounce escalates to this list. */
   bounceNote: boolean;
   onChange: (step: StepDraft) => void;
@@ -60,7 +63,7 @@ export function NotificationCcRecipients({
       ) : (
         <ol className="space-y-1" aria-label={`People cc'd on step ${stepNumber}, in order`}>
           {step.ccRecipients.map((recipient, index) => {
-            const label = ccRecipientLabel(recipient, members);
+            const label = ccRecipientLabel(recipient, members, membersLoaded);
             const last = index === step.ccRecipients.length - 1;
             return (
               <li

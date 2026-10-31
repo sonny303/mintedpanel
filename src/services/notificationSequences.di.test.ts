@@ -42,7 +42,9 @@ function ctxFor(db: unknown): NotificationSequenceServiceCtx {
   return { db: db as SupabaseClient<Database>, orgId: ORG };
 }
 
-function fakeReads(tables: Record<string, unknown[]>) {
+type FakeError = { code: string; message: string };
+
+function fakeReads(tables: Record<string, unknown[]>, errors: Record<string, FakeError> = {}) {
   const calls: Array<{ table: string; filters: Array<[string, unknown]>; order?: string }> = [];
   const from = vi.fn((table: string) => {
     const call: { table: string; filters: Array<[string, unknown]>; order?: string } = {
@@ -60,8 +62,12 @@ function fakeReads(tables: Record<string, unknown[]>) {
         call.order = column;
         return builder;
       },
-      then: (resolve: (value: { data: unknown[]; error: null }) => void) =>
-        resolve({ data: tables[table] ?? [], error: null }),
+      then: (resolve: (value: { data: unknown[] | null; error: FakeError | null }) => void) =>
+        resolve(
+          errors[table]
+            ? { data: null, error: errors[table] }
+            : { data: tables[table] ?? [], error: null },
+        ),
     };
     return builder;
   });
@@ -77,7 +83,9 @@ describe("notification sequences service", () => {
         stepRow(1, 2, [{ kind: "user", user_id: USER }]),
       ],
     });
-    const result = await listNotificationSequences(ctxFor({ from }));
+    const listed = await listNotificationSequences(ctxFor({ from }));
+    expect(listed.status).toBe("available");
+    const result = listed.status === "available" ? listed.sequences : {};
 
     expect(calls.map((c) => c.table)).toEqual([
       "notification_sequences",
@@ -105,7 +113,57 @@ describe("notification sequences service", () => {
 
   it("returns no entry for a purpose with no row (off)", async () => {
     const { from } = fakeReads({ notification_sequences: [], notification_sequence_steps: [] });
-    expect(await listNotificationSequences(ctxFor({ from }))).toEqual({});
+    expect(await listNotificationSequences(ctxFor({ from }))).toEqual({
+      status: "available",
+      sequences: {},
+    });
+  });
+
+  it("reports the feature unavailable, without throwing, before the migration is applied", async () => {
+    const missingSequences = fakeReads(
+      {},
+      {
+        notification_sequences: {
+          code: "PGRST205",
+          message: "Could not find the table 'public.notification_sequences' in the schema cache",
+        },
+        notification_sequence_steps: {
+          code: "PGRST205",
+          message:
+            "Could not find the table 'public.notification_sequence_steps' in the schema cache",
+        },
+      },
+    );
+    await expect(
+      listNotificationSequences(ctxFor({ from: missingSequences.from })),
+    ).resolves.toEqual({ status: "unavailable" });
+    const missingSteps = fakeReads(
+      { notification_sequences: [] },
+      {
+        notification_sequence_steps: {
+          code: "42P01",
+          message: 'relation "public.notification_sequence_steps" does not exist',
+        },
+      },
+    );
+    await expect(listNotificationSequences(ctxFor({ from: missingSteps.from }))).resolves.toEqual({
+      status: "unavailable",
+    });
+  });
+
+  it("still throws real read failures", async () => {
+    const denied = fakeReads(
+      {},
+      {
+        notification_sequences: {
+          code: "42501",
+          message: "permission denied for table notification_sequences",
+        },
+      },
+    );
+    await expect(listNotificationSequences(ctxFor({ from: denied.from }))).rejects.toMatchObject({
+      code: "42501",
+    });
   });
 
   it("saves through the atomic RPC with the org, purpose and built payload", async () => {
@@ -131,10 +189,22 @@ describe("notification sequences service", () => {
     const payload = buildSavePayload("intake_reminder", starterDraft("intake_reminder"), 2);
     const conflict = vi.fn().mockResolvedValue({
       data: null,
-      error: { code: "40001", message: "notification_sequence_conflict" },
+      error: { code: "PT409", message: "notification_sequence_conflict" },
     });
     await expect(
       saveNotificationSequence({ purpose: "intake_reminder", payload }, ctxFor({ rpc: conflict })),
+    ).rejects.toThrow(/Someone else saved these settings/);
+
+    // PT409 alone (PostgREST's HTTP 409) is the conflict, whatever the text.
+    const bareConflict = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PT409", message: "" },
+    });
+    await expect(
+      saveNotificationSequence(
+        { purpose: "intake_reminder", payload },
+        ctxFor({ rpc: bareConflict }),
+      ),
     ).rejects.toThrow(/Someone else saved these settings/);
 
     const denied = vi.fn().mockResolvedValue({

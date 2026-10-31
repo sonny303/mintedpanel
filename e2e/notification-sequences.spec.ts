@@ -1,8 +1,11 @@
 // MINT-107 — the Org Detail Notifications card over the mock harness. An
 // admin sets up intake reminders from the starter, edits an offset, fills
-// and orders step 1's cc list, switches it on and saves; the spec asserts the
-// exact save_notification_sequence payload, not just the UI. A specialist
-// sees the saved schedule read-only.
+// and orders step 1's cc list, moves a step from the keyboard, switches it on
+// and saves; the spec asserts the exact save_notification_sequence payload,
+// not just the UI. Another admin saving under an open draft keeps the edits
+// and makes the save a 409 conflict. A specialist sees the schedule
+// read-only, and before the migration is applied the card says the feature
+// is not switched on yet.
 import { test, expect, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -145,7 +148,7 @@ interface SaveCall {
   };
 }
 
-function makeHandler(rows: Rows) {
+function makeHandler(rows: Rows, options: { missingTables?: boolean } = {}) {
   const saves: SaveCall[] = [];
   const handler = async (route: Route) => {
     const req = route.request();
@@ -158,8 +161,15 @@ function makeHandler(rows: Rows) {
     if (url.pathname.endsWith("/rest/v1/rpc/save_notification_sequence")) {
       const call = req.postDataJSON() as SaveCall;
       saves.push(call);
-      // Write through, as the RPC does: replace the row and its steps.
       const existing = rows.notification_sequences.find((r) => r.purpose === call.p_purpose);
+      // The RPC's revision check: PT409, which PostgREST answers as HTTP 409.
+      if ((existing?.revision ?? null) !== call.p_payload.expected_revision) {
+        return json(
+          { code: "PT409", details: null, hint: null, message: "notification_sequence_conflict" },
+          409,
+        );
+      }
+      // Write through, as the RPC does: replace the row and its steps.
       const id = (existing?.id as string | undefined) ?? `seq-${call.p_purpose}`;
       const sequence = {
         id,
@@ -197,6 +207,18 @@ function makeHandler(rows: Rows) {
     if (url.pathname.includes("/rest/v1/rpc/")) return json(0);
 
     const table = url.pathname.split("/rest/v1/")[1] ?? "";
+    if (options.missingTables && table.startsWith("notification_sequence")) {
+      // What PostgREST says before migration 20261031051500 is applied.
+      return json(
+        {
+          code: "PGRST205",
+          details: null,
+          hint: null,
+          message: `Could not find the table 'public.${table}' in the schema cache`,
+        },
+        404,
+      );
+    }
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
     if (req.method() !== "GET") return json(wantsObject ? {} : [], 201);
 
@@ -279,7 +301,16 @@ test("MINT-107: an admin sets up intake reminders from the starter, fills the cc
   await expect(cc.getByRole("listitem").nth(1)).toContainText("Jane Doe");
 
   // Keyboard-operable step reorder: step 3's message moves up, offsets stay.
+  // Focus follows the message to its new slot, so a second Enter keeps
+  // moving it instead of undoing the first move.
+  const live = intake.locator('[aria-live="polite"]');
   await intake.getByRole("button", { name: "Move step 3 up" }).click();
+  await expect(intake.getByRole("button", { name: "Move step 2 up" })).toBeFocused();
+  await expect(live).toHaveText("Moved to step 2");
+  await page.keyboard.press("Enter");
+  // Step 1 has no up arrow to keep, so focus lands on its down arrow.
+  await expect(intake.getByRole("button", { name: "Move step 1 down" })).toBeFocused();
+  await expect(live).toHaveText("Moved to step 1");
 
   await intake.getByRole("switch", { name: "Send intake reminders" }).click();
   await intake.getByRole("button", { name: "Save", exact: true }).click();
@@ -299,17 +330,17 @@ test("MINT-107: an admin sets up intake reminders from the starter, fills the cc
         {
           offset_days: 2,
           channel: "email",
+          template_key: "intake_reminder_final",
+          cc_recipients: [],
+        },
+        {
+          offset_days: 5,
+          channel: "email",
           template_key: "intake_reminder_first",
           cc_recipients: [
             { kind: "role", role: "admin" },
             { kind: "user", user_id: JANE_ID },
           ],
-        },
-        {
-          offset_days: 5,
-          channel: "email",
-          template_key: "intake_reminder_final",
-          cc_recipients: [],
         },
         {
           offset_days: 7,
@@ -354,4 +385,77 @@ test("MINT-107: a specialist sees the saved schedule read-only", async ({ contex
   await expect(digest.getByRole("button")).toHaveCount(0);
   await expect(page.getByText("Only admins can change notifications.")).toBeVisible();
   expect(saves).toHaveLength(0);
+});
+
+test("MINT-107: another admin's save keeps an open draft, and saving it is a conflict", async ({
+  context,
+  page,
+}) => {
+  const rows = fixtures("admin");
+  savedIntake(rows);
+  const { handler, saves } = makeHandler(rows);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/org-detail");
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible({
+    timeout: 30000,
+  });
+  const intake = page.getByRole("region", { name: "Provider intake reminders" });
+  await intake.getByLabel("Step 1 days after invite").fill("1");
+
+  // Another admin saves the intake reminders (revision 4 -> 5, step 1 on day 3).
+  rows.notification_sequences[0].revision = 5;
+  rows.notification_sequence_steps[0].offset_days = 3;
+
+  // Saving the digest refetches both purposes.
+  const digest = page.getByRole("region", { name: "Daily follow-up digest" });
+  await digest.getByRole("button", { name: "Set up daily follow-up digest" }).click();
+  await digest.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Daily follow-up digest saved")).toBeVisible();
+
+  // The intake draft is kept, and the card says why it is now stale.
+  await expect(
+    intake.getByText("Another admin saved changes. Reload to see them; your edits aren't saved."),
+  ).toBeVisible();
+  await expect(intake.getByLabel("Step 1 days after invite")).toHaveValue("1");
+
+  // Saving sends the revision the draft started from and gets the 409.
+  await intake.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByText(/Someone else saved these settings while you were editing/),
+  ).toBeVisible();
+  expect(saves.at(-1)?.p_payload.expected_revision).toBe(4);
+  expect(rows.notification_sequence_steps[0].offset_days).toBe(3);
+
+  // Discarding takes the other admin's version.
+  await intake.getByRole("button", { name: "Discard changes" }).click();
+  await expect(intake.getByLabel("Step 1 days after invite")).toHaveValue("3");
+  await expect(intake.getByText("Another admin saved changes.", { exact: false })).toHaveCount(0);
+});
+
+test("MINT-107: before the migration is applied the card says it is not switched on yet", async ({
+  context,
+  page,
+}) => {
+  const rows = fixtures("admin");
+  const { handler } = makeHandler(rows, { missingTables: true });
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/org-detail");
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(
+    page.getByText(
+      "Notification settings will appear here once they're switched on for your organization.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Set up/ })).toHaveCount(0);
+  await expect(
+    page.getByText(/couldn't load this organization's notification settings/),
+  ).toHaveCount(0);
+  // The rest of Org Detail is unaffected.
+  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
 });

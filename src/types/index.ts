@@ -2334,7 +2334,7 @@ export interface RosterExportSnapshot {
   downloadPath: string;
 }
 
-// MINT-107 organization notification sequences (migration 20261031130000).
+// MINT-107 organization notification sequences (migration 20261031051500).
 // Configuration only: nothing in the app sends these messages yet. Pure rules
 // (validation, ordering, starters, the start-date cadence) live in
 // src/lib/notificationSequences.ts; the template catalog in

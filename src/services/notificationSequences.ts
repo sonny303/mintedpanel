@@ -1,10 +1,15 @@
-// MINT-107 — organization notification sequences (migration 20261031130000).
+// MINT-107 — organization notification sequences (migration 20261031051500).
 //
 // Reads go straight to the two tables under RLS (any member of the org).
 // Saves go through save_notification_sequence, a SECURITY INVOKER RPC that
 // replaces the sequence and its steps in one transaction, checks the caller
 // is an admin of the org, enforces the revision for concurrent editors, and
 // writes its own audit row, so this service does not call writeAudit.
+//
+// Deploy order: until migration 20261031051500 is applied, PostgREST reports
+// the tables missing (PGRST205 / 42P01). The read returns
+// `{ status: "unavailable" }` rather than throwing, so the card says the
+// feature is not switched on yet and the query never retries an error.
 //
 // Browser-only for now. A server consumer (the digest job) will read with the
 // service-role client through the same `listNotificationSequences(ctx)`, but
@@ -14,7 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
 import { requireActiveOrg } from "@/lib/audit";
-import { pgWireText } from "@/lib/dbErrors";
+import { isMissingNotificationSequenceTablesError, pgWireText } from "@/lib/dbErrors";
 import {
   NOTIFICATION_PURPOSES,
   STOP_CONDITIONS,
@@ -114,10 +119,21 @@ function toConfig(row: SequenceRow, steps: StepRow[]): NotificationSequenceConfi
   };
 }
 
-/** The org's saved sequences, keyed by purpose. A purpose with no row is absent (off). */
+export type NotificationSequencesByPurpose = Partial<
+  Record<NotificationPurpose, NotificationSequenceConfig>
+>;
+
+/**
+ * `available`: the org's saved sequences keyed by purpose; a purpose with no
+ * row is absent (off). `unavailable`: this database does not have the
+ * notification tables yet (the migration is not applied).
+ */
+export type NotificationSequencesResult =
+  { status: "available"; sequences: NotificationSequencesByPurpose } | { status: "unavailable" };
+
 export async function listNotificationSequences(
   ctx: NotificationSequenceServiceCtx = browserCtx(),
-): Promise<Partial<Record<NotificationPurpose, NotificationSequenceConfig>>> {
+): Promise<NotificationSequencesResult> {
   const [sequences, steps] = await Promise.all([
     ctx.db.from("notification_sequences").select(SEQUENCE_COLUMNS).eq("org_id", ctx.orgId),
     ctx.db
@@ -126,14 +142,19 @@ export async function listNotificationSequences(
       .eq("org_id", ctx.orgId)
       .order("position", { ascending: true }),
   ]);
+  for (const result of [sequences, steps]) {
+    if (result.error && isMissingNotificationSequenceTablesError(result.error)) {
+      return { status: "unavailable" };
+    }
+  }
   if (sequences.error) throw sequences.error;
   if (steps.error) throw steps.error;
-  const out: Partial<Record<NotificationPurpose, NotificationSequenceConfig>> = {};
+  const out: NotificationSequencesByPurpose = {};
   for (const row of (sequences.data ?? []) as SequenceRow[]) {
     const config = toConfig(row, (steps.data ?? []) as StepRow[]);
     if (config) out[config.purpose] = config;
   }
-  return out;
+  return { status: "available", sequences: out };
 }
 
 export interface SaveNotificationSequenceInput {
@@ -159,7 +180,7 @@ export async function saveNotificationSequence(
     p_payload:
       input.payload as unknown as Database["public"]["Functions"]["save_notification_sequence"]["Args"]["p_payload"],
   });
-  if (error) throw new Error(saveErrorMessage(pgWireText(error)));
+  if (error) throw new Error(saveErrorMessage(pgWireText(error), error.code));
   const snapshot = snapshotObject(data);
   const row = snapshotObject(snapshot.sequence) as unknown as SequenceRow;
   const steps = Array.isArray(snapshot.steps) ? (snapshot.steps as StepRow[]) : [];

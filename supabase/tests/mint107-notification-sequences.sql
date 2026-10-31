@@ -1,11 +1,18 @@
 -- MINT-107 notification sequences regression packet: RLS, grants, CHECKs,
--- triggers and save_notification_sequence. Run only in a disposable local
--- database with every migration through 20261031130000 applied:
---   psql -v ON_ERROR_STOP=1 -f supabase/tests/mint107-notification-sequences.sql
--- Every row is synthetic and the whole packet is rolled back.
+-- triggers and save_notification_sequence
+-- (supabase/migrations/20261031051500_notification_sequences.sql).
 --
--- Written without a local Postgres: this packet has NOT been executed yet.
--- Run it in migration CI (or a local `supabase start`) before relying on it.
+-- Run after all migrations in a disposable PostgreSQL database, never against
+-- hosted. CI's Migration dry-run job runs it right after the MINT-106 packet:
+--   psql -v ON_ERROR_STOP=1 -f supabase/tests/mint107-notification-sequences.sql
+-- Every row it writes is synthetic and rolled back.
+--
+-- It needs a superuser connection (it writes fixtures, switches role and
+-- toggles a trigger) and the anon, authenticated and service_role roles. CI
+-- creates those as bare NOLOGIN roles, so the packet emulates the two hosted
+-- Supabase attributes it relies on, inside its own transaction: USAGE on
+-- schema auth (auth.uid()) and BYPASSRLS on service_role. The first block
+-- checks the prerequisites and stops with a plain message.
 \set ON_ERROR_STOP on
 \set QUIET on
 \pset format unaligned
@@ -13,6 +20,35 @@
 
 BEGIN;
 SET LOCAL client_min_messages = warning;
+
+DO $$
+BEGIN
+  IF NOT coalesce(
+    (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user), false
+  ) THEN
+    RAISE EXCEPTION 'mint107-notification-sequences.sql must run as a superuser';
+  END IF;
+  IF (SELECT count(*) FROM pg_catalog.pg_roles
+       WHERE rolname IN ('anon', 'authenticated', 'service_role')) <> 3 THEN
+    RAISE EXCEPTION 'mint107-notification-sequences.sql needs the anon, authenticated and service_role roles';
+  END IF;
+  IF to_regclass('public.notification_sequences') IS NULL
+     OR to_regclass('public.notification_sequence_steps') IS NULL
+     OR to_regclass('public.sms_consents') IS NULL
+     OR to_regprocedure('public.save_notification_sequence(uuid, text, jsonb)') IS NULL
+     OR to_regprocedure('private.notification_cc_recipients_valid(jsonb)') IS NULL
+     OR to_regprocedure('private.notification_stop_conditions_valid(text[])') IS NULL
+     OR to_regprocedure('auth.uid()') IS NULL THEN
+    RAISE EXCEPTION 'apply every migration through 20261031051500_notification_sequences.sql first';
+  END IF;
+END;
+$$;
+
+-- CI seeds authenticated and service_role without the hosted attributes this
+-- packet relies on. Emulate them only inside this rollback-only transaction
+-- (the mint19 / mint60 precedent); both are restored before the ROLLBACK.
+GRANT USAGE ON SCHEMA auth TO authenticated, service_role;
+ALTER ROLE service_role BYPASSRLS;
 -- Fire the deferred step-set checks at the end of each statement, so a
 -- probe sees them inside this transaction (it never commits).
 SET CONSTRAINTS ALL IMMEDIATE;
@@ -138,8 +174,20 @@ SELECT pg_temp.m107_mark('rpc_execute_authenticated_only',
   AND NOT has_function_privilege('service_role',
     'public.save_notification_sequence(uuid,text,jsonb)', 'EXECUTE'));
 SELECT pg_temp.m107_mark('rpc_is_security_invoker_with_empty_search_path',
-  (SELECT NOT prosecdef AND proconfig = ARRAY['search_path=""']
-     FROM pg_proc WHERE oid = 'public.save_notification_sequence(uuid,text,jsonb)'::regprocedure));
+  (SELECT NOT p.prosecdef
+          AND EXISTS (SELECT 1 FROM unnest(p.proconfig) AS c
+                       WHERE c IN ('search_path=""', 'search_path='))
+     FROM pg_proc AS p
+    WHERE p.oid = 'public.save_notification_sequence(uuid,text,jsonb)'::regprocedure));
+SELECT pg_temp.m107_mark('validators_are_private_and_executable_by_writers',
+  to_regprocedure('public.notification_cc_recipients_valid(jsonb)') IS NULL
+  AND to_regprocedure('public.notification_stop_conditions_valid(text[])') IS NULL
+  AND has_function_privilege('authenticated',
+    'private.notification_cc_recipients_valid(jsonb)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'private.notification_stop_conditions_valid(text[])', 'EXECUTE')
+  AND NOT has_function_privilege('anon',
+    'private.notification_cc_recipients_valid(jsonb)', 'EXECUTE'));
 SELECT pg_temp.m107_mark('anon_has_no_table_access',
   NOT has_table_privilege('anon', 'public.notification_sequences', 'SELECT')
   AND NOT has_table_privilege('anon', 'public.notification_sequence_steps', 'SELECT')
@@ -168,28 +216,28 @@ SELECT pg_temp.m107_mark('rls_enabled_on_all_three',
 -- Validators (pure).
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.m107_mark('cc_validator_truth_table',
-  public.notification_cc_recipients_valid('[]')
-  AND public.notification_cc_recipients_valid(
+  private.notification_cc_recipients_valid('[]')
+  AND private.notification_cc_recipients_valid(
     '[{"kind":"user","user_id":"10700000-0000-4000-a000-000000000002"},{"kind":"role","role":"admin"}]')
-  AND NOT public.notification_cc_recipients_valid('{}')
-  AND NOT public.notification_cc_recipients_valid('[{"kind":"role","role":"owner"}]')
-  AND NOT public.notification_cc_recipients_valid('[{"kind":"role","role":"admin","extra":1}]')
-  AND NOT public.notification_cc_recipients_valid('[{"kind":"user"}]')
-  AND NOT public.notification_cc_recipients_valid(
+  AND NOT private.notification_cc_recipients_valid('{}')
+  AND NOT private.notification_cc_recipients_valid('[{"kind":"role","role":"owner"}]')
+  AND NOT private.notification_cc_recipients_valid('[{"kind":"role","role":"admin","extra":1}]')
+  AND NOT private.notification_cc_recipients_valid('[{"kind":"user"}]')
+  AND NOT private.notification_cc_recipients_valid(
     '[{"kind":"user","user_id":"10700000-0000-4000-A000-000000000002"}]')
-  AND NOT public.notification_cc_recipients_valid('[{"kind":"role","role":"admin"},{"kind":"role","role":"admin"}]')
-  AND NOT public.notification_cc_recipients_valid('["admin"]')
-  AND NOT public.notification_cc_recipients_valid(
+  AND NOT private.notification_cc_recipients_valid('[{"kind":"role","role":"admin"},{"kind":"role","role":"admin"}]')
+  AND NOT private.notification_cc_recipients_valid('["admin"]')
+  AND NOT private.notification_cc_recipients_valid(
     (SELECT jsonb_agg(jsonb_build_object('kind', 'user', 'user_id',
               lpad(g::text, 8, '0') || '-0000-4000-8000-000000000000'))
        FROM generate_series(1, 21) AS g)));
 SELECT pg_temp.m107_mark('stop_condition_validator_truth_table',
-  public.notification_stop_conditions_valid('{}')
-  AND public.notification_stop_conditions_valid('{submitted,paused,withdrawn,provider_replied}')
-  AND NOT public.notification_stop_conditions_valid('{submitted,submitted}')
-  AND NOT public.notification_stop_conditions_valid('{bounced}')
-  AND NOT public.notification_stop_conditions_valid(ARRAY['submitted', NULL]::text[])
-  AND NOT coalesce(public.notification_stop_conditions_valid(NULL), false));
+  private.notification_stop_conditions_valid('{}')
+  AND private.notification_stop_conditions_valid('{submitted,paused,withdrawn,provider_replied}')
+  AND NOT private.notification_stop_conditions_valid('{submitted,submitted}')
+  AND NOT private.notification_stop_conditions_valid('{bounced}')
+  AND NOT private.notification_stop_conditions_valid(ARRAY['submitted', NULL]::text[])
+  AND NOT coalesce(private.notification_stop_conditions_valid(NULL), false));
 
 -- ---------------------------------------------------------------------------
 -- The save RPC as org A's admin.
@@ -228,12 +276,12 @@ SELECT pg_temp.m107_mark('stale_revision_is_a_conflict', pg_temp.m107_expect_mes
   'notification_sequence_conflict',
   $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
       'intake_reminder', pg_temp.m107_intake('{3,9}', 1))$$));
-SELECT pg_temp.m107_mark('stale_revision_sqlstate_40001', pg_temp.m107_expect_state(
-  '40001',
+SELECT pg_temp.m107_mark('stale_revision_sqlstate_pt409', pg_temp.m107_expect_state(
+  'PT409',
   $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
       'intake_reminder', pg_temp.m107_intake('{3,9}', NULL))$$));
 SELECT pg_temp.m107_mark('create_with_a_revision_is_a_conflict', pg_temp.m107_expect_state(
-  '40001',
+  'PT409',
   $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
       'followup_digest', '{"enabled":false,"expected_revision":5,"steps":[{"offset_days":0,"channel":"email","template_key":"followup_digest_daily","cc_recipients":[]}]}')$$));
 
@@ -292,6 +340,39 @@ SELECT pg_temp.m107_mark('updated_by_cannot_be_spoofed_and_revision_bumps',
   (SELECT updated_by = '10700000-0000-4000-a000-000000000001' AND revision = 3
      FROM public.notification_sequences
     WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder'));
+-- A direct step write bumps the sequence's revision once per transaction.
+-- This whole packet is one transaction, so now() never moves and the
+-- sequence was already stamped; backdate it (stamp trigger off, as the
+-- owner) to look like a sequence last saved in an earlier transaction.
+RESET ROLE;
+ALTER TABLE public.notification_sequences DISABLE TRIGGER notification_sequences_stamp;
+UPDATE public.notification_sequences SET updated_at = now() - interval '1 hour'
+ WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder';
+ALTER TABLE public.notification_sequences ENABLE TRIGGER notification_sequences_stamp;
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000001');
+UPDATE public.notification_sequence_steps SET cc_recipients = '[{"kind":"role","role":"billing"}]'
+ WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND position = 1
+   AND template_key LIKE 'intake_reminder_%';
+UPDATE public.notification_sequence_steps SET cc_recipients = '[{"kind":"role","role":"admin"}]'
+ WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND position = 2
+   AND template_key LIKE 'intake_reminder_%';
+SELECT pg_temp.m107_mark('direct_step_writes_bump_revision_once',
+  (SELECT revision = 4 AND updated_by = '10700000-0000-4000-a000-000000000001'
+     FROM public.notification_sequences
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a' AND purpose = 'intake_reminder'));
+SELECT pg_temp.m107_mark('save_holding_the_pre_step_write_revision_conflicts',
+  pg_temp.m107_expect_message('notification_sequence_conflict',
+    $$SELECT public.save_notification_sequence('10700000-0000-4000-a000-00000000000a',
+        'intake_reminder', pg_temp.m107_intake('{3,9}', 3))$$));
+SELECT pg_temp.m107_mark('direct_step_writes_are_not_audited',
+  (SELECT count(*) = 2 FROM public.audit_log
+    WHERE org_id = '10700000-0000-4000-a000-00000000000a'
+      AND entity_type = 'notification_sequence'
+      AND entity_id = (SELECT id FROM public.notification_sequences
+                        WHERE org_id = '10700000-0000-4000-a000-00000000000a'
+                          AND purpose = 'intake_reminder')));
+
 SELECT pg_temp.m107_mark('identity_is_immutable', pg_temp.m107_expect_message(
   'notification_sequence_identity_immutable',
   $$UPDATE public.notification_sequences SET purpose = 'followup_digest'
@@ -441,6 +522,19 @@ SELECT pg_temp.m107_mark('consent_source_is_closed', pg_temp.m107_expect_state('
   INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
   VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
           '+15555550199', 'guessed', 'sms-consent.v1')$$));
+SELECT pg_temp.m107_mark('staff_recorded_consent_names_the_recorder',
+  pg_temp.m107_expect_state('23514', $$
+    INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
+    VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+            '+15555550188', 'staff_recorded', 'sms-consent.v1')$$)
+  -- This one succeeds, so its row stays: provider A now has a live consent
+  -- for +15555550188 as well, which the counts below include.
+  AND NOT pg_temp.m107_expect_state('23514', $$
+    INSERT INTO public.sms_consents
+      (org_id, provider_id, phone_e164, source, consent_text_version, recorded_by)
+    VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
+            '+15555550188', 'staff_recorded', 'sms-consent.v1',
+            '10700000-0000-4000-a000-000000000001')$$));
 SELECT pg_temp.m107_mark('consent_provider_must_be_in_org', pg_temp.m107_expect_state('23503', $$
   INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consent_text_version)
   VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000b0001',
@@ -468,15 +562,17 @@ INSERT INTO public.sms_consents (org_id, provider_id, phone_e164, source, consen
 VALUES ('10700000-0000-4000-a000-00000000000a', '10700000-0000-4000-a000-0000000a0001',
         '+15555550123', 'sms_keyword', 'sms-consent.v2');
 SELECT pg_temp.m107_mark('consent_can_be_given_again_after_revocation',
-  (SELECT count(*) = 2 FROM public.sms_consents
-    WHERE provider_id = '10700000-0000-4000-a000-0000000a0001'));
+  (SELECT count(*) = 2 AND count(*) FILTER (WHERE revoked_at IS NULL) = 1
+     FROM public.sms_consents
+    WHERE provider_id = '10700000-0000-4000-a000-0000000a0001'
+      AND phone_e164 = '+15555550123'));
 SELECT pg_temp.m107_mark('service_role_cannot_delete_consent', pg_temp.m107_expect_state('42501', $$
   DELETE FROM public.sms_consents WHERE id = '10700000-0000-4000-a000-0000000c0001'$$));
 
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000003');
 SELECT pg_temp.m107_mark('member_reads_own_org_consents',
-  (SELECT count(*) = 2 FROM public.sms_consents));
+  (SELECT count(*) = 3 FROM public.sms_consents));
 SELECT pg_temp.m107_as('10700000-0000-4000-a000-000000000004');
 SELECT pg_temp.m107_mark('other_org_reads_no_consents',
   (SELECT count(*) = 0 FROM public.sms_consents));
@@ -499,16 +595,22 @@ SELECT pg_temp.m107_mark('each_save_writes_one_attributed_audit_row',
     WHERE org_id = '10700000-0000-4000-a000-00000000000a'
       AND entity_type = 'notification_sequence'));
 
+SELECT name, CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END
+  FROM pg_temp.m107_results ORDER BY name;
+
 DO $$
 DECLARE v_failed text;
 BEGIN
   SELECT string_agg(name, ', ' ORDER BY name) INTO v_failed
     FROM pg_temp.m107_results WHERE NOT passed;
   IF v_failed IS NOT NULL THEN
-    RAISE EXCEPTION 'MINT-107 assertions failed: %', v_failed;
+    RAISE EXCEPTION 'MINT-107 notification sequences assertions failed: %', v_failed;
   END IF;
 END;
 $$;
 
+-- Undo the CI emulation (the ROLLBACK would too; this keeps it explicit).
+ALTER ROLE service_role NOBYPASSRLS;
+REVOKE USAGE ON SCHEMA auth FROM authenticated, service_role;
 ROLLBACK;
 \echo MINT-107 notification sequences packet passed.

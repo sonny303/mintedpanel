@@ -51,7 +51,10 @@
 -- own audit_log row. Direct admin writes are possible but hit the same
 -- CHECKs and triggers: offsets strictly increase with position, the digest
 -- has at most one step, and a step's template_key starts with its
--- sequence's purpose.
+-- sequence's purpose. A direct step write also bumps its sequence's revision
+-- (once per transaction), so a concurrent save gets the conflict instead of
+-- overwriting it. Direct writes are NOT audited; only the RPC writes
+-- audit_log.
 --
 -- Functions referenced by a CHECK or a trigger use CREATE OR REPLACE: a DROP
 -- would fail on re-run because the constraint or trigger depends on it, and
@@ -60,7 +63,9 @@
 --
 -- Additive and re-runnable. REPO-ONLY until an operator applies it, staging
 -- first. The app reads these tables from the Org Detail Notifications card;
--- until the apply, that card shows its load error and nothing else breaks.
+-- until the apply, PostgREST reports the tables missing (PGRST205 / 42P01)
+-- and the card says notification settings are not switched on yet
+-- (isMissingNotificationSequenceTablesError in src/lib/dbErrors.ts).
 -- Verify the OBJECTS, not a ledger filename (supabase-migrations skill):
 --   SELECT to_regclass('public.notification_sequences'),
 --          to_regclass('public.notification_sequence_steps'),
@@ -87,8 +92,12 @@ $migration$;
 
 -- ---------------------------------------------------------------------------
 -- 1. Validators used by CHECK constraints. IMMUTABLE, pure, no table reads.
+--    They live in `private` so PostgREST never exposes them as /rpc/
+--    endpoints. A CHECK runs its function as the writing role, which needs
+--    EXECUTE on it but no USAGE on the schema (USAGE governs name lookup,
+--    and the constraint stores the function's oid).
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.notification_stop_conditions_valid(p_conditions text[])
+CREATE OR REPLACE FUNCTION private.notification_stop_conditions_valid(p_conditions text[])
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
@@ -105,7 +114,7 @@ AS $function$
      );
 $function$;
 
-CREATE OR REPLACE FUNCTION public.notification_cc_recipients_valid(p_recipients jsonb)
+CREATE OR REPLACE FUNCTION private.notification_cc_recipients_valid(p_recipients jsonb)
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
@@ -146,16 +155,16 @@ AS $function$
 $function$;
 
 -- A CHECK runs its function as the writing role, so both writers need EXECUTE.
-REVOKE ALL ON FUNCTION public.notification_stop_conditions_valid(text[]) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.notification_cc_recipients_valid(jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.notification_stop_conditions_valid(text[])
+REVOKE ALL ON FUNCTION private.notification_stop_conditions_valid(text[]) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.notification_cc_recipients_valid(jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.notification_stop_conditions_valid(text[])
   TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.notification_cc_recipients_valid(jsonb)
+GRANT EXECUTE ON FUNCTION private.notification_cc_recipients_valid(jsonb)
   TO authenticated, service_role;
 
-COMMENT ON FUNCTION public.notification_stop_conditions_valid(text[]) IS
+COMMENT ON FUNCTION private.notification_stop_conditions_valid(text[]) IS
   'MINT-107: true when the array is a duplicate-free, NULL-free subset of submitted, paused, withdrawn, provider_replied. Used by notification_sequences_stop_conditions_check.';
-COMMENT ON FUNCTION public.notification_cc_recipients_valid(jsonb) IS
+COMMENT ON FUNCTION private.notification_cc_recipients_valid(jsonb) IS
   'MINT-107: true when the value is an array of at most 20 distinct entries, each exactly {"kind":"user","user_id":<lower-case uuid>} or {"kind":"role","role":"admin"|"specialist"|"billing"}. Used by notification_sequence_steps_cc_recipients_check. Membership is checked by a trigger, not here.';
 
 -- ---------------------------------------------------------------------------
@@ -181,7 +190,7 @@ CREATE TABLE IF NOT EXISTS public.notification_sequences (
   CONSTRAINT notification_sequences_org_purpose_key UNIQUE (org_id, purpose),
   CONSTRAINT notification_sequences_org_id_id_key UNIQUE (org_id, id),
   CONSTRAINT notification_sequences_stop_conditions_check
-    CHECK (public.notification_stop_conditions_valid(stop_conditions)),
+    CHECK (private.notification_stop_conditions_valid(stop_conditions)),
   CONSTRAINT notification_sequences_target_days_check
     CHECK (target_days_to_ready IS NULL OR target_days_to_ready BETWEEN 1 AND 90),
   CONSTRAINT notification_sequences_purpose_settings_check CHECK (
@@ -217,7 +226,7 @@ CREATE TABLE IF NOT EXISTS public.notification_sequence_steps (
   CONSTRAINT notification_sequence_steps_template_key_check
     CHECK (template_key ~ '^[a-z][a-z0-9_]{2,63}$'),
   CONSTRAINT notification_sequence_steps_cc_recipients_check
-    CHECK (public.notification_cc_recipients_valid(cc_recipients))
+    CHECK (private.notification_cc_recipients_valid(cc_recipients))
 );
 
 CREATE INDEX IF NOT EXISTS notification_sequence_steps_org_idx
@@ -237,6 +246,10 @@ CREATE TABLE IF NOT EXISTS public.sms_consents (
   revoked_at timestamptz,
   revoked_source text,
   created_at timestamptz NOT NULL DEFAULT now(),
+  -- CASCADE, not RESTRICT: the staging UAT reseed (supabase/seed-uat.sql,
+  -- reset mode 'all') hard-deletes its synthetic providers, and RESTRICT would
+  -- fail it once any of them has a consent row. No app path deletes a
+  -- provider; terminating one keeps its row and its consent history.
   CONSTRAINT sms_consents_provider_fkey FOREIGN KEY (org_id, provider_id)
     REFERENCES public.providers (org_id, id) ON DELETE CASCADE,
   CONSTRAINT sms_consents_phone_check CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
@@ -247,7 +260,10 @@ CREATE TABLE IF NOT EXISTS public.sms_consents (
   CONSTRAINT sms_consents_revoked_source_check
     CHECK (revoked_source IS NULL OR revoked_source IN ('sms_stop', 'provider_request', 'staff_recorded')),
   CONSTRAINT sms_consents_revocation_pair_check CHECK ((revoked_at IS NULL) = (revoked_source IS NULL)),
-  CONSTRAINT sms_consents_revoked_after_check CHECK (revoked_at IS NULL OR revoked_at >= consented_at)
+  CONSTRAINT sms_consents_revoked_after_check CHECK (revoked_at IS NULL OR revoked_at >= consented_at),
+  -- Paper or verbal consent names the staff member who took it.
+  CONSTRAINT sms_consents_staff_recorded_by_check
+    CHECK (source <> 'staff_recorded' OR recorded_by IS NOT NULL)
 );
 
 -- One live consent per provider and number; a revoked row stays as history.
@@ -322,6 +338,37 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '23503', MESSAGE = 'notification_cc_user_not_member';
   END IF;
   RETURN NEW;
+END;
+$function$;
+
+-- A step write changes its sequence, so it bumps the sequence's revision: a
+-- concurrent save_notification_sequence holding the old revision then gets
+-- the conflict instead of overwriting the edit. One bump per transaction:
+-- now() is the transaction's start time, and the sequences stamp trigger
+-- sets updated_at := now(), so a sequence already stamped in this
+-- transaction (by the save RPC, which updates the sequence before touching
+-- its steps, or by an earlier step write) is left alone. Touching the row
+-- runs that stamp trigger, which bumps revision and records updated_by.
+CREATE OR REPLACE FUNCTION private.notification_sequence_steps_touch_parent()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_sequence_id uuid;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_sequence_id := OLD.sequence_id;
+  ELSE
+    v_sequence_id := NEW.sequence_id;
+  END IF;
+  -- Zero rows when the sequence is being deleted itself (cascade).
+  UPDATE public.notification_sequences AS s
+     SET updated_at = pg_catalog.now()
+   WHERE s.id = v_sequence_id
+     AND s.updated_at IS DISTINCT FROM pg_catalog.now();
+  RETURN NULL;
 END;
 $function$;
 
@@ -410,6 +457,8 @@ REVOKE ALL ON FUNCTION private.notification_sequence_steps_stamp()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.notification_sequence_steps_check_set()
   FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.notification_sequence_steps_touch_parent()
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.sms_consents_guard_update()
   FROM PUBLIC, anon, authenticated, service_role;
 
@@ -422,6 +471,11 @@ DROP TRIGGER IF EXISTS notification_sequence_steps_stamp ON public.notification_
 CREATE TRIGGER notification_sequence_steps_stamp
   BEFORE INSERT OR UPDATE ON public.notification_sequence_steps
   FOR EACH ROW EXECUTE FUNCTION private.notification_sequence_steps_stamp();
+
+DROP TRIGGER IF EXISTS notification_sequence_steps_touch_parent ON public.notification_sequence_steps;
+CREATE TRIGGER notification_sequence_steps_touch_parent
+  AFTER INSERT OR UPDATE OR DELETE ON public.notification_sequence_steps
+  FOR EACH ROW EXECUTE FUNCTION private.notification_sequence_steps_touch_parent();
 
 DROP TRIGGER IF EXISTS notification_sequence_steps_set_check ON public.notification_sequence_steps;
 CREATE CONSTRAINT TRIGGER notification_sequence_steps_set_check
@@ -634,7 +688,7 @@ BEGIN
 
   IF v_found THEN
     IF v_expected IS DISTINCT FROM v_existing.revision THEN
-      RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'notification_sequence_conflict';
+      RAISE EXCEPTION USING ERRCODE = 'PT409', MESSAGE = 'notification_sequence_conflict';
     END IF;
 
     SELECT pg_catalog.jsonb_build_object(
@@ -660,7 +714,7 @@ BEGIN
      RETURNING * INTO v_saved;
   ELSE
     IF v_expected IS NOT NULL THEN
-      RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'notification_sequence_conflict';
+      RAISE EXCEPTION USING ERRCODE = 'PT409', MESSAGE = 'notification_sequence_conflict';
     END IF;
     BEGIN
       INSERT INTO public.notification_sequences
@@ -670,7 +724,7 @@ BEGIN
         RETURNING * INTO v_saved;
     EXCEPTION WHEN unique_violation THEN
       -- Another admin created it first.
-      RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'notification_sequence_conflict';
+      RAISE EXCEPTION USING ERRCODE = 'PT409', MESSAGE = 'notification_sequence_conflict';
     END;
   END IF;
 
@@ -742,7 +796,7 @@ COMMENT ON COLUMN public.notification_sequences.target_days_to_ready IS
 COMMENT ON COLUMN public.notification_sequences.compress_toward_start_date IS
   'Intake only: when true and the provider has a start date sooner than the schedule''s end, reminders are pulled closer together so the last lands no later than the day before the start date. The rule is scheduleSequenceSends() in src/lib/notificationSequences.ts.';
 COMMENT ON COLUMN public.notification_sequences.revision IS
-  'Optimistic-concurrency counter: 1 on insert, +1 on every update (trigger). save_notification_sequence refuses a save whose expected_revision is stale.';
+  'Optimistic-concurrency counter: 1 on insert, +1 on every update (trigger), and +1 when a direct write changes its steps (once per transaction). save_notification_sequence refuses a save whose expected_revision is stale with PT409 (HTTP 409).';
 COMMENT ON COLUMN public.notification_sequences.updated_by IS
   'The last browser writer (auth.uid(), stamped by trigger). An actor id, not a foreign key.';
 
@@ -753,12 +807,12 @@ COMMENT ON COLUMN public.notification_sequence_steps.offset_days IS
 COMMENT ON COLUMN public.notification_sequence_steps.channel IS
   'email or sms. An sms step reaches only a provider with a live sms_consents row for the number; cc''d copies are always emailed.';
 COMMENT ON COLUMN public.notification_sequence_steps.template_key IS
-  'A key from the template catalog (src/lib/notificationTemplates.ts), registered in src/server/email/templates.ts by the PR that sends it. No free-form body.';
+  'A key from the template catalog (src/lib/notificationTemplates.ts), registered in src/server/email/templates.ts by the PR that sends it. No free-form body. The database checks only the format and the purpose prefix, so a sender must look the key up in NOTIFICATION_TEMPLATES (and require selectable) before rendering.';
 COMMENT ON COLUMN public.notification_sequence_steps.cc_recipients IS
   'Ordered escalation list for this step, empty by default: [{"kind":"user","user_id":uuid} | {"kind":"role","role":"admin"|"specialist"|"billing"}]. Users must be org members when saved. A cc''d copy never carries SSN, date of birth or document contents.';
 
 COMMENT ON TABLE public.sms_consents IS
-  'MINT-107: a provider''s recorded agreement to receive texts at one number: when, how (source), which consent text version, and revocation. Evidence: the only allowed update stamps revoked_at + revoked_source once. Members read; only service_role writes (the intake form, later).';
+  'MINT-107: a provider''s recorded agreement to receive texts at one number: when, how (source), which consent text version, and revocation. Evidence: the only allowed update stamps revoked_at + revoked_source once; no DELETE grant. Members read; only service_role writes (the intake form, later). staff_recorded rows name recorded_by.';
 COMMENT ON COLUMN public.sms_consents.phone_e164 IS 'The consented number in E.164 form, e.g. +15555550123.';
 COMMENT ON COLUMN public.sms_consents.consent_text_version IS
   'The version id of the exact consent wording the provider agreed to.';
@@ -766,6 +820,6 @@ COMMENT ON COLUMN public.sms_consents.source IS
   'How consent was given: intake_form, staff_recorded (paper or verbal, with recorded_by), or sms_keyword (a START reply).';
 
 COMMENT ON FUNCTION public.save_notification_sequence(uuid, text, jsonb) IS
-  'MINT-107: admin-only, SECURITY INVOKER. Creates or replaces one purpose''s sequence and all its steps in one transaction, checks expected_revision (40001 notification_sequence_conflict when stale), and writes one audit_log row. Returns {sequence, steps}. Never call it with the service key.';
+  'MINT-107: admin-only, SECURITY INVOKER. Creates or replaces one purpose''s sequence and all its steps in one transaction, checks expected_revision (PT409, HTTP 409, notification_sequence_conflict when stale), and writes one audit_log row. Returns {sequence, steps}. Never call it with the service key.';
 
 NOTIFY pgrst, 'reload schema';

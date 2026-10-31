@@ -48,7 +48,7 @@ describe("SMS provider seam", () => {
 
   it("checks E.164 the same way the sms_consents CHECK does", () => {
     const migration = readFileSync(
-      "supabase/migrations/20261031130000_notification_sequences.sql",
+      "supabase/migrations/20261031051500_notification_sequences.sql",
       "utf8",
     );
     expect(migration).toContain(`phone_e164 ~ '${E164_PATTERN.source}'`);

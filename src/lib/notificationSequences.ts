@@ -12,7 +12,15 @@
 // call `scheduleSequenceSends` and `bounceEscalationRecipients` below, so the
 // rules they apply are pinned by tests now.
 //
-// The database enforces the same bounds (migration 20261031130000): offsets 0
+// Consumer contract for template keys: before rendering a step, the sender
+// must look its `template_key` up in NOTIFICATION_TEMPLATES
+// (src/lib/notificationTemplates.ts) and require the entry to exist, match the
+// sequence's purpose, be `selectable`, and support the step's channel; a
+// step that fails is skipped and recorded, never sent. The database checks
+// only the key's format and its purpose prefix, so a row written directly
+// can name a key the catalog does not have.
+//
+// The database enforces the same bounds (migration 20261031051500): offsets 0
 // to 90, at most 10 steps, offsets strictly increasing, the digest at most one
 // step, cc lists of at most 20 users or roles, target 1 to 90 days. Rules that
 // a later PR may relax without a migration (the digest offset fixed at 0,
@@ -78,25 +86,31 @@ export interface CcMemberOption {
   name: string;
 }
 
-/** How a cc recipient reads in the card. A user who left the org reads as "Former member". */
+/**
+ * How a cc recipient reads in the card. A user missing from a LOADED member
+ * list reads as "Former member"; while the list is loading, or after it
+ * failed, the card cannot tell, so the user reads as a neutral "Member".
+ */
 export function ccRecipientLabel(
   recipient: NotificationCcRecipient,
   members: ReadonlyMap<string, CcMemberOption>,
+  membersLoaded = true,
 ): string {
   if (recipient.kind === "role") return CC_ROLE_LABELS[recipient.role];
-  return members.get(recipient.userId)?.name ?? "Former member";
+  return members.get(recipient.userId)?.name ?? (membersLoaded ? "Former member" : "Member");
 }
 
 /** "Jane Doe, then All admins" for the read-only summary. */
 export function describeCcList(
   recipients: readonly NotificationCcRecipient[],
   members: ReadonlyMap<string, CcMemberOption>,
+  membersLoaded = true,
 ): string {
   if (recipients.length === 0) return "no one";
-  return recipients.map((r) => ccRecipientLabel(r, members)).join(", then ");
+  return recipients.map((r) => ccRecipientLabel(r, members, membersLoaded)).join(", then ");
 }
 
-/** Mirrors the CHECK constraints in migration 20261031130000. */
+/** Mirrors the CHECK constraints in migration 20261031051500. */
 export const NOTIFICATION_LIMITS = {
   maxOffsetDays: 90,
   maxSteps: 10,
@@ -571,12 +585,69 @@ const SAVE_ERROR_MESSAGES: ReadonlyArray<[string, string]> = [
   ["notification_step_offsets_not_increasing", "Each step must go out after the one before it."],
 ];
 
-/** A user-facing message for a failed save. Matches the RPC's RAISE codes. */
-export function saveErrorMessage(text: string): string {
+/**
+ * A user-facing message for a failed save. Matches the RPC's RAISE codes;
+ * SQLSTATE PT409 (PostgREST answers HTTP 409) is the revision conflict
+ * whatever its text.
+ */
+export function saveErrorMessage(text: string, sqlstate?: string): string {
+  const haystack = sqlstate === "PT409" ? `notification_sequence_conflict ${text}` : text;
   for (const [code, message] of SAVE_ERROR_MESSAGES) {
-    if (text.includes(code)) return message;
+    if (haystack.includes(code)) return message;
   }
   return "Couldn't save the notification settings. Check the fields and try again.";
+}
+
+/* --------------------------- Concurrent editors ---------------------------- */
+
+export interface ReconcileInput {
+  /** The saved config the open draft started from; undefined for a starter. */
+  base: NotificationSequenceConfig | undefined;
+  /** What the server has now. */
+  saved: NotificationSequenceConfig | undefined;
+  /** The open draft; null when the editor shows "Set up". */
+  draft: SequenceDraft | null;
+  /** The revision this editor's own last save produced, if any. */
+  ownSavedRevision: number | null;
+}
+
+/**
+ * What the editor does when the server's copy moves under it:
+ *
+ *   in_sync       the server still has what the draft started from.
+ *   adopt_server  reload the draft from the server: nothing unsaved would be
+ *                 lost (the draft is untouched, already equals the server's
+ *                 copy, or the change is this editor's own save).
+ *   keep_draft    another admin saved while this draft has unsaved edits.
+ *                 Keep the edits and say so; saving then sends the old
+ *                 revision and gets the conflict, as designed.
+ */
+export function reconcileWithServer(
+  input: ReconcileInput,
+): "in_sync" | "adopt_server" | "keep_draft" {
+  const { base, saved, draft, ownSavedRevision } = input;
+  if (base?.revision === saved?.revision) return "in_sync";
+  if (draft == null) return "adopt_server";
+  if (base && draftsEqual(draft, draftFromSequence(base))) return "adopt_server";
+  if (saved && draftsEqual(draft, draftFromSequence(saved))) return "adopt_server";
+  if (saved && ownSavedRevision != null && saved.revision === ownSavedRevision) {
+    return "adopt_server";
+  }
+  return "keep_draft";
+}
+
+/**
+ * Which arrow to focus after a step's message moves to `destIndex`: the same
+ * direction, so a second press keeps moving it, unless that arrow is disabled
+ * at the top or bottom, then the other one.
+ */
+export function stepMoveFocusTarget(
+  destIndex: number,
+  direction: -1 | 1,
+  stepCount: number,
+): "up" | "down" {
+  if (direction === -1) return destIndex === 0 ? "down" : "up";
+  return destIndex === stepCount - 1 ? "up" : "down";
 }
 
 /* ------------------------------ Bounce rule -------------------------------- */

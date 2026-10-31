@@ -5,6 +5,8 @@ import {
   addStep,
   bounceEscalationRecipients,
   buildSavePayload,
+  ccRecipientLabel,
+  describeCcList,
   describeOffsets,
   draftFromSequence,
   draftsEqual,
@@ -12,11 +14,13 @@ import {
   moveStep,
   parseCcRecipients,
   parseRecipientKey,
+  reconcileWithServer,
   removeCcRecipient,
   removeStep,
   saveErrorMessage,
   scheduleSequenceSends,
   starterDraft,
+  stepMoveFocusTarget,
   updateStep,
   validateDraft,
   type NotificationSequenceConfig,
@@ -624,5 +628,157 @@ describe("copy helpers", () => {
       maxTargetDays: 90,
       defaultTargetDays: 14,
     });
+  });
+});
+
+describe("concurrent editors (reconcileWithServer)", () => {
+  const config = (revision: number, offsets: number[]): NotificationSequenceConfig => ({
+    id: "seq-1",
+    orgId: "org-1",
+    purpose: "intake_reminder",
+    enabled: false,
+    stopConditions: ["submitted"],
+    targetDaysToReady: 14,
+    compressTowardStartDate: false,
+    revision,
+    createdAt: "",
+    updatedAt: "",
+    updatedBy: null,
+    steps: offsets.map((offsetDays, i) => ({
+      id: `s${i}`,
+      sequenceId: "seq-1",
+      orgId: "org-1",
+      position: i + 1,
+      offsetDays,
+      channel: "email" as const,
+      templateKey: "intake_reminder_first",
+      ccRecipients: [],
+      createdAt: "",
+      updatedAt: "",
+    })),
+  });
+  const v1 = config(1, [2, 4]);
+  const v2 = config(2, [3, 6]);
+
+  it("is in sync while the server has the revision the draft started from", () => {
+    expect(
+      reconcileWithServer({
+        base: v1,
+        saved: v1,
+        draft: draftFromSequence(v1),
+        ownSavedRevision: null,
+      }),
+    ).toBe("in_sync");
+    expect(
+      reconcileWithServer({
+        base: undefined,
+        saved: undefined,
+        draft: null,
+        ownSavedRevision: null,
+      }),
+    ).toBe("in_sync");
+  });
+
+  it("follows the server when nothing unsaved would be lost", () => {
+    // An untouched draft.
+    expect(
+      reconcileWithServer({
+        base: v1,
+        saved: v2,
+        draft: draftFromSequence(v1),
+        ownSavedRevision: null,
+      }),
+    ).toBe("adopt_server");
+    // No draft open (the Set up button).
+    expect(
+      reconcileWithServer({ base: undefined, saved: v2, draft: null, ownSavedRevision: null }),
+    ).toBe("adopt_server");
+    // The edits already equal what the server now has.
+    expect(
+      reconcileWithServer({
+        base: v1,
+        saved: v2,
+        draft: draftFromSequence(v2),
+        ownSavedRevision: null,
+      }),
+    ).toBe("adopt_server");
+    // This editor's own save.
+    const edited = updateStep(draftFromSequence(v1), 0, { offsetDays: 1 });
+    expect(reconcileWithServer({ base: v1, saved: v2, draft: edited, ownSavedRevision: 2 })).toBe(
+      "adopt_server",
+    );
+  });
+
+  it("keeps unsaved edits when another admin saved, including over a starter", () => {
+    const edited = updateStep(draftFromSequence(v1), 0, { offsetDays: 1 });
+    expect(
+      reconcileWithServer({ base: v1, saved: v2, draft: edited, ownSavedRevision: null }),
+    ).toBe("keep_draft");
+    expect(reconcileWithServer({ base: v1, saved: v2, draft: edited, ownSavedRevision: 1 })).toBe(
+      "keep_draft",
+    );
+    expect(
+      reconcileWithServer({
+        base: undefined,
+        saved: v2,
+        draft: starterDraft("intake_reminder"),
+        ownSavedRevision: null,
+      }),
+    ).toBe("keep_draft");
+  });
+});
+
+describe("step move focus", () => {
+  it("keeps the same arrow so a second press continues the move", () => {
+    expect(stepMoveFocusTarget(1, -1, 3)).toBe("up");
+    expect(stepMoveFocusTarget(1, 1, 3)).toBe("down");
+  });
+
+  it("switches to the other arrow at the top or bottom, where the same one is disabled", () => {
+    expect(stepMoveFocusTarget(0, -1, 3)).toBe("down");
+    expect(stepMoveFocusTarget(2, 1, 3)).toBe("up");
+  });
+});
+
+describe("cc labels while the member list loads", () => {
+  const members = new Map([[USER_A, { userId: USER_A, name: "Jane Doe" }]]);
+
+  it("says Former member only when the list has loaded", () => {
+    expect(ccRecipientLabel({ kind: "user", userId: STRANGER }, members)).toBe("Former member");
+    expect(ccRecipientLabel({ kind: "user", userId: STRANGER }, members, false)).toBe("Member");
+    expect(ccRecipientLabel({ kind: "user", userId: USER_A }, members, false)).toBe("Jane Doe");
+    expect(ccRecipientLabel({ kind: "role", role: "billing" }, members, false)).toBe(
+      "All billing members",
+    );
+    expect(
+      describeCcList(
+        [
+          { kind: "user", userId: STRANGER },
+          { kind: "role", role: "admin" },
+        ],
+        members,
+        false,
+      ),
+    ).toBe("Member, then All admins");
+  });
+
+  it("does not block a save on membership until the list has loaded", () => {
+    const draft = updateStep(starterDraft("intake_reminder"), 0, {
+      ccRecipients: [{ kind: "user", userId: STRANGER }],
+    });
+    expect(validateDraft("intake_reminder", draft)).toEqual([]);
+    expect(
+      validateDraft("intake_reminder", draft, { memberUserIds: new Set([USER_A]) }).map(
+        (issue) => issue.field,
+      ),
+    ).toEqual(["ccRecipients"]);
+  });
+});
+
+describe("conflict status", () => {
+  it("treats SQLSTATE PT409 as the revision conflict whatever its text", () => {
+    expect(saveErrorMessage("", "PT409")).toMatch(/Someone else saved/);
+    expect(saveErrorMessage("anything", "PT409")).toMatch(/Someone else saved/);
+    expect(saveErrorMessage("anything", "23514")).toMatch(/Couldn't save/);
   });
 });

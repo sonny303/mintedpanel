@@ -15,9 +15,12 @@ import { getNotificationTemplate } from "@/lib/notificationTemplates";
 export function NotificationSequenceSummary({
   config,
   members,
+  membersLoaded = true,
 }: {
   config: NotificationSequenceConfig;
   members: ReadonlyMap<string, CcMemberOption>;
+  /** False while the member list is loading or failed: no "Former member" yet. */
+  membersLoaded?: boolean;
 }) {
   const intake = config.purpose === "intake_reminder";
   const stops = STOP_CONDITIONS.filter((c) => config.stopConditions.includes(c));
@@ -33,7 +36,7 @@ export function NotificationSequenceSummary({
               {` · ${getNotificationTemplate(step.templateKey)?.label ?? step.templateKey}`}
             </div>
             <div className="text-[12px] text-muted-foreground">
-              Cc: {describeCcList(step.ccRecipients, members)}
+              Cc: {describeCcList(step.ccRecipients, members, membersLoaded)}
             </div>
           </li>
         ))}

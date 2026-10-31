@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { errorMessage, toError, translateDbError, UniqueViolationError } from "./dbErrors";
+import {
+  errorMessage,
+  isMissingNotificationSequenceTablesError,
+  toError,
+  translateDbError,
+  UniqueViolationError,
+} from "./dbErrors";
 
 const pgError = (code: string, message: string) => ({ code, message });
 
@@ -237,5 +243,39 @@ describe("toError — PostgREST objects become Error", () => {
 
   it("falls back when the payload has no message", () => {
     expect(errorMessage({ code: "PGRST116" }, "Save failed")).toBe("Save failed");
+  });
+});
+
+describe("isMissingNotificationSequenceTablesError (MINT-107 deploy order)", () => {
+  it("recognises the schema-cache and statement errors for either table", () => {
+    expect(
+      isMissingNotificationSequenceTablesError({
+        code: "PGRST205",
+        message: "Could not find the table 'public.notification_sequences' in the schema cache",
+      }),
+    ).toBe(true);
+    expect(
+      isMissingNotificationSequenceTablesError({
+        code: "42P01",
+        message: 'relation "public.notification_sequence_steps" does not exist',
+      }),
+    ).toBe(true);
+  });
+
+  it("lets every other failure through", () => {
+    expect(
+      isMissingNotificationSequenceTablesError({
+        code: "PGRST205",
+        message: "Could not find the table 'public.contracts' in the schema cache",
+      }),
+    ).toBe(false);
+    expect(
+      isMissingNotificationSequenceTablesError({
+        code: "42501",
+        message: "permission denied for table notification_sequences",
+      }),
+    ).toBe(false);
+    expect(isMissingNotificationSequenceTablesError(new Error("Failed to fetch"))).toBe(false);
+    expect(isMissingNotificationSequenceTablesError(null)).toBe(false);
   });
 });

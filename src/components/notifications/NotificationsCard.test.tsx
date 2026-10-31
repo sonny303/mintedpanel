@@ -19,23 +19,33 @@ import {
 const state = vi.hoisted(() => ({
   isAdmin: true,
   sequences: {} as Record<string, unknown>,
+  unavailable: false,
   isLoading: false,
   isError: false,
   members: [] as unknown[],
+  membersLoaded: true,
   mutate: vi.fn(),
 }));
 
 vi.mock("@/lib/permissions", () => ({ useIsAdmin: () => state.isAdmin }));
 vi.mock("@/hooks/useNotificationSequences", () => ({
   useNotificationSequences: () => ({
-    data: state.sequences,
+    data:
+      state.isLoading || state.isError
+        ? undefined
+        : state.unavailable
+          ? { status: "unavailable" }
+          : { status: "available", sequences: state.sequences },
     isLoading: state.isLoading,
     isError: state.isError,
   }),
   useSaveNotificationSequence: () => ({ mutate: state.mutate, isPending: false }),
 }));
 vi.mock("@/hooks/useOrgSettings", () => ({
-  useMemberships: () => ({ data: state.members }),
+  useMemberships: () => ({
+    data: state.membersLoaded ? state.members : undefined,
+    isSuccess: state.membersLoaded,
+  }),
 }));
 
 import { NotificationCcRecipients } from "./NotificationCcRecipients";
@@ -135,8 +145,10 @@ function editorProps(over: EditorOverrides = {}) {
 beforeEach(() => {
   state.isAdmin = true;
   state.sequences = {};
+  state.unavailable = false;
   state.isLoading = false;
   state.isError = false;
+  state.membersLoaded = true;
   state.members = [
     {
       id: "m-1",
@@ -346,5 +358,112 @@ describe("NotificationCcRecipients: filling an empty cc list", () => {
     );
     expect(html).not.toContain("No one is cc&#x27;d");
     expect(html).toContain("1.</span>");
+  });
+});
+
+describe("NotificationsCard: before the migration is applied", () => {
+  it("says the settings are not switched on yet, with no Set up and no error box", () => {
+    state.unavailable = true;
+    const html = renderToStaticMarkup(<NotificationsCard />);
+    expect(html).toContain(
+      "Notification settings will appear here once they&#x27;re switched on for your organization.",
+    );
+    expect(html).not.toContain("Set up");
+    expect(html).not.toContain("couldn&#x27;t load");
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("Provider intake reminders");
+  });
+
+  it("keeps the red box for a real load failure", () => {
+    state.isError = true;
+    const html = renderToStaticMarkup(<NotificationsCard />);
+    expect(html).toContain("We couldn&#x27;t load this organization&#x27;s notification settings.");
+    expect(html).not.toContain("switched on for your organization");
+  });
+});
+
+describe("NotificationsCard: cc'd users while the member list loads", () => {
+  const STRANGER = "99999999-9999-4999-8999-999999999999";
+  function withStrangerCc() {
+    const config = intakeConfig();
+    config.steps[0].ccRecipients = [{ kind: "user", userId: STRANGER }];
+    state.sequences = { intake_reminder: config };
+  }
+
+  it("shows a neutral Member and no membership error until members have loaded", () => {
+    withStrangerCc();
+    state.membersLoaded = false;
+    const html = renderToStaticMarkup(<NotificationsCard />);
+    expect(html).not.toContain("Former member");
+    expect(html).toContain('aria-label="Remove Member from step 1"');
+    expect(html).not.toContain("no longer a member");
+  });
+
+  it("names a former member and blocks Save once members have loaded", () => {
+    withStrangerCc();
+    const html = renderToStaticMarkup(<NotificationsCard />);
+    expect(html).toContain("Former member");
+    expect(html).toContain(
+      "Step 1 cc&#x27;s someone who is no longer a member. Remove them to save.",
+    );
+  });
+
+  it("does the same in the read-only summary", () => {
+    withStrangerCc();
+    state.isAdmin = false;
+    state.membersLoaded = false;
+    expect(renderToStaticMarkup(<NotificationsCard />)).toContain("Cc: Member");
+    state.membersLoaded = true;
+    expect(renderToStaticMarkup(<NotificationsCard />)).toContain("Cc: Former member");
+  });
+});
+
+describe("NotificationSequenceEditor: concurrent edits and keyboard moves", () => {
+  it("keeps the draft and says so when another admin saved", () => {
+    const html = renderToStaticMarkup(
+      <NotificationSequenceEditor {...editorProps({ staleNotice: true, dirty: true })} />,
+    );
+    expect(html).toContain(
+      "Another admin saved changes. Reload to see them; your edits aren&#x27;t saved.",
+    );
+    expect(html).toContain('role="status"');
+    expect(renderToStaticMarkup(<NotificationSequenceEditor {...editorProps()} />)).not.toContain(
+      "Another admin saved changes",
+    );
+  });
+
+  it("moves focus to the destination slot's arrow and announces the move", () => {
+    const focused: string[] = [];
+    vi.stubGlobal("window", { requestAnimationFrame: (cb: () => void) => cb() });
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => ({ focus: () => focused.push(id) }),
+    });
+    try {
+      const props = { ...editorProps(), onAnnounce: vi.fn<(message: string) => void>() };
+      const tree = NotificationSequenceEditor(props);
+      (byLabel(tree, "Move step 3 up").props.onClick as () => void)();
+      expect(focused).toEqual(["notifications-intake_reminder-step-2-move-up"]);
+      expect(props.onAnnounce).toHaveBeenLastCalledWith("Moved to step 2");
+
+      // At the top the up arrow is disabled, so focus lands on down.
+      (byLabel(tree, "Move step 2 up").props.onClick as () => void)();
+      expect(focused.at(-1)).toBe("notifications-intake_reminder-step-1-move-down");
+      expect(props.onAnnounce).toHaveBeenLastCalledWith("Moved to step 1");
+
+      // At the bottom the down arrow is disabled, so focus lands on up.
+      (byLabel(tree, "Move step 2 down").props.onClick as () => void)();
+      expect(focused.at(-1)).toBe("notifications-intake_reminder-step-3-move-up");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("renders the announcement in a polite live region and ids on every arrow", () => {
+    const html = renderToStaticMarkup(
+      <NotificationSequenceEditor {...editorProps({ announcement: "Moved to step 2" })} />,
+    );
+    expect(html).toMatch(/<p aria-live="polite" class="sr-only">Moved to step 2<\/p>/);
+    expect(html).toContain('id="notifications-intake_reminder-step-2-move-up"');
+    expect(html).toContain('id="notifications-intake_reminder-step-2-move-down"');
   });
 });

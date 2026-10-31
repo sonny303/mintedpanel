@@ -1,7 +1,13 @@
 // MINT-107 — the admin editor for one purpose's notification sequence. It is
-// controlled: the section owns the draft, every change here goes through the
-// pure helpers in src/lib/notificationSequences.ts, and nothing is saved until
-// the admin presses Save.
+// controlled and holds no state of its own: the section owns the draft and
+// the live-region message, every change here goes through the pure helpers
+// in src/lib/notificationSequences.ts, and nothing is saved until the admin
+// presses Save.
+//
+// Step slots are keyed by position, because the offset belongs to the slot.
+// Moving a step's message therefore leaves focus in the old slot, so after a
+// move the handler focuses the same arrow in the destination slot (or the
+// other arrow at the top or bottom) and announces "Moved to step N".
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { AddButton } from "@/components/providers/RecordSectionCard";
 import { Button } from "@/components/ui/button";
@@ -26,6 +32,7 @@ import {
   addStep,
   moveStep,
   removeStep,
+  stepMoveFocusTarget,
   updateStep,
   type CcMemberOption,
   type SequenceDraft,
@@ -45,6 +52,12 @@ function parseWholeNumber(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Focus an element after React has committed the next render. Not a hook. */
+function focusAfterRender(id: string) {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  window.requestAnimationFrame(() => document.getElementById(id)?.focus());
+}
+
 function IssueText({ issues }: { issues: SequenceIssue[] }) {
   if (issues.length === 0) return null;
   return (
@@ -61,11 +74,18 @@ export interface NotificationSequenceEditorProps {
   draft: SequenceDraft;
   issues: SequenceIssue[];
   members: ReadonlyMap<string, CcMemberOption>;
+  /** False while the member list is loading or failed. */
+  membersLoaded?: boolean;
   /** No row exists yet: the draft is the starter. */
   isNew: boolean;
   dirty: boolean;
   saving: boolean;
+  /** Another admin saved while this draft had unsaved edits. */
+  staleNotice?: boolean;
+  /** The polite live-region text, e.g. "Moved to step 2". */
+  announcement?: string;
   onChange: (draft: SequenceDraft) => void;
+  onAnnounce?: (message: string) => void;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -75,22 +95,45 @@ export function NotificationSequenceEditor({
   draft,
   issues,
   members,
+  membersLoaded = true,
   isNew,
   dirty,
   saving,
+  staleNotice = false,
+  announcement = "",
   onChange,
+  onAnnounce,
   onSave,
   onCancel,
 }: NotificationSequenceEditorProps) {
   const rules = PURPOSE_RULES[purpose];
   const templates = selectableTemplates(purpose);
   const idPrefix = `notifications-${purpose}`;
+  const arrowId = (index: number, arrow: "up" | "down") =>
+    `${idPrefix}-step-${index + 1}-move-${arrow}`;
+  const move = (index: number, direction: -1 | 1) => {
+    const dest = index + direction;
+    onChange(moveStep(draft, index, direction));
+    onAnnounce?.(`Moved to step ${dest + 1}`);
+    focusAfterRender(arrowId(dest, stepMoveFocusTarget(dest, direction, draft.steps.length)));
+  };
   const sequenceIssues = (field: SequenceIssue["field"]) =>
     issues.filter((issue) => issue.stepIndex == null && issue.field === field);
   const usesSms = draft.steps.some((step) => step.channel === "sms");
 
   return (
     <div className="space-y-4">
+      {staleNotice ? (
+        <p
+          role="status"
+          className="rounded-md border border-[var(--mp-warn-tint)] bg-[var(--mp-warn-tint)] px-3 py-2 text-[13px] text-[var(--mp-warn-ink)]"
+        >
+          Another admin saved changes. Reload to see them; your edits aren't saved.
+        </p>
+      ) : null}
+      <p aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
       <div className="flex items-center gap-3">
         <Switch
           id={`${idPrefix}-enabled`}
@@ -118,23 +161,25 @@ export function NotificationSequenceEditor({
                   <div className="flex items-center">
                     <Button
                       type="button"
+                      id={arrowId(index, "up")}
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
                       aria-label={`Move step ${n} up`}
                       disabled={index === 0}
-                      onClick={() => onChange(moveStep(draft, index, -1))}
+                      onClick={() => move(index, -1)}
                     >
                       <ArrowUp />
                     </Button>
                     <Button
                       type="button"
+                      id={arrowId(index, "down")}
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
                       aria-label={`Move step ${n} down`}
                       disabled={index === draft.steps.length - 1}
-                      onClick={() => onChange(moveStep(draft, index, 1))}
+                      onClick={() => move(index, 1)}
                     >
                       <ArrowDown />
                     </Button>
@@ -242,6 +287,7 @@ export function NotificationSequenceEditor({
                 step={step}
                 stepNumber={n}
                 members={members}
+                membersLoaded={membersLoaded}
                 bounceNote={purpose === "intake_reminder" && index === 0}
                 onChange={(next) => onChange(updateStep(draft, index, next))}
               />

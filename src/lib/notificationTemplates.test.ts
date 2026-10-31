@@ -15,7 +15,7 @@ import {
 import { starterDraft } from "./notificationSequences";
 
 const MIGRATION = readFileSync(
-  "supabase/migrations/20261031130000_notification_sequences.sql",
+  "supabase/migrations/20261031051500_notification_sequences.sql",
   "utf8",
 );
 
