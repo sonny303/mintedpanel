@@ -1873,6 +1873,82 @@ export type Database = {
         };
         Relationships: [];
       };
+      notification_org_slots: {
+        Row: {
+          completed_at: string;
+          job: string;
+          org_id: string;
+          slot: string;
+        };
+        Insert: {
+          completed_at?: string;
+          job: string;
+          org_id: string;
+          slot: string;
+        };
+        Update: {
+          completed_at?: string;
+          job?: string;
+          org_id?: string;
+          slot?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_org_slots_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notification_sends: {
+        Row: {
+          claimed_at: string;
+          error_code: string | null;
+          finished_at: string | null;
+          id: string;
+          job: string;
+          org_id: string;
+          outcome: string;
+          provider_message_id: string | null;
+          recipient_user_id: string;
+          slot: string;
+        };
+        Insert: {
+          claimed_at?: string;
+          error_code?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          job: string;
+          org_id: string;
+          outcome?: string;
+          provider_message_id?: string | null;
+          recipient_user_id: string;
+          slot: string;
+        };
+        Update: {
+          claimed_at?: string;
+          error_code?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          job?: string;
+          org_id?: string;
+          outcome?: string;
+          provider_message_id?: string | null;
+          recipient_user_id?: string;
+          slot?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_sends_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       notification_sequence_default_steps: {
         Row: {
           channel: string;
@@ -4765,12 +4841,34 @@ export type Database = {
         Args: { p_job: string; p_run_key: string };
         Returns: string;
       };
+      claim_notification_send: {
+        Args: {
+          p_job: string;
+          p_org_id: string;
+          p_recipient_user_id: string;
+          p_slot: string;
+        };
+        Returns: Json;
+      };
+      complete_notification_org_slot: {
+        Args: { p_job: string; p_org_id: string; p_slot: string };
+        Returns: boolean;
+      };
       finish_job_run: {
         Args: {
           p_counts: Json;
           p_error_code?: string;
           p_id: string;
           p_outcome: string;
+        };
+        Returns: boolean;
+      };
+      finish_notification_send: {
+        Args: {
+          p_error_code?: string;
+          p_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
         };
         Returns: boolean;
       };

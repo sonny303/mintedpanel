@@ -9,5 +9,11 @@
       "VITE_ENABLE_EXACT_WORK_V2": "true",
       "NITRO_PRESET": "vercel"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/jobs/followup-digest",
+      "schedule": "0 18 * * *"
+    }
+  ]
 }

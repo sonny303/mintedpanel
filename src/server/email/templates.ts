@@ -2,11 +2,23 @@
 // and supplies its typed data; it can never pass a free-form subject or body.
 // sendgrid.ts consumes only the rendered { subject, text, html }, so moving
 // the wording out of git later changes this file and nothing else.
+//
+// A type-only import is erased before Node runs the email CLI, so it keeps
+// this module's relative-`.ts`-only rule.
+import type {
+  FollowUpDigestEmailData,
+  FollowUpDigestRow,
+  FollowUpDigestSection,
+} from "../../lib/followUpDigest.ts";
 
 export interface TemplateDataMap {
   test: { practiceName: string };
   provider_invitation: { practiceName: string; firstName: string; link: string };
   intake_code: { practiceName: string; code: string };
+  // MINT-108: the daily coordinator follow-up digest. The key is the
+  // catalog's (src/lib/notificationTemplates.ts); the data is built by
+  // planFollowUpDigests (src/lib/followUpDigest.ts).
+  followup_digest_daily: FollowUpDigestEmailData;
 }
 
 // Canvas board 2. The canvas's reassurance line is placeholder copy (Q3), so
@@ -45,6 +57,105 @@ export function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "Oct 31, 2026" (the app's fmtDate spelling) for a YYYY-MM-DD date, read as a
+// calendar date so no time zone can move it. Anything else comes back as it
+// was, HTML-escaped, so the result is safe in either part.
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const month = MONTHS[m - 1];
+  return month && Number.isInteger(y) && Number.isInteger(d)
+    ? `${month} ${d}, ${y}`
+    : escapeHtml(iso);
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function sectionSummary(section: FollowUpDigestSection): string {
+  return `${section.overdue} overdue, ${section.dueToday} due today`;
+}
+
+// The status alone. An at-risk line ("submitted N days ago") waits for
+// MINT-111, which gives payers a decision time from their closed cases.
+function statusLabel(row: FollowUpDigestRow): string {
+  return row.status === "overdue" ? "Overdue" : "Due today";
+}
+
+function rowText(row: FollowUpDigestRow): string {
+  const parts = [
+    `C-${row.caseNumber}`,
+    plainInline(row.providerName),
+    plainInline(row.payerName),
+    `due ${formatDay(row.dueDate)}`,
+    statusLabel(row),
+  ];
+  return `- ${parts.join(" · ")}\n  ${row.caseLink}`;
+}
+
+function rowHtml(row: FollowUpDigestRow): string {
+  return [
+    "<tr>",
+    `<td><a href="${escapeHtml(row.caseLink)}">C-${row.caseNumber}</a></td>`,
+    `<td>${escapeHtml(row.providerName)}</td>`,
+    `<td>${escapeHtml(row.payerName)}</td>`,
+    `<td>${formatDay(row.dueDate)}</td>`,
+    `<td>${statusLabel(row)}</td>`,
+    "</tr>",
+  ].join("");
+}
+
+const ROW_HEADER =
+  '<tr><th align="left">Case</th><th align="left">Provider</th><th align="left">Payer</th><th align="left">Follow-up due</th><th align="left">Status</th></tr>';
+
+function moreLine(section: FollowUpDigestSection): string | null {
+  return section.more > 0
+    ? `And ${plural(section.more, "more follow-up", "more follow-ups")} in Work.`
+    : null;
+}
+
+// One coordinator's own follow-ups (MINT-108). Nobody else gets a copy: the
+// digest has no cc list, and unassigned follow-ups go to no one.
+function followUpDigest(data: FollowUpDigestEmailData): RenderedEmail {
+  const day = formatDay(data.digestDate);
+  const section = data.followUps;
+  const more = moreLine(section);
+  const name = data.recipientFirstName;
+  const practice = data.practiceName.trim();
+  // `day` is already HTML-safe (formatDay), so the intro is not escaped again.
+  const intro = `Here are your follow-ups due on ${day}, and the ones that are overdue.`;
+  const footer =
+    "You get this email because your organization turned on the daily follow-up digest.";
+  return {
+    subject: `Your follow-ups for ${day}: ${sectionSummary(section)}`,
+    text: [
+      name ? `Hi ${plainInline(name)},` : "Hi,",
+      intro,
+      [
+        `YOUR FOLLOW-UPS (${sectionSummary(section)})`,
+        ...section.rows.map(rowText),
+        ...(more ? [more] : []),
+      ].join("\n"),
+      `Open Work: ${data.workQueueLink}`,
+      footer,
+      ...(practice ? [`${plainInline(practice)} via Minted Panel`] : []),
+    ].join("\n\n"),
+    html: [
+      `<p>${name ? `Hi ${escapeHtml(name)},` : "Hi,"}</p>`,
+      `<p>${intro}</p>`,
+      "<h3>Your follow-ups</h3>",
+      `<p>${escapeHtml(sectionSummary(section))}.</p>`,
+      `<table cellpadding="4" cellspacing="0">${ROW_HEADER}${section.rows.map(rowHtml).join("")}</table>`,
+      ...(more ? [`<p>${escapeHtml(more)}</p>`] : []),
+      `<p><a href="${escapeHtml(data.workQueueLink)}">Open Work</a></p>`,
+      `<p>${escapeHtml(footer)}</p>`,
+      ...(practice ? [`<p>${escapeHtml(practice)} via Minted Panel</p>`] : []),
+    ].join(""),
+  };
 }
 
 export const TEMPLATES: { [K in TemplateKey]: (data: TemplateDataMap[K]) => RenderedEmail } = {
@@ -87,4 +198,5 @@ export const TEMPLATES: { [K in TemplateKey]: (data: TemplateDataMap[K]) => Rend
     text: `Your code is ${code}. It expires in 10 minutes.\n\nIf you didn't ask for a code, you can ignore this email.`,
     html: `<p>Your code is <strong>${escapeHtml(code)}</strong>. It expires in 10 minutes.</p><p>If you didn't ask for a code, you can ignore this email.</p>`,
   }),
+  followup_digest_daily: followUpDigest,
 };

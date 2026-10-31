@@ -392,6 +392,9 @@ jobs:
       - name: Run MINT-107 notification sequences SQL packet
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint107-notification-sequences.sql
 
+      - name: Run MINT-108 notification sends SQL packet
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/mint108-notification-sends.sql
+
       - name: Verify portal field-map flywheel RPC on disposable PostgreSQL
         run: node scripts/security/verify-portal-field-map-learning.mjs
 

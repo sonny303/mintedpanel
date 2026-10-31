@@ -11,6 +11,7 @@ import {
   getNotificationTemplate,
   purposeHasCcList,
   selectableTemplates,
+  templateSendProblem,
   templateSupportsChannel,
   type NotificationTemplateEntry,
 } from "./notificationTemplates";
@@ -133,5 +134,52 @@ describe("notification template catalog", () => {
     expect(catalogViolations([{ ...digest, ccFields: ["practiceName"] }])).toEqual([
       "followup_digest_daily: followup_digest has no cc list, so it renders no cc copy",
     ]);
+  });
+
+  it("applies the consumer contract to a saved step: exists, purpose, selectable, channel", () => {
+    expect(templateSendProblem("followup_digest", "followup_digest_daily", "email")).toBeNull();
+    expect(templateSendProblem("followup_digest", "followup_digest_weekly", "email")).toBe(
+      "unknown_template",
+    );
+    expect(templateSendProblem("followup_digest", "intake_reminder_first", "email")).toBe(
+      "wrong_purpose",
+    );
+    expect(templateSendProblem("intake_reminder", INTAKE_BOUNCE_NOTICE_TEMPLATE, "email")).toBe(
+      "not_selectable",
+    );
+    expect(templateSendProblem("followup_digest", "followup_digest_daily", "sms")).toBe(
+      "channel_unsupported",
+    );
+  });
+
+  it("lets the digest render a coordinator's own rows, with no at-risk or team field", () => {
+    const digest = getNotificationTemplate("followup_digest_daily");
+    expect(digest?.recipientFields).toEqual([
+      "practiceName",
+      "recipientFirstName",
+      "digestDate",
+      "followUpCount",
+      "overdueFollowUpCount",
+      "dueTodayFollowUpCount",
+      "workQueueLink",
+      "caseNumber",
+      "caseLink",
+      "providerFullName",
+      "payerName",
+      "followUpDueDate",
+      "followUpStatus",
+    ]);
+    // Sowmya, Oct 30: no at-risk flag until MINT-111, and nothing for anyone
+    // but the coordinator (no cc copy, no other coordinator's counts).
+    for (const gone of [
+      "atRiskFollowUpCount",
+      "daysSinceSubmission",
+      "payerDecisionDays",
+      "coordinatorName",
+    ]) {
+      expect(digest?.recipientFields as readonly string[]).not.toContain(gone);
+    }
+    expect(digest?.ccFields).toEqual([]);
+    expect(digest?.recipientFields).not.toContain("intakeLink");
   });
 });

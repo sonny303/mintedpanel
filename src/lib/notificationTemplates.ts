@@ -1,9 +1,10 @@
 // MINT-107 — the closed catalog of notification templates a sequence step may
 // name. It lives in src/lib because the Settings card (a browser bundle) picks
-// from it and the browser cannot import src/server. No template BODY exists
-// yet: the server PRs that send these messages add each key to
-// src/server/email/templates.ts (and an SMS text registry) and assert there
-// that every catalog key below is registered.
+// from it and the browser cannot import src/server. A template's BODY lives
+// in src/server/email/templates.ts (and, later, an SMS text registry) under
+// the same key, added by the PR that sends it: the follow-up digest's
+// (MINT-108) is there, with a test that every digest key below is
+// registered; the intake reminders' wait for their sender (MINT-109).
 //
 // THE CC RULE (MINT-107 decision 4). A copy sent to a step's cc list is an
 // escalation to staff, so it must never carry a provider's SSN, date of birth
@@ -48,7 +49,16 @@ export type NotificationTemplateField =
   | "intakeLink"
   | "followUpCount"
   | "overdueFollowUpCount"
-  | "workQueueLink";
+  | "workQueueLink"
+  // MINT-108: the daily follow-up digest's rows. No at-risk fields until
+  // MINT-111 gives payers a real decision time.
+  | "digestDate"
+  | "dueTodayFollowUpCount"
+  | "caseNumber"
+  | "caseLink"
+  | "payerName"
+  | "followUpDueDate"
+  | "followUpStatus";
 
 export interface NotificationTemplateEntry {
   /** Registered later under the same key in src/server/email/templates.ts. */
@@ -92,6 +102,24 @@ const INTAKE_CC_FIELDS: readonly NotificationTemplateField[] = [
   "inviteSentOn",
   "targetReadyDate",
   "startDate",
+];
+
+// What one digest row and its headings render (MINT-108). The provider's
+// display name is the only provider data; a touch's note never appears.
+const DIGEST_ROW_FIELDS: readonly NotificationTemplateField[] = [
+  "practiceName",
+  "recipientFirstName",
+  "digestDate",
+  "followUpCount",
+  "overdueFollowUpCount",
+  "dueTodayFollowUpCount",
+  "workQueueLink",
+  "caseNumber",
+  "caseLink",
+  "providerFullName",
+  "payerName",
+  "followUpDueDate",
+  "followUpStatus",
 ];
 
 export const NOTIFICATION_TEMPLATES: readonly NotificationTemplateEntry[] = [
@@ -157,13 +185,10 @@ export const NOTIFICATION_TEMPLATES: readonly NotificationTemplateEntry[] = [
     // A list of follow-ups does not fit in a text, so the digest has no SMS
     // body. Adding one is a catalog change, not a migration.
     channels: ["email"],
-    recipientFields: [
-      "practiceName",
-      "recipientFirstName",
-      "followUpCount",
-      "overdueFollowUpCount",
-      "workQueueLink",
-    ],
+    // The coordinator's own email: each of their cases with a follow-up due
+    // today or overdue. The at-risk flag waits for MINT-111 (decision time
+    // from closed cases).
+    recipientFields: DIGEST_ROW_FIELDS,
     // Coordinators only: the digest has no cc list, so no cc copy.
     ccFields: [],
     selectable: true,
@@ -184,6 +209,31 @@ export function selectableTemplates(purpose: NotificationPurpose): NotificationT
 
 export function templateSupportsChannel(key: string, channel: NotificationChannel): boolean {
   return getNotificationTemplate(key)?.channels.includes(channel) ?? false;
+}
+
+/** Why a saved step's template cannot be sent, per the consumer contract. */
+export type TemplateSendProblem =
+  "unknown_template" | "wrong_purpose" | "not_selectable" | "channel_unsupported";
+
+/**
+ * The consumer contract for a sender (MINT-107, src/lib/notificationSequences.ts):
+ * before rendering a step, its template_key must name a catalog entry that
+ * exists, belongs to the sequence's purpose, is selectable and supports the
+ * step's channel. Null means the step may be sent; anything else is skipped
+ * and counted, never sent. The database checks only the key's format and
+ * purpose prefix, so a directly written row can fail every one of these.
+ */
+export function templateSendProblem(
+  purpose: NotificationPurpose,
+  key: string,
+  channel: NotificationChannel,
+): TemplateSendProblem | null {
+  const entry = getNotificationTemplate(key);
+  if (!entry) return "unknown_template";
+  if (entry.purpose !== purpose) return "wrong_purpose";
+  if (!entry.selectable) return "not_selectable";
+  if (!entry.channels.includes(channel)) return "channel_unsupported";
+  return null;
 }
 
 /** The fields a cc'd copy of this template may render. */

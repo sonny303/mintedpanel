@@ -106,6 +106,7 @@ Document this at the top of `sendgrid.ts` and in CLAUDE.md:
 
 - **At-least-once.** SendGrid `/mail/send` has no idempotency key. Callers persist the code or invite attempt before sending, rate-limit, and never regenerate or resend on a retried request.
 - **Audit.** Callers write the "email sent" audit row through their own `ctx.writeAudit`, with org, entity, template key and `messageId`, never the recipient or body.
+- **Scheduled jobs.** A scheduled job has no actor for `audit_log`. The follow-up digest job (MINT-108, `src/server/jobs/followupDigestRun.ts`) records each send in `notification_sends` instead: org, recipient user id, slot (the org's local date) and `messageId`, never the address or body. It claims the send there before calling `sendEmail` and never resends a claimed one. Only `misconfigured`, `invalid_input` and a `provider_rejected` with a 4xx status other than 408 count as "nothing was accepted" and may be retried. A `network` error, or a `provider_rejected` with a 5xx or 408, may have been delivered, so it stays claimed. `sendEmail` itself is unchanged: it still throws `provider_rejected` with the status for every non-2xx.
 - **Sender domain.** `SENDGRID_FROM_EMAIL` must be on Minted's SendGrid-authenticated (DMARC-aligned) domain. The practice appears only in the display name and the reply-to.
 
 ## CLI

@@ -7,7 +7,10 @@
 //   code or invite attempt before sending, rate-limit, and never regenerate or
 //   resend on a retried request.
 // - The caller writes the "email sent" audit row with its own org context
-//   (template key + messageId, never the recipient or body).
+//   (template key + messageId, never the recipient or body). A scheduled job
+//   has no actor for audit_log, so it records each send in notification_sends
+//   instead (src/server/jobs/notificationSends.ts): org, recipient user id,
+//   slot and messageId, never the address or body.
 // - Map EmailError kind "misconfigured" to 500, never 401.
 //
 // This module logs nothing. Tracking is always off: click tracking would
