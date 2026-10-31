@@ -1,15 +1,22 @@
 // E6.3 — the grid's trust invariant: every provider × target lands in exactly
 // one bucket and the buckets always sum; skip-for-now is selection-only (no
 // persistence, no reason); the reconciliation line matches the epic's wording.
+// MINT-97 — a blocked candidate is its own bucket inside the denominator.
 import { describe, expect, it } from "vitest";
 import {
   bucketGridRows,
   filterGridRows,
   groupGridRows,
+  inGridScope,
   reconcileGrid,
   splitGridSelection,
+  type GridBlocker,
 } from "@/lib/generationGrid";
-import type { GenerationPreviewRow, PreviewDisposition } from "@/lib/generationPreview";
+import {
+  previewRowKey,
+  type GenerationPreviewRow,
+  type PreviewDisposition,
+} from "@/lib/generationPreview";
 
 const row = (
   payerId: string,
@@ -44,6 +51,12 @@ const liveFact = (payerId: string) => ({
   expiredAt: null,
 });
 
+// payer id → blocker, keyed the way the grid keys rows.
+const blockersFor = (entries: Record<string, GridBlocker>) =>
+  new Map(
+    Object.entries(entries).map(([payerId, b]) => [previewRowKey(row(payerId, "proposed")), b]),
+  );
+
 // The gherkin state: 7 targets — 4 candidates, 2 enrolled by fact, 1 excluded.
 function gherkinRows() {
   return bucketGridRows(
@@ -67,6 +80,17 @@ describe("bucketGridRows", () => {
       [liveFact("a"), liveFact("b"), liveFact("c")],
     );
     expect(rows.map((r) => r.bucket)).toEqual(["enrolled", "existing", "excluded"]);
+  });
+
+  it("a blocker buckets a proposed row blocked; a live fact still wins over it", () => {
+    const blockers = blockersFor({ a: "unmatched", b: "gated", c: "ambiguous" });
+    const rows = bucketGridRows(
+      [row("a", "proposed"), row("b", "proposed"), row("c", "proposed"), row("d", "existing")],
+      [liveFact("b")],
+      blockers,
+    );
+    expect(rows.map((r) => r.bucket)).toEqual(["blocked", "enrolled", "blocked", "existing"]);
+    expect(rows.map((r) => r.blocker)).toEqual(["unmatched", undefined, "ambiguous", undefined]);
   });
 
   it("an expired fact never buckets a row enrolled", () => {
@@ -103,6 +127,44 @@ describe("reconcileGrid — the sum invariant", () => {
   });
 });
 
+describe("reconcileGrid — blocked candidates (MINT-97)", () => {
+  it("counts a no-SOP candidate beside an existing case — 2 of 2, never 1 of 1", () => {
+    // The Oct 19 pass: one existing case + one candidate with no matching SOP.
+    const rows = bucketGridRows(
+      [row("p1", "existing"), row("p2", "proposed")],
+      [],
+      blockersFor({ p2: "unmatched" }),
+    );
+    const result = reconcileGrid(rows, new Set());
+    expect(result.line).toBe("Create 0 · 1 blocked · 1 existing — 2 of 2 accounted for");
+    expect(result.blocked).toBe(1);
+    expect(result.total).toBe(2);
+  });
+
+  it("names the blocked bucket in the gherkin line and the sum still reconciles", () => {
+    const rows = bucketGridRows(
+      [
+        row("p1", "proposed"),
+        row("p2", "proposed"),
+        row("p3", "proposed"),
+        row("p4", "proposed"),
+        row("p5", "proposed"),
+        row("p6", "proposed"),
+        row("p7", "excluded"),
+        row("p8", "proposed"),
+      ],
+      [liveFact("p5"), liveFact("p6")],
+      blockersFor({ p8: "gated" }),
+    );
+    const selected = new Set(rows.filter((r) => r.bucket === "candidate").map((r) => r.key));
+    const all = reconcileGrid(rows, selected);
+    expect(all.line).toBe("Create 4 · 1 blocked · 1 excluded · 2 enrolled — 8 of 8 accounted for");
+    expect(
+      all.create + all.skipped + all.blocked + all.excluded + all.enrolled + all.existing,
+    ).toBe(all.total);
+  });
+});
+
 describe("splitGridSelection", () => {
   it("splits candidates by selection and the other buckets verbatim", () => {
     const rows = gherkinRows();
@@ -114,6 +176,40 @@ describe("splitGridSelection", () => {
     expect(split.enrolledRows).toHaveLength(2);
     expect(split.excludedRows).toHaveLength(1);
     expect(split.existingRows).toHaveLength(0);
+  });
+
+  it("a blocked row rides none of the confirm inputs and is never a check-all key", () => {
+    const rows = bucketGridRows(
+      [row("a", "proposed"), row("b", "proposed")],
+      [],
+      blockersFor({ b: "unmatched" }),
+    );
+    const split = splitGridSelection(rows, new Set(rows.map((r) => r.key)));
+    const confirmed = [
+      ...split.selectedRows,
+      ...split.skippedRows,
+      ...split.enrolledRows,
+      ...split.existingRows,
+      ...split.excludedRows,
+    ];
+    expect(confirmed.map((r) => r.payerId)).toEqual(["a"]);
+    expect(groupGridRows(rows, "provider")[0].candidateKeys).toEqual([rows[0].key]);
+  });
+
+  it("a blocked row covered by a live fact lands only in enrolledRows — never created or blocked", () => {
+    const rows = bucketGridRows(
+      [row("a", "proposed")],
+      [liveFact("a")],
+      blockersFor({ a: "unmatched" }),
+    );
+    expect(rows[0].bucket).toBe("enrolled");
+    const split = splitGridSelection(rows, new Set(rows.map((r) => r.key)));
+    expect(split.enrolledRows.map((r) => r.payerId)).toEqual(["a"]);
+    expect(split.selectedRows).toHaveLength(0);
+    expect(split.skippedRows).toHaveLength(0);
+    expect(split.existingRows).toHaveLength(0);
+    expect(split.excludedRows).toHaveLength(0);
+    expect(reconcileGrid(rows, new Set()).blocked).toBe(0);
   });
 });
 
@@ -158,5 +254,14 @@ describe("filterGridRows — scoped entries", () => {
     const providerFacilities = new Map([["prov1", new Set(["f1"])]]);
     expect(filterGridRows(rows, { facilityId: "f1" }, providerFacilities)).toHaveLength(2);
     expect(filterGridRows(rows, { facilityId: "f2" }, providerFacilities)).toHaveLength(0);
+  });
+
+  it("scopes a skip-shaped row (the banners beside the grid) by the same rule", () => {
+    const skip = { providerId: "prov1", groupId: "g1", payerId: "a" };
+    expect(inGridScope(skip, { groupId: "g1" })).toBe(true);
+    expect(inGridScope(skip, { groupId: "g2" })).toBe(false);
+    expect(inGridScope(skip, { providerId: "prov2" })).toBe(false);
+    // A provider with no facility assignment is outside any facility scope.
+    expect(inGridScope(skip, { facilityId: "f1" }, new Map())).toBe(false);
   });
 });
