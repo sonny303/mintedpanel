@@ -352,4 +352,35 @@ describe("evaluateRosterSource", () => {
       ]),
     );
   });
+
+  it("keeps the digit-count rule for stored phones: a note beside 10 digits still exports (MINT-91)", () => {
+    const phoneTemplate: RosterTemplate = {
+      ...template,
+      columns: [
+        ...template.columns,
+        { key: "phone", header: "Practice phone", required: false, targetType: "phone" },
+      ],
+    };
+    const row = {
+      ...validSourceRow,
+      facility: { ...validSourceRow.facility, phone: "252-555-0100 main" },
+    };
+    for (const transform of [null, "phone_strip"] as const) {
+      const result = evaluate(
+        [],
+        {
+          columnAssignments: [
+            ...baseMapping.columnAssignments,
+            { columnKey: "phone", sourceField: "facility.phone", transform },
+          ],
+        },
+        [row],
+        phoneTemplate,
+      );
+      expect(
+        result.validation.issues.filter((issue) => issue.ruleCode === "phone_invalid"),
+        String(transform),
+      ).toEqual([]);
+    }
+  });
 });

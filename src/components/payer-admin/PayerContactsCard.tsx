@@ -31,6 +31,7 @@ import {
   useUpsertPayerContact,
 } from "@/hooks/usePayerContacts";
 import { useIsAdmin } from "@/lib/permissions";
+import { US_PHONE_MESSAGE, isValidUsPhone } from "@/lib/phone";
 import type { Payer, PayerContact, PayerContactPurpose } from "@/types";
 
 const PURPOSES: PayerContactPurpose[] = ["credentialing", "enrollment", "escalation", "general"];
@@ -70,6 +71,7 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState<ContactDraft>(EMPTY_CONTACT);
   const [formError, setFormError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const contacts = contactsQ.data ?? [];
   const pending = upsertMut.isPending || deleteMut.isPending;
@@ -78,11 +80,13 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
     setFormOpen(false);
     setDraft(EMPTY_CONTACT);
     setFormError(null);
+    setPhoneError(null);
   };
 
   const updateReachability = (patch: Pick<ContactDraft, "email"> | Pick<ContactDraft, "phone">) => {
     const nextDraft = { ...draft, ...patch };
     setDraft(nextDraft);
+    if ("phone" in patch) setPhoneError(null);
     if (nextDraft.email.trim() || nextDraft.phone.trim()) {
       setFormError((current) => (current === REACHABILITY_ERROR ? null : current));
     }
@@ -93,6 +97,11 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
     // the obviously-incomplete path.
     if (draft.email.trim() === "" && draft.phone.trim() === "") {
       setFormError(REACHABILITY_ERROR);
+      return;
+    }
+    // MINT-91: an entered phone must be a US number (this form only adds).
+    if (draft.phone.trim() && !isValidUsPhone(draft.phone)) {
+      setPhoneError(`${US_PHONE_MESSAGE}.`);
       return;
     }
     setFormError(null);
@@ -212,8 +221,15 @@ export function PayerContactsCard({ payer }: { payer: Payer }) {
                 value={draft.phone}
                 onChange={(e) => updateReachability({ phone: e.target.value })}
                 placeholder="555-555-0100"
+                aria-invalid={phoneError ? true : undefined}
+                aria-describedby={phoneError ? "contact-phone-error" : undefined}
                 className="h-9"
               />
+              {phoneError ? (
+                <p id="contact-phone-error" role="alert" className="text-[12.5px] text-[#B91C1C]">
+                  {phoneError}
+                </p>
+              ) : null}
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">

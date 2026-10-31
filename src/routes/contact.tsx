@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { submitInboundLead } from "@/services/inboundLeads";
 import { isValidEmail } from "@/lib/contactValidation";
+import { US_PHONE_MESSAGE, isValidUsPhone } from "@/lib/phone";
 import type { InboundLeadInput } from "@/types";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 import "./landing.css";
@@ -39,6 +40,7 @@ function leadErrors(v: InboundLeadInput): LeadErrors {
   if (!v.contactEmail.trim()) e.contactEmail = "Email is required";
   else if (!isValidEmail(v.contactEmail)) e.contactEmail = "Enter a valid email address";
   if (!v.contactPhone.trim()) e.contactPhone = "Phone is required";
+  else if (!isValidUsPhone(v.contactPhone)) e.contactPhone = US_PHONE_MESSAGE;
   return e;
 }
 

@@ -343,7 +343,7 @@ function EditPartyDialog({ party, onClose }: { party: Party; onClose: () => void
   const [formError, setFormError] = useState<string | null>(null);
 
   function save() {
-    const e = contactErrors(value);
+    const e = contactErrors(value, party.phoneOffice);
     setErrors(e);
     if (hasContactErrors(e)) return;
     setFormError(null);

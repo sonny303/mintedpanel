@@ -112,12 +112,17 @@ function CapturePage() {
     }
   }, [data, seeded]);
 
-  const errors = useMemo(() => (showErrors ? contactErrors(form) : {}), [showErrors, form]);
+  // A prefilled phone the contact leaves alone is never re-checked (MINT-91).
+  const storedPhone = data?.current?.phoneOffice;
+  const errors = useMemo(
+    () => (showErrors ? contactErrors(form, storedPhone) : {}),
+    [showErrors, form, storedPhone],
+  );
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
-    const found = contactErrors(form);
+    const found = contactErrors(form, storedPhone);
     if (hasContactErrors(found)) {
       setShowErrors(true);
       return;

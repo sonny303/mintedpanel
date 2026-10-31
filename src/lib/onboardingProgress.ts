@@ -90,8 +90,10 @@ export function resolveOrgDetailsStatus(input: OrgDetailsInput): OnboardingSecti
   const ownerOk = Boolean(
     input.owner && input.owner.name.trim() && isValidEmail(input.owner.email ?? ""),
   );
+  // Stored data: the phone format is never re-checked here (MINT-91).
+  const customer = input.customer ? partyToContactInput(input.customer) : null;
   const customerOk = Boolean(
-    input.customer && !hasContactErrors(contactErrors(partyToContactInput(input.customer))),
+    customer && !hasContactErrors(contactErrors(customer, customer.phoneOffice)),
   );
   if (orgNameOk && ownerOk && customerOk) return "complete";
   const anyInput = orgNameOk || input.owner !== null || input.customer !== null;

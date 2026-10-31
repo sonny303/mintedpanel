@@ -44,6 +44,7 @@ import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
 import { isValidNpi } from "@/lib/providerGroup";
 import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
+import { usPhoneError } from "@/lib/phone";
 import {
   ProviderSaveError,
   type LicenseCommand,
@@ -58,6 +59,7 @@ interface RosterFormErrors {
   lastName?: string;
   npi?: string;
   ssnLast4?: string;
+  phone?: string;
   assignments?: string;
 }
 
@@ -223,6 +225,10 @@ function FormBody({
       next.ssnLast4 = "Enter the LAST 4 digits only";
     const assignmentError = validateGroupAssignments(assignments);
     if (assignmentError) next.assignments = assignmentError;
+    // MINT-91: an entered or changed phone must be a US number; an untouched
+    // stored phone never blocks an edit.
+    const phoneError = usPhoneError(form.phone, provider ? initialForm.phone : undefined);
+    if (phoneError) next.phone = phoneError;
 
     const licErrs: Record<number, string> = {};
     licenses.forEach((l, i) => {
@@ -452,6 +458,7 @@ function FormBody({
                 onChange={(e) => set({ phone: e.target.value })}
                 className="h-9"
               />
+              <FieldError message={errors.phone} />
             </div>
           </div>
         </div>

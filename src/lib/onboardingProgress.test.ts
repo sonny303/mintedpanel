@@ -146,6 +146,16 @@ describe("resolveOrgDetailsStatus", () => {
       }),
     ).toBe("in_progress");
   });
+
+  it("never re-checks a stored customer phone's format (MINT-91 existing-data rule)", () => {
+    expect(
+      resolveOrgDetailsStatus({
+        orgName: "Rose City Rehab Collective",
+        owner: validOwner,
+        customer: party({ ...validCustomer, phoneOffice: "abc-def-ghij" }),
+      }),
+    ).toBe("complete");
+  });
 });
 
 describe("resolveRowCountStatus", () => {

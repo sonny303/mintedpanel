@@ -39,6 +39,7 @@ import {
   type HoursDraft,
 } from "@/lib/facilityHours";
 import { groupDefaultContact, hasReachableContact } from "@/lib/facilityContact";
+import { usPhoneError } from "@/lib/phone";
 import { US_STATES } from "@/lib/usStates";
 import type { FacilityInput } from "@/services/orgSettings";
 import type { Facility, ProviderGroup } from "@/types";
@@ -50,6 +51,8 @@ interface FacilityFormErrors {
   city?: string;
   state?: string;
   zip?: string;
+  phone?: string;
+  appointmentPhone?: string;
   contact?: string;
 }
 
@@ -132,6 +135,11 @@ export function FacilityForm({
       next.contact =
         "Add a contact channel (phone, email, fax, or contact name) — this group has no default contact to inherit.";
     }
+    // MINT-91: only an entered or changed phone is checked on an edit.
+    const phoneError = usPhoneError(phone, facility?.phone);
+    if (phoneError) next.phone = phoneError;
+    const appointmentPhoneError = usPhoneError(appointmentPhone, facility?.appointmentPhone);
+    if (appointmentPhoneError) next.appointmentPhone = appointmentPhoneError;
     const hErrs = validateHoursDraft(hoursDraft);
     setErrors(next);
     setHoursErrors(hErrs);
@@ -366,6 +374,7 @@ export function FacilityForm({
                   onChange={(e) => setPhone(e.target.value)}
                   className="h-9"
                 />
+                <FieldError message={errors.phone} />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -401,6 +410,7 @@ export function FacilityForm({
                   onChange={(e) => setAppointmentPhone(e.target.value)}
                   className="h-9"
                 />
+                <FieldError message={errors.appointmentPhone} />
               </div>
             </div>
             <FieldError message={errors.contact} />
