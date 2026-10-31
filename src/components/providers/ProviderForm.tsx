@@ -196,10 +196,11 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
     const names = selected
       .map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name))
       .join(", ");
-    // MINT-96: insertAssignmentRows saves a blank start date as local today, so
-    // name the date the assignments will actually carry.
+    // MINT-96: name the date the facility assignments will carry. A blank
+    // Start date stays null on the provider, but insertAssignmentRows saves
+    // the assignments as local today.
     const start = form.startDate || localCalendarDate(new Date());
-    return `${names} · starts ${fmtDate(start)}`;
+    return `${names} · assignments start ${fmtDate(start)}`;
   }, [facilities.data, form.facilityIds, form.startDate]);
   const licenses = form.licenses.filter((l) => !isBlankLicenseRow(l));
 

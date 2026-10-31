@@ -1,9 +1,10 @@
 // MINT-96 — the internal Add Provider wizard (/providers/new):
 //   * skipping the Licenses step shows "No licenses added" on Review (never
 //     the default blank row) and writes no state_licenses row;
-//   * the start date opens on the browser's local today, Review names the
-//     date the facility assignments will carry, and that date is what saves;
-//   * a cleared start date still shows the assignment default on Review.
+//   * Start date opens blank and stays null on the provider when left blank;
+//     with a facility selected, a hint and the Review Facilities row name the
+//     browser-local today that the facility assignments will be saved with;
+//   * an entered Start date clears the hint and saves on both.
 import { test, expect, type Page, type Route } from "./fixtures/legacy-access-context";
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -167,8 +168,8 @@ async function openWizard(page: Page) {
   return { ...mock, today };
 }
 
-/** Names → Next past Credentials and Licenses (untouched) → Employment. */
-async function reachEmploymentWithFacility(page: Page) {
+/** Names → Next past Credentials and Licenses (untouched) → Employment, group picked. */
+async function reachEmployment(page: Page) {
   await page.getByLabel("First name", { exact: true }).fill("Taylor");
   await page.getByLabel("Last name", { exact: true }).fill("Provider");
   for (let step = 0; step < 3; step += 1) {
@@ -176,51 +177,70 @@ async function reachEmploymentWithFacility(page: Page) {
   }
   await page.getByText("Select group").click();
   await page.getByRole("option", { name: GROUP_NAME }).click();
-  await page.getByRole("checkbox", { name: FACILITY_NAME }).click();
 }
 
 function reviewValue(page: Page, label: string) {
   return page.locator("dt", { hasText: new RegExp(`^${label}$`) }).locator("xpath=../dd");
 }
 
-test("MINT-96: skipped Licenses read 'No licenses added'; the start date opens on today and saves on the assignment", async ({
+function postBody(writes: Write[], table: string) {
+  return writes.find((w) => w.method === "POST" && w.table === table)?.body;
+}
+
+test("MINT-96: skipped Licenses read 'No licenses added'; a blank start date stays null and the assignments' today is shown before save", async ({
   page,
 }) => {
   const { writes, today } = await openWizard(page);
-  await reachEmploymentWithFacility(page);
-  await expect(page.getByLabel("Start date", { exact: true })).toHaveValue(today.iso);
+  await reachEmployment(page);
+  const startDate = page.getByLabel("Start date", { exact: true });
+  const hint = page.getByText(
+    `Leave blank and facility assignments start today (${today.label}).`,
+    {
+      exact: true,
+    },
+  );
+  await expect(startDate).toHaveValue("");
+  await expect(hint).toHaveCount(0);
+  await page.getByRole("checkbox", { name: FACILITY_NAME }).click();
+  await expect(hint).toBeVisible();
 
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByText("No licenses added", { exact: true })).toBeVisible();
   await expect(page.getByText(/— · — · —/)).toHaveCount(0);
-  await expect(reviewValue(page, "Start date")).toHaveText(today.label);
+  await expect(reviewValue(page, "Start date")).toHaveText("—");
   await expect(reviewValue(page, "Facilities")).toHaveText(
-    `${FACILITY_NAME} (primary) · starts ${today.label}`,
+    `${FACILITY_NAME} (primary) · assignments start ${today.label}`,
   );
 
   await page.getByRole("button", { name: "Create provider" }).click();
-  await expect
-    .poll(() => writes.filter((w) => w.table === "provider_facility_assignments").length)
-    .toBe(1);
-  const provider = writes.find((w) => w.method === "POST" && w.table === "providers");
-  expect((provider?.body as Record<string, unknown>).start_date).toBe(today.iso);
-  const assignment = writes.find((w) => w.table === "provider_facility_assignments");
-  expect(assignment?.body).toEqual([
+  await expect.poll(() => postBody(writes, "provider_facility_assignments")).toBeTruthy();
+  expect(postBody(writes, "providers")).toHaveProperty("start_date", null);
+  expect(postBody(writes, "provider_facility_assignments")).toEqual([
     expect.objectContaining({ facility_id: "f-1", is_primary: true, start_date: today.iso }),
   ]);
   expect(writes.filter((w) => w.table === "state_licenses")).toEqual([]);
 });
 
-test("MINT-96: a cleared start date still shows the assignment default on Review", async ({
+test("MINT-96: an entered start date clears the hint and saves on the provider and the assignments", async ({
   page,
 }) => {
-  const { today } = await openWizard(page);
-  await reachEmploymentWithFacility(page);
-  await page.getByLabel("Start date", { exact: true }).fill("");
+  const { writes } = await openWizard(page);
+  await reachEmployment(page);
+  await page.getByRole("checkbox", { name: FACILITY_NAME }).click();
+  await expect(page.getByText(/^Leave blank and facility assignments start today/)).toBeVisible();
+  await page.getByLabel("Start date", { exact: true }).fill("2026-11-02");
+  await expect(page.getByText(/^Leave blank and facility assignments start today/)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(reviewValue(page, "Start date")).toHaveText("—");
+  await expect(reviewValue(page, "Start date")).toHaveText("Nov 2, 2026");
   await expect(reviewValue(page, "Facilities")).toHaveText(
-    `${FACILITY_NAME} (primary) · starts ${today.label}`,
+    `${FACILITY_NAME} (primary) · assignments start Nov 2, 2026`,
   );
+
+  await page.getByRole("button", { name: "Create provider" }).click();
+  await expect.poll(() => postBody(writes, "provider_facility_assignments")).toBeTruthy();
+  expect(postBody(writes, "providers")).toHaveProperty("start_date", "2026-11-02");
+  expect(postBody(writes, "provider_facility_assignments")).toEqual([
+    expect.objectContaining({ facility_id: "f-1", start_date: "2026-11-02" }),
+  ]);
 });
