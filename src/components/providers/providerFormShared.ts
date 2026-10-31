@@ -79,8 +79,9 @@ export function emptyLicenseRow(): LicenseRow {
 }
 
 /** A license row with nothing entered — the stepper's default row when the
- * Licenses step is skipped. Submit drops these and Review hides them, so the
- * two cannot disagree about what will be saved. */
+ * Licenses step is skipped. Submit drops these and Review hides them. Blank
+ * rows only: a row with a number but no state still shows on Review, and
+ * createProviderWithDetails drops it. */
 export function isBlankLicenseRow(l: LicenseRow): boolean {
   return !l.state && !l.number.trim() && !l.type && !l.issueDate && !l.expirationDate;
 }

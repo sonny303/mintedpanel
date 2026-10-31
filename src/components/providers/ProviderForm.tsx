@@ -189,6 +189,10 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
     () => groups.data?.find((g) => g.id === form.groupId)?.name ?? "—",
     [groups.data, form.groupId],
   );
+  // MINT-96: name the date the facility assignments will carry. A blank
+  // Start date stays null on the provider, but insertAssignmentRows saves the
+  // assignments as local today, read on every render so it never goes stale.
+  const assignmentStart = form.startDate || localCalendarDate(new Date());
   const facilityNames = useMemo(() => {
     const selected = (facilities.data ?? []).filter((f) => form.facilityIds.includes(f.id));
     if (selected.length === 0) return "—";
@@ -196,12 +200,8 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
     const names = selected
       .map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name))
       .join(", ");
-    // MINT-96: name the date the facility assignments will carry. A blank
-    // Start date stays null on the provider, but insertAssignmentRows saves
-    // the assignments as local today.
-    const start = form.startDate || localCalendarDate(new Date());
-    return `${names} · assignments start ${fmtDate(start)}`;
-  }, [facilities.data, form.facilityIds, form.startDate]);
+    return `${names} · assignments start ${fmtDate(assignmentStart)}`;
+  }, [facilities.data, form.facilityIds, assignmentStart]);
   const licenses = form.licenses.filter((l) => !isBlankLicenseRow(l));
 
   const Section = ({

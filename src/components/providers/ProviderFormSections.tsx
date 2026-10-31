@@ -281,7 +281,7 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
   // before save instead of letting the date appear on the record after.
   const startDateHint =
     !form.startDate && form.facilityIds.length > 0
-      ? `Leave blank and facility assignments start today (${fmtDate(localCalendarDate(new Date()))}).`
+      ? `If left blank, facility assignments start today (${fmtDate(localCalendarDate(new Date()))}).`
       : undefined;
 
   return (

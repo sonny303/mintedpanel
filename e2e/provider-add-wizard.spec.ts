@@ -193,12 +193,9 @@ test("MINT-96: skipped Licenses read 'No licenses added'; a blank start date sta
   const { writes, today } = await openWizard(page);
   await reachEmployment(page);
   const startDate = page.getByLabel("Start date", { exact: true });
-  const hint = page.getByText(
-    `Leave blank and facility assignments start today (${today.label}).`,
-    {
-      exact: true,
-    },
-  );
+  const hint = page.getByText(`If left blank, facility assignments start today (${today.label}).`, {
+    exact: true,
+  });
   await expect(startDate).toHaveValue("");
   await expect(hint).toHaveCount(0);
   await page.getByRole("checkbox", { name: FACILITY_NAME }).click();
@@ -227,9 +224,9 @@ test("MINT-96: an entered start date clears the hint and saves on the provider a
   const { writes } = await openWizard(page);
   await reachEmployment(page);
   await page.getByRole("checkbox", { name: FACILITY_NAME }).click();
-  await expect(page.getByText(/^Leave blank and facility assignments start today/)).toBeVisible();
+  await expect(page.getByText(/^If left blank, facility assignments start today/)).toBeVisible();
   await page.getByLabel("Start date", { exact: true }).fill("2026-11-02");
-  await expect(page.getByText(/^Leave blank and facility assignments start today/)).toHaveCount(0);
+  await expect(page.getByText(/^If left blank, facility assignments start today/)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Next" }).click();
   await expect(reviewValue(page, "Start date")).toHaveText("Nov 2, 2026");
