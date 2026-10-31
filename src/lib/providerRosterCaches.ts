@@ -2,8 +2,7 @@
 // group / facility / license memberships change. Readiness and generation
 // join these org-wide lists; several carry a 5-minute staleTime, so a
 // missing invalidation looks like "this provider has no group or payer"
-// until a hard refresh. The Provider Onboarding funnel report reads the
-// same roster, so it rides this set too.
+// until a hard refresh.
 import type { QueryClient } from "@tanstack/react-query";
 
 export function providerRosterCacheKeys(orgId: string) {
@@ -13,7 +12,6 @@ export function providerRosterCacheKeys(orgId: string) {
     ["org-state-licenses", orgId] as const,
     ["facility-assignments", orgId] as const,
     ["provider-readiness-facts", orgId] as const,
-    ["onboarding-funnel", orgId] as const,
     ["audit-log", orgId] as const,
   ];
 }

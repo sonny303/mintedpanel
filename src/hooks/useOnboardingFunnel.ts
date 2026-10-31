@@ -1,7 +1,8 @@
 // Provider Onboarding funnel hook (RC-06). Org-scoped; the stage derivation
-// runs on the cached read with today's local date. The roster cache set
-// (providerRosterCaches.ts) and case creation invalidate the key; profile and
-// license edits do not, so the report also refetches every time it opens.
+// runs on the cached read with today's local date. The report refetches every
+// time it opens. Case creation also marks the key stale (not awaited); it is
+// deliberately NOT in the roster cache set, whose awaited "all" refetch would
+// make every provider write wait on this five-table read.
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";

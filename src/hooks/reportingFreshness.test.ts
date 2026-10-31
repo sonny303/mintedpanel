@@ -1,7 +1,8 @@
 // The Provider Onboarding funnel and the Portfolio footprint must not serve a
 // five-minute-old cache after an edit: the app turns refetchOnWindowFocus off,
-// so these reports refetch on open and the funnel key is invalidated by the
-// roster cache set and by case creation.
+// so these reports refetch on open, and case creation (one case, or a
+// generation batch) marks the funnel stale. The funnel stays out of the
+// awaited roster cache set.
 import { describe, expect, it, vi } from "vitest";
 
 const holder = vi.hoisted(() => ({
@@ -31,9 +32,11 @@ vi.mock("@/services/reportShares", () => ({
   revokeReportShare: vi.fn(),
 }));
 vi.mock("@/services/cases", () => ({}));
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
 
 import { queryKeys } from "@/hooks/queryKeys";
 import { useCreateCase } from "@/hooks/useCases";
+import { useConfirmGeneration } from "@/hooks/useGenerationPreview";
 import { useOnboardingFunnel } from "@/hooks/useOnboardingFunnel";
 import { usePortfolioFootprint } from "@/hooks/useReporting";
 import { providerRosterCacheKeys } from "@/lib/providerRosterCaches";
@@ -60,10 +63,25 @@ describe("reporting freshness", () => {
     });
   });
 
-  it("invalidates the funnel with the roster cache set and on case creation", () => {
-    expect(providerRosterCacheKeys("org-1")).toContainEqual(queryKeys.onboardingFunnel("org-1"));
+  it("keeps the funnel out of the awaited roster cache set", () => {
+    expect(providerRosterCacheKeys("org-1")).not.toContainEqual(
+      queryKeys.onboardingFunnel("org-1"),
+    );
+  });
+
+  it("marks the funnel stale when a case is created", () => {
+    holder.invalidateQueries.mockClear();
     const mutation = useCreateCase() as unknown as { onSuccess: () => void };
     mutation.onSuccess();
+    expect(holder.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.onboardingFunnel("org-1"),
+    });
+  });
+
+  it("marks the funnel stale when a generation batch settles", () => {
+    holder.invalidateQueries.mockClear();
+    const mutation = useConfirmGeneration() as unknown as { onSettled: () => void };
+    mutation.onSettled();
     expect(holder.invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.onboardingFunnel("org-1"),
     });
